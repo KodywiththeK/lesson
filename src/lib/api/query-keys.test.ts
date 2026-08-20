@@ -80,4 +80,22 @@ describe("queryKeys", () => {
       "payment-pending",
     ]);
   });
+
+  it("학원별 입출입 내역 key에 academyId와 검색/유형/출처 필터를 포함한다", () => {
+    expect(
+      queryKeys.finance.ledgerList("academy-1", {
+        q: "조율",
+        type: "expense",
+        source: "manual",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "finance",
+      "ledger-list",
+      "조율",
+      "expense",
+      "manual",
+    ]);
+  });
 });

@@ -50,6 +50,17 @@ export type IncomeExpenseGraph = {
   months: MonthlyIncomeExpenseGraphPoint[];
 };
 
+export type FinanceLedgerListFilters = {
+  type?: LedgerEntry["type"];
+  source?: LedgerEntry["source"];
+};
+
+export type BuildFinanceLedgerListOptions = {
+  academyId: string;
+  search?: string;
+  filters?: FinanceLedgerListFilters;
+};
+
 export function createManualLedgerEntry(
   input: ManualLedgerInput,
   options: ManualLedgerOptions,
@@ -79,6 +90,36 @@ export function createManualLedgerEntry(
   };
 }
 
+export function buildFinanceLedgerList(
+  entries: LedgerEntry[],
+  options: BuildFinanceLedgerListOptions,
+): LedgerEntry[] {
+  return entries
+    .filter((entry) => entry.academyId === options.academyId)
+    .filter((entry) => matchesFinanceLedgerFilters(entry, options.filters))
+    .filter((entry) => matchesFinanceLedgerSearch(entry, options.search))
+    .sort(
+      (left, right) =>
+        right.occurredOn.localeCompare(left.occurredOn) ||
+        left.description.localeCompare(right.description, "ko-KR"),
+    );
+}
+
+export function formatLedgerEntryType(type: LedgerEntry["type"]) {
+  return type === "income" ? "수입" : "지출";
+}
+
+export function formatLedgerEntrySource(source: LedgerEntry["source"]) {
+  const labels: Record<LedgerEntry["source"], string> = {
+    tuition: "수강료",
+    "book-sale": "교재",
+    payroll: "급여",
+    manual: "수동",
+  };
+
+  return labels[source];
+}
+
 export function buildIncomeExpenseGraph(
   entries: FinanceGraphLedgerEntry[],
   options: IncomeExpenseGraphOptions,
@@ -101,6 +142,41 @@ export function buildIncomeExpenseGraph(
       ),
     ),
   };
+}
+
+function matchesFinanceLedgerFilters(
+  entry: LedgerEntry,
+  filters: FinanceLedgerListFilters | undefined,
+) {
+  if (!filters) {
+    return true;
+  }
+
+  return (
+    (!filters.type || entry.type === filters.type) &&
+    (!filters.source || entry.source === filters.source)
+  );
+}
+
+function matchesFinanceLedgerSearch(
+  entry: LedgerEntry,
+  search: string | undefined,
+) {
+  const trimmedSearch = search?.trim().toLocaleLowerCase("ko-KR");
+
+  if (!trimmedSearch) {
+    return true;
+  }
+
+  return [
+    entry.occurredOn,
+    entry.description,
+    entry.amount.toString(),
+    entry.type,
+    entry.source,
+    formatLedgerEntryType(entry.type),
+    formatLedgerEntrySource(entry.source),
+  ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
 }
 
 function buildMonthlyGraphPoint(

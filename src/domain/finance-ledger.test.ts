@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildFinanceLedgerList,
   buildIncomeExpenseGraph,
   createManualLedgerEntry,
+  formatLedgerEntrySource,
+  formatLedgerEntryType,
 } from "./finance-ledger";
 
 describe("createManualLedgerEntry", () => {
@@ -148,5 +151,73 @@ describe("buildIncomeExpenseGraph", () => {
       expense: 30000,
       netIncome: 290000,
     });
+  });
+});
+
+describe("buildFinanceLedgerList", () => {
+  it("현재 학원의 수입/지출 내역을 최신순으로 보여주고 검색과 유형 필터를 적용한다", () => {
+    const list = buildFinanceLedgerList(
+      [
+        {
+          academyId: "academy-1",
+          ledgerId: "ledger-1",
+          occurredOn: "2026-08-20",
+          type: "income",
+          source: "book-sale",
+          amount: 12000,
+          description: "교재 판매: 바이엘 2 / 김민지",
+          refId: "sale-1",
+        },
+        {
+          academyId: "academy-1",
+          ledgerId: "ledger-2",
+          occurredOn: "2026-08-21",
+          type: "expense",
+          source: "manual",
+          amount: 30000,
+          description: "조율비",
+          refId: "manual-1",
+        },
+        {
+          academyId: "academy-2",
+          ledgerId: "ledger-3",
+          occurredOn: "2026-08-21",
+          type: "income",
+          source: "tuition",
+          amount: 999999,
+          description: "다른 학원 수강료",
+          refId: "tuition-1",
+        },
+      ],
+      {
+        academyId: "academy-1",
+        search: "조율",
+        filters: {
+          type: "expense",
+        },
+      },
+    );
+
+    expect(list).toEqual([
+      {
+        academyId: "academy-1",
+        ledgerId: "ledger-2",
+        occurredOn: "2026-08-21",
+        type: "expense",
+        source: "manual",
+        amount: 30000,
+        description: "조율비",
+        refId: "manual-1",
+      },
+    ]);
+  });
+
+  it("입출입 유형과 출처를 운영자가 읽는 한국어로 표시한다", () => {
+    expect(formatLedgerEntryType("income")).toBe("수입");
+    expect(formatLedgerEntryType("expense")).toBe("지출");
+    expect(formatLedgerEntrySource("tuition")).toBe("수강료");
+    expect(formatLedgerEntrySource("book-sale")).toBe("교재");
+    expect(formatLedgerEntrySource("payroll")).toBe("급여");
+    expect(formatLedgerEntrySource("manual")).toBe("수동");
   });
 });

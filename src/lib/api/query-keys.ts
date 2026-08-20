@@ -22,6 +22,12 @@ type BookPurchaseListFilters = {
   status?: string;
 };
 
+type FinanceLedgerListFilters = {
+  q?: string;
+  type?: string;
+  source?: string;
+};
+
 export const queryKeys = {
   academy: (academyId: string) => ["academy", academyId] as const,
   students: {
@@ -69,6 +75,17 @@ export const queryKeys = {
         "purchase-list",
         filters.q ?? "",
         filters.status ?? "",
+      ] as const,
+  },
+  finance: {
+    ledgerList: (academyId: string, filters: FinanceLedgerListFilters = {}) =>
+      [
+        ...queryKeys.academy(academyId),
+        "finance",
+        "ledger-list",
+        filters.q ?? "",
+        filters.type ?? "",
+        filters.source ?? "",
       ] as const,
   },
   lessonTickets: {
