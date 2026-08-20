@@ -15,8 +15,15 @@
 
 - `src/components/ui/`
   - 현재 `components.json`의 `new-york`, RSC, TypeScript, CSS variables 기준에서 설치 가능한 shadcn 컴포넌트를 추가했다.
+  - 공식 All Components 목록과 대조해 누락됐던 `Sidebar`를 추가했다.
   - `sonner` Toaster를 앱 루트에 연결했다.
   - shadcn 생성 컴포넌트 중 프로젝트 lint와 충돌한 `carousel`, `combobox`를 동작 변경 없이 최소 보정했다.
+- `src/hooks/use-mobile.ts`
+  - shadcn `Sidebar`가 사용하는 모바일 breakpoint hook을 추가했다.
+- `src/app/providers.tsx`
+  - 전역 `TooltipProvider`를 연결해 shadcn `Tooltip`과 `Sidebar` tooltip 사용 기준을 맞췄다.
+- `package.json`
+  - `Data Table` 조합 구현을 위해 `@tanstack/react-table`을 추가했다.
 - `src/components/management/list-controls.tsx`
   - 목록 화면에서 반복되는 검색 입력, 단순 필터, 오류 알림을 shadcn `Input`, `NativeSelect`, `Alert` 조합으로 공통화했다.
 - `src/features/students/student-list-screen.tsx`
@@ -39,12 +46,26 @@
 | `date-picker` | `new-york-v4` 레지스트리 단일 파일 없음 | `Calendar` + `Popover` 조합 항목으로 문서화 |
 | `data-table` | `new-york-v4` 레지스트리 단일 파일 없음 | shadcn `Table` + TanStack Table 조합 항목으로 문서화 |
 | `typography` | `new-york-v4` 레지스트리 단일 파일 없음 | 텍스트 토큰/타입 규칙으로 문서화 |
+| `sidebar` | `src/components/ui/sidebar.tsx`, `src/hooks/use-mobile.ts` 생성 | 앱 shell 리팩터링 후보로 확보 |
+
+## 2026-08-21 추가 대조 결과
+
+| 확인 | 결과 | 처리 |
+| --- | --- | --- |
+| 공식 All Components 목록 재확인 | `Toast`, `Sidebar`, `Data Table`, `Date Picker`, `Typography` 상태를 재대조 | 컴포넌트 가이드에 전체 대조표 추가 |
+| `pnpm dlx shadcn@latest add toast sidebar data-table date-picker typography` | `Toast`가 Base UI 전용이라 명령이 중단됨 | `Toast`는 미설치 사유를 문서화하고 `Sonner` 유지 |
+| `pnpm dlx shadcn@latest add sidebar` | 통과 | `Sidebar`와 `use-mobile` 추가 |
+| `pnpm dlx shadcn@latest add data-table` | 단일 레지스트리 항목 없음 | `@tanstack/react-table` + shadcn `Table` 조합으로 표준화 |
+| `pnpm dlx shadcn@latest add date-picker` | 단일 레지스트리 항목 없음 | `Calendar` + `Popover` + `Button` + `Field` 조합으로 표준화 |
+| `pnpm dlx shadcn@latest add typography` | 단일 레지스트리 항목 없음 | 디자인 시스템의 텍스트 규칙으로 관리 |
 
 ## 검증 결과
 
 | 명령 또는 확인 | 결과 | 비고 |
 | --- | --- | --- |
 | `pnpm test:run src/features/students/student-list-screen.test.tsx src/features/teachers/teacher-list-screen.test.tsx src/features/vendors/vendor-list-screen.test.tsx` | 통과 | 3개 파일, 9개 테스트 통과 |
+| `pnpm test:run src/app/providers.test.tsx` | 통과 | 전역 QueryClient/Tooltip provider 구성 확인 |
+| `pnpm lint` | 통과 | `Sidebar` 생성 코드의 랜덤 skeleton 폭과 `use-mobile` effect state를 React compiler 규칙에 맞게 보정 후 통과 |
 | `pnpm test:run` | 통과 | 37개 파일, 151개 테스트 통과 |
 | `pnpm lint` | 통과 | shadcn 생성 파일 lint 보정 후 통과 |
 | `pnpm typecheck` | 통과 | route type 생성 및 `tsc --noEmit` 통과 |

@@ -14,6 +14,9 @@
 - 직접 만든 input, select, table, dialog, badge, alert, toast, empty state는 금지한다. 필요한 경우 shadcn 컴포넌트를 얇게 조합한 도메인 컴포넌트를 만든다.
 - 반복되는 운영 앱 패턴은 `src/components/management/` 아래에 shadcn 조합 컴포넌트로 둔다.
 - 컴포넌트별 선택 기준은 [shadcn-component-guide.md](./shadcn-component-guide.md)를 따른다.
+- 2026-08-21 기준 공식 shadcn All Components 목록을 대조했고, 설치 가능한 단일 컴포넌트는 모두 `src/components/ui/`에 둔다.
+- `Toast`는 현재 프로젝트에서 Base UI 전용이라 설치할 수 없으므로 `Sonner`를 공식 toast 표준으로 사용한다.
+- `Data Table`, `Date Picker`, `Typography`는 단일 파일 컴포넌트가 아니라 shadcn 조합 패턴으로 관리한다.
 
 ## 레이아웃
 
@@ -27,11 +30,12 @@
 
 - `Sidebar`
 - `Table`
-- `Data Table`: shadcn `Table` + TanStack Table 조합으로 만든다.
+- `Data Table`: shadcn `Table` + `@tanstack/react-table` 조합으로 만든다.
 - `Tabs`
 - `Dialog`
 - `Form`
 - `Calendar`
+- `Date Picker`: `Calendar` + `Popover` + `Button` + `Field` 조합으로 만든다.
 - `Badge`
 - `Button`
 - `DropdownMenu`
@@ -47,6 +51,8 @@
 - `Field`
 - `InputGroup`
 - `ButtonGroup`
+- `Sonner`
+- `Tooltip`
 
 ## TanStack 기준
 
@@ -55,6 +61,12 @@
 - 정렬, 컬럼 숨김, 페이지네이션, row selection, column filter, server-side filter가 들어가는 순간 TanStack Table을 사용한다.
 - TanStack Table은 headless 엔진으로만 사용하고, 화면에 보이는 마크업과 스타일은 shadcn `Table`, `Checkbox`, `DropdownMenu`, `Button`, `Pagination`으로 구성한다.
 - 차트가 필요하면 우선 shadcn `Chart`를 사용하고, 데이터 변환은 도메인 pure function으로 분리한다.
+
+## 알림 기준
+
+- 저장 완료, 삭제 완료, 비동기 처리 성공/실패는 `Sonner`의 `toast` API를 사용한다.
+- `src/app/layout.tsx`에는 `Toaster`가 있고, `src/app/providers.tsx`에는 전역 `TooltipProvider`가 있다.
+- 별도 `toast.tsx` 파일을 손으로 만들지 않는다. Base UI 전환이 결정되면 별도 phase에서 공식 `Toast` 도입 여부를 다시 판단한다.
 
 ## 토큰
 

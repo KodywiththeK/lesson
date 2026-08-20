@@ -11,6 +11,11 @@
 - shadcn 원본 컴포넌트는 가능한 그대로 유지한다.
 - 서비스 도메인에 맞춘 조합은 `src/components/management/`처럼 별도 폴더에 만든다.
 - 공식 문서에는 있으나 현재 `new-york-v4` 레지스트리에서 단일 파일로 내려오지 않는 항목은 조합 패턴으로 문서화한다.
+- 2026-08-21 기준 공식 shadcn All Components 목록과 `src/components/ui/`를 대조했다.
+- 설치 가능한 단일 컴포넌트는 모두 `src/components/ui/`에 내려받아 둔다.
+- 단일 레지스트리 항목이 아닌 `Data Table`, `Date Picker`, `Typography`는 이 문서의 조합 규칙을 표준으로 삼는다.
+- 현재 프로젝트에서 `Toast`는 Base UI 전용 레지스트리 항목이라 CLI가 설치를 차단한다. Radix/new-york 기준 toast 표준은 공식 안내에 따라 `Sonner`다.
+- `Data Table` 구현 엔진으로 `@tanstack/react-table`을 설치해 둔다.
 
 ## 현재 설치된 컴포넌트
 
@@ -82,10 +87,79 @@
 
 | 항목 | 현재 처리 |
 | --- | --- |
-| `Toast` | 현재 `new-york-v4` CLI가 Base UI 프로젝트 전용이라고 막는다. 이 서비스의 표준 toast는 `Sonner`다. Base UI 전환이 결정되기 전에는 `Toast`를 직접 이식하지 않는다. |
-| `Date Picker` | 단일 설치 파일이 아니라 `Calendar` + `Popover` + `Button` 조합으로 만든다. |
-| `Data Table` | 단일 설치 파일이 아니라 shadcn `Table` + TanStack Table 엔진으로 만든다. |
-| `Typography` | 설치 파일이 아니라 텍스트 크기, weight, line-height 규칙으로 관리한다. |
+| `Toast` | 2026-08-21에 `pnpm dlx shadcn@latest add toast`를 실행했지만 현재 프로젝트에서는 Base UI 전용이라고 차단됐다. 액션 결과 알림은 `Sonner`와 `src/components/ui/sonner.tsx`의 `Toaster`를 사용한다. Base UI 전환을 결정하기 전에는 `Toast`를 수동 이식하지 않는다. |
+| `Date Picker` | `pnpm dlx shadcn@latest add date-picker` 결과 단일 레지스트리 항목이 없었다. 날짜 선택은 `Calendar` + `Popover` + `Button` + 필요 시 `Field` 조합으로 만든다. |
+| `Data Table` | `pnpm dlx shadcn@latest add data-table` 결과 단일 레지스트리 항목이 없었다. 표 상태 엔진은 `@tanstack/react-table`, 화면 컴포넌트는 shadcn `Table`, `Checkbox`, `DropdownMenu`, `Button`, `Pagination`, `Skeleton`, `Empty`를 조합한다. |
+| `Typography` | `pnpm dlx shadcn@latest add typography` 결과 단일 레지스트리 항목이 없었다. 텍스트 스타일은 `docs/engineering/design-system.md`의 semantic typography 규칙으로 관리한다. |
+
+## 공식 목록 대조표
+
+| 공식 항목 | 레포 기준 |
+| --- | --- |
+| `Accordion` | 설치됨 |
+| `Alert` | 설치됨 |
+| `Alert Dialog` | 설치됨 |
+| `Aspect Ratio` | 설치됨 |
+| `Attachment` | 설치됨 |
+| `Avatar` | 설치됨 |
+| `Badge` | 설치됨 |
+| `Breadcrumb` | 설치됨 |
+| `Bubble` | 설치됨 |
+| `Button` | 설치됨 |
+| `Button Group` | 설치됨 |
+| `Calendar` | 설치됨 |
+| `Card` | 설치됨 |
+| `Carousel` | 설치됨 |
+| `Chart` | 설치됨 |
+| `Checkbox` | 설치됨 |
+| `Collapsible` | 설치됨 |
+| `Combobox` | 설치됨 |
+| `Command` | 설치됨 |
+| `Context Menu` | 설치됨 |
+| `Data Table` | 조합형 표준, `@tanstack/react-table` 설치됨 |
+| `Date Picker` | 조합형 표준 |
+| `Dialog` | 설치됨 |
+| `Direction` | 설치됨 |
+| `Drawer` | 설치됨 |
+| `Dropdown Menu` | 설치됨 |
+| `Empty` | 설치됨 |
+| `Field` | 설치됨 |
+| `Hover Card` | 설치됨 |
+| `Input` | 설치됨 |
+| `Input Group` | 설치됨 |
+| `Input OTP` | 설치됨 |
+| `Item` | 설치됨 |
+| `Kbd` | 설치됨 |
+| `Label` | 설치됨 |
+| `Marker` | 설치됨 |
+| `Menubar` | 설치됨 |
+| `Message` | 설치됨 |
+| `Message Scroller` | 설치됨 |
+| `Native Select` | 설치됨 |
+| `Navigation Menu` | 설치됨 |
+| `Pagination` | 설치됨 |
+| `Popover` | 설치됨 |
+| `Progress` | 설치됨 |
+| `Radio Group` | 설치됨 |
+| `Resizable` | 설치됨 |
+| `Scroll Area` | 설치됨 |
+| `Select` | 설치됨 |
+| `Separator` | 설치됨 |
+| `Sheet` | 설치됨 |
+| `Sidebar` | 설치됨 |
+| `Skeleton` | 설치됨 |
+| `Slider` | 설치됨 |
+| `Sonner` | 설치됨, 이 프로젝트의 toast 표준 |
+| `Spinner` | 설치됨 |
+| `Switch` | 설치됨 |
+| `Table` | 설치됨 |
+| `Tabs` | 설치됨 |
+| `Textarea` | 설치됨 |
+| `Toast` | Base UI 전용으로 현재 프로젝트 설치 불가, `Sonner` 사용 |
+| `Toggle` | 설치됨 |
+| `Toggle Group` | 설치됨 |
+| `Tooltip` | 설치됨 |
+| `Typography` | 조합형 표준 |
 
 ## 조합 규칙
 
@@ -94,12 +168,14 @@
 - 커스텀 팝오버 선택: `Select`를 사용한다.
 - 옵션이 많거나 검색이 필요한 필터: `Combobox` 또는 `Command` + `Popover`를 사용한다.
 - 목록 표: 단순 목록은 `Table`, 정렬/페이지/선택이 필요하면 `Table` + TanStack Table을 사용한다.
+- Data Table: `@tanstack/react-table`로 상태를 계산하고, DOM은 shadcn `Table`로 렌더링한다.
+- Date Picker: `Calendar`는 날짜 선택 본체, `Popover`는 floating panel, `Button`은 trigger, `Field`는 label/error를 담당한다.
 - 빈 목록: `Empty`를 사용하고, 다음 액션이 명확하면 `Button`을 함께 둔다.
 - 오류 상태: `Alert`를 사용한다.
 - 파괴적 확인: `AlertDialog`를 사용한다.
 - 생성/수정 폼: `Dialog` + `Form` + `Field`를 우선한다.
 - 긴 상세 편집: `Sheet` 또는 `Drawer`를 사용한다.
-- 액션 결과 알림: `Sonner`를 사용한다.
+- 액션 결과 알림: `Sonner`를 사용한다. `Toast` 이름의 직접 구현체를 만들지 않는다.
 
 ## 금지 규칙
 
