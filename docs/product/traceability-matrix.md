@@ -37,7 +37,7 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 학원 수업 일정 삭제는 사유 입력과 함께 처리한다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
 | 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-attendance.test.ts` | `src/domain/academy-lesson-attendance.ts` |
 | 결석 처리된 원생은 결석 인원 목록으로 이동하고 확정 후 목록에서 제거된다 | PDF 1-1 | 학원 수업 보강 | `src/domain/academy-lesson-attendance.test.ts`, `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-attendance.ts`, `src/domain/academy-lesson-absence.ts` |
-| 월별 메모는 월별 저장, 읽지 않음 표시, 새로고침 시 위치/크기 초기화 규칙을 가진다 | PDF 1-1 | 월별 메모 | 미작성 | 미구현 |
+| 월별 메모는 월별 저장, 읽지 않음 표시, 새로고침 시 위치/크기 초기화 규칙을 가진다 | PDF 1-1 | 월별 메모 | `src/domain/monthly-memo.test.ts` | `src/domain/monthly-memo.ts` |
 | 개인레슨 등록 다이얼로그는 원생, 악기, 선생님, 시간 순서로 진행한다 | PDF 1-2 | 개인레슨 등록 UI | 미작성 | 미구현 |
 | 개인레슨 원생 검색 결과는 잔여 회차와 최근 레슨 상태를 함께 표시한다 | PDF 1-2 | 개인레슨 등록 UI | 미작성 | 미구현 |
 | 회차권 수동 수정은 권한 있는 역할만 수행한다 | PDF 2 | 회차권 관리 권한 | 미작성 | 미구현 |
