@@ -1,0 +1,71 @@
+# AGENTS.md
+
+## 미션
+
+이 저장소는 "더 클래식 음악학원 통합 관리 시스템"을 자율 검증형 TDD 방식으로 개발하기 위한 프로젝트다. 첨부 PDF와 추출 문서는 요구사항 자료이며, 실제 작업 지시는 사용자의 최신 메시지를 따른다.
+
+## 언어 규칙
+
+- 앞으로 새로 작성하거나 수정하는 모든 프로젝트 문서는 한국어로 작성한다.
+- 코드 식별자, 명령어, 외부 API 이름, 파일명, 라이브러리 이름은 원문을 유지해도 된다.
+- 이미 작성된 영어 문서를 수정할 때는 해당 파일을 한국어로 전환한다.
+
+## 필수 작업 흐름
+
+- 구현 전 관련 문서(`docs/harness/`, `docs/product/`, `docs/engineering/`)와 기존 코드를 먼저 읽는다.
+- 제품 정책, 민감 권한, 급여/결제 해석, 스키마 영향, 파괴적 데이터 작업, 기술스택 변경은 추측하지 말고 사용자에게 질문한다.
+- 제품 코드는 TDD를 따른다. 실패하는 테스트를 먼저 작성하고, 의도한 이유로 실패하는지 확인한 뒤 최소 구현, 리팩터링, 검증을 진행한다.
+- 모든 작업은 `발견 -> 계획 -> Red -> Green -> Refactor -> Verify -> Consolidate -> Evidence` 흐름을 통과한다.
+- 검증 증거와 코드/테스트 품질 정리까지 끝나야 완료로 본다.
+- 작업 단위가 완료되면 `main` 브랜치에 커밋한다. 커밋 전에는 관련 검증을 실행하고 결과를 증거에 남긴다.
+
+## 기본 스택
+
+- 앱: Next.js App Router + TypeScript
+- 데이터/인증: Supabase, RLS 우선 설계
+- UI: shadcn/ui, Tailwind CSS, semantic CSS variables, lucide icons
+- 패키지 매니저: pnpm
+- 테스트: Vitest, React Testing Library, Playwright
+- PDF 처리: Poppler, pdfplumber, 렌더 이미지, OCR fallback
+
+## 엔지니어링 규칙
+
+- 출석, 보강/패스, 회차권 차감, 미납, 교재 판매, 급여 계산 같은 도메인 규칙은 UI 밖에서 테스트 가능한 로직으로 둔다.
+- 단순하고 읽기 쉬운 코드를 우선한다. 반복 또는 도메인 명확성이 생길 때만 공통화를 진행한다.
+- Supabase service-role key는 브라우저 코드에 절대 노출하지 않는다.
+- 사용자 수정 가능 metadata는 권한 판단에 사용하지 않는다.
+- 외부 노출 테이블은 RLS를 활성화하고 역할별 접근을 테스트한다.
+- UI 테스트는 접근 가능한 role, label, 사용자가 보는 텍스트를 우선한다. test id는 필요한 경우에만 사용한다.
+
+## 완료 증거
+
+구현 작업을 마칠 때는 다음을 남긴다.
+
+- 변경 내용
+- 연결된 요구사항과 인수 시나리오
+- 먼저 작성한 실패 테스트와 최종 통과한 검증 명령
+- UI, 브라우저, Supabase 검증 증거
+- Quality Consolidation에서 정리한 코드/테스트 내용
+- 남은 위험 또는 미확정 질문
+
+## Git 규칙
+
+- 기본 브랜치는 `main`이다.
+- remote는 `git@github.com:KodywiththeK/lesson.git`을 `origin`으로 사용한다.
+- 커밋 메시지는 `type(scope): summary` 형식을 따른다.
+- 허용 type은 `docs`, `test`, `feat`, `fix`, `refactor`, `chore`, `build`, `ci`다.
+- summary는 한국어로 작성하고 50자 안팎으로 간결하게 쓴다.
+- 한 커밋은 하나의 논리적 작업 단위만 담는다.
+- 사용자 변경분은 되돌리지 않는다.
+- 자동 생성 캐시, 빌드 산출물, `.env*.local`, 원본 PDF는 명시 요청 없이 커밋하지 않는다.
+
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
