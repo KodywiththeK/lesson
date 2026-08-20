@@ -21,8 +21,8 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 회차권 재등록은 회수 추가와 유효기간 갱신을 지원한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 회차권 잔여 회수 부족 또는 만료 임박 상태를 표시한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 원생 등록은 일정과 고정 수입의 기준이 된다 | PDF 3-1 | 원생 등록 | 미작성 | 미구현 |
-| 휴원/퇴원 전환은 확인 절차를 가진다 | PDF 3-3 | 원생 상태 전환 | 미작성 | 미구현 |
-| 퇴원 원생은 30일 보관 후 삭제된다 | PDF 3-3 | 원생 보관 정책 | 미작성 | 미구현 |
+| 휴원/퇴원 전환은 확인 절차를 가진다 | PDF 3-3 | 원생 상태 전환 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |
+| 퇴원 원생은 30일 보관 후 삭제된다 | PDF 3-3 | 원생 보관 정책 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |
 | 교재 결제 완료는 수입 ledger에 반영된다 | PDF 4 | 교재 판매 | 미작성 | 미구현 |
 | 월별 고정 수입 수납/미납은 월 단위 snapshot으로 관리된다 | PDF 5 | 수입 관리 | 미작성 | 미구현 |
 | 급여 지급은 지출 내역을 생성한다 | PDF 5 | 급여 지급 | 미작성 | 미구현 |
