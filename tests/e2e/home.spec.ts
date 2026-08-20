@@ -24,3 +24,14 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
     "/passes",
   );
 });
+
+test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "원생" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "원생 관리" }),
+  ).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "원생 검색" })).toBeVisible();
+});

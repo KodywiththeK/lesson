@@ -22,8 +22,13 @@
 ## Supabase
 
 - `supabase --help`: CLI 사용 전 현재 명령을 확인한다.
+- `supabase login`: 원격 프로젝트에 CLI로 접근해야 할 때 로그인한다.
+- `supabase link --project-ref <project-ref>`: 로컬 repo와 원격 Supabase 프로젝트를 연결한다.
 - `supabase migration new <name>`: migration 파일을 만든다.
 - `supabase db push --dry-run`: 적용 전 migration 영향을 확인한다.
+- `supabase db push`: 사용자 승인 후 원격 DB에 migration을 적용한다.
+- `supabase db reset --local --no-seed`: Docker 기반 로컬 DB에 migration을 처음부터 적용해 검증한다.
+- `supabase db lint --local --fail-on error`: 로컬 DB schema lint를 실행한다.
 - `supabase db advisors`: 사용 가능할 때 데이터베이스 advisor를 실행한다.
 
 ## PDF

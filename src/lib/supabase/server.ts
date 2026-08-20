@@ -4,10 +4,10 @@ import { cookies } from "next/headers";
 import { getSupabaseBrowserConfig } from "./env";
 
 export async function createSupabaseServerClient() {
-  const { url, anonKey } = getSupabaseBrowserConfig();
+  const { url, publishableKey } = getSupabaseBrowserConfig();
   const cookieStore = await cookies();
 
-  return createServerClient(url, anonKey, {
+  return createServerClient(url, publishableKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -7,12 +7,24 @@ describe("getSupabaseBrowserConfig", () => {
     expect(
       getSupabaseBrowserConfig({
         NEXT_PUBLIC_SUPABASE_URL: "https://academy.supabase.co",
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key",
         SUPABASE_SERVICE_ROLE_KEY: "server-only",
       }),
     ).toEqual({
       url: "https://academy.supabase.co",
-      anonKey: "anon-key",
+      publishableKey: "publishable-key",
+    });
+  });
+
+  it("기존 anon key 환경변수도 하위 호환으로 읽는다", () => {
+    expect(
+      getSupabaseBrowserConfig({
+        NEXT_PUBLIC_SUPABASE_URL: "https://academy.supabase.co",
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "legacy-anon-key",
+      }),
+    ).toEqual({
+      url: "https://academy.supabase.co",
+      publishableKey: "legacy-anon-key",
     });
   });
 

@@ -3,7 +3,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { getSupabaseBrowserConfig } from "./env";
 
 export function createSupabaseBrowserClient() {
-  const { url, anonKey } = getSupabaseBrowserConfig();
+  const { url, publishableKey } = getSupabaseBrowserConfig();
 
-  return createBrowserClient(url, anonKey);
+  return createBrowserClient(url, publishableKey);
 }

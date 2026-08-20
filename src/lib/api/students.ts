@@ -31,7 +31,7 @@ type StudentListSelectBuilder = {
   eq(
     column: "academy_id",
     value: string,
-  ): Promise<SupabaseQueryResult<StudentSupabaseRow[]>>;
+  ): PromiseLike<SupabaseQueryResult<StudentSupabaseRow[]>>;
 };
 
 type StudentListFromBuilder = {

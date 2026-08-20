@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   AlertCircle,
   CalendarCheck,
@@ -19,6 +20,8 @@ import {
 type AppShellProps = {
   academyName: string;
   permissionContext: PermissionContext;
+  pageTitle?: string;
+  children?: ReactNode;
 };
 
 type WorkQueueItem = {
@@ -68,7 +71,12 @@ const navigationFeatureByHref: Record<string, FeatureKey> = {
   "/finance": "income-management",
 };
 
-export function AppShell({ academyName, permissionContext }: AppShellProps) {
+export function AppShell({
+  academyName,
+  permissionContext,
+  pageTitle = "음악학원 관리",
+  children,
+}: AppShellProps) {
   const visibleFeatureKeys = getVisibleNavigationItems(permissionContext);
   const visibleNavigation = mainNavigation.filter((item) => {
     if (item.href === "/") {
@@ -142,7 +150,7 @@ export function AppShell({ academyName, permissionContext }: AppShellProps) {
                   현재 학원: {academyName}
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal md:text-3xl">
-                  음악학원 관리
+                  {pageTitle}
                 </h1>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -163,69 +171,78 @@ export function AppShell({ academyName, permissionContext }: AppShellProps) {
           </header>
 
           <div className="grid gap-6 px-5 py-6 md:px-8">
-            <section
-              aria-label="운영 대기열"
-              className="grid gap-3 md:grid-cols-3"
-            >
-              {visibleWorkQueue.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <article
-                    key={item.label}
-                    className="rounded-lg border border-border bg-card p-4 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span
-                        className={`flex size-9 items-center justify-center rounded-md ${item.tone}`}
-                      >
-                        <Icon aria-hidden="true" className="size-4" />
-                      </span>
-                      <p className="text-2xl font-semibold">{item.value}</p>
-                    </div>
-                    <h3 className="mt-4 text-sm font-medium">{item.label}</h3>
-                  </article>
-                );
-              })}
-            </section>
-
-            <section className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-              <div className="rounded-lg border border-border bg-card">
-                <div className="border-b border-border p-4">
-                  <h2 className="text-base font-semibold">우선 개발 흐름</h2>
-                </div>
-                <div className="divide-y divide-border">
-                  {nextMilestones.map((milestone, index) => (
-                    <div
-                      key={milestone}
-                      className="flex items-center justify-between gap-4 p-4"
-                    >
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          {index === 0 ? "진행 중" : `${index + 1}단계`}
-                        </p>
-                        <p className="mt-1 text-sm font-medium">{milestone}</p>
-                      </div>
-                      <ChevronRight
-                        aria-hidden="true"
-                        className="size-4 text-muted-foreground"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-border bg-card p-4">
-                <h2 className="text-base font-semibold">핵심 규칙</h2>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  레슨 일정 등록만으로 회차권을 차감하지 않고, 실제 등원 확인
-                  시점에만 1회를 차감한다. 결석은 회차를 차감하지 않는다.
-                </p>
-              </div>
-            </section>
+            {children ?? <DashboardContent visibleWorkQueue={visibleWorkQueue} />}
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+function DashboardContent({
+  visibleWorkQueue,
+}: {
+  visibleWorkQueue: WorkQueueItem[];
+}) {
+  return (
+    <>
+      <section aria-label="운영 대기열" className="grid gap-3 md:grid-cols-3">
+        {visibleWorkQueue.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <article
+              key={item.label}
+              className="rounded-lg border border-border bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span
+                  className={`flex size-9 items-center justify-center rounded-md ${item.tone}`}
+                >
+                  <Icon aria-hidden="true" className="size-4" />
+                </span>
+                <p className="text-2xl font-semibold">{item.value}</p>
+              </div>
+              <h3 className="mt-4 text-sm font-medium">{item.label}</h3>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+        <div className="rounded-lg border border-border bg-card">
+          <div className="border-b border-border p-4">
+            <h2 className="text-base font-semibold">우선 개발 흐름</h2>
+          </div>
+          <div className="divide-y divide-border">
+            {nextMilestones.map((milestone, index) => (
+              <div
+                key={milestone}
+                className="flex items-center justify-between gap-4 p-4"
+              >
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {index === 0 ? "진행 중" : `${index + 1}단계`}
+                  </p>
+                  <p className="mt-1 text-sm font-medium">{milestone}</p>
+                </div>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4">
+          <h2 className="text-base font-semibold">핵심 규칙</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            레슨 일정 등록만으로 회차권을 차감하지 않고, 실제 등원 확인
+            시점에만 1회를 차감한다. 결석은 회차를 차감하지 않는다.
+          </p>
+        </div>
+      </section>
+    </>
   );
 }
