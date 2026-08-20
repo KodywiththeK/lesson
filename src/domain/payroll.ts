@@ -13,6 +13,27 @@ export type RatioPayrollPolicy = {
   rounding: PayrollRounding;
 };
 
+export type MonthlyPayrollPolicy = {
+  academyId: string;
+  teacherId: string;
+  teacherName: string;
+  month: string;
+  monthlySalary: number;
+  withholdingTaxRate: number;
+  rounding: PayrollRounding;
+};
+
+export type HourlyPayrollPolicy = {
+  academyId: string;
+  teacherId: string;
+  teacherName: string;
+  month: string;
+  hourlyRate: number;
+  workedHours: number;
+  withholdingTaxRate: number;
+  rounding: PayrollRounding;
+};
+
 export type CompletedLessonRevenue = {
   academyId: string;
   lessonEventId: string;
@@ -32,7 +53,7 @@ export type PayrollRecord = {
   teacherId: string;
   teacherName: string;
   month: string;
-  payType: "ratio";
+  payType: "ratio" | "monthly" | "hourly";
   basePay: number;
   withholdingTax: number;
   netPay: number;
@@ -94,6 +115,40 @@ export function calculateRatioPayroll(
   };
 }
 
+export function calculateMonthlyPayroll(
+  policy: MonthlyPayrollPolicy,
+): PayrollRecord {
+  validateBasePayrollPolicy(policy);
+
+  if (!Number.isInteger(policy.monthlySalary) || policy.monthlySalary <= 0) {
+    throw new Error("월급제 급여는 1 이상의 월 고정 급여가 필요합니다.");
+  }
+
+  return buildPayrollRecord(policy, {
+    payType: "monthly",
+    basePay: policy.monthlySalary,
+    lessonEventIds: [],
+  });
+}
+
+export function calculateHourlyPayroll(policy: HourlyPayrollPolicy): PayrollRecord {
+  validateBasePayrollPolicy(policy);
+
+  if (!Number.isInteger(policy.hourlyRate) || policy.hourlyRate <= 0) {
+    throw new Error("시급제 급여는 1 이상의 시급이 필요합니다.");
+  }
+
+  if (policy.workedHours <= 0) {
+    throw new Error("시급제 급여는 0보다 큰 근무 시간이 필요합니다.");
+  }
+
+  return buildPayrollRecord(policy, {
+    payType: "hourly",
+    basePay: applyRounding(policy.hourlyRate * policy.workedHours, policy.rounding),
+    lessonEventIds: [],
+  });
+}
+
 export function markPayrollAsPaid(
   payroll: PayrollRecord,
   input: MarkPayrollAsPaidInput,
@@ -123,11 +178,53 @@ export function markPayrollAsPaid(
   };
 }
 
+function buildPayrollRecord(
+  policy: Pick<
+    RatioPayrollPolicy,
+    | "academyId"
+    | "teacherId"
+    | "teacherName"
+    | "month"
+    | "withholdingTaxRate"
+    | "rounding"
+  >,
+  result: {
+    payType: PayrollRecord["payType"];
+    basePay: number;
+    lessonEventIds: string[];
+  },
+): PayrollRecord {
+  const withholdingTax = applyRounding(
+    result.basePay * policy.withholdingTaxRate,
+    policy.rounding,
+  );
+
+  return {
+    academyId: policy.academyId,
+    payrollId: `${policy.month}:${policy.teacherId}`,
+    teacherId: policy.teacherId,
+    teacherName: policy.teacherName,
+    month: policy.month,
+    payType: result.payType,
+    basePay: result.basePay,
+    withholdingTax,
+    netPay: result.basePay - withholdingTax,
+    status: "pending",
+    lessonEventIds: result.lessonEventIds,
+  };
+}
+
 function validateRatioPolicy(policy: RatioPayrollPolicy) {
   if (policy.academyShareRatio + policy.teacherShareRatio !== 100) {
     throw new Error("학원과 선생님 비율의 합은 100이어야 합니다.");
   }
 
+  validateBasePayrollPolicy(policy);
+}
+
+function validateBasePayrollPolicy(
+  policy: Pick<RatioPayrollPolicy, "withholdingTaxRate">,
+) {
   if (policy.withholdingTaxRate < 0) {
     throw new Error("원천징수율은 0 이상이어야 합니다.");
   }

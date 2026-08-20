@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateHourlyPayroll,
+  calculateMonthlyPayroll,
   calculateRatioPayroll,
   markPayrollAsPaid,
 } from "./payroll";
@@ -135,6 +137,82 @@ describe("calculateRatioPayroll", () => {
 
     expect(payroll.withholdingTax).toBe(331);
     expect(payroll.netPay).toBe(9670);
+  });
+});
+
+describe("calculateMonthlyPayroll", () => {
+  it("월급제 급여는 월 고정 급여와 3.3% 원천징수로 계산한다", () => {
+    const payroll = calculateMonthlyPayroll({
+      academyId: "academy-1",
+      teacherId: "teacher-2",
+      teacherName: "이선생",
+      month: "2026-08",
+      monthlySalary: 2_000_000,
+      withholdingTaxRate: 0.033,
+      rounding: "floor",
+    });
+
+    expect(payroll).toMatchObject({
+      payrollId: "2026-08:teacher-2",
+      payType: "monthly",
+      basePay: 2_000_000,
+      withholdingTax: 66_000,
+      netPay: 1_934_000,
+      lessonEventIds: [],
+    });
+  });
+
+  it("월급제는 월 고정 급여가 필요하다", () => {
+    expect(() =>
+      calculateMonthlyPayroll({
+        academyId: "academy-1",
+        teacherId: "teacher-2",
+        teacherName: "이선생",
+        month: "2026-08",
+        monthlySalary: 0,
+        withholdingTaxRate: 0.033,
+        rounding: "floor",
+      }),
+    ).toThrow("월급제 급여는 1 이상의 월 고정 급여가 필요합니다.");
+  });
+});
+
+describe("calculateHourlyPayroll", () => {
+  it("시급제 급여는 월 근무 시간과 시급으로 계산한다", () => {
+    const payroll = calculateHourlyPayroll({
+      academyId: "academy-1",
+      teacherId: "teacher-3",
+      teacherName: "최선생",
+      month: "2026-08",
+      hourlyRate: 30_000,
+      workedHours: 12.5,
+      withholdingTaxRate: 0.033,
+      rounding: "round",
+    });
+
+    expect(payroll).toMatchObject({
+      payrollId: "2026-08:teacher-3",
+      payType: "hourly",
+      basePay: 375_000,
+      withholdingTax: 12_375,
+      netPay: 362_625,
+      lessonEventIds: [],
+    });
+  });
+
+  it("시급제는 시급과 근무 시간이 필요하다", () => {
+    expect(() =>
+      calculateHourlyPayroll({
+        academyId: "academy-1",
+        teacherId: "teacher-3",
+        teacherName: "최선생",
+        month: "2026-08",
+        hourlyRate: 30_000,
+        workedHours: 0,
+        withholdingTaxRate: 0.033,
+        rounding: "round",
+      }),
+    ).toThrow("시급제 급여는 0보다 큰 근무 시간이 필요합니다.");
   });
 });
 
