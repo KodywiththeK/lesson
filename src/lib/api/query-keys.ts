@@ -1,6 +1,9 @@
 type StudentListFilters = {
   status?: "active" | "suspended" | "withdrawn";
   q?: string;
+  teacherName?: string;
+  instrumentName?: string;
+  weekdayLabel?: string;
 };
 
 export const queryKeys = {
@@ -13,6 +16,9 @@ export const queryKeys = {
         "list",
         filters.status ?? "all",
         filters.q ?? "",
+        filters.teacherName ?? "",
+        filters.instrumentName ?? "",
+        filters.weekdayLabel ?? "",
       ] as const,
   },
   lessonTickets: {

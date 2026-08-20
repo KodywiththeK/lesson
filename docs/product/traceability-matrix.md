@@ -8,7 +8,7 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 결석은 회차권을 차감하지 않는다 | PDF Part 2 전역 규칙 | 회차권 차감 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 수업 일정에 올라간 상태만으로는 회차권을 차감하지 않는다 | PDF Part 2 전역 규칙 | 회차권 차감 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 다른 학원 tenant의 회차권은 차감하지 못한다 | 사용자 추가 지시: 멀티학원 서비스 | 멀티테넌트 데이터 격리 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
-| API cache key는 학원별로 분리한다 | 사용자 추가 지시: TanStack Query + 멀티학원 서비스 | API cache 격리 | `src/lib/api/query-keys.test.ts` | `src/lib/api/query-keys.ts` |
+| API cache key는 학원별로 분리한다 | 사용자 추가 지시: TanStack Query + 멀티학원 서비스 | API cache 격리 | `src/lib/api/query-keys.test.ts`, `src/lib/api/students.test.ts` | `src/lib/api/query-keys.ts`, `src/lib/api/students.ts` |
 | 학원 피아노 수업 일정은 원생 등록 정보에서 반복 생성된다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
 | 학원 수업 일정 이동은 해당 월에만 반영된다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
 | 결석 확인은 보강 일정 또는 패스 기록을 만들 수 있다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
@@ -41,7 +41,7 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 개인레슨 등록 다이얼로그는 원생, 악기, 선생님, 시간 순서로 진행한다 | PDF 1-2 | 개인레슨 등록 UI | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 개인레슨 원생 검색 결과는 잔여 회차와 최근 레슨 상태를 함께 표시한다 | PDF 1-2 | 개인레슨 등록 UI | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 회차권 수동 수정은 권한 있는 역할만 수행한다 | PDF 2 | 회차권 관리 권한 | `src/domain/lesson-ticket.test.ts`, `src/domain/permissions.test.ts` | `src/domain/lesson-ticket.ts`, `src/domain/permissions.ts` |
-| 원생 목록은 이름, 선생님, 악기, 정기 요일 기준 검색/정렬을 지원한다 | PDF 3-1 | 원생 목록 | `src/domain/student-list.test.ts` | `src/domain/student-list.ts` |
+| 원생 목록은 이름, 선생님, 악기, 정기 요일 기준 검색/정렬을 지원한다 | PDF 3-1 | 원생 목록 | `src/domain/student-list.test.ts`, `src/lib/api/students.test.ts` | `src/domain/student-list.ts`, `src/lib/api/students.ts` |
 | 선생님 등록은 담당 파트, 연락처, 등록일, 주민등록번호, 급여 형태를 기록한다 | PDF 3-2 | 선생님 등록 | `src/domain/teacher.test.ts` | `src/domain/teacher.ts` |
 | 거래처 등록은 거래처명, 연락처, 종류, 비고를 기록한다 | PDF 3-4 | 거래처 등록 | `src/domain/vendor.test.ts` | `src/domain/vendor.ts` |
 | 교재 구매 목록은 원생, 교재명, 자동 입력 가격, 출고일을 기록한다 | PDF 4 | 교재 판매 UI | `src/domain/book-sale.test.ts` | `src/domain/book-sale.ts` |
