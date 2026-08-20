@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PRIVATE_LESSON_REGISTRATION_STEPS,
+  buildPrivateLessonStudentSearchResults,
   findPrivateLessonRegistrationBlocker,
   formatPrivateLessonScheduleMessage,
+  getPrivateLessonRegistrationFlowState,
   getSelectablePrivateLessonInstruments,
 } from "./private-lesson";
 
@@ -135,6 +138,117 @@ describe("getSelectablePrivateLessonInstruments", () => {
       {
         instrumentId: "piano",
         instrumentName: "피아노",
+      },
+    ]);
+  });
+});
+
+describe("getPrivateLessonRegistrationFlowState", () => {
+  it("개인레슨 등록은 원생, 악기, 선생님, 시간 순서로 진행한다", () => {
+    expect(PRIVATE_LESSON_REGISTRATION_STEPS.map((step) => step.id)).toEqual([
+      "student",
+      "instrument",
+      "teacher",
+      "time",
+    ]);
+
+    const flow = getPrivateLessonRegistrationFlowState({
+      academyId: "academy-1",
+      studentId: "student-1",
+      instrumentId: "piano",
+    });
+
+    expect(flow.currentStepId).toBe("teacher");
+    expect(flow.steps).toEqual([
+      { id: "student", label: "원생", status: "complete" },
+      { id: "instrument", label: "악기", status: "complete" },
+      { id: "teacher", label: "선생님", status: "current" },
+      { id: "time", label: "시간", status: "locked" },
+    ]);
+  });
+});
+
+describe("buildPrivateLessonStudentSearchResults", () => {
+  it("원생 검색 결과에 잔여 회차와 최근 레슨 상태를 함께 표시한다", () => {
+    const results = buildPrivateLessonStudentSearchResults(
+      [
+        {
+          academyId: "academy-1",
+          studentId: "student-1",
+          studentName: "김민지",
+        },
+        {
+          academyId: "academy-1",
+          studentId: "student-2",
+          studentName: "이서윤",
+        },
+        {
+          academyId: "academy-2",
+          studentId: "student-1",
+          studentName: "김민지",
+        },
+      ],
+      [
+        {
+          academyId: "academy-1",
+          studentId: "student-1",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          remainingCount: 3,
+        },
+      ],
+      [
+        {
+          id: "older-lesson",
+          academyId: "academy-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          teacherId: "teacher-1",
+          teacherName: "박선생",
+          startAt: "2026-08-17T15:00:00+09:00",
+          endAt: "2026-08-17T15:50:00+09:00",
+          status: "present",
+        },
+        {
+          id: "recent-lesson",
+          academyId: "academy-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          teacherId: "teacher-1",
+          teacherName: "박선생",
+          startAt: "2026-08-19T15:00:00+09:00",
+          endAt: "2026-08-19T15:50:00+09:00",
+          status: "absent",
+        },
+      ],
+      {
+        academyId: "academy-1",
+        search: "김",
+      },
+    );
+
+    expect(results).toEqual([
+      {
+        studentId: "student-1",
+        studentName: "김민지",
+        remainingTickets: [
+          {
+            instrumentId: "piano",
+            instrumentName: "피아노",
+            remainingCount: 3,
+          },
+        ],
+        recentLesson: {
+          lessonId: "recent-lesson",
+          date: "2026-08-19",
+          instrumentName: "피아노",
+          status: "absent",
+          statusLabel: "결석",
+        },
       },
     ]);
   });
