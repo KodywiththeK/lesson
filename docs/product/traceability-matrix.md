@@ -33,10 +33,10 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 수입 관리는 기본적으로 원장 전용으로 제한한다 | PDF 5 + 제품 결정 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
 | 공통 목록은 10개 기본, 10/20/30 페이지 크기, 가나다 정렬을 지원한다 | PDF 목록 공통 | 공통 목록 동작 | `src/domain/common-list.test.ts`, `src/components/operations/list-toolbar.test.tsx` | `src/domain/common-list.ts`, `src/components/operations/list-toolbar.tsx` |
 | 원생, 선생님, 거래처, 교재, 수입 내역은 검색 또는 필터를 제공한다 | PDF 목록 공통 | 공통 목록 동작 | `src/domain/common-list.test.ts`, `src/components/operations/list-toolbar.test.tsx` | `src/domain/common-list.ts`, `src/components/operations/list-toolbar.tsx` |
-| 날짜 선택 시 해당 날짜의 예상 출석 원생을 보여준다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
-| 학원 수업 일정 삭제는 사유 입력과 함께 처리한다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
-| 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
-| 결석 처리된 원생은 결석 인원 목록으로 이동하고 확정 후 목록에서 제거된다 | PDF 1-1 | 학원 수업 보강 | 미작성 | 미구현 |
+| 날짜 선택 시 해당 날짜의 예상 출석 원생을 보여준다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-attendance.test.ts` | `src/domain/academy-lesson-attendance.ts` |
+| 학원 수업 일정 삭제는 사유 입력과 함께 처리한다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
+| 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-attendance.test.ts` | `src/domain/academy-lesson-attendance.ts` |
+| 결석 처리된 원생은 결석 인원 목록으로 이동하고 확정 후 목록에서 제거된다 | PDF 1-1 | 학원 수업 보강 | `src/domain/academy-lesson-attendance.test.ts`, `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-attendance.ts`, `src/domain/academy-lesson-absence.ts` |
 | 월별 메모는 월별 저장, 읽지 않음 표시, 새로고침 시 위치/크기 초기화 규칙을 가진다 | PDF 1-1 | 월별 메모 | 미작성 | 미구현 |
 | 개인레슨 등록 다이얼로그는 원생, 악기, 선생님, 시간 순서로 진행한다 | PDF 1-2 | 개인레슨 등록 UI | 미작성 | 미구현 |
 | 개인레슨 원생 검색 결과는 잔여 회차와 최근 레슨 상태를 함께 표시한다 | PDF 1-2 | 개인레슨 등록 UI | 미작성 | 미구현 |

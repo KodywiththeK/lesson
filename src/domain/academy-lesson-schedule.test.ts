@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deleteAcademyLessonWithReason,
   generateAcademyLessonEvents,
   moveAcademyLessonWithinMonth,
 } from "./academy-lesson-schedule";
@@ -139,5 +140,49 @@ describe("moveAcademyLessonWithinMonth", () => {
         targetEndTime: "16:50",
       }),
     ).toThrow("일정 이동은 같은 월 안에서만 가능합니다.");
+  });
+});
+
+describe("deleteAcademyLessonWithReason", () => {
+  const event = {
+    id: "event-1",
+    academyId: "academy-1",
+    enrollmentId: "enrollment-1",
+    studentId: "student-1",
+    studentName: "김민지",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    date: "2026-08-10",
+    startTime: "15:00",
+    endTime: "15:50",
+    generatedFromEnrollment: true,
+  };
+
+  it("학원 수업 일정 삭제는 사유와 처리 정보를 남긴다", () => {
+    const result = deleteAcademyLessonWithReason(event, {
+      reason: "학원 행사로 휴강",
+      deletedAt: "2026-08-09T18:00:00+09:00",
+      deletedBy: "user-owner",
+    });
+
+    expect(result.deletedEvent).toMatchObject({
+      id: "event-1",
+      status: "deleted",
+      deletionReason: "학원 행사로 휴강",
+      deletedAt: "2026-08-09T18:00:00+09:00",
+      deletedBy: "user-owner",
+      generatedFromEnrollment: false,
+    });
+    expect(result.enrollmentScheduleChanged).toBe(false);
+  });
+
+  it("삭제 사유가 없으면 삭제를 막는다", () => {
+    expect(() =>
+      deleteAcademyLessonWithReason(event, {
+        reason: " ",
+        deletedAt: "2026-08-09T18:00:00+09:00",
+        deletedBy: "user-owner",
+      }),
+    ).toThrow("일정 삭제 사유는 필수입니다.");
   });
 });

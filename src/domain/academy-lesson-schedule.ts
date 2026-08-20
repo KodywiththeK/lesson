@@ -38,6 +38,7 @@ export type AcademyLessonEvent = {
   startTime: string;
   endTime: string;
   generatedFromEnrollment: boolean;
+  status?: "scheduled" | "deleted";
 };
 
 export type MoveAcademyLessonInput = {
@@ -48,6 +49,24 @@ export type MoveAcademyLessonInput = {
 
 export type MoveAcademyLessonResult = {
   movedEvent: AcademyLessonEvent;
+  enrollmentScheduleChanged: false;
+};
+
+export type DeleteAcademyLessonInput = {
+  reason: string;
+  deletedAt: string;
+  deletedBy: string;
+};
+
+export type DeletedAcademyLessonEvent = AcademyLessonEvent & {
+  status: "deleted";
+  deletionReason: string;
+  deletedAt: string;
+  deletedBy: string;
+};
+
+export type DeleteAcademyLessonResult = {
+  deletedEvent: DeletedAcademyLessonEvent;
   enrollmentScheduleChanged: false;
 };
 
@@ -107,6 +126,29 @@ export function moveAcademyLessonWithinMonth(
       date: input.targetDate,
       startTime: input.targetStartTime,
       endTime: input.targetEndTime,
+      generatedFromEnrollment: false,
+    },
+    enrollmentScheduleChanged: false,
+  };
+}
+
+export function deleteAcademyLessonWithReason(
+  event: AcademyLessonEvent,
+  input: DeleteAcademyLessonInput,
+): DeleteAcademyLessonResult {
+  const deletionReason = input.reason.trim();
+
+  if (!deletionReason) {
+    throw new Error("일정 삭제 사유는 필수입니다.");
+  }
+
+  return {
+    deletedEvent: {
+      ...event,
+      status: "deleted",
+      deletionReason,
+      deletedAt: input.deletedAt,
+      deletedBy: input.deletedBy,
       generatedFromEnrollment: false,
     },
     enrollmentScheduleChanged: false,
