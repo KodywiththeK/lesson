@@ -218,6 +218,7 @@ export function registerLessonTicket(
   registration: LessonTicketRegistration,
 ): RegisterLessonTicketResult {
   assertPositiveCount(registration.grantedCount);
+  assertValidDateRange(registration.validFrom, registration.validUntil);
 
   if (!existingTicket) {
     return {
@@ -402,6 +403,12 @@ function assertPositiveCount(count: number) {
 function assertNonZeroInteger(count: number) {
   if (!Number.isInteger(count) || count === 0) {
     throw new Error("회차권 수동 수정 회수는 0이 아닌 정수여야 합니다.");
+  }
+}
+
+function assertValidDateRange(validFrom: string, validUntil: string) {
+  if (toUtcDayNumber(validUntil) < toUtcDayNumber(validFrom)) {
+    throw new Error("회차권 유효 만료일은 시작일 이후여야 합니다.");
   }
 }
 

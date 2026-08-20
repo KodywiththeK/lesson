@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +12,7 @@ import {
 import {
   LessonTicketListScreen,
   type LessonTicketListQueryOptionsFactory,
+  type LessonTicketRegistrationOptionsQueryFactory,
 } from "./lesson-ticket-list-screen";
 
 const lessonTickets: LessonTicketListItem[] = [
@@ -44,6 +46,10 @@ const lessonTickets: LessonTicketListItem[] = [
 
 function renderLessonTicketListScreen(
   queryOptionsFactory: LessonTicketListQueryOptionsFactory,
+  registrationOptionsQueryFactory?: LessonTicketRegistrationOptionsQueryFactory,
+  registerLessonTicket?: ComponentProps<
+    typeof LessonTicketListScreen
+  >["registerLessonTicket"],
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -60,6 +66,8 @@ function renderLessonTicketListScreen(
         academyName="더 클래식"
         today="2026-09-01"
         queryOptionsFactory={queryOptionsFactory}
+        registrationOptionsQueryFactory={registrationOptionsQueryFactory}
+        registerLessonTicket={registerLessonTicket}
       />
     </QueryClientProvider>,
   );
@@ -137,5 +145,88 @@ describe("LessonTicketListScreen", () => {
       "회차권 목록을 불러오지 못했습니다.",
     );
     expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
+  });
+
+  it("회차권 등록 다이얼로그에서 원생과 악기를 선택해 등록 mutation을 실행한다", async () => {
+    const user = userEvent.setup();
+    const registrations: Array<Record<string, unknown>> = [];
+
+    renderLessonTicketListScreen(
+      (options) => ({
+        queryKey: ["lesson-tickets", options.academyId],
+        queryFn: async () => buildLessonTicketList(lessonTickets, options),
+      }),
+      (academyId) => ({
+        queryKey: ["lesson-ticket-registration-options", academyId],
+        queryFn: async () => [
+          {
+            studentId: "student-1",
+            studentName: "김민지",
+            instruments: [
+              {
+                instrumentId: "piano",
+                instrumentName: "피아노",
+              },
+            ],
+          },
+        ],
+      }),
+      async (input) => {
+        registrations.push(input);
+
+        return {
+          ticket: {
+            academyId: input.academyId,
+            ticketId: "ticket-3",
+            studentId: input.studentId,
+            studentName: input.studentName,
+            instrumentId: input.instrumentId,
+            instrumentName: input.instrumentName,
+            totalGrantedCount: input.grantedCount,
+            remainingCount: input.grantedCount,
+            validFrom: input.validFrom,
+            validUntil: input.validUntil,
+            registeredAt: input.registeredAt,
+          },
+          event: {
+            type: "created-new-ticket",
+            addedCount: input.grantedCount,
+            nextValidUntil: input.validUntil,
+          },
+        };
+      },
+    );
+
+    await user.click(screen.getByRole("button", { name: "회차권 등록" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    await user.clear(within(dialog).getByRole("spinbutton", { name: "부여 회수" }));
+    await user.type(
+      within(dialog).getByRole("spinbutton", { name: "부여 회수" }),
+      "10",
+    );
+    await user.type(within(dialog).getByLabelText("유효 시작일"), "2026-09-01");
+    await user.type(within(dialog).getByLabelText("유효 만료일"), "2026-10-31");
+    await user.type(within(dialog).getByLabelText("등록일"), "2026-09-01");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(registrations).toEqual([
+        {
+          academyId: "academy-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          grantedCount: 10,
+          validFrom: "2026-09-01",
+          validUntil: "2026-10-31",
+          registeredAt: "2026-09-01",
+        },
+      ]);
+    });
+    expect(screen.queryByRole("dialog", { name: "회차권 등록" })).toBeNull();
   });
 });

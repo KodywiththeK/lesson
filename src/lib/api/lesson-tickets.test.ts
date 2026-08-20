@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createLessonTicketListQueryOptions,
+  fetchLessonTicketRegistrationOptions,
   fetchLessonTicketList,
+  registerLessonTicketGrant,
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
@@ -123,3 +125,306 @@ describe("createLessonTicketListQueryOptions", () => {
     await expect(options.queryFn()).resolves.toEqual([]);
   });
 });
+
+describe("fetchLessonTicketRegistrationOptions", () => {
+  it("원생과 활성 개인레슨 악기를 회차권 등록 선택지로 만든다", async () => {
+    const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
+      [];
+    const client = {
+      from(table: "students") {
+        calls.push({ table });
+
+        return {
+          select(select: string) {
+            calls[calls.length - 1].select = select;
+
+            return {
+              async eq(column: "academy_id", value: string) {
+                calls[calls.length - 1].eq = [column, value];
+
+                return {
+                  data: [
+                    {
+                      id: "student-1",
+                      academy_id: "academy-1",
+                      name: "김민지",
+                      student_instruments: [
+                        {
+                          instrument_id: "piano",
+                          instrument_name: "피아노",
+                          lesson_type: "private",
+                          active: true,
+                        },
+                        {
+                          instrument_id: "cello",
+                          instrument_name: "첼로",
+                          lesson_type: "private",
+                          active: false,
+                        },
+                        {
+                          instrument_id: "academy-piano",
+                          instrument_name: "학원 피아노",
+                          lesson_type: "academy",
+                          active: true,
+                        },
+                      ],
+                    },
+                  ],
+                  error: null,
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const result = await fetchLessonTicketRegistrationOptions(
+      client,
+      "academy-1",
+    );
+
+    expect(calls).toEqual([
+      {
+        table: "students",
+        select:
+          "id, academy_id, name, student_instruments(instrument_id, instrument_name, lesson_type, active)",
+        eq: ["academy_id", "academy-1"],
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        studentId: "student-1",
+        studentName: "김민지",
+        instruments: [
+          {
+            instrumentId: "piano",
+            instrumentName: "피아노",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("registerLessonTicketGrant", () => {
+  it("기존 회차권이 있으면 회수와 유효기간을 병합해 update한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      from(table: "lesson_ticket_grants") {
+        calls.push({ table });
+
+        return {
+          select(select: string) {
+            calls[calls.length - 1].select = select;
+
+            return createExistingTicketLookup(calls, [
+              {
+                id: "ticket-1",
+                academy_id: "academy-1",
+                student_id: "student-1",
+                instrument_id: "piano",
+                instrument_name: "피아노",
+                total_granted_count: 12,
+                remaining_count: 3,
+                valid_from: "2026-08-01",
+                valid_until: "2026-09-30",
+                registered_at: "2026-08-01",
+                students: {
+                  name: "김민지",
+                },
+              },
+            ]);
+          },
+          update(values: Record<string, unknown>) {
+            calls[calls.length - 1].update = values;
+
+            return createPersistedTicketResult(calls, {
+              id: "ticket-1",
+              academy_id: "academy-1",
+              student_id: "student-1",
+              instrument_id: "piano",
+              instrument_name: "피아노",
+              total_granted_count: 22,
+              remaining_count: 13,
+              valid_from: "2026-10-01",
+              valid_until: "2026-11-30",
+              registered_at: "2026-09-20",
+              students: {
+                name: "김민지",
+              },
+            });
+          },
+          insert() {
+            throw new Error("insert should not be called");
+          },
+        };
+      },
+    };
+
+    const result = await registerLessonTicketGrant(client, {
+      academyId: "academy-1",
+      studentId: "student-1",
+      studentName: "김민지",
+      instrumentId: "piano",
+      instrumentName: "피아노",
+      grantedCount: 10,
+      validFrom: "2026-10-01",
+      validUntil: "2026-11-30",
+      registeredAt: "2026-09-20",
+    });
+
+    expect(calls).toMatchObject([
+      {
+        table: "lesson_ticket_grants",
+        select:
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students(name)",
+        eq: [
+          ["academy_id", "academy-1"],
+          ["student_id", "student-1"],
+          ["instrument_id", "piano"],
+        ],
+        order: ["valid_until", { ascending: false }],
+        limit: 1,
+      },
+      {
+        table: "lesson_ticket_grants",
+        update: {
+          total_granted_count: 22,
+          remaining_count: 13,
+          valid_from: "2026-10-01",
+          valid_until: "2026-11-30",
+          registered_at: "2026-09-20",
+          instrument_name: "피아노",
+        },
+        eq: [["id", "ticket-1"]],
+      },
+    ]);
+    expect(result.ticket).toMatchObject({
+      ticketId: "ticket-1",
+      totalGrantedCount: 22,
+      remainingCount: 13,
+      validUntil: "2026-11-30",
+    });
+    expect(result.event.type).toBe("merged-existing-ticket");
+  });
+
+  it("기존 회차권이 없으면 새 회차권을 insert한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      from(table: "lesson_ticket_grants") {
+        calls.push({ table });
+
+        return {
+          select(select: string) {
+            calls[calls.length - 1].select = select;
+
+            return createExistingTicketLookup(calls, []);
+          },
+          update() {
+            throw new Error("update should not be called");
+          },
+          insert(values: Record<string, unknown>) {
+            calls[calls.length - 1].insert = values;
+
+            return createPersistedTicketResult(calls, {
+              id: "ticket-2",
+              academy_id: "academy-1",
+              student_id: "student-2",
+              instrument_id: "violin",
+              instrument_name: "바이올린",
+              total_granted_count: 8,
+              remaining_count: 8,
+              valid_from: "2026-09-01",
+              valid_until: "2026-10-31",
+              registered_at: "2026-09-01",
+              students: {
+                name: "이서윤",
+              },
+            });
+          },
+        };
+      },
+    };
+
+    const result = await registerLessonTicketGrant(client, {
+      academyId: "academy-1",
+      studentId: "student-2",
+      studentName: "이서윤",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      grantedCount: 8,
+      validFrom: "2026-09-01",
+      validUntil: "2026-10-31",
+      registeredAt: "2026-09-01",
+    });
+
+    expect(calls[1]).toMatchObject({
+      table: "lesson_ticket_grants",
+      insert: {
+        academy_id: "academy-1",
+        student_id: "student-2",
+        instrument_id: "violin",
+        instrument_name: "바이올린",
+        total_granted_count: 8,
+        remaining_count: 8,
+        valid_from: "2026-09-01",
+        valid_until: "2026-10-31",
+        registered_at: "2026-09-01",
+      },
+    });
+    expect(result.event.type).toBe("created-new-ticket");
+  });
+});
+
+function createExistingTicketLookup(
+  calls: Array<Record<string, unknown>>,
+  rows: LessonTicketGrantSupabaseRow[],
+) {
+  return {
+    eq(column: string, value: string) {
+      const latestCall = calls[calls.length - 1];
+      latestCall.eq = [...((latestCall.eq as unknown[]) ?? []), [column, value]];
+
+      return this;
+    },
+    order(column: string, options: { ascending: boolean }) {
+      calls[calls.length - 1].order = [column, options];
+
+      return this;
+    },
+    async limit(count: number) {
+      calls[calls.length - 1].limit = count;
+
+      return {
+        data: rows,
+        error: null,
+      };
+    },
+  };
+}
+
+function createPersistedTicketResult(
+  calls: Array<Record<string, unknown>>,
+  row: LessonTicketGrantSupabaseRow,
+) {
+  return {
+    eq(column: string, value: string) {
+      const latestCall = calls[calls.length - 1];
+      latestCall.eq = [...((latestCall.eq as unknown[]) ?? []), [column, value]];
+
+      return this;
+    },
+    select(select: string) {
+      calls[calls.length - 1].select = select;
+
+      return this;
+    },
+    async single() {
+      return {
+        data: row,
+        error: null,
+      };
+    },
+  };
+}

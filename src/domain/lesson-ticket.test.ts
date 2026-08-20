@@ -159,6 +159,20 @@ describe("registerLessonTicket", () => {
       }),
     ).toThrow("학원 범위가 일치하지 않습니다.");
   });
+
+  it("유효 만료일이 시작일보다 빠른 회차권 등록은 막는다", () => {
+    expect(() =>
+      registerLessonTicket(undefined, {
+        academyId: "academy-1",
+        studentId: "student-1",
+        instrumentId: "piano",
+        grantedCount: 10,
+        validFrom: "2026-10-01",
+        validUntil: "2026-09-30",
+        registeredAt: "2026-09-20",
+      }),
+    ).toThrow("회차권 유효 만료일은 시작일 이후여야 합니다.");
+  });
 });
 
 describe("summarizeLessonTicketStatus", () => {

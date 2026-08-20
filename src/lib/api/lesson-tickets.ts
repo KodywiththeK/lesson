@@ -1,8 +1,12 @@
 import {
   buildLessonTicketList,
+  registerLessonTicket,
   type BuildLessonTicketListOptions,
+  type LessonTicket,
   type LessonTicketListItem,
   type LessonTicketListRow,
+  type LessonTicketRegistration,
+  type RegisterLessonTicketResult,
 } from "@/domain/lesson-ticket";
 
 import { queryKeys } from "./query-keys";
@@ -45,6 +49,89 @@ export type LessonTicketListSupabaseClient = {
 
 export type FetchLessonTicketListOptions = BuildLessonTicketListOptions;
 
+export type LessonTicketRegistrationInstrumentOption = {
+  instrumentId: string;
+  instrumentName: string;
+};
+
+export type LessonTicketRegistrationStudentOption = {
+  studentId: string;
+  studentName: string;
+  instruments: LessonTicketRegistrationInstrumentOption[];
+};
+
+export type LessonTicketRegistrationOptionsSupabaseRow = {
+  id: string;
+  academy_id: string;
+  name: string;
+  student_instruments:
+    | Array<{
+        instrument_id: string | null;
+        instrument_name: string | null;
+        lesson_type: string | null;
+        active: boolean | null;
+      }>
+    | null;
+};
+
+type LessonTicketRegistrationOptionsSelectBuilder = {
+  eq(
+    column: "academy_id",
+    value: string,
+  ): PromiseLike<
+    SupabaseQueryResult<LessonTicketRegistrationOptionsSupabaseRow[]>
+  >;
+};
+
+type LessonTicketRegistrationOptionsFromBuilder = {
+  select(select: string): LessonTicketRegistrationOptionsSelectBuilder;
+};
+
+export type LessonTicketRegistrationOptionsSupabaseClient = {
+  from(table: "students"): LessonTicketRegistrationOptionsFromBuilder;
+};
+
+export type RegisterLessonTicketGrantInput = LessonTicketRegistration & {
+  studentName: string;
+  instrumentName: string;
+};
+
+export type RegisterLessonTicketGrantResult = RegisterLessonTicketResult & {
+  ticket: LessonTicketListItem;
+};
+
+type LessonTicketGrantLookupBuilder = {
+  eq(
+    column: "academy_id" | "student_id" | "instrument_id",
+    value: string,
+  ): LessonTicketGrantLookupBuilder;
+  order(
+    column: "valid_until",
+    options: { ascending: boolean },
+  ): {
+    limit(
+      count: number,
+    ): PromiseLike<SupabaseQueryResult<LessonTicketGrantSupabaseRow[]>>;
+  };
+};
+
+type LessonTicketGrantPersistBuilder = {
+  eq(column: "id", value: string): LessonTicketGrantPersistBuilder;
+  select(select: string): {
+    single(): PromiseLike<SupabaseQueryResult<LessonTicketGrantSupabaseRow>>;
+  };
+};
+
+type LessonTicketGrantRegistrationFromBuilder = {
+  select(select: string): LessonTicketGrantLookupBuilder;
+  update(values: Record<string, unknown>): LessonTicketGrantPersistBuilder;
+  insert(values: Record<string, unknown>): LessonTicketGrantPersistBuilder;
+};
+
+export type LessonTicketGrantRegistrationSupabaseClient = {
+  from(table: "lesson_ticket_grants"): LessonTicketGrantRegistrationFromBuilder;
+};
+
 const LESSON_TICKET_LIST_SELECT =
   "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students(name)";
 
@@ -62,6 +149,56 @@ export async function fetchLessonTicketList(
   }
 
   return buildLessonTicketList((data ?? []).map(toLessonTicketListItem), options);
+}
+
+export async function fetchLessonTicketRegistrationOptions(
+  supabase: LessonTicketRegistrationOptionsSupabaseClient,
+  academyId: string,
+): Promise<LessonTicketRegistrationStudentOption[]> {
+  const { data, error } = await supabase
+    .from("students")
+    .select(
+      "id, academy_id, name, student_instruments(instrument_id, instrument_name, lesson_type, active)",
+    )
+    .eq("academy_id", academyId);
+
+  if (error) {
+    throw new Error(`회차권 등록 선택지를 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return (data ?? []).map(toLessonTicketRegistrationStudentOption);
+}
+
+export function createLessonTicketRegistrationOptionsQueryOptions(
+  supabase: LessonTicketRegistrationOptionsSupabaseClient,
+  academyId: string,
+) {
+  return {
+    queryKey: queryKeys.lessonTickets.registrationOptions(academyId),
+    queryFn: () => fetchLessonTicketRegistrationOptions(supabase, academyId),
+  };
+}
+
+export async function registerLessonTicketGrant(
+  supabase: LessonTicketGrantRegistrationSupabaseClient,
+  input: RegisterLessonTicketGrantInput,
+): Promise<RegisterLessonTicketGrantResult> {
+  const existingTicket = await fetchLatestLessonTicketGrant(supabase, input);
+  const registered = registerLessonTicket(existingTicket?.ticket, input);
+  const persistedTicket = existingTicket
+    ? await updateLessonTicketGrant(supabase, existingTicket.ticketId, {
+        ...registered.ticket,
+        instrumentName: input.instrumentName,
+      })
+    : await insertLessonTicketGrant(supabase, {
+        ...registered.ticket,
+        instrumentName: input.instrumentName,
+      });
+
+  return {
+    ticket: persistedTicket,
+    event: registered.event,
+  };
 }
 
 export function createLessonTicketListQueryOptions(
@@ -92,5 +229,133 @@ function toLessonTicketListItem(
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     registeredAt: row.registered_at,
+  };
+}
+
+function toLessonTicketRegistrationStudentOption(
+  row: LessonTicketRegistrationOptionsSupabaseRow,
+): LessonTicketRegistrationStudentOption {
+  return {
+    studentId: row.id,
+    studentName: row.name,
+    instruments: (row.student_instruments ?? []).flatMap((instrument) => {
+      if (
+        instrument.active !== true ||
+        instrument.lesson_type !== "private" ||
+        !instrument.instrument_id ||
+        !instrument.instrument_name?.trim()
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          instrumentId: instrument.instrument_id,
+          instrumentName: instrument.instrument_name,
+        },
+      ];
+    }),
+  };
+}
+
+async function fetchLatestLessonTicketGrant(
+  supabase: LessonTicketGrantRegistrationSupabaseClient,
+  input: RegisterLessonTicketGrantInput,
+) {
+  const { data, error } = await supabase
+    .from("lesson_ticket_grants")
+    .select(LESSON_TICKET_LIST_SELECT)
+    .eq("academy_id", input.academyId)
+    .eq("student_id", input.studentId)
+    .eq("instrument_id", input.instrumentId)
+    .order("valid_until", { ascending: false })
+    .limit(1);
+
+  if (error) {
+    throw new Error(`기존 회차권을 확인하지 못했습니다: ${error.message}`);
+  }
+
+  const row = data?.[0];
+
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    ticketId: row.id,
+    ticket: toLessonTicket(row),
+  };
+}
+
+async function updateLessonTicketGrant(
+  supabase: LessonTicketGrantRegistrationSupabaseClient,
+  ticketId: string,
+  ticket: LessonTicket & { instrumentName: string },
+) {
+  const { data, error } = await supabase
+    .from("lesson_ticket_grants")
+    .update(toLessonTicketGrantMutationRow(ticket))
+    .eq("id", ticketId)
+    .select(LESSON_TICKET_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`회차권을 갱신하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("회차권을 갱신했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toLessonTicketListItem(data);
+}
+
+async function insertLessonTicketGrant(
+  supabase: LessonTicketGrantRegistrationSupabaseClient,
+  ticket: LessonTicket & { instrumentName: string },
+) {
+  const { data, error } = await supabase
+    .from("lesson_ticket_grants")
+    .insert(toLessonTicketGrantMutationRow(ticket))
+    .select(LESSON_TICKET_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`회차권을 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("회차권을 등록했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toLessonTicketListItem(data);
+}
+
+function toLessonTicket(row: LessonTicketGrantSupabaseRow): LessonTicket {
+  return {
+    academyId: row.academy_id,
+    studentId: row.student_id,
+    instrumentId: row.instrument_id,
+    totalGrantedCount: row.total_granted_count,
+    remainingCount: row.remaining_count,
+    validFrom: row.valid_from,
+    validUntil: row.valid_until,
+    registeredAt: row.registered_at,
+  };
+}
+
+function toLessonTicketGrantMutationRow(
+  ticket: LessonTicket & { instrumentName: string },
+) {
+  return {
+    academy_id: ticket.academyId,
+    student_id: ticket.studentId,
+    instrument_id: ticket.instrumentId,
+    instrument_name: ticket.instrumentName,
+    total_granted_count: ticket.totalGrantedCount,
+    remaining_count: ticket.remainingCount,
+    valid_from: ticket.validFrom,
+    valid_until: ticket.validUntil,
+    registered_at: ticket.registeredAt,
   };
 }

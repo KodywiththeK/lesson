@@ -114,4 +114,13 @@ describe("queryKeys", () => {
       "low-remaining",
     ]);
   });
+
+  it("회차권 등록 선택지 key를 학원별로 분리한다", () => {
+    expect(queryKeys.lessonTickets.registrationOptions("academy-1")).toEqual([
+      "academy",
+      "academy-1",
+      "lesson-tickets",
+      "registration-options",
+    ]);
+  });
 });

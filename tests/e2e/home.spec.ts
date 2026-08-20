@@ -45,6 +45,9 @@ test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다"
     page.getByRole("heading", { level: 1, name: "회차권 관리" }),
   ).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "회차권 검색" })).toBeVisible();
+
+  await page.getByRole("button", { name: "회차권 등록" }).click();
+  await expect(page.getByRole("dialog", { name: "회차권 등록" })).toBeVisible();
 });
 
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {

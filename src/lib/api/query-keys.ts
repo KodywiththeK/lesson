@@ -102,6 +102,12 @@ export const queryKeys = {
         filters.q ?? "",
         filters.status ?? "",
       ] as const,
+    registrationOptions: (academyId: string) =>
+      [
+        ...queryKeys.academy(academyId),
+        "lesson-tickets",
+        "registration-options",
+      ] as const,
     summary: (academyId: string) =>
       [...queryKeys.academy(academyId), "lesson-tickets", "summary"] as const,
   },

@@ -1,8 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { RotateCcw, TicketPlus } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   ListFilterSelect,
@@ -11,6 +17,21 @@ import {
 } from "@/components/management/list-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -27,7 +48,14 @@ import {
 } from "@/domain/lesson-ticket";
 import {
   createLessonTicketListQueryOptions,
+  createLessonTicketRegistrationOptionsQueryOptions,
+  registerLessonTicketGrant,
+  type LessonTicketGrantRegistrationSupabaseClient,
   type LessonTicketListSupabaseClient,
+  type LessonTicketRegistrationOptionsSupabaseClient,
+  type LessonTicketRegistrationStudentOption,
+  type RegisterLessonTicketGrantInput,
+  type RegisterLessonTicketGrantResult,
 } from "@/lib/api/lesson-tickets";
 import { queryKeys } from "@/lib/api/query-keys";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -41,16 +69,33 @@ export type LessonTicketListQueryOptionsFactory = (
   options: BuildLessonTicketListOptions,
 ) => LessonTicketListQueryOptions;
 
+type LessonTicketRegistrationOptionsQueryOptions = {
+  queryKey: QueryKey;
+  queryFn: () => Promise<LessonTicketRegistrationStudentOption[]>;
+};
+
+export type LessonTicketRegistrationOptionsQueryFactory = (
+  academyId: string,
+) => LessonTicketRegistrationOptionsQueryOptions;
+
 type LessonTicketListScreenProps = {
   academyId: string;
   academyName: string;
   today: string;
   queryOptionsFactory?: LessonTicketListQueryOptionsFactory;
+  registrationOptionsQueryFactory?: LessonTicketRegistrationOptionsQueryFactory;
+  registerLessonTicket?: (
+    input: RegisterLessonTicketGrantInput,
+  ) => Promise<RegisterLessonTicketGrantResult>;
 };
+
+type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
+  LessonTicketRegistrationOptionsSupabaseClient &
+  LessonTicketGrantRegistrationSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: LessonTicketListSupabaseClient;
+      client: LessonTicketSupabaseClient;
       error: null;
     }
   | {
@@ -78,13 +123,28 @@ export function LessonTicketListScreen({
   academyName,
   today,
   queryOptionsFactory,
+  registrationOptionsQueryFactory,
+  registerLessonTicket,
 }: LessonTicketListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<LessonTicketStatus | "">("");
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
+  const hasInjectedRegistrationOptions = Boolean(registrationOptionsQueryFactory);
+  const hasInjectedRegistrationMutation = Boolean(registerLessonTicket);
   const supabaseClientState = useMemo(
-    () => (hasInjectedQueryOptions ? null : createLessonTicketSupabaseClient()),
-    [hasInjectedQueryOptions],
+    () =>
+      hasInjectedQueryOptions &&
+      hasInjectedRegistrationOptions &&
+      hasInjectedRegistrationMutation
+        ? null
+        : createLessonTicketSupabaseClient(),
+    [
+      hasInjectedQueryOptions,
+      hasInjectedRegistrationMutation,
+      hasInjectedRegistrationOptions,
+    ],
   );
 
   const currentOptions: BuildLessonTicketListOptions = {
@@ -108,6 +168,38 @@ export function LessonTicketListScreen({
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
   const tickets = lessonTicketListQuery.data ?? [];
+  const registrationOptionsQueryOptions = registrationOptionsQueryFactory
+    ? registrationOptionsQueryFactory(academyId)
+    : createDefaultRegistrationOptionsQueryOptions(
+        academyId,
+        supabaseClientState ?? createMissingSupabaseClientState(),
+      );
+  const registrationOptionsQuery = useQuery({
+    queryKey: registrationOptionsQueryOptions.queryKey,
+    queryFn: registrationOptionsQueryOptions.queryFn,
+    enabled:
+      isRegistrationOpen &&
+      (hasInjectedRegistrationOptions || !supabaseClientState?.error),
+  });
+  const registerMutation = useMutation({
+    mutationFn:
+      registerLessonTicket ??
+      createDefaultRegisterLessonTicket(
+        supabaseClientState ?? createMissingSupabaseClientState(),
+      ),
+    onSuccess: () => {
+      setIsRegistrationOpen(false);
+      toast.success("회차권을 등록했습니다.");
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
+      });
+    },
+    onError: (error) => {
+      toast.error("회차권 등록에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
 
   return (
     <section className="grid gap-4" aria-labelledby="lesson-ticket-heading">
@@ -120,10 +212,34 @@ export function LessonTicketListScreen({
             회차권 목록
           </h2>
         </div>
-        <Button type="button">
-          <TicketPlus aria-hidden="true" />
-          회차권 등록
-        </Button>
+        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <TicketPlus aria-hidden="true" />
+              회차권 등록
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>회차권 등록</DialogTitle>
+              <DialogDescription>
+                개인레슨 회차권을 신규 등록하거나 기존 회차권에 추가합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <LessonTicketRegistrationForm
+              academyId={academyId}
+              options={registrationOptionsQuery.data ?? []}
+              isLoading={registrationOptionsQuery.isLoading}
+              error={
+                registrationOptionsQuery.isError
+                  ? registrationOptionsQuery.error
+                  : null
+              }
+              isSaving={registerMutation.isPending}
+              onSubmit={(input) => registerMutation.mutate(input)}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -205,12 +321,44 @@ function createDefaultQueryOptions(
   return createLessonTicketListQueryOptions(supabaseClientState.client, options);
 }
 
+function createDefaultRegistrationOptionsQueryOptions(
+  academyId: string,
+  supabaseClientState: SupabaseClientState,
+): LessonTicketRegistrationOptionsQueryOptions {
+  if (supabaseClientState.error) {
+    return {
+      queryKey: queryKeys.lessonTickets.registrationOptions(academyId),
+      queryFn: async () => {
+        throw supabaseClientState.error;
+      },
+    };
+  }
+
+  return createLessonTicketRegistrationOptionsQueryOptions(
+    supabaseClientState.client,
+    academyId,
+  );
+}
+
+function createDefaultRegisterLessonTicket(
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return async () => {
+      throw supabaseClientState.error;
+    };
+  }
+
+  return (input: RegisterLessonTicketGrantInput) =>
+    registerLessonTicketGrant(supabaseClientState.client, input);
+}
+
 function createLessonTicketSupabaseClient(): SupabaseClientState {
   try {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as LessonTicketListSupabaseClient,
+      client: client as LessonTicketSupabaseClient,
       error: null,
     };
   } catch (error) {
@@ -226,6 +374,166 @@ function createMissingSupabaseClientState(): SupabaseClientState {
     client: null,
     error: new Error("Supabase client 상태를 만들지 못했습니다."),
   };
+}
+
+function LessonTicketRegistrationForm({
+  academyId,
+  options,
+  isLoading,
+  error,
+  isSaving,
+  onSubmit,
+}: {
+  academyId: string;
+  options: LessonTicketRegistrationStudentOption[];
+  isLoading: boolean;
+  error: Error | null;
+  isSaving: boolean;
+  onSubmit: (input: RegisterLessonTicketGrantInput) => void;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
+  const [grantedCount, setGrantedCount] = useState(1);
+  const [validFrom, setValidFrom] = useState("");
+  const [validUntil, setValidUntil] = useState("");
+  const [registeredAt, setRegisteredAt] = useState("");
+  const selectedStudent = options.find((option) => option.studentId === studentId);
+  const selectedInstrument = selectedStudent?.instruments.find(
+    (instrument) => instrument.instrumentId === instrumentId,
+  );
+  const canSubmit =
+    Boolean(selectedStudent) &&
+    Boolean(selectedInstrument) &&
+    grantedCount > 0 &&
+    Boolean(validFrom) &&
+    Boolean(validUntil) &&
+    Boolean(registeredAt) &&
+    !isSaving;
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!selectedStudent || !selectedInstrument || !canSubmit) {
+          return;
+        }
+
+        onSubmit({
+          academyId,
+          studentId: selectedStudent.studentId,
+          studentName: selectedStudent.studentName,
+          instrumentId: selectedInstrument.instrumentId,
+          instrumentName: selectedInstrument.instrumentName,
+          grantedCount,
+          validFrom,
+          validUntil,
+          registeredAt,
+        });
+      }}
+    >
+      {error ? (
+        <ListStatusAlert
+          message="회차권 등록 선택지를 불러오지 못했습니다."
+          detail={error.message}
+        />
+      ) : null}
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">
+          회차권 등록 선택지를 불러오는 중입니다.
+        </p>
+      ) : null}
+
+      <Label className="grid gap-1">
+        <span>원생</span>
+        <NativeSelect
+          aria-label="원생"
+          value={studentId}
+          onChange={(event) => {
+            setStudentId(event.target.value);
+            setInstrumentId("");
+          }}
+        >
+          <NativeSelectOption value="">원생 선택</NativeSelectOption>
+          {options.map((option) => (
+            <NativeSelectOption key={option.studentId} value={option.studentId}>
+              {option.studentName}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Label>
+
+      <Label className="grid gap-1">
+        <span>악기</span>
+        <NativeSelect
+          aria-label="악기"
+          value={instrumentId}
+          disabled={!selectedStudent}
+          onChange={(event) => setInstrumentId(event.target.value)}
+        >
+          <NativeSelectOption value="">악기 선택</NativeSelectOption>
+          {(selectedStudent?.instruments ?? []).map((instrument) => (
+            <NativeSelectOption
+              key={instrument.instrumentId}
+              value={instrument.instrumentId}
+            >
+              {instrument.instrumentName}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Label>
+
+      <Label className="grid gap-1">
+        <span>부여 회수</span>
+        <Input
+          aria-label="부여 회수"
+          type="number"
+          min={1}
+          step={1}
+          value={grantedCount}
+          onChange={(event) => setGrantedCount(Number(event.target.value))}
+        />
+      </Label>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Label className="grid gap-1">
+          <span>유효 시작일</span>
+          <Input
+            aria-label="유효 시작일"
+            type="date"
+            value={validFrom}
+            onChange={(event) => setValidFrom(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>유효 만료일</span>
+          <Input
+            aria-label="유효 만료일"
+            type="date"
+            value={validUntil}
+            onChange={(event) => setValidUntil(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>등록일</span>
+          <Input
+            aria-label="등록일"
+            type="date"
+            value={registeredAt}
+            onChange={(event) => setRegisteredAt(event.target.value)}
+          />
+        </Label>
+      </div>
+
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          {isSaving ? "저장 중" : "저장"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
 }
 
 function LessonTicketTable({ tickets }: { tickets: LessonTicketListRow[] }) {
