@@ -30,4 +30,22 @@ describe("queryKeys", () => {
       queryKeys.lessonTickets.summary("academy-2"),
     );
   });
+
+  it("학원별 선생님 목록 key에 academyId와 검색/필터를 포함한다", () => {
+    expect(
+      queryKeys.teachers.list("academy-1", {
+        q: "박",
+        part: "피아노",
+        payType: "ratio",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "teachers",
+      "list",
+      "박",
+      "피아노",
+      "ratio",
+    ]);
+  });
 });
