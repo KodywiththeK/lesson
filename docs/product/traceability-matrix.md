@@ -12,8 +12,10 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 학원 피아노 수업 일정은 원생 등록 정보에서 반복 생성된다 | PDF 1-1 | 원생 등록 | 미작성 | 미구현 |
 | 학원 수업 일정 이동은 해당 월에만 반영된다 | PDF 1-1 | 학원 수업 보강 | 미작성 | 미구현 |
 | 결석 확인은 보강 일정 또는 패스 기록을 만들 수 있다 | PDF 1-1 시나리오 B | 학원 수업 보강 | 미작성 | 미구현 |
-| 개인레슨 등록은 같은 선생님/시간 중복을 막는다 | PDF 1-2 | 개인레슨 등록 | 미작성 | 미구현 |
-| 원생 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | 미작성 | 미구현 |
+| 개인레슨 등록은 같은 선생님/시간 중복을 막는다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
+| 개인레슨 악기 선택은 원생이 수강 중인 개인레슨 악기로 제한한다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
+| 원생 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
+| 선생님 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 회차권 재등록은 회수 추가와 유효기간 갱신을 지원한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 회차권 잔여 회수 부족 또는 만료 임박 상태를 표시한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 원생 등록은 일정과 고정 수입의 기준이 된다 | PDF 3-1 | 원생 등록 | 미작성 | 미구현 |
