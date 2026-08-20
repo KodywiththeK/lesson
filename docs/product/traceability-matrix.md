@@ -9,8 +9,8 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 수업 일정에 올라간 상태만으로는 회차권을 차감하지 않는다 | PDF Part 2 전역 규칙 | 회차권 차감 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 다른 학원 tenant의 회차권은 차감하지 못한다 | 사용자 추가 지시: 멀티학원 서비스 | 멀티테넌트 데이터 격리 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | API cache key는 학원별로 분리한다 | 사용자 추가 지시: TanStack Query + 멀티학원 서비스 | API cache 격리 | `src/lib/api/query-keys.test.ts` | `src/lib/api/query-keys.ts` |
-| 학원 피아노 수업 일정은 원생 등록 정보에서 반복 생성된다 | PDF 1-1 | 원생 등록 | 미작성 | 미구현 |
-| 학원 수업 일정 이동은 해당 월에만 반영된다 | PDF 1-1 | 학원 수업 보강 | 미작성 | 미구현 |
+| 학원 피아노 수업 일정은 원생 등록 정보에서 반복 생성된다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
+| 학원 수업 일정 이동은 해당 월에만 반영된다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-schedule.test.ts` | `src/domain/academy-lesson-schedule.ts` |
 | 결석 확인은 보강 일정 또는 패스 기록을 만들 수 있다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
 | 보강 확정은 `[보강 수업]` 일정과 월별 메모를 만든다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
 | 패스 확정은 보강 일정 없이 메모만 만들고 회차권을 차감하지 않는다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
