@@ -36,6 +36,17 @@ test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", asyn
   await expect(page.getByRole("searchbox", { name: "원생 검색" })).toBeVisible();
 });
 
+test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "회차권" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "회차권 관리" }),
+  ).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "회차권 검색" })).toBeVisible();
+});
+
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 

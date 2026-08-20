@@ -19,7 +19,7 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 원생 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 선생님 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 회차권 재등록은 회수 추가와 유효기간 갱신을 지원한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
-| 회차권 잔여 회수 부족 또는 만료 임박 상태를 표시한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
+| 회차권 잔여 회수 부족 또는 만료 임박 상태를 표시한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts`, `src/lib/api/lesson-tickets.test.ts`, `src/features/lesson-tickets/lesson-ticket-list-screen.test.tsx`, `src/app/passes/page.test.tsx`, `tests/e2e/home.spec.ts` | `src/domain/lesson-ticket.ts`, `src/lib/api/lesson-tickets.ts`, `src/features/lesson-tickets/lesson-ticket-list-screen.tsx`, `src/app/passes/page.tsx` |
 | 원생 등록은 일정과 고정 수입의 기준이 된다 | PDF 3-1 | 원생 등록 | `src/domain/student-registration.test.ts` | `src/domain/student-registration.ts` |
 | 휴원/퇴원 전환은 확인 절차를 가진다 | PDF 3-3 | 원생 상태 전환 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |
 | 퇴원 원생은 30일 보관 후 삭제된다 | PDF 3-3 | 원생 보관 정책 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |

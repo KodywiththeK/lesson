@@ -20,6 +20,12 @@ export type LessonTicket = LessonTicketBalance & {
   registeredAt: string;
 };
 
+export type LessonTicketListItem = LessonTicket & {
+  ticketId: string;
+  studentName: string;
+  instrumentName: string;
+};
+
 export type AttendanceConfirmation = {
   academyId: string;
   lessonEventId: string;
@@ -121,6 +127,19 @@ export type LessonTicketStatusSummary = {
   daysUntilExpiration: number;
 };
 
+export type LessonTicketListFilters = {
+  status?: LessonTicketStatus;
+};
+
+export type BuildLessonTicketListOptions = LessonTicketStatusOptions & {
+  academyId: string;
+  search?: string;
+  filters?: LessonTicketListFilters;
+};
+
+export type LessonTicketListRow = LessonTicketListItem &
+  LessonTicketStatusSummary;
+
 export function applyAttendanceToTicket(
   ticket: LessonTicketBalance,
   attendance: AttendanceConfirmation,
@@ -161,6 +180,37 @@ export function applyAttendanceToTicket(
       usedCount: 1,
     },
   };
+}
+
+export function buildLessonTicketList(
+  tickets: LessonTicketListItem[],
+  options: BuildLessonTicketListOptions,
+): LessonTicketListRow[] {
+  return tickets
+    .filter((ticket) => ticket.academyId === options.academyId)
+    .map((ticket) => ({
+      ...ticket,
+      ...summarizeLessonTicketStatus(ticket, options),
+    }))
+    .filter((ticket) => matchesLessonTicketFilters(ticket, options.filters))
+    .filter((ticket) => matchesLessonTicketSearch(ticket, options.search))
+    .sort(
+      (left, right) =>
+        left.studentName.localeCompare(right.studentName, "ko-KR") ||
+        left.instrumentName.localeCompare(right.instrumentName, "ko-KR") ||
+        left.validUntil.localeCompare(right.validUntil),
+    );
+}
+
+export function formatLessonTicketStatus(status: LessonTicketStatus) {
+  const labels: Record<LessonTicketStatus, string> = {
+    "low-remaining": "잔여 부족",
+    "expiring-soon": "만료 임박",
+    expired: "만료",
+    exhausted: "소진",
+  };
+
+  return labels[status];
 }
 
 export function registerLessonTicket(
@@ -281,6 +331,32 @@ export function adjustLessonTicketManually(
       adjustedBy: input.adjustedBy,
     },
   };
+}
+
+function matchesLessonTicketFilters(
+  ticket: LessonTicketListRow,
+  filters: LessonTicketListFilters | undefined,
+) {
+  return !filters?.status || ticket.statuses.includes(filters.status);
+}
+
+function matchesLessonTicketSearch(
+  ticket: LessonTicketListRow,
+  search: string | undefined,
+) {
+  const trimmedSearch = search?.trim().toLocaleLowerCase("ko-KR");
+
+  if (!trimmedSearch) {
+    return true;
+  }
+
+  return [
+    ticket.studentName,
+    ticket.instrumentName,
+    ticket.validFrom,
+    ticket.validUntil,
+    ...ticket.statuses.map(formatLessonTicketStatus),
+  ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
 }
 
 function assertSameScope(

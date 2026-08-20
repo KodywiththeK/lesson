@@ -98,4 +98,20 @@ describe("queryKeys", () => {
       "manual",
     ]);
   });
+
+  it("학원별 회차권 목록 key에 academyId와 검색/상태 필터를 포함한다", () => {
+    expect(
+      queryKeys.lessonTickets.list("academy-1", {
+        q: "피아노",
+        status: "low-remaining",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "lesson-tickets",
+      "list",
+      "피아노",
+      "low-remaining",
+    ]);
+  });
 });

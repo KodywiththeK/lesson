@@ -28,6 +28,11 @@ type FinanceLedgerListFilters = {
   source?: string;
 };
 
+type LessonTicketListFilters = {
+  q?: string;
+  status?: string;
+};
+
 export const queryKeys = {
   academy: (academyId: string) => ["academy", academyId] as const,
   students: {
@@ -89,6 +94,14 @@ export const queryKeys = {
       ] as const,
   },
   lessonTickets: {
+    list: (academyId: string, filters: LessonTicketListFilters = {}) =>
+      [
+        ...queryKeys.academy(academyId),
+        "lesson-tickets",
+        "list",
+        filters.q ?? "",
+        filters.status ?? "",
+      ] as const,
     summary: (academyId: string) =>
       [...queryKeys.academy(academyId), "lesson-tickets", "summary"] as const,
   },

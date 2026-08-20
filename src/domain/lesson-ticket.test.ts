@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyAttendanceToTicket,
   adjustLessonTicketManually,
+  buildLessonTicketList,
+  formatLessonTicketStatus,
   registerLessonTicket,
   summarizeLessonTicketStatus,
 } from "./lesson-ticket";
@@ -225,6 +227,124 @@ describe("summarizeLessonTicketStatus", () => {
     );
 
     expect(summary.statuses).toEqual(["exhausted", "expired"]);
+  });
+});
+
+describe("buildLessonTicketList", () => {
+  it("현재 학원의 회차권 목록을 원생명 가나다순으로 만들고 상태를 계산한다", () => {
+    const list = buildLessonTicketList(
+      [
+        {
+          academyId: "academy-1",
+          ticketId: "ticket-2",
+          studentId: "student-2",
+          studentName: "이서윤",
+          instrumentId: "violin",
+          instrumentName: "바이올린",
+          totalGrantedCount: 8,
+          remainingCount: 0,
+          validFrom: "2026-08-01",
+          validUntil: "2026-08-31",
+          registeredAt: "2026-08-01",
+        },
+        {
+          academyId: "academy-1",
+          ticketId: "ticket-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          totalGrantedCount: 12,
+          remainingCount: 2,
+          validFrom: "2026-08-01",
+          validUntil: "2026-09-07",
+          registeredAt: "2026-08-01",
+        },
+        {
+          academyId: "academy-2",
+          ticketId: "ticket-3",
+          studentId: "student-3",
+          studentName: "다른학원",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          totalGrantedCount: 12,
+          remainingCount: 12,
+          validFrom: "2026-08-01",
+          validUntil: "2026-09-30",
+          registeredAt: "2026-08-01",
+        },
+      ],
+      {
+        academyId: "academy-1",
+        today: "2026-09-01",
+        lowRemainingThreshold: 2,
+        expiringWithinDays: 7,
+      },
+    );
+
+    expect(list.map((row) => row.studentName)).toEqual(["김민지", "이서윤"]);
+    expect(list[0]).toMatchObject({
+      ticketId: "ticket-1",
+      statuses: ["low-remaining", "expiring-soon"],
+      daysUntilExpiration: 6,
+    });
+    expect(list[1]).toMatchObject({
+      ticketId: "ticket-2",
+      statuses: ["exhausted", "expired"],
+    });
+  });
+
+  it("검색어와 상태 필터를 적용한다", () => {
+    const list = buildLessonTicketList(
+      [
+        {
+          academyId: "academy-1",
+          ticketId: "ticket-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          totalGrantedCount: 12,
+          remainingCount: 2,
+          validFrom: "2026-08-01",
+          validUntil: "2026-09-07",
+          registeredAt: "2026-08-01",
+        },
+        {
+          academyId: "academy-1",
+          ticketId: "ticket-2",
+          studentId: "student-2",
+          studentName: "이서윤",
+          instrumentId: "violin",
+          instrumentName: "바이올린",
+          totalGrantedCount: 8,
+          remainingCount: 8,
+          validFrom: "2026-08-01",
+          validUntil: "2026-10-31",
+          registeredAt: "2026-08-01",
+        },
+      ],
+      {
+        academyId: "academy-1",
+        today: "2026-09-01",
+        lowRemainingThreshold: 2,
+        expiringWithinDays: 7,
+        search: "피아노",
+        filters: {
+          status: "low-remaining",
+        },
+      },
+    );
+
+    expect(list).toHaveLength(1);
+    expect(list[0].studentName).toBe("김민지");
+  });
+
+  it("회차권 상태를 운영자가 읽는 한국어로 표시한다", () => {
+    expect(formatLessonTicketStatus("low-remaining")).toBe("잔여 부족");
+    expect(formatLessonTicketStatus("expiring-soon")).toBe("만료 임박");
+    expect(formatLessonTicketStatus("expired")).toBe("만료");
+    expect(formatLessonTicketStatus("exhausted")).toBe("소진");
   });
 });
 
