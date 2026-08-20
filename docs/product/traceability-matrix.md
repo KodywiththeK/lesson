@@ -48,5 +48,5 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 원장 또는 허용된 데스크 직원은 수동 수입/지출을 입력할 수 있다 | PDF 5 | 입출입 내역 | `src/domain/finance-ledger.test.ts`, `src/domain/permissions.test.ts` | `src/domain/finance-ledger.ts`, `src/domain/permissions.ts` |
 | 전체 수입 그래프는 연도/월 기준 전체 악기, 개별 악기, 학원 수입, 지출 비교를 지원한다 | PDF 5 | 전체 수입 그래프 | `src/domain/finance-ledger.test.ts` | `src/domain/finance-ledger.ts` |
 | 월급제와 시급제 급여 유형은 조건부 필드와 계산 기준을 가진다 | PDF 3-2, PDF 5 | 급여 지급 | `src/domain/payroll.test.ts` | `src/domain/payroll.ts` |
-| Supabase DB는 학원 tenant별 데이터 격리와 RLS 정책을 가진다 | 사용자 추가 지시: 멀티학원 서비스 | Supabase RLS | `docs/harness/evidence/2026-08-20-supabase-tenant-core-rls.md` | `supabase/migrations/20260820142318_tenant_core_schema.sql` |
+| Supabase DB는 학원 tenant별 데이터 격리와 RLS 정책을 가진다 | 사용자 추가 지시: 멀티학원 서비스 | Supabase RLS | `src/lib/supabase/schema-contract.test.ts`, `docs/harness/evidence/2026-08-20-supabase-tenant-core-rls.md` | `supabase/migrations/20260820142318_tenant_core_schema.sql`, `supabase/migrations/20260820151645_pdf_domain_persistence.sql` |
 | shadcn 기반 운영 UI는 일관된 디자인 시스템으로 구현된다 | 사용자 추가 지시: shadcn 디자인 시스템 | 운영 UI | `src/app/app-shell.test.tsx`, `src/app/page.test.tsx` | `src/app/app-shell.tsx`, `src/app/page.tsx` |
