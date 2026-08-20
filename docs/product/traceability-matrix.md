@@ -27,10 +27,10 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 월별 고정 수입 수납/미납은 월 단위 snapshot으로 관리된다 | PDF 5 | 수입 관리 | `src/domain/tuition-income.test.ts` | `src/domain/tuition-income.ts` |
 | 급여 지급은 지출 내역을 생성한다 | PDF 5 | 급여 지급 | `src/domain/payroll.test.ts` | `src/domain/payroll.ts` |
 | 비율제 급여는 3.3% 원천징수를 반영한다 | PDF 5 | 급여 지급 | `src/domain/payroll.test.ts` | `src/domain/payroll.ts` |
-| 역할별 로그인은 원장, 데스크 직원, 선생님 역할을 구분한다 | PDF 개요 | 역할별 로그인 | 미작성 | 미구현 |
-| 선생님은 본인 학원과 배정 범위 안에서만 접근한다 | 사용자 추가 지시: 멀티학원 서비스 + PDF 권한 | 권한과 접근 제어 | 미작성 | 미구현 |
-| 선생님은 거래처 관리에 접근할 수 없다 | PDF 3-4 | 권한과 접근 제어 | 미작성 | 미구현 |
-| 수입 관리는 기본적으로 원장 전용으로 제한한다 | PDF 5 + 제품 결정 | 권한과 접근 제어 | 미작성 | 미구현 |
+| 역할별 로그인은 원장, 데스크 직원, 선생님 역할을 구분한다 | PDF 개요 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
+| 선생님은 본인 학원과 배정 범위 안에서만 접근한다 | 사용자 추가 지시: 멀티학원 서비스 + PDF 권한 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
+| 선생님은 거래처 관리에 접근할 수 없다 | PDF 3-4 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
+| 수입 관리는 기본적으로 원장 전용으로 제한한다 | PDF 5 + 제품 결정 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
 | 공통 목록은 10개 기본, 10/20/30 페이지 크기, 가나다 정렬을 지원한다 | PDF 목록 공통 | 공통 목록 동작 | 미작성 | 미구현 |
 | 원생, 선생님, 거래처, 교재, 수입 내역은 검색 또는 필터를 제공한다 | PDF 목록 공통 | 공통 목록 동작 | 미작성 | 미구현 |
 | 날짜 선택 시 해당 날짜의 예상 출석 원생을 보여준다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
