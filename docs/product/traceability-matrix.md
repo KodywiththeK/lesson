@@ -24,6 +24,6 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 휴원/퇴원 전환은 확인 절차를 가진다 | PDF 3-3 | 원생 상태 전환 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |
 | 퇴원 원생은 30일 보관 후 삭제된다 | PDF 3-3 | 원생 보관 정책 | `src/domain/student-status.test.ts` | `src/domain/student-status.ts` |
 | 교재 결제 완료는 수입 ledger에 반영된다 | PDF 4 | 교재 판매 | `src/domain/book-sale.test.ts` | `src/domain/book-sale.ts` |
-| 월별 고정 수입 수납/미납은 월 단위 snapshot으로 관리된다 | PDF 5 | 수입 관리 | 미작성 | 미구현 |
+| 월별 고정 수입 수납/미납은 월 단위 snapshot으로 관리된다 | PDF 5 | 수입 관리 | `src/domain/tuition-income.test.ts` | `src/domain/tuition-income.ts` |
 | 급여 지급은 지출 내역을 생성한다 | PDF 5 | 급여 지급 | 미작성 | 미구현 |
 | 비율제 급여는 3.3% 원천징수를 반영한다 | PDF 5 | 급여 지급 | 미작성 | 미구현 |
