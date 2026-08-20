@@ -31,8 +31,8 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 선생님은 본인 학원과 배정 범위 안에서만 접근한다 | 사용자 추가 지시: 멀티학원 서비스 + PDF 권한 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
 | 선생님은 거래처 관리에 접근할 수 없다 | PDF 3-4 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
 | 수입 관리는 기본적으로 원장 전용으로 제한한다 | PDF 5 + 제품 결정 | 역할별 로그인과 권한 | `src/domain/permissions.test.ts` | `src/domain/permissions.ts` |
-| 공통 목록은 10개 기본, 10/20/30 페이지 크기, 가나다 정렬을 지원한다 | PDF 목록 공통 | 공통 목록 동작 | 미작성 | 미구현 |
-| 원생, 선생님, 거래처, 교재, 수입 내역은 검색 또는 필터를 제공한다 | PDF 목록 공통 | 공통 목록 동작 | 미작성 | 미구현 |
+| 공통 목록은 10개 기본, 10/20/30 페이지 크기, 가나다 정렬을 지원한다 | PDF 목록 공통 | 공통 목록 동작 | `src/domain/common-list.test.ts`, `src/components/operations/list-toolbar.test.tsx` | `src/domain/common-list.ts`, `src/components/operations/list-toolbar.tsx` |
+| 원생, 선생님, 거래처, 교재, 수입 내역은 검색 또는 필터를 제공한다 | PDF 목록 공통 | 공통 목록 동작 | `src/domain/common-list.test.ts`, `src/components/operations/list-toolbar.test.tsx` | `src/domain/common-list.ts`, `src/components/operations/list-toolbar.tsx` |
 | 날짜 선택 시 해당 날짜의 예상 출석 원생을 보여준다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
 | 학원 수업 일정 삭제는 사유 입력과 함께 처리한다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
 | 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다 | PDF 1-1 | 학원 피아노 레슨표 | 미작성 | 미구현 |
