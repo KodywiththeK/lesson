@@ -1,0 +1,256 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { RotateCcw, UserPlus } from "lucide-react";
+
+import {
+  ListFilterSelect,
+  ListSearchField,
+  ListStatusAlert,
+} from "@/components/management/list-controls";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { ListView } from "@/domain/common-list";
+import type {
+  BuildVendorListOptions,
+  VendorListRow,
+} from "@/domain/vendor-list";
+import {
+  createVendorListQueryOptions,
+  type VendorListSupabaseClient,
+} from "@/lib/api/vendors";
+import { queryKeys } from "@/lib/api/query-keys";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+type VendorListQueryOptions = {
+  queryKey: QueryKey;
+  queryFn: () => Promise<ListView<VendorListRow>>;
+};
+
+export type VendorListQueryOptionsFactory = (
+  options: BuildVendorListOptions,
+) => VendorListQueryOptions;
+
+type VendorListScreenProps = {
+  academyId: string;
+  academyName: string;
+  queryOptionsFactory?: VendorListQueryOptionsFactory;
+};
+
+type SupabaseClientState =
+  | {
+      client: VendorListSupabaseClient;
+      error: null;
+    }
+  | {
+      client: null;
+      error: Error;
+    };
+
+export function VendorListScreen({
+  academyId,
+  academyName,
+  queryOptionsFactory,
+}: VendorListScreenProps) {
+  const [search, setSearch] = useState("");
+  const [kind, setKind] = useState("");
+  const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
+  const supabaseClientState = useMemo(
+    () => (hasInjectedQueryOptions ? null : createVendorListSupabaseClient()),
+    [hasInjectedQueryOptions],
+  );
+
+  const currentOptions: BuildVendorListOptions = {
+    academyId,
+    search,
+    filters: {
+      kind: kind || undefined,
+    },
+  };
+  const queryOptions = queryOptionsFactory
+    ? queryOptionsFactory(currentOptions)
+    : createDefaultQueryOptions(
+        currentOptions,
+        supabaseClientState ?? createMissingSupabaseClientState(),
+      );
+  const vendorListQuery = useQuery({
+    queryKey: queryOptions.queryKey,
+    queryFn: queryOptions.queryFn,
+    enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
+  });
+  const vendors = vendorListQuery.data?.items ?? [];
+  const filterOptions = buildFilterOptions(vendorListQuery.data?.items ?? []);
+
+  return (
+    <section className="grid gap-4" aria-labelledby="vendor-list-heading">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">
+            {academyName}
+          </p>
+          <h2 id="vendor-list-heading" className="text-2xl font-semibold">
+            거래처 목록
+          </h2>
+        </div>
+        <Button type="button">
+          <UserPlus aria-hidden="true" />
+          거래처 등록
+        </Button>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card">
+        <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">
+          <ListSearchField
+            label="거래처 검색"
+            value={search}
+            onChange={setSearch}
+            placeholder="거래처명, 연락처, 종류, 비고"
+          />
+
+          <ListFilterSelect
+            label="거래처 종류 필터"
+            value={kind}
+            options={filterOptions.kinds}
+            onChange={setKind}
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            className="self-end"
+            onClick={() => {
+              setSearch("");
+              setKind("");
+            }}
+          >
+            <RotateCcw aria-hidden="true" />
+            초기화
+          </Button>
+        </div>
+
+        {!hasInjectedQueryOptions && supabaseClientState?.error ? (
+          <ListStatusAlert
+            message="Supabase 환경변수가 설정되면 거래처 목록을 불러올 수 있습니다."
+            detail={supabaseClientState.error.message}
+          />
+        ) : null}
+
+        {vendorListQuery.isError ? (
+          <ListStatusAlert
+            message="거래처 목록을 불러오지 못했습니다."
+            detail={vendorListQuery.error.message}
+          />
+        ) : null}
+
+        {vendorListQuery.isLoading ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            거래처 목록을 불러오는 중입니다.
+          </p>
+        ) : null}
+
+        {!vendorListQuery.isLoading &&
+        !vendorListQuery.isError &&
+        (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
+          <VendorListTable vendors={vendors} />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function createDefaultQueryOptions(
+  options: BuildVendorListOptions,
+  supabaseClientState: SupabaseClientState,
+): VendorListQueryOptions {
+  if (supabaseClientState.error) {
+    return {
+      queryKey: queryKeys.vendors.list(options.academyId, {
+        q: options.search,
+        kind: options.filters?.kind,
+      }),
+      queryFn: async () => {
+        throw supabaseClientState.error;
+      },
+    };
+  }
+
+  return createVendorListQueryOptions(supabaseClientState.client, options);
+}
+
+function createVendorListSupabaseClient(): SupabaseClientState {
+  try {
+    const client: unknown = createSupabaseBrowserClient();
+
+    return {
+      client: client as VendorListSupabaseClient,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      client: null,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
+function createMissingSupabaseClientState(): SupabaseClientState {
+  return {
+    client: null,
+    error: new Error("Supabase client 상태를 만들지 못했습니다."),
+  };
+}
+
+function VendorListTable({ vendors }: { vendors: VendorListRow[] }) {
+  if (vendors.length === 0) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        조건에 맞는 거래처가 없습니다.
+      </p>
+    );
+  }
+
+  return (
+    <Table aria-label="거래처 목록" className="min-w-[44rem]">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">거래처</TableHead>
+          <TableHead className="px-4 py-3">연락처</TableHead>
+          <TableHead className="px-4 py-3">종류</TableHead>
+          <TableHead className="px-4 py-3">비고</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {vendors.map((vendor) => (
+          <TableRow key={vendor.vendorId}>
+            <TableCell className="px-4 py-3 font-medium">
+              {vendor.name}
+            </TableCell>
+            <TableCell className="px-4 py-3">{vendor.contact || "-"}</TableCell>
+            <TableCell className="px-4 py-3">{vendor.kind || "-"}</TableCell>
+            <TableCell className="px-4 py-3">{vendor.memo || "-"}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function buildFilterOptions(vendors: VendorListRow[]) {
+  return {
+    kinds: uniqueSorted(vendors.map((vendor) => vendor.kind)),
+  };
+}
+
+function uniqueSorted(values: string[]) {
+  return [...new Set(values.filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right, "ko"),
+  );
+}

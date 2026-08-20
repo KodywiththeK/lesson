@@ -12,6 +12,11 @@ type TeacherListFilters = {
   payType?: string;
 };
 
+type VendorListFilters = {
+  q?: string;
+  kind?: string;
+};
+
 export const queryKeys = {
   academy: (academyId: string) => ["academy", academyId] as const,
   students: {
@@ -36,6 +41,16 @@ export const queryKeys = {
         filters.q ?? "",
         filters.part ?? "",
         filters.payType ?? "",
+      ] as const,
+  },
+  vendors: {
+    list: (academyId: string, filters: VendorListFilters = {}) =>
+      [
+        ...queryKeys.academy(academyId),
+        "vendors",
+        "list",
+        filters.q ?? "",
+        filters.kind ?? "",
       ] as const,
   },
   lessonTickets: {

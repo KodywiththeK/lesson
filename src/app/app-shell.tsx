@@ -67,6 +67,7 @@ const navigationFeatureByHref: Record<string, FeatureKey> = {
   "/passes": "tickets",
   "/students": "students",
   "/teachers": "teachers",
+  "/vendors": "vendors",
   "/books": "books",
   "/finance": "income-management",
 };

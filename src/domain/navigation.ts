@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Gauge,
   GraduationCap,
+  Handshake,
   ScrollText,
   UsersRound,
 } from "lucide-react";
@@ -46,6 +47,12 @@ export const mainNavigation: NavigationItem[] = [
     href: "/teachers",
     description: "선생님 프로필, 담당 파트, 급여 기준을 관리합니다.",
     icon: GraduationCap,
+  },
+  {
+    label: "거래처",
+    href: "/vendors",
+    description: "교재, 조율, 운영 거래처 정보를 관리합니다.",
+    icon: Handshake,
   },
   {
     label: "교재",

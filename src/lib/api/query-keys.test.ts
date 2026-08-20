@@ -48,4 +48,20 @@ describe("queryKeys", () => {
       "ratio",
     ]);
   });
+
+  it("학원별 거래처 목록 key에 academyId와 검색/필터를 포함한다", () => {
+    expect(
+      queryKeys.vendors.list("academy-1", {
+        q: "문구",
+        kind: "교재",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "vendors",
+      "list",
+      "문구",
+      "교재",
+    ]);
+  });
 });

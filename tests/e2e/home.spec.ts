@@ -48,3 +48,16 @@ test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다"
     page.getByRole("searchbox", { name: "선생님 검색" }),
   ).toBeVisible();
 });
+
+test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "거래처" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "거래처 관리" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: "거래처 검색" }),
+  ).toBeVisible();
+});
