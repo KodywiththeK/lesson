@@ -1,36 +1,38 @@
-# Verification Matrix
+# 검증 매트릭스
 
-Use the smallest sufficient set for the change, then broaden when shared behavior is touched.
+변경에는 가장 작은 충분한 검증 세트를 적용하고, 공유 동작을 건드렸다면 더 넓은 검증으로 확장한다.
 
-| Surface | Required Checks | Evidence |
+| 변경 표면 | 필수 확인 | 증거 |
 | --- | --- | --- |
-| Domain utility | Unit tests, typecheck | Command output |
-| React component | Unit/component tests, accessibility-oriented queries | Command output |
-| Page or route | Component/integration tests, browser smoke check | Command output and screenshot when visual |
-| Critical user flow | Playwright E2E | Trace or screenshot on failure |
-| Styling/design system | Browser screenshot desktop and mobile, visual overlap check | Screenshot paths |
-| Supabase schema | Migration dry run, generated types if applicable | Migration output |
-| Supabase RLS | Role-based access tests | Query results per role |
-| PDF ingestion | Text extraction, rendered page review, OCR fallback when needed | Extract paths and page image paths |
-| Build config | Lint, typecheck, build | Command output |
+| 도메인 유틸 | Unit test, typecheck | 명령 결과 |
+| React 컴포넌트 | Unit/component test, 접근성 중심 query | 명령 결과 |
+| 페이지 또는 route | Component/integration test, browser smoke check | 명령 결과와 필요 시 스크린샷 |
+| 핵심 사용자 흐름 | Playwright E2E | 실패 시 trace 또는 screenshot |
+| 스타일/디자인 시스템 | 데스크톱/모바일 스크린샷, 겹침 확인 | 스크린샷 경로 |
+| Supabase schema | migration dry-run, 필요 시 generated type | migration 출력 |
+| Supabase RLS | 역할별 접근 테스트 | 역할별 query 결과 |
+| PDF ingestion | 텍스트 추출, 렌더 페이지 검토, 필요 시 OCR fallback | 추출 경로와 페이지 이미지 경로 |
+| 빌드 설정 | lint, typecheck, build | 명령 결과 |
+| Git 운영 | status, log, 커밋 메시지 컨벤션 | `git status`, `git log` |
 
-## Default Commands
+## 기본 명령
 
-These commands become active after the app scaffold exists:
+앱 scaffold 이후 기본적으로 사용할 수 있는 명령은 다음과 같다.
 
 - `pnpm lint`
 - `pnpm typecheck`
-- `pnpm test`
+- `pnpm test:run`
 - `pnpm test:components`
 - `pnpm test:e2e`
 - `pnpm build`
 
-## Browser Verification
+## 브라우저 검증
 
-For visual or interactive UI changes:
+시각적 또는 상호작용 UI 변경 시 다음을 확인한다.
 
-- Start the dev server.
-- Inspect desktop and mobile viewports.
-- Check that text does not overlap, buttons remain stable, and primary workflows are reachable.
-- Confirm shadcn components use semantic tokens and accessible labels.
-
+- dev server를 실행한다.
+- 데스크톱과 모바일 viewport를 확인한다.
+- 텍스트 겹침이 없는지 확인한다.
+- 버튼 크기가 안정적인지 확인한다.
+- 주요 workflow에 접근 가능한지 확인한다.
+- shadcn 컴포넌트가 semantic token과 접근 가능한 label을 사용하는지 확인한다.

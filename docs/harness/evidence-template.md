@@ -1,48 +1,52 @@
-# Evidence Template
+# Evidence 템플릿
 
-Use this template in task notes or the final response.
+작업 노트, evidence 문서, 최종 응답에 이 형식을 사용한다.
 
-## Summary
+## 요약
 
-- Goal:
-- Completed change:
-- Requirements covered:
+- 목표:
+- 완료한 변경:
+- 커버한 요구사항:
 
-## Tests Written First
+## 먼저 작성한 테스트
 
-- Test file:
-- Scenario:
-- Initial failure:
+- 테스트 파일:
+- 시나리오:
+- 초기 실패:
 
-## Verification
+## 검증
 
-| Command or Check | Result | Notes |
+| 명령 또는 확인 | 결과 | 비고 |
 | --- | --- | --- |
 |  |  |  |
 
-## Browser Evidence
+## 브라우저 증거
 
 - URL:
-- Desktop screenshot:
-- Mobile screenshot:
-- Notes:
+- 데스크톱 스크린샷:
+- 모바일 스크린샷:
+- 비고:
 
-## Supabase Evidence
+## Supabase 증거
 
 - Migration:
-- RLS checks:
-- Role checks:
-- Notes:
+- RLS 확인:
+- 역할별 확인:
+- 비고:
 
-## Quality Consolidation
+## 품질 정리
 
-- Code simplifications:
-- Reused abstractions:
-- Test cleanup:
-- Remaining debt:
+- 코드 단순화:
+- 재사용한 추상화:
+- 테스트 정리:
+- 남은 부채:
 
-## Risks And Open Questions
+## 위험과 확인 질문
 
-- Risk:
-- Follow-up:
+- 위험:
+- 후속 질문:
 
+## Git
+
+- 커밋:
+- push 여부:

@@ -1,37 +1,36 @@
-# Quality Consolidation
+# 품질 정리
 
-Run this after implementation and verification, before calling the task complete. This is the final pass that turns "it works" into "it is maintainable."
+구현과 검증 후, 작업 완료를 선언하기 전에 반드시 실행한다. 이 단계는 “동작한다”를 “유지보수 가능하다”로 바꾸는 마지막 점검이다.
 
-## Production Code Review
+## production code 검토
 
-Evaluate the changed code against these criteria:
+변경한 코드를 다음 기준으로 평가한다.
 
-- **Maintainability**: Domain rules are named and isolated enough to change safely.
-- **Reusability**: Repeated forms, tables, filters, status badges, permission checks, and formatting rules have a clear shared home when repeated at least twice.
-- **Readability**: Names match product language, conditionals are easy to scan, and side effects are explicit.
-- **Simplicity**: Remove disposable scaffolding, unnecessary abstraction, stale comments, dead branches, and speculative options.
-- **Boundaries**: UI components do not own business rules that belong in domain modules or server actions.
+- **유지보수성**: 도메인 규칙이 안전하게 바뀔 수 있을 만큼 이름과 경계가 분리되어 있는가?
+- **재사용성**: 2회 이상 반복되는 폼, 테이블, 필터, 상태 배지, 권한 검사, 포맷 규칙이 적절한 공통 위치를 가졌는가?
+- **가독성**: 이름이 제품 언어와 맞고, 조건문을 읽기 쉽고, side effect가 명확한가?
+- **단순성**: 일회용 scaffold, 불필요한 추상화, 오래된 주석, 죽은 분기, 추측성 옵션이 제거되었는가?
+- **경계**: UI 컴포넌트가 도메인 모듈이나 server action에 있어야 할 비즈니스 규칙을 들고 있지 않은가?
 
-## Test Code Review
+## test code 검토
 
-Convert tests from development aids into long-term regression coverage:
+테스트를 개발 보조물이 아니라 장기 회귀 방지 자산으로 정리한다.
 
-- Keep tests that express user-visible behavior or stable domain rules.
-- Remove tests that only assert implementation details, temporary structure, or incidental class names.
-- Prefer accessible roles, labels, and visible text for UI tests.
-- Prefer deterministic fixtures over hidden global state.
-- Make each test isolated enough to run independently.
-- Rename tests so failure messages explain the broken requirement.
+- 사용자에게 보이는 동작 또는 안정적인 도메인 규칙을 표현하는 테스트를 남긴다.
+- 임시 구조, incidental class name, 구현 세부사항만 검증하는 테스트는 제거하거나 다시 작성한다.
+- UI 테스트는 접근 가능한 role, label, visible text를 우선한다.
+- 숨은 전역 상태보다 결정적인 fixture를 사용한다.
+- 각 테스트는 독립 실행 가능해야 한다.
+- 테스트 이름은 실패했을 때 깨진 요구사항을 설명해야 한다.
 
-## Re-Verification
+## 재검증
 
-After consolidation:
+품질 정리 후 다음을 수행한다.
 
-- Run the impacted tests again.
-- Run broader checks if shared code changed.
-- Update evidence with the second verification pass.
+- 영향 받은 테스트를 다시 실행한다.
+- 공유 코드가 바뀌었으면 더 넓은 검증을 실행한다.
+- evidence에 두 번째 검증 결과를 기록한다.
 
-## Completion Rule
+## 완료 규칙
 
-A task is not done until consolidation is complete or explicitly documented as not applicable.
-
+품질 정리가 완료되었거나 적용 불가 사유가 명시되지 않으면 작업은 완료가 아니다.

@@ -1,199 +1,205 @@
-# Functional Spec
+# 기능 명세
 
-This spec is based on the attached PDF. Items marked "needs confirmation" must not be implemented as final policy until confirmed by the user.
+이 문서는 첨부 PDF를 바탕으로 정리한 기능 명세다. PDF는 요구사항 자료이며, 제품 방향과 우선순위는 사용자의 최신 지시를 따른다. “확인 필요”로 표시된 항목은 사용자 확인 전 최종 정책으로 구현하지 않는다.
 
-## Global List Behavior
+## 공통 목록 동작
 
-- Lists default to top 10 items.
-- Page size options: 10, 20, 30.
-- Names sort in Korean alphabetical order by default.
-- Lists need name search or filtering.
+- 목록은 기본 10개를 우선 표시한다.
+- 페이지 크기는 10, 20, 30개 옵션을 제공한다.
+- 이름 정렬은 기본적으로 한글 가나다순을 따른다.
+- 원생, 선생님, 거래처, 교재, 수입 내역은 이름 검색 또는 필터를 제공한다.
 
-## Core Attendance Rule
+## 핵심 출결/회차권 규칙
 
-A student's lesson ticket is not deducted just because the student appears on a schedule. One ticket is deducted only when actual attendance is confirmed. Absence does not deduct a ticket. This rule is especially important for private lessons.
+- 수업 일정에 원생이 올라와 있다는 이유만으로 회차권을 차감하지 않는다.
+- 실제 등원/출석 확인을 눌렀을 때만 해당 원생, 학원, 악기의 회차권에서 1회를 차감한다.
+- 결석은 회차권을 차감하지 않는다.
+- 같은 수업 출석 확인이 중복 처리되어도 회차권은 중복 차감되지 않아야 한다.
+- 다른 학원 tenant의 회차권, 다른 원생의 회차권, 다른 악기의 회차권은 차감하지 못한다.
 
-## Lesson Timetable
+## 레슨 시간표
 
-The lesson timetable has two modes:
+레슨 시간표는 두 가지 모드를 가진다.
 
-- Academy piano lessons: group/regular academy lessons.
-- Private lessons: one-to-one lessons.
+- 학원 피아노 레슨표: 정기/그룹 성격의 학원 수업
+- 개인레슨표: 원생별 1:1 수업
 
-### Academy Piano Lessons
+### 학원 피아노 레슨표
 
-- Pull base data from student and teacher management.
-- Students registered for recurring academy lesson days appear automatically every week.
-- A schedule item may be moved by drag-and-drop for that month only; the student's base recurring day does not change.
-- Selecting a date shows expected attendees and allows deleting that day's schedule item with a reason.
-- Daily attendance modal supports present/absent per student plus "all present" and "all absent".
-- Absences are collected in an absence list for final makeup/pass processing.
-- Monthly memo behaves like a sticky note: content persists per month; position/size resets on refresh; changed content shows an unread indicator.
+- 원생 관리와 선생님 관리의 데이터를 기반으로 표시한다.
+- 원생 등록 시 설정한 학원 수업 요일에 따라 매주 자동으로 시간표에 노출된다.
+- 일정 항목은 드래그 앤 드롭으로 이동할 수 있으나, 이동은 해당 월에만 반영되고 원생 기본 요일은 바뀌지 않는다.
+- 날짜를 선택하면 해당 날짜의 예상 출석 원생을 보여준다.
+- 해당 날짜의 일정 삭제는 사유 입력과 함께 처리한다.
+- 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다.
+- 결석 처리된 원생은 최종 보강/패스 처리를 위해 결석 인원 목록으로 이동한다.
+- 월별 메모는 sticky note처럼 동작한다. 내용은 월별로 저장하고, 새로고침 시 위치/크기는 초기화될 수 있다.
+- 월별 메모 내용이 변경되면 읽지 않음 표시를 제공한다.
 
-### Absence, Makeup, Pass
+### 결석, 보강, 패스
 
-- Absence list shows students marked absent for the selected date.
-- Each student has confirm absence and cancel actions.
-- Confirming opens a reason form with:
-  - reason type: makeup or pass
-  - makeup date required when makeup is selected
-  - makeup time optional
-  - memo optional
-- Confirmed makeup creates a moved calendar schedule labeled `[makeup lesson]`.
-- The monthly memo records student name, makeup date/time if present, original absence date, and reason.
-- Confirmed absence is removed from the absence list.
+- 결석 인원 목록은 선택 날짜에 결석 처리된 원생을 보여준다.
+- 각 원생은 결석 확정과 취소 액션을 가진다.
+- 결석 확정 시 사유 입력 폼을 연다.
+- 사유 유형은 보강 또는 패스다.
+- 보강을 선택하면 보강 날짜는 필수다.
+- 보강 시간과 메모는 선택 입력이다.
+- 보강 확정 시 이동된 캘린더 일정이 생성되고 `[보강 수업]`으로 표시한다.
+- 월별 메모에는 원생명, 보강 날짜/시간, 원래 결석 날짜, 사유를 기록한다.
+- 확정된 결석은 결석 인원 목록에서 제거한다.
 
-### Private Lessons
+### 개인레슨표
 
-- Date click opens a registration dialog.
-- Registration flow: student -> instrument -> teacher -> time.
-- Only instruments the student studies should be selectable.
-- Warn and disable selecting a time already booked for the same teacher.
-- Attendance confirmation deducts one matching lesson ticket.
-- Student search shows remaining tickets and recent lesson status.
-- Student schedule and teacher schedule can be copied as message-friendly text.
-- Monthly memo matches academy lesson memo behavior.
+- 날짜 클릭 시 개인레슨 등록 다이얼로그를 연다.
+- 등록 흐름은 원생 선택, 악기 선택, 선생님 선택, 시간 선택 순서다.
+- 선택 가능한 악기는 해당 원생이 수강 중인 악기로 제한한다.
+- 같은 선생님의 같은 시간에 이미 수업이 있으면 경고하고 선택을 막는다.
+- 출석 확인 시 해당 학원, 원생, 악기에 맞는 회차권을 1회 차감한다.
+- 원생 검색 결과에는 잔여 회차와 최근 레슨 상태를 함께 표시한다.
+- 원생 시간표와 선생님 시간표는 메시지로 보내기 쉬운 텍스트 형태로 복사할 수 있다.
+- 월별 메모는 학원 피아노 레슨표의 메모 동작과 맞춘다.
 
-## Lesson Tickets
+## 회차권
 
-- Private lessons use ticket/count-based billing, not monthly flat billing.
-- New ticket fields: student, instrument, granted count, validity period, registration date.
-- If an active ticket exists for the same student and instrument, new registration adds count and renews validity.
-- List shows total granted count, remaining count, validity period, and expiration date.
-- Count and validity can be manually corrected by authorized roles.
-- Attendance confirmation deducts one count.
-- Low remaining count or near expiration should be visually emphasized.
+- 개인레슨은 월 고정 수강료가 아니라 회차권/횟수 기반으로 관리한다.
+- 신규 회차권 필드는 원생, 악기, 부여 회수, 유효기간, 등록일이다.
+- 같은 원생과 악기에 활성 회차권이 있으면 신규 등록은 기존 회차권에 회수를 추가하고 유효기간을 갱신한다.
+- 목록은 총 부여 회수, 잔여 회수, 유효기간, 만료일을 표시한다.
+- 권한 있는 역할은 회수와 유효기간을 수동 수정할 수 있다.
+- 출석 확인 시 1회를 차감한다.
+- 잔여 회수가 적거나 만료가 가까우면 시각적으로 강조한다.
 
-## Student, Teacher, Vendor Management
+## 원생, 선생님, 거래처 관리
 
-The section has five areas:
+이 영역은 다섯 가지 하위 목록을 가진다.
 
-- Students
-- Teachers
-- Suspended students
-- Withdrawn students
-- Vendors
+- 원생
+- 선생님
+- 휴원 원생
+- 퇴원 원생
+- 거래처
 
-### Students
+### 원생
 
-Student fields:
+원생 기본 필드:
 
-- name
-- age
-- grade
-- school
-- registration date
-- instrument progress
-- contacts including parent relationship
-- one or more instruments
+- 이름
+- 나이
+- 학년
+- 학교
+- 등록일
+- 악기 진도
+- 보호자 관계를 포함한 연락처
+- 하나 이상의 수강 악기
 
-Per instrument settings:
+악기별 설정:
 
-- teacher
-- lesson type: academy lesson or private lesson
-- lesson days
-- progress
-- lesson fee
-- discount
-- final tuition
+- 담당 선생님
+- 수업 형태: 학원 수업 또는 개인레슨
+- 수업 요일
+- 진도
+- 레슨비
+- 할인
+- 최종 수강료
 
-Student list supports sorting/search by name, teacher, instrument, and regular days. Students can be edited, suspended, or withdrawn.
+원생 목록은 이름, 선생님, 악기, 정기 요일 기준 검색/정렬을 지원한다. 원생은 수정, 휴원, 퇴원 처리할 수 있다.
 
-### Pricing
+### 가격표와 할인
 
-The PDF contains fixed pricing tables for piano academy lessons, piano private lessons, violin, cello, flute, and discounts. Preserve those tables as seeded reference data during implementation. Do not change amounts without user confirmation.
+PDF에는 피아노 학원 수업, 피아노 개인레슨, 바이올린, 첼로, 플루트, 할인 금액 표가 포함되어 있다. 이 금액은 구현 시 seeded reference data 후보로 보존하되, 사용자 확인 없이 금액을 최종 정책으로 고정하지 않는다.
 
-Discounts:
+할인:
 
-- two children discount: -10000 monthly
-- two instruments discount: -10000 monthly
-- referral discount: -10000 for the referral month only
+- 형제 할인: 월 -10,000원
+- 두 악기 할인: 월 -10,000원
+- 소개 할인: 소개한 해당 월 1회 -10,000원
 
-### Teachers
+### 선생님
 
-Teacher fields:
+선생님 기본 필드:
 
-- name
-- assigned part: piano, violin, cello, flute, owner
-- contact
-- registration date
-- resident registration number
-- salary type
+- 이름
+- 담당 파트: 피아노, 바이올린, 첼로, 플루트, 원장
+- 연락처
+- 등록일
+- 주민등록번호
+- 급여 형태
 
-Salary types:
+급여 형태:
 
-- monthly fixed salary
-- hourly fixed amount
-- ratio-based salary
+- 월급제
+- 시급제
+- 비율제
 
-Ratio salary is based on lesson income for students taught by that teacher and the configured academy:teacher ratio. Withholding is 3.3% of base salary.
+비율제 급여는 해당 선생님이 담당한 원생의 레슨 수입과 설정된 학원:선생님 비율을 기준으로 계산한다. 원천징수는 기본 급여의 3.3%로 계산한다. 세부 반올림/절사 정책은 확인 필요다.
 
-### Suspended And Withdrawn Students
+### 휴원/퇴원 원생
 
-- Student list actions move students to suspended or withdrawn lists.
-- Suspended list can restore to active or move to withdrawn.
-- Withdrawn list can restore to active.
-- Withdrawn students remain for 30 days unless restored, then are automatically deleted.
-- Suspension, withdrawal, and restore actions require confirmation dialogs.
+- 원생 목록에서 휴원 또는 퇴원 목록으로 이동할 수 있다.
+- 휴원 목록에서는 재원 처리 또는 퇴원 이동을 할 수 있다.
+- 퇴원 목록에서는 재원 처리할 수 있다.
+- 퇴원 원생은 복구되지 않으면 30일 후 자동 삭제된다. 실제 삭제 방식은 확인 필요다.
+- 휴원, 퇴원, 재원 처리에는 확인 다이얼로그가 필요하다.
 
-### Vendors
+### 거래처
 
-Vendor fields:
+거래처 필드:
 
-- vendor name
-- contact
-- type
-- note
+- 거래처명
+- 연락처
+- 종류
+- 비고
 
-Teachers cannot access vendor management.
+선생님은 거래처 관리에 접근할 수 없다.
 
-## Book Management
+## 교재 관리
 
-Book flow:
+교재 흐름:
 
-`Registration -> Inventory -> Purchase List -> Release -> Payment Complete`
+```text
+등록 -> 재고 -> 구매 목록 -> 출고 -> 결제 완료
+```
 
-- Register books with title, price, quantity, and stock-in date.
-- Inventory shows title, price, quantity, and stock-in date.
-- Purchase list records student, book title, auto-filled price, and release date.
-- Release reduces inventory quantity by one and waits for payment.
-- Payment complete records payment date and moves the sale to final history.
-- Payment complete records are permanent sales records and feed income management.
-- Inventory records should remain visible even at zero quantity.
+- 교재는 제목, 가격, 수량, 입고일로 등록한다.
+- 재고 목록은 제목, 가격, 수량, 입고일을 표시한다.
+- 구매 목록은 원생, 교재명, 자동 입력된 가격, 출고일을 기록한다.
+- 출고 시 재고 수량이 1 감소하고 결제 대기 상태가 된다.
+- 결제 완료 시 결제일을 기록하고 판매 확정 내역으로 이동한다.
+- 결제 완료 기록은 영구 판매 기록이며 수입 관리에 반영된다.
+- 재고가 0이 되어도 재고 기록은 보이도록 유지한다.
 
-## Income Management
+## 수입 관리
 
-Income management is proposed as owner-only, with possible teacher access to own salary only.
+수입 관리는 기본적으로 원장 전용으로 제안한다. 선생님은 본인 급여 정보만 볼 수 있는 방향을 고려하되, 세부 권한은 확인 필요다.
 
-Tabs:
+탭:
 
-- fixed academy income
-- income/expense records
-- book records
-- teacher salary
-- total income
+- 학원 고정 수입
+- 입출입 내역
+- 교재 내역
+- 선생님 월급
+- 전체 수입
 
-Fixed income:
+학원 고정 수입:
 
-- uses student tuition settings
-- records paid/unpaid by month
-- monthly state resets to unpaid
-- unpaid button adds to unpaid list
-- monthly records must differ when enrollment changes
-- month snapshot cutoff is the day before month change at 00:00
+- 원생의 최종 수강료 설정을 기준으로 한다.
+- 월별 수납/미납 상태를 기록한다.
+- 매월 상태는 미납으로 초기화된다.
+- 미납 버튼은 미납 목록에 추가한다.
+- 재원/퇴원/수강료 변경이 있으면 월별 기록은 달라져야 한다.
+- 월 snapshot 기준은 PDF에 “달 넘어가기 하루 전 00:00”으로 표현되어 있으나, 정확한 경계는 확인 필요다.
 
-Income/expense:
+입출입 내역:
 
-- manual entries by owner or desk staff where allowed
-- automatic entries from book payment completion and salary payment
+- 원장 또는 허용된 데스크 직원은 수동 수입/지출을 입력할 수 있다.
+- 교재 결제 완료와 급여 지급은 자동 내역을 만든다.
 
-Teacher salary:
+선생님 월급:
 
-- shows salary type, base amount, after-tax amount, payment state, and management actions
-- payment action creates an expense entry
+- 급여 형태, 기본 금액, 세후 금액, 지급 상태, 관리 액션을 표시한다.
+- 지급 처리 시 지출 내역을 생성한다.
 
-Total income:
+전체 수입:
 
-- income/expense ledger is the source of truth
-- graph supports yearly/monthly comparison for all instruments, individual instruments, academy income, and expenses
-
+- 수입/지출 ledger가 전체 수입 계산의 source of truth다.
+- 그래프는 연도/월 기준으로 전체 악기, 개별 악기, 학원 수입, 지출 비교를 지원한다.

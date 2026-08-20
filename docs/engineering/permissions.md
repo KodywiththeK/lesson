@@ -1,39 +1,38 @@
-# Permissions
+# 권한 설계
 
-Permission behavior must be tested at both UI and Supabase RLS layers.
+권한 동작은 UI 표시와 Supabase RLS 양쪽에서 테스트한다.
 
-## Roles
+## 역할
 
-- `owner`: full access.
-- `desk`: day-to-day operations; finance access is unconfirmed.
-- `teacher`: assigned lesson visibility, allowed attendance actions where confirmed, own salary view.
+- `owner`: 학원 전체 접근
+- `desk`: 일상 운영 담당, 재무 접근은 확인 필요
+- `teacher`: 배정 수업 확인, 허용된 출석 액션, 본인 급여 확인
 
-## Proposed Access Matrix
+## 제안 접근 매트릭스
 
-| Area | Owner | Desk | Teacher |
+| 영역 | 원장 | 데스크 | 선생님 |
 | --- | --- | --- | --- |
-| Academy lesson timetable | Full management | Full management | Assigned lessons only; attendance needs confirmation |
-| Private lesson timetable | Full management | Full management | Own lessons only; registration needs confirmation |
-| Lesson tickets | Issue/edit | Issue/edit | Own students' remaining count only; needs confirmation |
-| Students | Full management | Full management | Assigned basic info only; contact visibility needs confirmation |
-| Teachers | Full management | Needs confirmation | Own info only |
-| Vendors | Full management | Full management | No access |
-| Books | Full management | Full management | No access |
-| Income management | Full management | Needs confirmation | Own salary only |
+| 학원 피아노 레슨표 | 전체 관리 | 전체 관리 | 배정 수업만, 출석 권한은 확인 필요 |
+| 개인레슨표 | 전체 관리 | 전체 관리 | 본인 수업만, 등록 권한은 확인 필요 |
+| 회차권 | 발급/수정 | 발급/수정 가능 후보 | 담당 원생 잔여 회차 확인만, 범위 확인 필요 |
+| 원생 | 전체 관리 | 전체 관리 | 담당 원생 기본정보만, 연락처 노출 확인 필요 |
+| 선생님 | 전체 관리 | 확인 필요 | 본인 정보만 |
+| 거래처 | 전체 관리 | 전체 관리 | 접근 불가 |
+| 교재 | 전체 관리 | 전체 관리 | 접근 불가 |
+| 수입 관리 | 전체 관리 | 확인 필요 | 본인 급여만 |
 
-## RLS Rules
+## RLS 규칙
 
-- Owner policies are scoped to academy membership with owner role.
-- Desk policies are scoped to academy membership with desk role and allowed tables.
-- Teacher policies are scoped to assigned lessons/students and own salary rows.
-- Anonymous users should have no app data access.
-- UPDATE policies need both `USING` and `WITH CHECK`.
-- Views exposed through APIs should use security-invoker behavior where supported.
+- 원장 policy는 `academy_members`의 owner 역할과 `academy_id`를 기준으로 한다.
+- 데스크 policy는 학원 멤버십, desk 역할, 허용 테이블을 기준으로 한다.
+- 선생님 policy는 배정된 수업/원생과 본인 급여 row를 기준으로 한다.
+- anonymous 사용자는 앱 데이터에 접근할 수 없다.
+- UPDATE policy는 `USING`과 `WITH CHECK`를 모두 가져야 한다.
+- API에 노출되는 view는 지원되는 경우 security-invoker 동작을 사용한다.
 
-## Sensitive Data
+## 민감 데이터
 
-- Resident registration numbers require explicit confirmation before implementation.
-- Salary and payment records require owner-only defaults.
-- Contacts are not visible to teachers unless the user confirms.
-- Service-role access is never used in browser code.
-
+- 주민등록번호는 구현 전 사용자 확인이 필요하다.
+- 급여와 결제 기록은 owner-only 기본값을 따른다.
+- 원생 연락처는 사용자 확인 전 선생님에게 노출하지 않는다.
+- service-role 접근은 브라우저 코드에서 절대 사용하지 않는다.

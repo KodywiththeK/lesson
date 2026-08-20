@@ -1,12 +1,13 @@
-# Source Extracts
+# PDF 추출 산출물
 
-Store derived PDF extraction outputs here when they are intentionally committed.
+의도적으로 커밋할 PDF 파생 산출물을 이 디렉터리에 둔다.
 
-Recommended files:
+## 권장 파일
 
-- `pdf-text.md`: cleaned text extraction summary.
-- `pdf-image-notes.md`: requirements or UI implications visible only in rendered page images.
-- `pdf-ingestion-report.md`: tool versions, extraction commands, page count, OCR fallback notes.
+- `pdf-text.md`: 정리된 텍스트 추출 요약
+- `pdf-image-notes.md`: 렌더 이미지에서 확인한 요구사항 또는 UI 참고 사항
+- `pdf-ingestion-report.md`: 도구, 추출 명령, 페이지 수, OCR fallback 기록
 
-Do not commit the original PDF unless the user explicitly asks for it. Reference the external attachment path instead.
+## 원본 PDF 처리
 
+사용자가 명시적으로 요청하지 않는 한 원본 PDF 파일은 커밋하지 않는다. 원본은 외부 첨부 경로로만 참조한다.

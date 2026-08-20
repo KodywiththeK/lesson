@@ -1,66 +1,82 @@
-# Acceptance Scenarios
+# 인수 시나리오
 
-Use these scenarios as the starting point for TDD.
+이 문서는 TDD 시작점으로 사용한다. 시나리오가 구현되면 `docs/product/traceability-matrix.md`에 테스트와 구현 위치를 연결한다.
 
-## Lesson Ticket Deduction
+## 회차권 차감
 
-Given a private lesson student has 4 remaining piano tickets  
-When the student's lesson attendance is confirmed  
-Then the remaining ticket count becomes 3  
-And the deduction is recorded with the lesson date and instrument.
+조건: 개인레슨 원생에게 피아노 회차권 잔여 4회가 있다  
+동작: 해당 수업의 출석을 확인한다  
+결과: 잔여 회차는 3회가 된다  
+그리고: 차감 기록은 수업일, 학원, 원생, 악기와 함께 기록된다.
 
-Given a private lesson student is marked absent  
-When absence is saved  
-Then the remaining ticket count does not change.
+조건: 개인레슨 원생이 결석 처리된다  
+동작: 결석 상태를 저장한다  
+결과: 잔여 회차는 변경되지 않는다.
 
-## Private Lesson Registration
+조건: 원생이 수업 일정에만 등록되어 있다  
+동작: 실제 출석 확인이 아직 처리되지 않았다  
+결과: 잔여 회차는 변경되지 않는다.
 
-Given a student studies piano only  
-When the private lesson registration dialog opens for that student  
-Then piano is selectable  
-And violin, cello, and flute are not selectable.
+조건: 같은 수업 출석 확인이 이미 차감 처리되었다  
+동작: 같은 수업을 다시 출석 처리한다  
+결과: 잔여 회차는 중복 차감되지 않는다.
 
-Given a teacher already has a lesson at a selected time  
-When another lesson is registered for the same teacher and time  
-Then the app warns about the conflict  
-And the conflicting time cannot be selected.
+조건: 학원 A의 회차권이 있다  
+동작: 학원 B의 출석 기록으로 차감을 시도한다  
+결과: 차감은 거부된다.
 
-## Academy Lesson Makeup
+## 개인레슨 등록
 
-Given a student is absent from an academy lesson  
-When the absence is confirmed as makeup with a makeup date  
-Then a new calendar item is created on the makeup date  
-And the item is labeled `[makeup lesson]`  
-And the monthly memo records the student, makeup date, original absence date, and reason.
+조건: 원생이 피아노만 수강 중이다  
+동작: 해당 원생의 개인레슨 등록 다이얼로그를 연다  
+결과: 피아노만 선택할 수 있다  
+그리고: 바이올린, 첼로, 플루트는 선택할 수 없다.
 
-## Student Registration
+조건: 선생님에게 이미 선택 시간의 수업이 있다  
+동작: 같은 선생님과 같은 시간으로 다른 수업을 등록하려 한다  
+결과: 앱은 시간 충돌을 경고한다  
+그리고: 충돌 시간은 선택할 수 없다.
 
-Given a new student is registered with an instrument, teacher, lesson type, lesson days, fee, and discount  
-When the student is saved  
-Then the student appears in the student list  
-And recurring lesson schedule data is prepared  
-And fixed academy income includes the final tuition.
+## 학원 수업 보강
 
-## Book Sale
+조건: 원생이 학원 수업에서 결석 처리되었다  
+동작: 보강 날짜를 입력해 결석을 보강으로 확정한다  
+결과: 보강 날짜에 새 캘린더 일정이 생성된다  
+그리고: 일정은 `[보강 수업]`으로 표시된다  
+그리고: 월별 메모에는 원생명, 보강 날짜, 원래 결석 날짜, 사유가 기록된다.
 
-Given a book has quantity 2  
-When one copy is released to a student  
-Then inventory quantity becomes 1  
-And the sale waits for payment confirmation.
+조건: 원생이 학원 수업에서 결석 처리되었다  
+동작: 패스로 결석을 확정한다  
+결과: 회차권은 차감되지 않는다  
+그리고: 월별 메모에 패스 사유가 기록된다.
 
-Given released book payment is confirmed  
-When the payment date is saved  
-Then the sale appears in payment-complete history  
-And an income ledger entry is created for the payment date.
+## 원생 등록
 
-## Salary Payment
+조건: 새 원생이 악기, 선생님, 수업 형태, 수업 요일, 수강료, 할인과 함께 등록된다  
+동작: 원생을 저장한다  
+결과: 원생은 원생 목록에 표시된다  
+그리고: 반복 수업 일정 데이터가 준비된다  
+그리고: 학원 고정 수입에 최종 수강료가 반영된다.
 
-Given a ratio teacher taught completed lessons this month  
-When salary is calculated  
-Then base salary uses lesson price per session and teacher ratio  
-And after-tax salary subtracts 3.3%.
+## 교재 판매
 
-Given salary payment is confirmed  
-When the salary is marked paid  
-Then an expense entry is created in the income/expense ledger.
+조건: 교재 재고 수량이 2개다  
+동작: 교재 1권을 원생에게 출고한다  
+결과: 재고 수량은 1개가 된다  
+그리고: 해당 판매는 결제 대기 상태가 된다.
 
+조건: 출고된 교재의 결제를 확인한다  
+동작: 결제일을 저장한다  
+결과: 판매는 결제 완료 내역에 표시된다  
+그리고: 결제일 기준 수입 ledger 항목이 생성된다.
+
+## 급여 지급
+
+조건: 비율제 선생님이 이번 달 완료된 수업을 담당했다  
+동작: 급여를 계산한다  
+결과: 기본 급여는 수업별 수강료와 선생님 비율을 기준으로 계산된다  
+그리고: 세후 급여는 3.3% 원천징수를 반영한다.
+
+조건: 급여 지급이 확정된다  
+동작: 급여를 지급 완료로 표시한다  
+결과: 입출입 ledger에 지출 항목이 생성된다.

@@ -1,44 +1,68 @@
-# Open Questions
+# 확인 필요 질문
 
-Do not implement final policy for these items until confirmed by the user.
+이 문서의 항목은 사용자 확인 전 최종 정책으로 구현하지 않는다. 단, 질문에 막히지 않는 순수 로직, UI 골격, 테스트 하네스는 진행할 수 있다.
 
-## Organization And Roles
+## 제품/테넌트
 
-- Does the academy currently have desk staff, or does the owner handle desk work?
-- How many teachers use the system?
-- Should teachers access from phone, PC, or both?
-- Can teachers check attendance for academy piano lessons, or only view assigned lessons?
-- Can teachers register private lessons, or only owner/desk staff?
-- Should teachers see student contact information?
+- 서비스의 실제 제품명은 무엇으로 할지?
+- 사용자가 처음 가입하면 학원을 직접 생성하는지, 초대 링크로 학원에 합류하는지?
+- 한 사용자가 여러 학원에 소속될 수 있는지?
+- 한 선생님이 여러 학원에 동시에 소속될 수 있는지?
+- 더 클래식은 초기 seed/reference tenant로만 둘지, 첫 운영 학원으로 실제 데이터 migration을 할지?
 
-## Permissions
+## 조직과 역할
 
-- Should desk staff access any finance screens?
-- Should teachers see only after-tax salary or both base and after-tax amounts?
-- Should resident registration numbers be stored in v1, and if yes, who can view them?
+- 데스크 직원 역할은 모든 학원에서 기본 제공할지, 학원별로 켜고 끄는 옵션인지?
+- 선생님은 모바일, PC, 둘 다 어느 환경을 우선 지원해야 하는지?
+- 선생님이 학원 피아노 수업 출석을 직접 확인할 수 있는지, 배정된 개인레슨만 확인할 수 있는지?
+- 선생님이 개인레슨을 직접 등록할 수 있는지, 원장/데스크만 등록할 수 있는지?
+- 선생님에게 원생 보호자 연락처를 노출할지?
 
-## Lessons
+## 권한과 민감정보
 
-- Which weekdays are valid for academy piano lessons? PDF mentions Monday through Friday for counts but Saturday appears in student settings.
-- How should Korean holidays or academy closure dates affect recurring schedules?
-- Should makeup lessons support time conflicts, or can makeup visits be random/no-time?
-- Should passes reduce future expected lessons, create a note only, or affect income?
+- 데스크 직원이 수입/지출 화면 일부에 접근할 수 있는지?
+- 선생님은 세후 급여만 볼지, 기본 급여와 세후 급여를 모두 볼지?
+- 주민등록번호를 v1에서 저장할지?
+- 주민등록번호를 저장한다면 누가 볼 수 있고, 마스킹/보관/삭제/audit 정책은 어떻게 할지?
+- audit log를 원장에게 화면으로 노출할지?
 
-## Payments And Finance
+## 레슨과 일정
 
-- What exact month boundary should be used for fixed income snapshots? PDF says the day before month change at 00:00, which needs confirmation.
-- Should unpaid status reset automatically on the first day of the month?
-- Who can manually edit income/expense records?
-- Are salary and resident registration data subject to special retention or masking rules?
+- 학원 피아노 수업의 유효 요일은 무엇인지? PDF에는 월~금 기준 표현과 토요일 예시가 함께 보인다.
+- 공휴일 또는 학원 휴무일이 반복 일정에 어떤 영향을 주는지?
+- 보강 수업은 시간 충돌을 반드시 막아야 하는지, 날짜만 기록하고 임의 방문으로 처리할 수 있는지?
+- 패스는 향후 예정 수업 수를 줄이는지, 메모만 남기는지, 수입에도 영향을 주는지?
+- 월별 메모의 읽지 않음 기준은 누구별로 관리하는지?
 
-## Data Retention
+## 회차권
 
-- Should withdrawn students be hard-deleted after 30 days or archived/soft-deleted?
-- Should payment-complete book records be deletable only by owner or never deleted?
-- Should audit logs be visible to the owner?
+- 회차권 만료 임박 기준은 며칠 전인지?
+- 잔여 회차 부족 강조 기준은 몇 회 이하인지?
+- 회차권 수동 수정은 원장만 가능한지, 데스크도 가능한지?
+- 회차권을 차감 취소할 수 있는지?
+- 차감 취소가 가능하다면 audit 사유 입력이 필수인지?
 
-## Product Scope
+## 결제와 수입
 
-- Is notice/event sharing part of a later phase only?
-- Is multi-academy SaaS expansion only architectural consideration for v1?
+- 학원 고정 수입 snapshot의 정확한 월 경계는 언제인지? PDF에는 “달 넘어가기 하루 전 00:00”으로 표현되어 있어 확인이 필요하다.
+- 미납 상태는 매월 1일 자동 초기화되는지?
+- 수입/지출 수동 입력은 원장만 가능한지, 데스크도 가능한지?
+- 교재 결제 완료 기록은 원장만 삭제할 수 있는지, 절대 삭제하지 않는지?
 
+## 급여
+
+- 비율제 급여에서 3.3% 원천징수 계산 시 원 단위 반올림/내림/절사 규칙은 무엇인지?
+- 시급제 급여의 근무 시간 입력 방식은 수업 시간 기반인지, 별도 근무 기록 기반인지?
+- 급여 지급 후 수정 또는 취소가 가능한지?
+
+## 데이터 보관
+
+- 퇴원 원생은 30일 후 hard delete할지, soft delete/archive할지?
+- 삭제 전 원장에게 알림 또는 복구 유예 안내가 필요한지?
+- 결제 완료, 급여 지급, 회차권 수정 같은 민감 기록의 보관 기간은 얼마인지?
+
+## 후순위 범위
+
+- 공지사항/이벤트 공유 기능은 나중 phase 전용인지?
+- 카드 단말기 결제 연동, 카카오 알림톡, 학부모 포털은 각각 어느 phase 후보인지?
+- 멀티학원 SaaS용 요금제/결제/구독 관리가 필요한 시점은 언제인지?

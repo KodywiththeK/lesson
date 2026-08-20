@@ -1,35 +1,34 @@
-# Goal Intake
+# 목표 접수
 
-Use this document at the start of each task. The purpose is to make the task ready for autonomous execution without over-planning.
+각 작업을 시작할 때 이 문서를 기준으로 목표를 실행 가능한 상태로 만든다. 목적은 과도한 계획이 아니라, Codex가 자율적으로 끝까지 검증할 수 있는 최소 맥락을 확보하는 것이다.
 
-## Classification
+## 분류
 
-Classify the goal as one primary type:
+목표는 하나의 주 유형으로 분류한다.
 
-- `feature`: New user-visible behavior.
-- `bug`: Existing behavior is incorrect.
-- `task`: Engineering, configuration, data, or tooling work.
-- `refactor`: Behavior-preserving code improvement.
-- `doc`: Documentation-only change.
+- `feature`: 사용자에게 보이는 새 동작
+- `bug`: 기존 동작 오류 수정
+- `task`: 엔지니어링, 설정, 데이터, 도구 작업
+- `refactor`: 동작 변경 없는 코드 개선
+- `doc`: 문서만 변경
 
-## Required Fields
+## 필수 항목
 
-- Goal:
-- Type:
-- Target user:
-- Source requirement:
-- In scope:
-- Out of scope:
-- Acceptance criteria:
-- Verification commands:
-- Required evidence:
-- Open questions:
+- 목표:
+- 유형:
+- 대상 사용자:
+- 출처 요구사항:
+- 범위:
+- 범위 밖:
+- 인수 기준:
+- 검증 명령:
+- 필요한 증거:
+- 확인 질문:
 
-## Ready Checklist
+## Ready 체크리스트
 
-- The target user and workflow are clear.
-- The success criteria can be tested or inspected.
-- Any linked PDF requirement is mapped in `docs/product/traceability-matrix.md`.
-- Product-policy uncertainties are listed in `docs/product/open-questions.md`.
-- A first failing test can be named before implementation begins.
-
+- 대상 사용자와 workflow가 명확하다.
+- 성공 기준이 테스트 또는 눈검증으로 확인 가능하다.
+- PDF 요구사항과 연결되면 `docs/product/traceability-matrix.md`에 매핑되어 있다.
+- 제품 정책 불확실성은 `docs/product/open-questions.md`에 기록되어 있다.
+- 구현 전 첫 실패 테스트 파일과 시나리오를 말할 수 있다.

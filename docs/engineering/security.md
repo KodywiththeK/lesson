@@ -1,37 +1,38 @@
-# Security And Privacy
+# 보안과 개인정보
 
-This app handles minors, family contact data, payment status, salary information, and potentially resident registration numbers. Security defaults must be conservative.
+이 서비스는 미성년 원생, 보호자 연락처, 수납/미납 상태, 급여 정보, 주민등록번호 후보 필드를 다룬다. 기본값은 보수적으로 둔다.
 
-## Defaults
+## 기본값
 
-- Owner-only access for finance and salary data unless explicitly expanded.
-- No anonymous access to app data.
-- RLS enabled on all exposed Supabase tables.
-- No service-role keys in browser code or public environment variables.
-- Sensitive fields masked in UI unless the active role has a documented need.
+- 재무와 급여 데이터는 명시적으로 확장하기 전까지 원장 전용이다.
+- 익명 사용자는 앱 데이터에 접근할 수 없다.
+- Supabase 노출 스키마의 모든 테이블은 RLS를 활성화한다.
+- service-role key는 브라우저 코드 또는 public 환경변수에 절대 노출하지 않는다.
+- 민감 필드는 현재 역할에 문서화된 필요가 없으면 UI에서 마스킹한다.
 
-## Personal Data
+## 개인정보
 
-- Student contact data should be visible only to owner and approved desk staff by default.
-- Teacher resident registration numbers require explicit confirmation before storage.
-- If resident registration numbers are stored, document masking, access, retention, and audit behavior first.
+- 원생 연락처와 보호자 정보는 기본적으로 원장과 승인된 데스크 직원만 볼 수 있다.
+- 선생님 주민등록번호 저장은 구현 전 사용자 확인이 필요하다.
+- 주민등록번호를 저장한다면 마스킹, 접근 권한, 보관 기간, audit 동작을 먼저 문서화한다.
 
-## Audit Candidates
+## Audit 후보
 
-Audit these actions when implemented:
+다음 작업은 구현 시 audit 대상이다.
 
-- manual ticket correction
-- attendance confirmation that deducts a ticket
-- absence confirmation and makeup/pass resolution
-- student suspension, withdrawal, restore, and deletion
-- salary calculation and payment
-- manual ledger entry create/update/delete
-- book payment completion
+- 회차권 수동 수정
+- 회차권을 차감하는 출석 확인
+- 결석 확정과 보강/패스 처리
+- 원생 휴원, 퇴원, 재원, 삭제
+- 급여 계산과 지급
+- 수동 ledger 생성/수정/삭제
+- 교재 결제 완료
+- 학원 멤버 권한 변경
 
-## Supabase Checks
+## Supabase 확인
 
-- Test anonymous, owner, desk, and teacher roles.
-- Confirm teachers can only access assigned lesson/student data.
-- Confirm finance and salary tables reject unauthorized reads and writes.
-- Confirm update policies include both row visibility and write constraints.
-
+- anonymous, owner, desk, teacher 역할을 모두 테스트한다.
+- 선생님은 배정된 수업/원생 데이터만 접근 가능한지 확인한다.
+- 재무와 급여 테이블은 권한 없는 읽기/쓰기를 거부해야 한다.
+- UPDATE policy는 row visibility와 write constraint를 모두 포함해야 한다.
+- view를 노출하면 가능한 `security_invoker = true`를 사용한다.

@@ -1,25 +1,24 @@
-# Failure Policy
+# 실패 대응 정책
 
-Failures are expected during TDD. Repeating the same failure without new information is not.
+TDD에서는 실패가 정상이다. 하지만 새 정보 없이 같은 실패를 반복하는 것은 정상 진행이 아니다.
 
-## Retry Limit
+## 재시도 한계
 
-- After one failure, inspect the error carefully and make the smallest correction.
-- After two similar failures, broaden diagnosis: read docs, inspect configs, isolate the failing path.
-- After three similar failures, stop retrying the same approach. Write a short cause note and choose a new strategy or ask the user if the decision is product-related.
+- 1회 실패 후에는 오류를 자세히 읽고 가장 작은 수정을 한다.
+- 유사한 실패가 2회 반복되면 진단 범위를 넓힌다. 문서, 설정, 실패 경로를 다시 확인한다.
+- 유사한 실패가 3회 반복되면 같은 접근을 멈춘다. 짧은 원인 노트를 남기고 새 전략을 택하거나, 제품 결정이 필요한 경우 사용자에게 질문한다.
 
-## Do Not
+## 금지
 
-- Delete or weaken tests to make them pass.
-- Ignore TypeScript, lint, build, or browser failures that touch changed behavior.
-- Mask Supabase permission errors with service-role code in user-facing paths.
-- Turn flaky E2E into sleeps instead of using web-first assertions or deterministic fixtures.
+- 테스트를 통과시키기 위해 테스트를 삭제하거나 약화하지 않는다.
+- 변경 동작과 관련된 TypeScript, lint, build, browser 실패를 무시하지 않는다.
+- 사용자 경로의 Supabase 권한 오류를 service-role 코드로 덮지 않는다.
+- flaky E2E를 임의 sleep으로 해결하지 않는다. web-first assertion 또는 결정적 fixture를 사용한다.
 
-## Ask The User When
+## 사용자에게 질문해야 하는 경우
 
-- Requirements conflict.
-- Product policy is missing.
-- Sensitive access or financial calculation is ambiguous.
-- A migration or data operation could affect real data.
-- A new dependency or stack change would alter the agreed architecture.
-
+- 요구사항이 충돌한다.
+- 제품 정책이 빠져 있다.
+- 민감 권한 또는 재무 계산이 모호하다.
+- migration 또는 데이터 작업이 실제 데이터에 영향을 줄 수 있다.
+- 새 의존성이나 스택 변경이 합의된 아키텍처를 바꾼다.

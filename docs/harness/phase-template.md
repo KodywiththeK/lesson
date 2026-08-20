@@ -1,36 +1,37 @@
-# Phase Template
+# Phase 템플릿
 
-Create a copy of this structure in task notes when a goal is larger than one small change.
+작업이 하나의 작은 변경보다 크면 이 구조를 작업 노트나 evidence에 복사해 사용한다.
 
-## Goal
+## 목표
 
-- Goal:
-- Source requirement:
-- User-visible outcome:
+- 목표:
+- 출처 요구사항:
+- 사용자에게 보이는 결과:
 
-## Phase Plan
+## Phase 계획
 
-| Phase | Objective | Tests First | Verification | Status |
+| Phase | 목적 | 먼저 작성할 테스트 | 검증 | 상태 |
 | --- | --- | --- | --- | --- |
-| 0 Discover | Read docs, code, and open questions | N/A | Ready checklist | Pending |
-| 1 Red | Add failing tests | Test file and scenario | Expected failure | Pending |
-| 2 Green | Minimal implementation | Existing failing test | Target test passes | Pending |
-| 3 Refactor | Improve structure | Existing tests | Related tests pass | Pending |
-| 4 Verify | Run matrix checks | N/A | Commands pass | Pending |
-| 5 Consolidate | Maintainability pass | Regression test cleanup | Checks rerun | Pending |
-| 6 Evidence | Record results | N/A | Evidence complete | Pending |
+| 0 Discover | 문서, 코드, 확인 질문 읽기 | 해당 없음 | Ready 체크리스트 | 대기 |
+| 1 Red | 실패 테스트 추가 | 테스트 파일과 시나리오 | 예상 실패 | 대기 |
+| 2 Green | 최소 구현 | 기존 실패 테스트 | 대상 테스트 통과 | 대기 |
+| 3 Refactor | 구조 개선 | 기존 테스트 | 관련 테스트 통과 | 대기 |
+| 4 Verify | 매트릭스 검증 | 해당 없음 | 명령 통과 | 대기 |
+| 5 Consolidate | 유지보수성 점검 | 회귀 테스트 정리 | 검증 재실행 | 대기 |
+| 6 Evidence | 결과 기록 | 해당 없음 | 증거 완성 | 대기 |
+| 7 Commit | 작업 단위 커밋 | 해당 없음 | Git 상태 깨끗함 | 대기 |
 
-## Failure Notes
+## 실패 노트
 
-- Attempt:
-- Failure:
-- Diagnosis:
-- New strategy:
+- 시도:
+- 실패:
+- 진단:
+- 새 접근:
 
-## Completion Notes
+## 완료 노트
 
-- Requirements covered:
-- Commands run:
-- Quality consolidation summary:
-- Residual risk:
-
+- 커버한 요구사항:
+- 실행한 명령:
+- 품질 정리 요약:
+- 남은 위험:
+- 커밋:

@@ -1,40 +1,40 @@
-# TDD Protocol
+# TDD 프로토콜
 
-TDD is mandatory for application code and strongly preferred for scripts and domain utilities.
+제품 코드에는 TDD가 필수다. 스크립트와 도메인 유틸에도 가능한 한 TDD를 적용한다.
 
 ## Red
 
-- Start with the user outcome, not the implementation.
-- Write a failing test before the production change.
-- Confirm the failure message points at the missing behavior.
+- 구현 방식이 아니라 사용자 결과에서 시작한다.
+- production code를 바꾸기 전에 실패 테스트를 작성한다.
+- 실패 메시지가 누락된 동작을 가리키는지 확인한다.
 
 ## Green
 
-- Add the smallest production change that makes the test pass.
-- Prefer pure domain functions for rules involving:
-  - lesson ticket deduction
-  - attendance status transitions
-  - makeup/pass handling
-  - unpaid and paid state
-  - book stock and settlement
-  - salary and withholding calculations
+- 테스트를 통과시키는 가장 작은 production change를 추가한다.
+- 다음 규칙은 순수 도메인 함수로 우선 검증한다.
+- 회차권 차감
+- 출석 상태 전환
+- 보강/패스 처리
+- 수납/미납 상태
+- 교재 재고와 정산
+- 급여와 원천징수 계산
+- 권한 helper
 
 ## Refactor
 
-- Refactor only under green tests.
-- Preserve domain terms from the product spec.
-- Extract shared utilities only when they clarify repeated behavior.
+- 테스트가 Green일 때만 리팩터링한다.
+- 제품 명세의 용어와 코드 용어를 맞춘다.
+- 반복이 실제로 드러났거나 의미가 명확해졌을 때만 공통 유틸을 뽑는다.
 
-## Test Levels
+## 테스트 계층
 
-- Unit tests: pure calculations, permission helpers, date logic, status transitions.
-- Component tests: form validation, role-visible controls, table filtering, modal behavior.
-- Integration tests: page-level workflows with mocked Supabase or local test data.
-- E2E tests: critical user flows in a browser.
+- Unit: 순수 계산, 권한 helper, 날짜 로직, 상태 전환
+- Component: 폼 검증, 역할별 표시, 테이블 필터, 모달 동작
+- Integration: Supabase mock 또는 local test data 기반 page/workflow
+- E2E: 브라우저에서 핵심 사용자 흐름
 
-## Promotion Rules
+## 승격 규칙
 
-- A bug fix must add or update a regression test.
-- A brittle implementation-detail test must be rewritten before the task is done.
-- A high-value workflow should be represented at the highest practical level, usually Playwright.
-
+- 버그 수정은 반드시 회귀 테스트를 추가하거나 수정한다.
+- 구현 세부사항에 과하게 묶인 brittle test는 작업 완료 전 다시 작성한다.
+- 중요한 사용자 흐름은 가능한 가장 높은 실용 계층, 보통 Playwright로 대표한다.
