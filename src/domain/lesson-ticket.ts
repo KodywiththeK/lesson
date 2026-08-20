@@ -36,6 +36,36 @@ export type LessonTicketUsage = {
   usedCount: 1;
 };
 
+export type LessonTicketManualAdjustmentInput = {
+  academyId: string;
+  deltaCount: number;
+  reason: string;
+  adjustedAt: string;
+  adjustedBy: string;
+};
+
+export type LessonTicketManualAdjustmentOptions = {
+  canAdjust: boolean;
+};
+
+export type LessonTicketManualAdjustmentEvent = {
+  type: "manual-adjustment";
+  academyId: string;
+  studentId: string;
+  instrumentId: string;
+  previousRemainingCount: number;
+  nextRemainingCount: number;
+  deltaCount: number;
+  reason: string;
+  adjustedAt: string;
+  adjustedBy: string;
+};
+
+export type LessonTicketManualAdjustmentResult = {
+  ticket: LessonTicketBalance;
+  event: LessonTicketManualAdjustmentEvent;
+};
+
 export type ApplyAttendanceOptions = {
   alreadyDeductedLessonEventIds?: string[];
 };
@@ -206,6 +236,53 @@ export function summarizeLessonTicketStatus(
   };
 }
 
+export function adjustLessonTicketManually(
+  ticket: LessonTicketBalance,
+  input: LessonTicketManualAdjustmentInput,
+  options: LessonTicketManualAdjustmentOptions,
+): LessonTicketManualAdjustmentResult {
+  if (!options.canAdjust) {
+    throw new Error("회차권 수동 수정 권한이 없습니다.");
+  }
+
+  if (ticket.academyId !== input.academyId) {
+    throw new Error("학원 범위가 일치하지 않습니다.");
+  }
+
+  assertNonZeroInteger(input.deltaCount);
+
+  const reason = input.reason.trim();
+
+  if (!reason) {
+    throw new Error("회차권 수동 수정 사유는 필수입니다.");
+  }
+
+  const nextRemainingCount = ticket.remainingCount + input.deltaCount;
+
+  if (nextRemainingCount < 0) {
+    throw new Error("잔여 회차는 0보다 작을 수 없습니다.");
+  }
+
+  return {
+    ticket: {
+      ...ticket,
+      remainingCount: nextRemainingCount,
+    },
+    event: {
+      type: "manual-adjustment",
+      academyId: ticket.academyId,
+      studentId: ticket.studentId,
+      instrumentId: ticket.instrumentId,
+      previousRemainingCount: ticket.remainingCount,
+      nextRemainingCount,
+      deltaCount: input.deltaCount,
+      reason,
+      adjustedAt: input.adjustedAt,
+      adjustedBy: input.adjustedBy,
+    },
+  };
+}
+
 function assertSameScope(
   ticket: LessonTicketBalance,
   attendance: AttendanceConfirmation,
@@ -243,6 +320,12 @@ function assertSameTicketScope(
 function assertPositiveCount(count: number) {
   if (!Number.isInteger(count) || count <= 0) {
     throw new Error("회차권 부여 회수는 1 이상의 정수여야 합니다.");
+  }
+}
+
+function assertNonZeroInteger(count: number) {
+  if (!Number.isInteger(count) || count === 0) {
+    throw new Error("회차권 수동 수정 회수는 0이 아닌 정수여야 합니다.");
   }
 }
 

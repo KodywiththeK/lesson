@@ -73,6 +73,29 @@ describe("canAccessFeature", () => {
     ).toBe(true);
   });
 
+  it("회차권 수동 수정은 owner에게 허용하고 desk는 명시 설정이 필요하다", () => {
+    expect(canAccessFeature({ role: "owner" }, "ticket-manual-adjustment")).toBe(
+      true,
+    );
+    expect(canAccessFeature({ role: "desk" }, "ticket-manual-adjustment")).toBe(
+      false,
+    );
+    expect(
+      canAccessFeature(
+        {
+          role: "desk",
+          flags: {
+            allowDeskTicketAdjustment: true,
+          },
+        },
+        "ticket-manual-adjustment",
+      ),
+    ).toBe(true);
+    expect(
+      canAccessFeature({ role: "teacher" }, "ticket-manual-adjustment"),
+    ).toBe(false);
+  });
+
   it("teacher는 배정된 학생과 본인 급여에만 접근한다", () => {
     const teacherContext = {
       role: "teacher" as const,

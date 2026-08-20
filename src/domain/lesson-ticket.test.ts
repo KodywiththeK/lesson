@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyAttendanceToTicket,
+  adjustLessonTicketManually,
   registerLessonTicket,
   summarizeLessonTicketStatus,
 } from "./lesson-ticket";
@@ -224,5 +225,73 @@ describe("summarizeLessonTicketStatus", () => {
     );
 
     expect(summary.statuses).toEqual(["exhausted", "expired"]);
+  });
+});
+
+describe("adjustLessonTicketManually", () => {
+  it("권한 있는 사용자는 사유와 함께 회차권 잔여 회수를 수동 조정할 수 있다", () => {
+    const result = adjustLessonTicketManually(
+      baseTicket,
+      {
+        academyId: "academy-1",
+        deltaCount: 2,
+        reason: "이전 수기 장부 누락 보정",
+        adjustedAt: "2026-08-20T18:00:00+09:00",
+        adjustedBy: "user-owner",
+      },
+      {
+        canAdjust: true,
+      },
+    );
+
+    expect(result.ticket.remainingCount).toBe(6);
+    expect(result.event).toEqual({
+      type: "manual-adjustment",
+      academyId: "academy-1",
+      studentId: "student-1",
+      instrumentId: "piano",
+      previousRemainingCount: 4,
+      nextRemainingCount: 6,
+      deltaCount: 2,
+      reason: "이전 수기 장부 누락 보정",
+      adjustedAt: "2026-08-20T18:00:00+09:00",
+      adjustedBy: "user-owner",
+    });
+  });
+
+  it("권한이 없으면 회차권 수동 수정을 막는다", () => {
+    expect(() =>
+      adjustLessonTicketManually(
+        baseTicket,
+        {
+          academyId: "academy-1",
+          deltaCount: 1,
+          reason: "테스트 조정",
+          adjustedAt: "2026-08-20T18:00:00+09:00",
+          adjustedBy: "teacher-1",
+        },
+        {
+          canAdjust: false,
+        },
+      ),
+    ).toThrow("회차권 수동 수정 권한이 없습니다.");
+  });
+
+  it("수동 조정 후 잔여 회차가 음수가 되면 막는다", () => {
+    expect(() =>
+      adjustLessonTicketManually(
+        baseTicket,
+        {
+          academyId: "academy-1",
+          deltaCount: -5,
+          reason: "오등록 차감",
+          adjustedAt: "2026-08-20T18:00:00+09:00",
+          adjustedBy: "user-owner",
+        },
+        {
+          canAdjust: true,
+        },
+      ),
+    ).toThrow("잔여 회차는 0보다 작을 수 없습니다.");
   });
 });
