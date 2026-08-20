@@ -64,4 +64,20 @@ describe("queryKeys", () => {
       "교재",
     ]);
   });
+
+  it("학원별 교재 구매 목록 key에 academyId와 검색/상태 필터를 포함한다", () => {
+    expect(
+      queryKeys.books.purchaseList("academy-1", {
+        q: "바이엘",
+        status: "payment-pending",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "books",
+      "purchase-list",
+      "바이엘",
+      "payment-pending",
+    ]);
+  });
 });

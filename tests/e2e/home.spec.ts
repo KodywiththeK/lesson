@@ -61,3 +61,16 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
     page.getByRole("searchbox", { name: "거래처 검색" }),
   ).toBeVisible();
 });
+
+test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "교재" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "교재 관리" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: "교재 구매 검색" }),
+  ).toBeVisible();
+});

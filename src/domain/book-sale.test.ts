@@ -214,4 +214,53 @@ describe("buildBookPurchaseList", () => {
       },
     ]);
   });
+
+  it("교재 구매 목록은 검색어와 결제 상태 필터를 적용한다", () => {
+    const rows = buildBookPurchaseList(
+      [
+        {
+          academyId: "academy-1",
+          saleId: "sale-1",
+          bookId: "book-1",
+          bookTitle: "바이엘 2",
+          studentId: "student-1",
+          studentName: "김민지",
+          price: 12000,
+          shippedAt: "2026-08-21",
+          status: "payment-pending",
+        },
+        {
+          academyId: "academy-1",
+          saleId: "sale-2",
+          bookId: "book-2",
+          bookTitle: "체르니 100",
+          studentId: "student-2",
+          studentName: "이서윤",
+          price: 15000,
+          shippedAt: "2026-08-22",
+          status: "paid",
+          paidAt: "2026-08-23",
+          permanent: true,
+        },
+      ],
+      {
+        academyId: "academy-1",
+        search: "체르니",
+        filters: {
+          status: "paid",
+        },
+      },
+    );
+
+    expect(rows).toEqual([
+      {
+        saleId: "sale-2",
+        studentName: "이서윤",
+        bookTitle: "체르니 100",
+        autoFilledPrice: 15000,
+        shippedAt: "2026-08-22",
+        status: "paid",
+      },
+    ]);
+  });
 });

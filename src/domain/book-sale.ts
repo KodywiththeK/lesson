@@ -69,6 +69,10 @@ export type CompleteBookSalePaymentResult = {
 
 export type BuildBookPurchaseListOptions = {
   academyId: string;
+  search?: string;
+  filters?: {
+    status?: BookSaleStatus;
+  };
 };
 
 export type BookPurchaseListRow = {
@@ -158,6 +162,8 @@ export function buildBookPurchaseList(
 ): BookPurchaseListRow[] {
   return sales
     .filter((sale) => sale.academyId === options.academyId)
+    .filter((sale) => matchesBookPurchaseFilters(sale, options.filters))
+    .filter((sale) => matchesBookPurchaseSearch(sale, options.search))
     .sort(
       (left, right) =>
         left.shippedAt.localeCompare(right.shippedAt) ||
@@ -172,6 +178,33 @@ export function buildBookPurchaseList(
       shippedAt: sale.shippedAt,
       status: sale.status,
     }));
+}
+
+export function formatBookSaleStatus(status: BookSaleStatus) {
+  return status === "paid" ? "결제 완료" : "결제 대기";
+}
+
+function matchesBookPurchaseFilters(
+  sale: BookSale,
+  filters: BuildBookPurchaseListOptions["filters"],
+) {
+  return !filters?.status || sale.status === filters.status;
+}
+
+function matchesBookPurchaseSearch(sale: BookSale, search: string | undefined) {
+  const trimmedSearch = search?.trim().toLocaleLowerCase("ko-KR");
+
+  if (!trimmedSearch) {
+    return true;
+  }
+
+  return [
+    sale.studentName,
+    sale.bookTitle,
+    sale.shippedAt,
+    sale.status,
+    formatBookSaleStatus(sale.status),
+  ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
 }
 
 function assertSameAcademy(leftAcademyId: string, rightAcademyId: string) {
