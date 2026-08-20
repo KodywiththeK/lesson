@@ -67,6 +67,19 @@ export type CompleteBookSalePaymentResult = {
   ledgerEntry: LedgerEntry;
 };
 
+export type BuildBookPurchaseListOptions = {
+  academyId: string;
+};
+
+export type BookPurchaseListRow = {
+  saleId: string;
+  studentName: string;
+  bookTitle: string;
+  autoFilledPrice: number;
+  shippedAt: string;
+  status: BookSaleStatus;
+};
+
 export function registerBookStock(input: BookStockInput): BookStock {
   assertPositiveMoney(input.price);
   assertNonNegativeInteger(input.quantity);
@@ -137,6 +150,28 @@ export function completeBookSalePayment(
       refId: sale.saleId,
     },
   };
+}
+
+export function buildBookPurchaseList(
+  sales: BookSale[],
+  options: BuildBookPurchaseListOptions,
+): BookPurchaseListRow[] {
+  return sales
+    .filter((sale) => sale.academyId === options.academyId)
+    .sort(
+      (left, right) =>
+        left.shippedAt.localeCompare(right.shippedAt) ||
+        left.studentName.localeCompare(right.studentName, "ko-KR") ||
+        left.bookTitle.localeCompare(right.bookTitle, "ko-KR"),
+    )
+    .map((sale) => ({
+      saleId: sale.saleId,
+      studentName: sale.studentName,
+      bookTitle: sale.bookTitle,
+      autoFilledPrice: sale.price,
+      shippedAt: sale.shippedAt,
+      status: sale.status,
+    }));
 }
 
 function assertSameAcademy(leftAcademyId: string, rightAcademyId: string) {
