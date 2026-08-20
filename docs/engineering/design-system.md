@@ -10,6 +10,10 @@
 - `components.json`을 shadcn 경로, alias, style, RSC, icon library의 기준으로 유지한다.
 - theme token은 semantic CSS variables를 사용한다.
 - 버튼과 메뉴 액션의 아이콘은 lucide icons를 우선 사용한다.
+- 새 UI를 만들 때는 먼저 `src/components/ui/`의 shadcn 컴포넌트를 확인한다.
+- 직접 만든 input, select, table, dialog, badge, alert, toast, empty state는 금지한다. 필요한 경우 shadcn 컴포넌트를 얇게 조합한 도메인 컴포넌트를 만든다.
+- 반복되는 운영 앱 패턴은 `src/components/management/` 아래에 shadcn 조합 컴포넌트로 둔다.
+- 컴포넌트별 선택 기준은 [shadcn-component-guide.md](./shadcn-component-guide.md)를 따른다.
 
 ## 레이아웃
 
@@ -23,6 +27,7 @@
 
 - `Sidebar`
 - `Table`
+- `Data Table`: shadcn `Table` + TanStack Table 조합으로 만든다.
 - `Tabs`
 - `Dialog`
 - `Form`
@@ -37,6 +42,19 @@
 - `Textarea`
 - `Checkbox`
 - `AlertDialog`
+- `Sonner`
+- `Empty`
+- `Field`
+- `InputGroup`
+- `ButtonGroup`
+
+## TanStack 기준
+
+- API 캐싱과 서버 상태는 `@tanstack/react-query`를 사용한다.
+- 단순 읽기 목록은 shadcn `Table`만 사용해도 된다.
+- 정렬, 컬럼 숨김, 페이지네이션, row selection, column filter, server-side filter가 들어가는 순간 TanStack Table을 사용한다.
+- TanStack Table은 headless 엔진으로만 사용하고, 화면에 보이는 마크업과 스타일은 shadcn `Table`, `Checkbox`, `DropdownMenu`, `Button`, `Pagination`으로 구성한다.
+- 차트가 필요하면 우선 shadcn `Chart`를 사용하고, 데이터 변환은 도메인 pure function으로 분리한다.
 
 ## 토큰
 

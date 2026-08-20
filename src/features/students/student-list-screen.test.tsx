@@ -99,10 +99,7 @@ describe("StudentListScreen", () => {
       screen.getByRole("searchbox", { name: "원생 검색" }),
       "바이올린",
     );
-    await user.selectOptions(
-      screen.getByLabelText("선생님 필터"),
-      "최선생",
-    );
+    await user.selectOptions(screen.getByLabelText("선생님 필터"), "최선생");
     await user.selectOptions(screen.getByLabelText("악기 필터"), "바이올린");
     await user.selectOptions(screen.getByLabelText("요일 필터"), "화");
 

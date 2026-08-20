@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { Toaster } from "@/components/ui/sonner";
+
 import { AppProviders } from "./providers";
 import "./globals.css";
 
@@ -17,6 +19,7 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <AppProviders>{children}</AppProviders>
+        <Toaster />
       </body>
     </html>
   );

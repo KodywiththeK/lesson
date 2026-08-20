@@ -2,9 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
-import { RotateCcw, Search, UserPlus } from "lucide-react";
+import { RotateCcw, UserPlus } from "lucide-react";
 
+import {
+  ListFilterSelect,
+  ListSearchField,
+  ListStatusAlert,
+} from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { ListView } from "@/domain/common-list";
 import type {
   BuildTeacherListOptions,
@@ -108,48 +121,27 @@ export function TeacherListScreen({
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_12rem_auto]">
-          <label className="grid gap-1 text-sm font-medium">
-            <span>검색</span>
-            <span className="relative">
-              <Search
-                aria-hidden="true"
-                className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              <input
-                aria-label="선생님 검색"
-                className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none transition-colors focus:border-ring"
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="이름, 담당 파트, 연락처, 급여"
-              />
-            </span>
-          </label>
+          <ListSearchField
+            label="선생님 검색"
+            value={search}
+            onChange={setSearch}
+            placeholder="이름, 담당 파트, 연락처, 급여"
+          />
 
-          <FilterSelect
+          <ListFilterSelect
             label="담당 파트 필터"
             value={part}
             options={filterOptions.parts}
             onChange={setPart}
           />
-          <label className="grid gap-1 text-sm font-medium">
-            <span>급여 형태 필터</span>
-            <select
-              aria-label="급여 형태 필터"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-ring"
-              value={payType}
-              onChange={(event) =>
-                setPayType(event.target.value as TeacherPayType | "")
-              }
-            >
-              <option value="">전체</option>
-              {teacherPayTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ListFilterSelect
+            label="급여 형태 필터"
+            value={payType}
+            options={teacherPayTypeOptions}
+            onChange={(nextPayType) =>
+              setPayType(nextPayType as TeacherPayType | "")
+            }
+          />
 
           <Button
             type="button"
@@ -167,14 +159,14 @@ export function TeacherListScreen({
         </div>
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
-          <TeacherListAlert
+          <ListStatusAlert
             message="Supabase 환경변수가 설정되면 선생님 목록을 불러올 수 있습니다."
             detail={supabaseClientState.error.message}
           />
         ) : null}
 
         {teacherListQuery.isError ? (
-          <TeacherListAlert
+          <ListStatusAlert
             message="선생님 목록을 불러오지 못했습니다."
             detail={teacherListQuery.error.message}
           />
@@ -239,55 +231,6 @@ function createMissingSupabaseClientState(): SupabaseClientState {
   };
 }
 
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="grid gap-1 text-sm font-medium">
-      <span>{label}</span>
-      <select
-        aria-label={label}
-        className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-ring"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">전체</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function TeacherListAlert({
-  message,
-  detail,
-}: {
-  message: string;
-  detail: string;
-}) {
-  return (
-    <div
-      role="alert"
-      className="m-4 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
-    >
-      <p className="font-medium">{message}</p>
-      <p className="mt-1">{detail}</p>
-    </div>
-  );
-}
-
 function TeacherListTable({ teachers }: { teachers: TeacherListRow[] }) {
   if (teachers.length === 0) {
     return (
@@ -298,32 +241,34 @@ function TeacherListTable({ teachers }: { teachers: TeacherListRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table aria-label="선생님 목록" className="w-full min-w-[44rem] text-sm">
-        <thead className="bg-muted text-muted-foreground">
-          <tr>
-            <th className="px-4 py-3 text-left font-medium">선생님</th>
-            <th className="px-4 py-3 text-left font-medium">담당 파트</th>
-            <th className="px-4 py-3 text-left font-medium">연락처</th>
-            <th className="px-4 py-3 text-left font-medium">등록일</th>
-            <th className="px-4 py-3 text-left font-medium">급여 형태</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {teachers.map((teacher) => (
-            <tr key={teacher.teacherId}>
-              <td className="px-4 py-3 font-medium">{teacher.name}</td>
-              <td className="px-4 py-3">{teacher.part}</td>
-              <td className="px-4 py-3">{teacher.contact || "-"}</td>
-              <td className="px-4 py-3">{teacher.registeredAt}</td>
-              <td className="px-4 py-3">
-                {formatTeacherPayType(teacher.payType)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table aria-label="선생님 목록" className="min-w-[44rem]">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">선생님</TableHead>
+          <TableHead className="px-4 py-3">담당 파트</TableHead>
+          <TableHead className="px-4 py-3">연락처</TableHead>
+          <TableHead className="px-4 py-3">등록일</TableHead>
+          <TableHead className="px-4 py-3">급여 형태</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {teachers.map((teacher) => (
+          <TableRow key={teacher.teacherId}>
+            <TableCell className="px-4 py-3 font-medium">
+              {teacher.name}
+            </TableCell>
+            <TableCell className="px-4 py-3">{teacher.part}</TableCell>
+            <TableCell className="px-4 py-3">
+              {teacher.contact || "-"}
+            </TableCell>
+            <TableCell className="px-4 py-3">{teacher.registeredAt}</TableCell>
+            <TableCell className="px-4 py-3">
+              {formatTeacherPayType(teacher.payType)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
