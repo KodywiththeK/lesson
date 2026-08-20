@@ -59,6 +59,7 @@
 - service-role key는 서버 전용 관리 경로에만 둔다.
 - owner, desk, teacher, anonymous 역할별 접근을 테스트한다.
 - view를 만들 때는 가능한 `security_invoker = true`를 사용한다.
+- Next.js App Router의 cookie 기반 세션은 root `proxy.ts`와 `src/lib/supabase/proxy.ts`에서 `auth.getClaims()`로 갱신한다.
 
 ## Migration 규칙
 
