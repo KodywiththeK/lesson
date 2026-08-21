@@ -14,8 +14,8 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 결석 확인은 보강 일정 또는 패스 기록을 만들 수 있다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
 | 보강 확정은 `[보강 수업]` 일정과 월별 메모를 만든다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
 | 패스 확정은 보강 일정 없이 메모만 만들고 회차권을 차감하지 않는다 | PDF 1-1 시나리오 B | 학원 수업 보강 | `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-absence.ts` |
-| 개인레슨 등록은 같은 선생님/시간 중복을 막는다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
-| 개인레슨 악기 선택은 원생이 수강 중인 개인레슨 악기로 제한한다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
+| 개인레슨 등록은 같은 선생님/시간 중복을 막는다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts`, `src/lib/api/private-lessons.test.ts`, `src/features/private-lessons/private-lesson-registration-screen.test.tsx`, `src/app/lessons/page.test.tsx`, `tests/e2e/home.spec.ts` | `src/domain/private-lesson.ts`, `src/lib/api/private-lessons.ts`, `src/features/private-lessons/private-lesson-registration-screen.tsx`, `src/app/lessons/page.tsx` |
+| 개인레슨 악기 선택은 원생이 수강 중인 개인레슨 악기로 제한한다 | PDF 1-2 | 개인레슨 등록 | `src/domain/private-lesson.test.ts`, `src/lib/api/private-lessons.test.ts`, `src/features/private-lessons/private-lesson-registration-screen.test.tsx` | `src/domain/private-lesson.ts`, `src/lib/api/private-lessons.ts`, `src/features/private-lessons/private-lesson-registration-screen.tsx` |
 | 원생 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 선생님 시간표는 메시지 텍스트로 복사할 수 있다 | PDF 1-2 | 시간표 복사 | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 회차권 재등록은 회수 추가와 유효기간 갱신을 지원한다 | PDF 2 | 회차권 재등록과 상태 표시 | `src/domain/lesson-ticket.test.ts`, `src/lib/api/lesson-tickets.test.ts`, `src/features/lesson-tickets/lesson-ticket-list-screen.test.tsx`, `tests/e2e/home.spec.ts` | `src/domain/lesson-ticket.ts`, `src/lib/api/lesson-tickets.ts`, `src/features/lesson-tickets/lesson-ticket-list-screen.tsx` |
@@ -38,7 +38,7 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 | 일별 출석 모달은 원생별 출석/결석, 전체 출석, 전체 결석을 지원한다 | PDF 1-1 | 학원 피아노 레슨표 | `src/domain/academy-lesson-attendance.test.ts` | `src/domain/academy-lesson-attendance.ts` |
 | 결석 처리된 원생은 결석 인원 목록으로 이동하고 확정 후 목록에서 제거된다 | PDF 1-1 | 학원 수업 보강 | `src/domain/academy-lesson-attendance.test.ts`, `src/domain/academy-lesson-absence.test.ts` | `src/domain/academy-lesson-attendance.ts`, `src/domain/academy-lesson-absence.ts` |
 | 월별 메모는 월별 저장, 읽지 않음 표시, 새로고침 시 위치/크기 초기화 규칙을 가진다 | PDF 1-1 | 월별 메모 | `src/domain/monthly-memo.test.ts` | `src/domain/monthly-memo.ts` |
-| 개인레슨 등록 다이얼로그는 원생, 악기, 선생님, 시간 순서로 진행한다 | PDF 1-2 | 개인레슨 등록 UI | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
+| 개인레슨 등록 다이얼로그는 원생, 악기, 선생님, 시간 순서로 진행한다 | PDF 1-2 | 개인레슨 등록 UI | `src/domain/private-lesson.test.ts`, `src/features/private-lessons/private-lesson-registration-screen.test.tsx`, `src/app/lessons/page.test.tsx`, `tests/e2e/home.spec.ts` | `src/domain/private-lesson.ts`, `src/features/private-lessons/private-lesson-registration-screen.tsx`, `src/app/lessons/page.tsx` |
 | 개인레슨 원생 검색 결과는 잔여 회차와 최근 레슨 상태를 함께 표시한다 | PDF 1-2 | 개인레슨 등록 UI | `src/domain/private-lesson.test.ts` | `src/domain/private-lesson.ts` |
 | 회차권 수동 수정은 권한 있는 역할만 수행한다 | PDF 2 | 회차권 관리 권한 | `src/domain/lesson-ticket.test.ts`, `src/domain/permissions.test.ts` | `src/domain/lesson-ticket.ts`, `src/domain/permissions.ts` |
 | 원생 목록은 이름, 선생님, 악기, 정기 요일 기준 검색/정렬을 지원한다 | PDF 3-1 | 원생 목록 | `src/domain/student-list.test.ts`, `src/lib/api/students.test.ts`, `src/features/students/student-list-screen.test.tsx`, `src/app/students/page.test.tsx`, `tests/e2e/home.spec.ts` | `src/domain/student-list.ts`, `src/lib/api/students.ts`, `src/features/students/student-list-screen.tsx`, `src/app/students/page.tsx` |

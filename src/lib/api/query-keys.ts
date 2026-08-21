@@ -111,4 +111,12 @@ export const queryKeys = {
     summary: (academyId: string) =>
       [...queryKeys.academy(academyId), "lesson-tickets", "summary"] as const,
   },
+  privateLessons: {
+    registrationOptions: (academyId: string) =>
+      [
+        ...queryKeys.academy(academyId),
+        "private-lessons",
+        "registration-options",
+      ] as const,
+  },
 };
