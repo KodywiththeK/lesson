@@ -177,10 +177,12 @@ insert into public.lesson_ticket_grants (
   valid_from,
   valid_until,
   registered_at,
+  paid_amount,
+  paid_at,
   created_by
 ) values
-  ('99999999-9999-4999-8999-999999999991', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', 'violin', '바이올린', 8, 2, '2026-08-01', '2026-08-28', '2026-08-01', '11111111-1111-1111-1111-111111111111'),
-  ('99999999-9999-4999-8999-999999999992', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd5', 'cello', '첼로', 4, 1, '2026-08-10', '2026-08-24', '2026-08-10', '11111111-1111-1111-1111-111111111111');
+  ('99999999-9999-4999-8999-999999999991', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', 'violin', '바이올린', 8, 2, '2026-08-01', '2026-08-28', '2026-08-01', 320000, '2026-08-01', '11111111-1111-1111-1111-111111111111'),
+  ('99999999-9999-4999-8999-999999999992', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd5', 'cello', '첼로', 4, 1, '2026-08-10', '2026-08-24', '2026-08-10', 180000, '2026-08-10', '11111111-1111-1111-1111-111111111111');
 
 insert into public.vendors (id, academy_id, name, phone, vendor_type, note) values
   ('abababab-abab-4bab-8bab-ababababab01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '클래식 악기사', '02-1000-2000', '악기', '피아노 조율, 현 교체'),
@@ -227,6 +229,7 @@ insert into public.fixed_income_snapshots (
 insert into public.ledger_entries (academy_id, occurred_on, entry_type, source, amount, description, ref_table, ref_id, created_by) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08-05', 'income', 'tuition', 140000, '김민지 8월 피아노 수강료', 'fixed_income_snapshots', '김민지-2026-08-piano', '11111111-1111-1111-1111-111111111111'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08-14', 'income', 'book-sale', 18000, '교재 판매: 스즈키 바이올린 1 / 한서아', 'book_releases', '스즈키-한서아', '11111111-1111-1111-1111-111111111111'),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08-01', 'income', 'lesson-ticket', 320000, '한서아 바이올린 회차권 8회 구매', 'lesson_ticket_grants', '99999999-9999-4999-8999-999999999991', '11111111-1111-1111-1111-111111111111'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08-20', 'expense', 'manual', 70000, '피아노 조율비', 'vendors', '클래식 악기사', '11111111-1111-1111-1111-111111111111');
 
 insert into public.teacher_salary_settings (

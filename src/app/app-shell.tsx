@@ -106,7 +106,7 @@ export function AppShell({
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 lg:grid-cols-[16rem_1fr]">
-        <aside className="border-b border-border bg-card px-4 py-3 lg:border-b-0 lg:border-r lg:py-4">
+        <aside className="min-w-0 border-b border-border bg-card px-4 py-3 lg:border-b-0 lg:border-r lg:py-4">
           <div className="mb-3 lg:mb-6">
             <p className="text-xs font-semibold text-muted-foreground">
               Service Console
@@ -171,7 +171,7 @@ export function AppShell({
             </div>
           </header>
 
-          <div className="grid gap-6 px-5 py-6 md:px-8">
+          <div className="grid min-w-0 gap-6 px-5 py-6 md:px-8 [&>*]:min-w-0">
             {children ?? <DashboardContent visibleWorkQueue={visibleWorkQueue} />}
           </div>
         </section>

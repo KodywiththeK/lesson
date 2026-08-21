@@ -1,7 +1,7 @@
 "use client";
 
 import { VendorListScreen } from "@/features/vendors/vendor-list-screen";
-import { createDemoVendorListQueryOptions } from "@/lib/demo/management-demo-data";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -11,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function VendorsPage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -22,7 +24,8 @@ export default function VendorsPage() {
       <VendorListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
-        queryOptionsFactory={createDemoVendorListQueryOptions}
+        queryOptionsFactory={demo.createVendorListQueryOptions}
+        registerVendor={demo.registerVendor}
       />
     </AppShell>
   );

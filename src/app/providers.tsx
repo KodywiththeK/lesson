@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DemoAcademyProvider } from "@/lib/demo/academy-demo-provider";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -20,7 +21,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>{children}</TooltipProvider>
+      <DemoAcademyProvider>
+        <TooltipProvider>{children}</TooltipProvider>
+      </DemoAcademyProvider>
     </QueryClientProvider>
   );
 }

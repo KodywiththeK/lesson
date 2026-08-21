@@ -113,6 +113,7 @@ export function formatLedgerEntrySource(source: LedgerEntry["source"]) {
   const labels: Record<LedgerEntry["source"], string> = {
     tuition: "수강료",
     "book-sale": "교재",
+    "lesson-ticket": "회차권",
     payroll: "급여",
     manual: "수동",
   };

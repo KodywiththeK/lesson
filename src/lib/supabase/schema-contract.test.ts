@@ -163,4 +163,12 @@ describe("Supabase schema contract", () => {
     expect(creatorSelectPolicy).toBeDefined();
     expect(creatorSelectPolicy).toContain("created_by = (select auth.uid())");
   });
+
+  it("회차권 구매 수입을 추적하기 위한 결제 컬럼과 장부 출처를 둔다", () => {
+    expect(migrationSql).toContain(
+      "alter type public.ledger_entry_source add value if not exists 'lesson-ticket'",
+    );
+    expect(migrationSql).toContain("add column if not exists paid_amount");
+    expect(migrationSql).toContain("add column if not exists paid_at date");
+  });
 });

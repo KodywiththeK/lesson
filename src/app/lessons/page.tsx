@@ -1,5 +1,7 @@
-import { LessonManagementWorkspaceWithProviders } from "@/features/lessons/lesson-management-workspace";
-import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
+"use client";
+
+import { LessonManagementWorkspace } from "@/features/lessons/lesson-management-workspace";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -9,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function LessonsPage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -17,11 +21,41 @@ export default function LessonsPage() {
       }}
       pageTitle="레슨 시간표"
     >
-      <LessonManagementWorkspaceWithProviders
+      <LessonManagementWorkspace
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
         initialDate="2026-08-21"
-        demoData={demoLessonWorkspaceData}
+        demoData={{
+          academySheets: Object.values(demo.state.academySheets),
+          privateLessons: demo.state.privateLessons,
+          registrationOptions: {
+            students: demo.state.students.map((student) => ({
+              studentId: student.studentId,
+              studentName: student.name,
+              instruments: demo.state.enrollments
+                .filter(
+                  (enrollment) =>
+                    enrollment.studentId === student.studentId &&
+                    enrollment.lessonType === "private" &&
+                    enrollment.active,
+                )
+                .map((enrollment) => ({
+                  studentInstrumentId: enrollment.enrollmentId,
+                  instrumentId: enrollment.instrumentId,
+                  instrumentName: enrollment.instrumentName,
+                })),
+            })),
+            teachers: demo.state.teachers.map((teacher) => ({
+              teacherId: teacher.teacherId,
+              teacherName: teacher.name,
+              part: teacher.part,
+            })),
+          },
+          academyMemo: "[2026-08-21] 5시 피아노반 박지호 연락 대기",
+          privateMemo: "바이올린 개인레슨은 발표회 곡 위주로 배정",
+        }}
+        onRegisterPrivateLesson={demo.registerPrivateLesson}
+        onMarkPrivateLessonAttendance={demo.markPrivateLessonAttendance}
       />
     </AppShell>
   );

@@ -87,6 +87,9 @@ type LessonTicketListScreenProps = {
   registerLessonTicket?: (
     input: RegisterLessonTicketGrantInput,
   ) => Promise<RegisterLessonTicketGrantResult>;
+  registerLessonTicketPurchase?: (
+    input: RegisterLessonTicketGrantInput & { paidAmount: number },
+  ) => Promise<void>;
 };
 
 type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
@@ -125,6 +128,7 @@ export function LessonTicketListScreen({
   queryOptionsFactory,
   registrationOptionsQueryFactory,
   registerLessonTicket,
+  registerLessonTicketPurchase,
 }: LessonTicketListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -133,16 +137,18 @@ export function LessonTicketListScreen({
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const hasInjectedRegistrationOptions = Boolean(registrationOptionsQueryFactory);
   const hasInjectedRegistrationMutation = Boolean(registerLessonTicket);
+  const hasInjectedPurchaseMutation = Boolean(registerLessonTicketPurchase);
   const supabaseClientState = useMemo(
     () =>
       hasInjectedQueryOptions &&
       hasInjectedRegistrationOptions &&
-      hasInjectedRegistrationMutation
+      (hasInjectedRegistrationMutation || hasInjectedPurchaseMutation)
         ? null
         : createLessonTicketSupabaseClient(),
     [
       hasInjectedQueryOptions,
       hasInjectedRegistrationMutation,
+      hasInjectedPurchaseMutation,
       hasInjectedRegistrationOptions,
     ],
   );
@@ -182,16 +188,35 @@ export function LessonTicketListScreen({
       (hasInjectedRegistrationOptions || !supabaseClientState?.error),
   });
   const registerMutation = useMutation({
-    mutationFn:
-      registerLessonTicket ??
-      createDefaultRegisterLessonTicket(
-        supabaseClientState ?? createMissingSupabaseClientState(),
-      ),
+    mutationFn: async (input: RegisterLessonTicketGrantInput) => {
+      if (registerLessonTicketPurchase) {
+        if (!input.paidAmount) {
+          throw new Error("회차권 결제 금액이 필요합니다.");
+        }
+
+        await registerLessonTicketPurchase({
+          ...input,
+          paidAmount: input.paidAmount,
+        });
+        return;
+      }
+
+      const mutation =
+        registerLessonTicket ??
+        createDefaultRegisterLessonTicket(
+          supabaseClientState ?? createMissingSupabaseClientState(),
+        );
+
+      await mutation(input);
+    },
     onSuccess: () => {
       setIsRegistrationOpen(false);
       toast.success("회차권을 등록했습니다.");
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "finance"],
       });
     },
     onError: (error) => {
@@ -397,6 +422,7 @@ function LessonTicketRegistrationForm({
   const [validFrom, setValidFrom] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [registeredAt, setRegisteredAt] = useState("");
+  const [paidAmount, setPaidAmount] = useState(0);
   const selectedStudent = options.find((option) => option.studentId === studentId);
   const selectedInstrument = selectedStudent?.instruments.find(
     (instrument) => instrument.instrumentId === instrumentId,
@@ -408,10 +434,12 @@ function LessonTicketRegistrationForm({
     Boolean(validFrom) &&
     Boolean(validUntil) &&
     Boolean(registeredAt) &&
+    paidAmount > 0 &&
     !isSaving;
 
   return (
     <form
+      aria-label="회차권 등록 입력"
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -430,6 +458,7 @@ function LessonTicketRegistrationForm({
           validFrom,
           validUntil,
           registeredAt,
+          paidAmount,
         });
       }}
     >
@@ -494,6 +523,18 @@ function LessonTicketRegistrationForm({
           step={1}
           value={grantedCount}
           onChange={(event) => setGrantedCount(Number(event.target.value))}
+        />
+      </Label>
+
+      <Label className="grid gap-1">
+        <span>결제 금액</span>
+        <Input
+          aria-label="결제 금액"
+          type="number"
+          min={1}
+          step={1000}
+          value={paidAmount}
+          onChange={(event) => setPaidAmount(Number(event.target.value))}
         />
       </Label>
 

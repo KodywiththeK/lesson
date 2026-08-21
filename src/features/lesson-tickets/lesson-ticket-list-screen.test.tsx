@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it } from "vitest";
@@ -200,17 +200,31 @@ describe("LessonTicketListScreen", () => {
     await user.click(screen.getByRole("button", { name: "회차권 등록" }));
 
     const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
+    await within(dialog).findByRole("option", { name: "김민지" });
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await within(dialog).findByRole("option", { name: "피아노" });
     await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
-    await user.clear(within(dialog).getByRole("spinbutton", { name: "부여 회수" }));
-    await user.type(
-      within(dialog).getByRole("spinbutton", { name: "부여 회수" }),
-      "10",
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "10" },
+    });
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
+      target: { value: "150000" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("유효 시작일"), {
+      target: { value: "2026-09-01" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("유효 만료일"), {
+      target: { value: "2026-10-31" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("등록일"), {
+      target: { value: "2026-09-01" },
+    });
+    await waitFor(() => {
+      expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
+    });
+    fireEvent.submit(
+      within(dialog).getByRole("form", { name: "회차권 등록 입력" }),
     );
-    await user.type(within(dialog).getByLabelText("유효 시작일"), "2026-09-01");
-    await user.type(within(dialog).getByLabelText("유효 만료일"), "2026-10-31");
-    await user.type(within(dialog).getByLabelText("등록일"), "2026-09-01");
-    await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
     await waitFor(() => {
       expect(registrations).toEqual([
@@ -224,6 +238,7 @@ describe("LessonTicketListScreen", () => {
           validFrom: "2026-09-01",
           validUntil: "2026-10-31",
           registeredAt: "2026-09-01",
+          paidAmount: 150000,
         },
       ]);
     });

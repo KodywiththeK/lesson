@@ -1,7 +1,7 @@
 "use client";
 
 import { TeacherListScreen } from "@/features/teachers/teacher-list-screen";
-import { createDemoTeacherListQueryOptions } from "@/lib/demo/management-demo-data";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -11,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function TeachersPage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -22,7 +24,8 @@ export default function TeachersPage() {
       <TeacherListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
-        queryOptionsFactory={createDemoTeacherListQueryOptions}
+        queryOptionsFactory={demo.createTeacherListQueryOptions}
+        registerTeacher={demo.registerTeacher}
       />
     </AppShell>
   );

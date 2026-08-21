@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "../providers";
@@ -24,5 +25,23 @@ describe("StudentsPage", () => {
     expect(screen.getByRole("searchbox", { name: "원생 검색" })).toBeInTheDocument();
     expect(await screen.findByText("김민지")).toBeInTheDocument();
     expect(screen.getByText("한서아")).toBeInTheDocument();
+  });
+
+  it("원생 등록 다이얼로그에서 등록한 원생을 목록에 반영한다", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppProviders>
+        <StudentsPage />
+      </AppProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "원생 등록" }));
+    const dialog = await screen.findByRole("dialog", { name: "원생 등록" });
+
+    await user.type(within(dialog).getByLabelText("원생명"), "윤라온");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    expect(await screen.findByText("윤라온")).toBeInTheDocument();
   });
 });

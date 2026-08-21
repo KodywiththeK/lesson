@@ -1,7 +1,7 @@
 "use client";
 
 import { BookPurchaseListScreen } from "@/features/books/book-purchase-list-screen";
-import { createDemoBookPurchaseListQueryOptions } from "@/lib/demo/management-demo-data";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -11,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function BooksPage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -22,7 +24,9 @@ export default function BooksPage() {
       <BookPurchaseListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
-        queryOptionsFactory={createDemoBookPurchaseListQueryOptions}
+        queryOptionsFactory={demo.createBookPurchaseListQueryOptions}
+        students={demo.state.students}
+        registerBookRelease={demo.registerBookRelease}
       />
     </AppShell>
   );

@@ -1,11 +1,7 @@
 "use client";
 
 import { LessonTicketListScreen } from "@/features/lesson-tickets/lesson-ticket-list-screen";
-import {
-  createDemoLessonTicketListQueryOptions,
-  createDemoLessonTicketRegistrationOptionsQueryOptions,
-  registerDemoLessonTicket,
-} from "@/lib/demo/management-demo-data";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -15,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function PassesPage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -27,11 +25,11 @@ export default function PassesPage() {
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
         today="2026-08-21"
-        queryOptionsFactory={createDemoLessonTicketListQueryOptions}
+        queryOptionsFactory={demo.createLessonTicketListQueryOptions}
         registrationOptionsQueryFactory={
-          createDemoLessonTicketRegistrationOptionsQueryOptions
+          demo.createLessonTicketRegistrationOptionsQueryOptions
         }
-        registerLessonTicket={registerDemoLessonTicket}
+        registerLessonTicketPurchase={demo.registerLessonTicketPurchase}
       />
     </AppShell>
   );

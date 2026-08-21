@@ -27,6 +27,8 @@ export type LessonTicketGrantSupabaseRow = {
   valid_from: string;
   valid_until: string;
   registered_at: string;
+  paid_amount?: number | null;
+  paid_at?: string | null;
   students: {
     name: string | null;
   } | null;
@@ -94,6 +96,7 @@ export type LessonTicketRegistrationOptionsSupabaseClient = {
 export type RegisterLessonTicketGrantInput = LessonTicketRegistration & {
   studentName: string;
   instrumentName: string;
+  paidAmount?: number;
 };
 
 export type RegisterLessonTicketGrantResult = RegisterLessonTicketResult & {
@@ -128,12 +131,17 @@ type LessonTicketGrantRegistrationFromBuilder = {
   insert(values: Record<string, unknown>): LessonTicketGrantPersistBuilder;
 };
 
+type LedgerEntryInsertFromBuilder = {
+  insert(values: Record<string, unknown>): PromiseLike<SupabaseQueryResult<null>>;
+};
+
 export type LessonTicketGrantRegistrationSupabaseClient = {
   from(table: "lesson_ticket_grants"): LessonTicketGrantRegistrationFromBuilder;
+  from(table: "ledger_entries"): LedgerEntryInsertFromBuilder;
 };
 
 const LESSON_TICKET_LIST_SELECT =
-  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students(name)";
+  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)";
 
 export async function fetchLessonTicketList(
   supabase: LessonTicketListSupabaseClient,
@@ -186,14 +194,27 @@ export async function registerLessonTicketGrant(
   const existingTicket = await fetchLatestLessonTicketGrant(supabase, input);
   const registered = registerLessonTicket(existingTicket?.ticket, input);
   const persistedTicket = existingTicket
-    ? await updateLessonTicketGrant(supabase, existingTicket.ticketId, {
-        ...registered.ticket,
-        instrumentName: input.instrumentName,
-      })
-    : await insertLessonTicketGrant(supabase, {
-        ...registered.ticket,
-        instrumentName: input.instrumentName,
-      });
+    ? await updateLessonTicketGrant(
+        supabase,
+        existingTicket.ticketId,
+        {
+          ...registered.ticket,
+          instrumentName: input.instrumentName,
+        },
+        input.paidAmount ?? 0,
+      )
+    : await insertLessonTicketGrant(
+        supabase,
+        {
+          ...registered.ticket,
+          instrumentName: input.instrumentName,
+        },
+        input.paidAmount ?? 0,
+      );
+
+  if (input.paidAmount && input.paidAmount > 0) {
+    await insertLessonTicketIncomeLedger(supabase, input, persistedTicket.ticketId);
+  }
 
   return {
     ticket: persistedTicket,
@@ -258,6 +279,26 @@ function toLessonTicketRegistrationStudentOption(
   };
 }
 
+async function insertLessonTicketIncomeLedger(
+  supabase: LessonTicketGrantRegistrationSupabaseClient,
+  input: RegisterLessonTicketGrantInput,
+  ticketId: string,
+) {
+  const { error } = await supabase.from("ledger_entries").insert({
+    academy_id: input.academyId,
+    occurred_on: input.registeredAt,
+    entry_type: "income",
+    source: "lesson-ticket",
+    amount: input.paidAmount,
+    description: `${input.studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
+    ref_id: ticketId,
+  });
+
+  if (error) {
+    throw new Error(`회차권 수입 내역을 저장하지 못했습니다: ${error.message}`);
+  }
+}
+
 async function fetchLatestLessonTicketGrant(
   supabase: LessonTicketGrantRegistrationSupabaseClient,
   input: RegisterLessonTicketGrantInput,
@@ -291,10 +332,11 @@ async function updateLessonTicketGrant(
   supabase: LessonTicketGrantRegistrationSupabaseClient,
   ticketId: string,
   ticket: LessonTicket & { instrumentName: string },
+  paidAmount: number,
 ) {
   const { data, error } = await supabase
     .from("lesson_ticket_grants")
-    .update(toLessonTicketGrantMutationRow(ticket))
+    .update(toLessonTicketGrantMutationRow(ticket, paidAmount))
     .eq("id", ticketId)
     .select(LESSON_TICKET_LIST_SELECT)
     .single();
@@ -313,10 +355,11 @@ async function updateLessonTicketGrant(
 async function insertLessonTicketGrant(
   supabase: LessonTicketGrantRegistrationSupabaseClient,
   ticket: LessonTicket & { instrumentName: string },
+  paidAmount: number,
 ) {
   const { data, error } = await supabase
     .from("lesson_ticket_grants")
-    .insert(toLessonTicketGrantMutationRow(ticket))
+    .insert(toLessonTicketGrantMutationRow(ticket, paidAmount))
     .select(LESSON_TICKET_LIST_SELECT)
     .single();
 
@@ -346,6 +389,7 @@ function toLessonTicket(row: LessonTicketGrantSupabaseRow): LessonTicket {
 
 function toLessonTicketGrantMutationRow(
   ticket: LessonTicket & { instrumentName: string },
+  paidAmount: number,
 ) {
   return {
     academy_id: ticket.academyId,
@@ -357,5 +401,7 @@ function toLessonTicketGrantMutationRow(
     valid_from: ticket.validFrom,
     valid_until: ticket.validUntil,
     registered_at: ticket.registeredAt,
+    paid_amount: paidAmount,
+    paid_at: paidAmount > 0 ? ticket.registeredAt : null,
   };
 }

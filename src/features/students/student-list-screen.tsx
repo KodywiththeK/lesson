@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
 
 import {
@@ -10,6 +10,21 @@ import {
   ListStatusAlert,
 } from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -28,7 +43,9 @@ import {
   type StudentListSupabaseClient,
 } from "@/lib/api/students";
 import { queryKeys } from "@/lib/api/query-keys";
+import type { DemoStudentRegistrationInput } from "@/lib/demo/academy-demo-state";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { TeacherListRow } from "@/domain/teacher-list";
 
 type StudentListQueryOptions = {
   queryKey: QueryKey;
@@ -43,6 +60,8 @@ type StudentListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: StudentListQueryOptionsFactory;
+  teachers?: TeacherListRow[];
+  registerStudent?: (input: DemoStudentRegistrationInput) => void;
 };
 
 type SupabaseClientState =
@@ -59,11 +78,15 @@ export function StudentListScreen({
   academyId,
   academyName,
   queryOptionsFactory,
+  teachers = [],
+  registerStudent,
 }: StudentListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [instrumentName, setInstrumentName] = useState("");
   const [weekdayLabel, setWeekdayLabel] = useState("");
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createStudentListSupabaseClient()),
@@ -104,10 +127,32 @@ export function StudentListScreen({
             원생 목록
           </h2>
         </div>
-        <Button type="button">
-          <UserPlus aria-hidden="true" />
-          원생 등록
-        </Button>
+        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <UserPlus aria-hidden="true" />
+              원생 등록
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>원생 등록</DialogTitle>
+              <DialogDescription>
+                원생의 수강 악기와 레슨 기준을 함께 등록합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <StudentRegistrationForm
+              teachers={teachers}
+              onSubmit={(input) => {
+                registerStudent?.(input);
+                setIsRegistrationOpen(false);
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "students"],
+                });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -184,6 +229,198 @@ export function StudentListScreen({
   );
 }
 
+function StudentRegistrationForm({
+  teachers,
+  onSubmit,
+}: {
+  teachers: TeacherListRow[];
+  onSubmit: (input: DemoStudentRegistrationInput) => void;
+}) {
+  const firstTeacher = teachers[0];
+  const [name, setName] = useState("");
+  const [registeredAt, setRegisteredAt] = useState("2026-08-21");
+  const [teacherId, setTeacherId] = useState(firstTeacher?.teacherId ?? "");
+  const [lessonType, setLessonType] = useState<"academy" | "private">("academy");
+  const [instrumentId, setInstrumentId] = useState("piano");
+  const [instrumentName, setInstrumentName] = useState("피아노");
+  const [weekday, setWeekday] = useState("friday");
+  const [startTime, setStartTime] = useState("14:00");
+  const [endTime, setEndTime] = useState("14:50");
+  const [lessonFee, setLessonFee] = useState(150000);
+  const [discountTotal, setDiscountTotal] = useState(0);
+  const selectedTeacher =
+    teachers.find((teacher) => teacher.teacherId === teacherId) ?? firstTeacher;
+  const finalMonthlyFee = Math.max(0, lessonFee - discountTotal);
+  const canSubmit = Boolean(name.trim() && selectedTeacher);
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!selectedTeacher || !canSubmit) {
+          return;
+        }
+
+        onSubmit({
+          name: name.trim(),
+          registeredAt,
+          instrumentId,
+          instrumentName,
+          teacherId: selectedTeacher.teacherId,
+          teacherName: selectedTeacher.name,
+          lessonType,
+          weekdays: [weekday as DemoStudentRegistrationInput["weekdays"][number]],
+          startTime,
+          endTime,
+          progress: "신규 등록",
+          lessonFee,
+          discountTotal,
+          finalMonthlyFee,
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>원생명</span>
+          <Input
+            aria-label="원생명"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>등록일</span>
+          <Input
+            aria-label="등록일"
+            type="date"
+            value={registeredAt}
+            onChange={(event) => setRegisteredAt(event.target.value)}
+          />
+        </Label>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>담당 선생님</span>
+          <NativeSelect
+            aria-label="담당 선생님"
+            value={teacherId}
+            onChange={(event) => setTeacherId(event.target.value)}
+          >
+            {teachers.map((teacher) => (
+              <NativeSelectOption key={teacher.teacherId} value={teacher.teacherId}>
+                {teacher.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Label>
+        <Label className="grid gap-1">
+          <span>수업 형태</span>
+          <NativeSelect
+            aria-label="수업 형태"
+            value={lessonType}
+            onChange={(event) =>
+              setLessonType(event.target.value as "academy" | "private")
+            }
+          >
+            <NativeSelectOption value="academy">학원 수업</NativeSelectOption>
+            <NativeSelectOption value="private">개인레슨</NativeSelectOption>
+          </NativeSelect>
+        </Label>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Label className="grid gap-1">
+          <span>악기 ID</span>
+          <Input
+            aria-label="악기 ID"
+            value={instrumentId}
+            onChange={(event) => setInstrumentId(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>악기명</span>
+          <Input
+            aria-label="악기명"
+            value={instrumentName}
+            onChange={(event) => setInstrumentName(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>요일</span>
+          <NativeSelect
+            aria-label="요일"
+            value={weekday}
+            onChange={(event) => setWeekday(event.target.value)}
+          >
+            <NativeSelectOption value="monday">월</NativeSelectOption>
+            <NativeSelectOption value="tuesday">화</NativeSelectOption>
+            <NativeSelectOption value="wednesday">수</NativeSelectOption>
+            <NativeSelectOption value="thursday">목</NativeSelectOption>
+            <NativeSelectOption value="friday">금</NativeSelectOption>
+            <NativeSelectOption value="saturday">토</NativeSelectOption>
+            <NativeSelectOption value="sunday">일</NativeSelectOption>
+          </NativeSelect>
+        </Label>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>시작 시간</span>
+          <Input
+            aria-label="시작 시간"
+            type="time"
+            value={startTime}
+            onChange={(event) => setStartTime(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>종료 시간</span>
+          <Input
+            aria-label="종료 시간"
+            type="time"
+            value={endTime}
+            onChange={(event) => setEndTime(event.target.value)}
+          />
+        </Label>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Label className="grid gap-1">
+          <span>레슨비</span>
+          <Input
+            aria-label="레슨비"
+            type="number"
+            value={lessonFee}
+            onChange={(event) => setLessonFee(Number(event.target.value))}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>할인</span>
+          <Input
+            aria-label="할인"
+            type="number"
+            value={discountTotal}
+            onChange={(event) => setDiscountTotal(Number(event.target.value))}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>최종 수강료</span>
+          <Input aria-label="최종 수강료" readOnly value={finalMonthlyFee} />
+        </Label>
+      </div>
+
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          저장
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 function createDefaultQueryOptions(
   options: BuildStudentListOptions,
   supabaseClientState: SupabaseClientState,
@@ -238,34 +475,36 @@ function StudentListTable({ students }: { students: StudentListRow[] }) {
   }
 
   return (
-    <Table aria-label="원생 목록" className="min-w-[42rem]">
-      <TableHeader className="bg-muted text-muted-foreground">
-        <TableRow>
-          <TableHead className="px-4 py-3">원생</TableHead>
-          <TableHead className="px-4 py-3">선생님</TableHead>
-          <TableHead className="px-4 py-3">악기</TableHead>
-          <TableHead className="px-4 py-3">정기 요일</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {students.map((student) => (
-          <TableRow key={student.studentId}>
-            <TableCell className="px-4 py-3 font-medium">
-              {student.name}
-            </TableCell>
-            <TableCell className="px-4 py-3">
-              {formatJoinedValue(student.teacherNames)}
-            </TableCell>
-            <TableCell className="px-4 py-3">
-              {formatJoinedValue(student.instrumentNames)}
-            </TableCell>
-            <TableCell className="px-4 py-3">
-              {formatJoinedValue(student.weekdayLabels)}
-            </TableCell>
+    <div className="overflow-x-auto">
+      <Table aria-label="원생 목록" className="min-w-[42rem]">
+        <TableHeader className="bg-muted text-muted-foreground">
+          <TableRow>
+            <TableHead className="px-4 py-3">원생</TableHead>
+            <TableHead className="px-4 py-3">선생님</TableHead>
+            <TableHead className="px-4 py-3">악기</TableHead>
+            <TableHead className="px-4 py-3">정기 요일</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {students.map((student) => (
+            <TableRow key={student.studentId}>
+              <TableCell className="px-4 py-3 font-medium">
+                {student.name}
+              </TableCell>
+              <TableCell className="px-4 py-3">
+                {formatJoinedValue(student.teacherNames)}
+              </TableCell>
+              <TableCell className="px-4 py-3">
+                {formatJoinedValue(student.instrumentNames)}
+              </TableCell>
+              <TableCell className="px-4 py-3">
+                {formatJoinedValue(student.weekdayLabels)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 

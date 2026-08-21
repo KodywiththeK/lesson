@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { CircleDollarSign, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   ListFilterSelect,
@@ -11,6 +12,21 @@ import {
 } from "@/components/management/list-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -45,6 +61,12 @@ type FinanceLedgerListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: FinanceLedgerListQueryOptionsFactory;
+  registerManualLedgerEntry?: (input: {
+    occurredOn: string;
+    type: LedgerEntry["type"];
+    amount: number;
+    description: string;
+  }) => void;
 };
 
 type SupabaseClientState =
@@ -71,6 +93,7 @@ const sourceFilterOptions: Array<{
 }> = [
   { value: "tuition", label: formatLedgerEntrySource("tuition") },
   { value: "book-sale", label: formatLedgerEntrySource("book-sale") },
+  { value: "lesson-ticket", label: formatLedgerEntrySource("lesson-ticket") },
   { value: "payroll", label: formatLedgerEntrySource("payroll") },
   { value: "manual", label: formatLedgerEntrySource("manual") },
 ];
@@ -79,10 +102,13 @@ export function FinanceLedgerListScreen({
   academyId,
   academyName,
   queryOptionsFactory,
+  registerManualLedgerEntry,
 }: FinanceLedgerListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [type, setType] = useState<LedgerEntry["type"] | "">("");
   const [source, setSource] = useState<LedgerEntry["source"] | "">("");
+  const [isManualOpen, setIsManualOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createFinanceLedgerSupabaseClient()),
@@ -121,10 +147,37 @@ export function FinanceLedgerListScreen({
             입출입 내역
           </h2>
         </div>
-        <Button type="button">
-          <CircleDollarSign aria-hidden="true" />
-          수동 입출입 등록
-        </Button>
+        <Dialog open={isManualOpen} onOpenChange={setIsManualOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <CircleDollarSign aria-hidden="true" />
+              수동 입출입 등록
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>수동 입출입 등록</DialogTitle>
+              <DialogDescription>
+                자동 수납 외 조정 내역을 직접 기록합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <ManualLedgerForm
+              onSubmit={(input) => {
+                if (!registerManualLedgerEntry) {
+                  toast.error("수동 입출입 저장 기능이 연결되지 않았습니다.");
+                  return;
+                }
+
+                registerManualLedgerEntry(input);
+                setIsManualOpen(false);
+                toast.success("수동 입출입을 등록했습니다.");
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "finance"],
+                });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -194,6 +247,92 @@ export function FinanceLedgerListScreen({
   );
 }
 
+function ManualLedgerForm({
+  onSubmit,
+}: {
+  onSubmit: (input: {
+    occurredOn: string;
+    type: LedgerEntry["type"];
+    amount: number;
+    description: string;
+  }) => void;
+}) {
+  const [occurredOn, setOccurredOn] = useState("2026-08-21");
+  const [type, setType] = useState<LedgerEntry["type"]>("income");
+  const [amount, setAmount] = useState(0);
+  const [description, setDescription] = useState("");
+  const canSubmit =
+    Boolean(occurredOn) && amount > 0 && Boolean(description.trim());
+
+  return (
+    <form
+      aria-label="수동 입출입 입력"
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!canSubmit) {
+          return;
+        }
+
+        onSubmit({
+          occurredOn,
+          type,
+          amount,
+          description,
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>발생일</span>
+          <Input
+            aria-label="발생일"
+            type="date"
+            value={occurredOn}
+            onChange={(event) => setOccurredOn(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>유형</span>
+          <NativeSelect
+            aria-label="유형"
+            value={type}
+            onChange={(event) => setType(event.target.value as LedgerEntry["type"])}
+          >
+            <NativeSelectOption value="income">수입</NativeSelectOption>
+            <NativeSelectOption value="expense">지출</NativeSelectOption>
+          </NativeSelect>
+        </Label>
+      </div>
+      <Label className="grid gap-1">
+        <span>금액</span>
+        <Input
+          aria-label="금액"
+          type="number"
+          min={1}
+          step={1000}
+          value={amount}
+          onChange={(event) => setAmount(Number(event.target.value))}
+        />
+      </Label>
+      <Label className="grid gap-1">
+        <span>설명</span>
+        <Input
+          aria-label="설명"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+      </Label>
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          저장
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 function createDefaultQueryOptions(
   options: BuildFinanceLedgerListOptions,
   supabaseClientState: SupabaseClientState,
@@ -250,7 +389,8 @@ function FinanceLedgerTable({ entries }: { entries: LedgerEntry[] }) {
   }
 
   return (
-    <Table aria-label="입출입 내역" className="min-w-[48rem]">
+    <div className="overflow-x-auto">
+      <Table aria-label="입출입 내역" className="min-w-[48rem]">
       <TableHeader className="bg-muted text-muted-foreground">
         <TableRow>
           <TableHead className="px-4 py-3">발생일</TableHead>
@@ -279,7 +419,8 @@ function FinanceLedgerTable({ entries }: { entries: LedgerEntry[] }) {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   );
 }
 

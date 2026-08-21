@@ -1,7 +1,7 @@
 "use client";
 
 import { FinanceLedgerListScreen } from "@/features/finance/finance-ledger-list-screen";
-import { createDemoFinanceLedgerListQueryOptions } from "@/lib/demo/management-demo-data";
+import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
@@ -11,6 +11,8 @@ const currentAcademy = {
 };
 
 export default function FinancePage() {
+  const demo = useDemoAcademy();
+
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -22,7 +24,8 @@ export default function FinancePage() {
       <FinanceLedgerListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
-        queryOptionsFactory={createDemoFinanceLedgerListQueryOptions}
+        queryOptionsFactory={demo.createFinanceLedgerListQueryOptions}
+        registerManualLedgerEntry={demo.registerManualLedgerEntry}
       />
     </AppShell>
   );

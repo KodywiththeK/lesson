@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   ListFilterSelect,
@@ -10,6 +11,17 @@ import {
   ListStatusAlert,
 } from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -43,6 +55,13 @@ type VendorListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: VendorListQueryOptionsFactory;
+  registerVendor?: (input: {
+    name: string;
+    contact: string;
+    kind: string;
+    memo: string;
+    registeredAt: string;
+  }) => void;
 };
 
 type SupabaseClientState =
@@ -59,9 +78,12 @@ export function VendorListScreen({
   academyId,
   academyName,
   queryOptionsFactory,
+  registerVendor,
 }: VendorListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState("");
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createVendorListSupabaseClient()),
@@ -100,10 +122,37 @@ export function VendorListScreen({
             거래처 목록
           </h2>
         </div>
-        <Button type="button">
-          <UserPlus aria-hidden="true" />
-          거래처 등록
-        </Button>
+        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <UserPlus aria-hidden="true" />
+              거래처 등록
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>거래처 등록</DialogTitle>
+              <DialogDescription>
+                악기, 교재, 수리 등 운영 거래처를 추가합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <VendorRegistrationForm
+              onSubmit={(input) => {
+                if (!registerVendor) {
+                  toast.error("거래처 저장 기능이 연결되지 않았습니다.");
+                  return;
+                }
+
+                registerVendor(input);
+                setIsRegistrationOpen(false);
+                toast.success("거래처를 등록했습니다.");
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "vendors"],
+                });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -166,6 +215,90 @@ export function VendorListScreen({
   );
 }
 
+function VendorRegistrationForm({
+  onSubmit,
+}: {
+  onSubmit: (input: {
+    name: string;
+    contact: string;
+    kind: string;
+    memo: string;
+    registeredAt: string;
+  }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [contact, setContact] = useState("");
+  const [kind, setKind] = useState("");
+  const [memo, setMemo] = useState("");
+  const [registeredAt, setRegisteredAt] = useState("2026-08-21");
+  const canSubmit = Boolean(name.trim()) && Boolean(kind.trim());
+
+  return (
+    <form
+      aria-label="거래처 등록 입력"
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!canSubmit) {
+          return;
+        }
+
+        onSubmit({ name, contact, kind, memo, registeredAt });
+      }}
+    >
+      <Label className="grid gap-1">
+        <span>거래처명</span>
+        <Input
+          aria-label="거래처명"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </Label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>연락처</span>
+          <Input
+            aria-label="연락처"
+            value={contact}
+            onChange={(event) => setContact(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>종류</span>
+          <Input
+            aria-label="종류"
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+          />
+        </Label>
+      </div>
+      <Label className="grid gap-1">
+        <span>등록일</span>
+        <Input
+          aria-label="등록일"
+          type="date"
+          value={registeredAt}
+          onChange={(event) => setRegisteredAt(event.target.value)}
+        />
+      </Label>
+      <Label className="grid gap-1">
+        <span>비고</span>
+        <Input
+          aria-label="비고"
+          value={memo}
+          onChange={(event) => setMemo(event.target.value)}
+        />
+      </Label>
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          저장
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 function createDefaultQueryOptions(
   options: BuildVendorListOptions,
   supabaseClientState: SupabaseClientState,
@@ -218,7 +351,8 @@ function VendorListTable({ vendors }: { vendors: VendorListRow[] }) {
   }
 
   return (
-    <Table aria-label="거래처 목록" className="min-w-[44rem]">
+    <div className="overflow-x-auto">
+      <Table aria-label="거래처 목록" className="min-w-[44rem]">
       <TableHeader className="bg-muted text-muted-foreground">
         <TableRow>
           <TableHead className="px-4 py-3">거래처</TableHead>
@@ -239,7 +373,8 @@ function VendorListTable({ vendors }: { vendors: VendorListRow[] }) {
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   );
 }
 

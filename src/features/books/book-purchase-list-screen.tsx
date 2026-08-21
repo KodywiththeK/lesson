@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { BookOpenCheck, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   ListFilterSelect,
@@ -11,6 +12,21 @@ import {
 } from "@/components/management/list-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -25,6 +41,7 @@ import {
   type BookSaleStatus,
   type BuildBookPurchaseListOptions,
 } from "@/domain/book-sale";
+import type { StudentListRow } from "@/domain/student-list";
 import {
   createBookPurchaseListQueryOptions,
   type BookPurchaseListSupabaseClient,
@@ -45,6 +62,15 @@ type BookPurchaseListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: BookPurchaseListQueryOptionsFactory;
+  students?: StudentListRow[];
+  registerBookRelease?: (input: {
+    studentId: string;
+    studentName?: string;
+    bookTitle: string;
+    price: number;
+    shippedAt: string;
+    status: BookSaleStatus;
+  }) => void;
 };
 
 type SupabaseClientState =
@@ -69,9 +95,13 @@ export function BookPurchaseListScreen({
   academyId,
   academyName,
   queryOptionsFactory,
+  students = [],
+  registerBookRelease,
 }: BookPurchaseListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<BookSaleStatus | "">("");
+  const [isReleaseOpen, setIsReleaseOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () =>
@@ -110,10 +140,41 @@ export function BookPurchaseListScreen({
             교재 구매 목록
           </h2>
         </div>
-        <Button type="button">
-          <BookOpenCheck aria-hidden="true" />
-          교재 출고
-        </Button>
+        <Dialog open={isReleaseOpen} onOpenChange={setIsReleaseOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <BookOpenCheck aria-hidden="true" />
+              교재 출고
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>교재 출고</DialogTitle>
+              <DialogDescription>
+                원생에게 출고한 교재와 결제 상태를 기록합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <BookReleaseForm
+              students={students}
+              onSubmit={(input) => {
+                if (!registerBookRelease) {
+                  toast.error("교재 출고 저장 기능이 연결되지 않았습니다.");
+                  return;
+                }
+
+                registerBookRelease(input);
+                setIsReleaseOpen(false);
+                toast.success("교재 출고를 등록했습니다.");
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "books"],
+                });
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "finance"],
+                });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -176,6 +237,118 @@ export function BookPurchaseListScreen({
   );
 }
 
+function BookReleaseForm({
+  students,
+  onSubmit,
+}: {
+  students: StudentListRow[];
+  onSubmit: (input: {
+    studentId: string;
+    studentName?: string;
+    bookTitle: string;
+    price: number;
+    shippedAt: string;
+    status: BookSaleStatus;
+  }) => void;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [bookTitle, setBookTitle] = useState("");
+  const [price, setPrice] = useState(0);
+  const [shippedAt, setShippedAt] = useState("2026-08-21");
+  const [status, setStatus] = useState<BookSaleStatus>("payment-pending");
+  const selectedStudent = students.find((student) => student.studentId === studentId);
+  const canSubmit =
+    Boolean(selectedStudent) &&
+    Boolean(bookTitle.trim()) &&
+    price > 0 &&
+    Boolean(shippedAt);
+
+  return (
+    <form
+      aria-label="교재 출고 입력"
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!selectedStudent || !canSubmit) {
+          return;
+        }
+
+        onSubmit({
+          studentId: selectedStudent.studentId,
+          studentName: selectedStudent.name,
+          bookTitle,
+          price,
+          shippedAt,
+          status,
+        });
+      }}
+    >
+      <Label className="grid gap-1">
+        <span>원생</span>
+        <NativeSelect
+          aria-label="원생"
+          value={studentId}
+          onChange={(event) => setStudentId(event.target.value)}
+        >
+          <NativeSelectOption value="">원생 선택</NativeSelectOption>
+          {students.map((student) => (
+            <NativeSelectOption key={student.studentId} value={student.studentId}>
+              {student.name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Label>
+      <Label className="grid gap-1">
+        <span>교재명</span>
+        <Input
+          aria-label="교재명"
+          value={bookTitle}
+          onChange={(event) => setBookTitle(event.target.value)}
+        />
+      </Label>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Label className="grid gap-1">
+          <span>가격</span>
+          <Input
+            aria-label="가격"
+            type="number"
+            min={1}
+            step={1000}
+            value={price}
+            onChange={(event) => setPrice(Number(event.target.value))}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>출고일</span>
+          <Input
+            aria-label="출고일"
+            type="date"
+            value={shippedAt}
+            onChange={(event) => setShippedAt(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>결제 상태</span>
+          <NativeSelect
+            aria-label="결제 상태"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as BookSaleStatus)}
+          >
+            <NativeSelectOption value="payment-pending">결제 대기</NativeSelectOption>
+            <NativeSelectOption value="paid">결제 완료</NativeSelectOption>
+          </NativeSelect>
+        </Label>
+      </div>
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          저장
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 function createDefaultQueryOptions(
   options: BuildBookPurchaseListOptions,
   supabaseClientState: SupabaseClientState,
@@ -232,7 +405,8 @@ function BookPurchaseListTable({
   }
 
   return (
-    <Table aria-label="교재 구매 목록" className="min-w-[46rem]">
+    <div className="overflow-x-auto">
+      <Table aria-label="교재 구매 목록" className="min-w-[46rem]">
       <TableHeader className="bg-muted text-muted-foreground">
         <TableRow>
           <TableHead className="px-4 py-3">원생</TableHead>
@@ -265,7 +439,8 @@ function BookPurchaseListTable({
           </TableRow>
         ))}
       </TableBody>
-    </Table>
+      </Table>
+    </div>
   );
 }
 

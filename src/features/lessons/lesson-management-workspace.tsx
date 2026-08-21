@@ -42,10 +42,6 @@ import type {
 } from "@/lib/api/private-lessons";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
 
-import {
-  AcademyLessonAttendanceScreen,
-  type DailyAcademyLessonAttendanceQueryFactory,
-} from "../academy-lessons/academy-lesson-attendance-screen";
 import { PrivateLessonRegistrationScreen } from "../private-lessons/private-lesson-registration-screen";
 
 type LessonManagementWorkspaceProps = {
@@ -53,6 +49,11 @@ type LessonManagementWorkspaceProps = {
   academyName: string;
   initialDate?: string;
   demoData: LessonWorkspaceDemoData;
+  onRegisterPrivateLesson?: (input: RegisterPrivateLessonEventInput) => Promise<void>;
+  onMarkPrivateLessonAttendance?: (
+    lessonId: string,
+    status: "present" | "absent",
+  ) => void;
 };
 
 type CalendarEvent = {
@@ -109,6 +110,8 @@ export function LessonManagementWorkspace({
   academyName,
   initialDate = toDateInputValue(new Date()),
   demoData,
+  onRegisterPrivateLesson,
+  onMarkPrivateLessonAttendance,
 }: LessonManagementWorkspaceProps) {
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [academySheets, setAcademySheets] = useState(() =>
@@ -122,6 +125,8 @@ export function LessonManagementWorkspace({
   const [academyMemo, setAcademyMemo] = useState(demoData.academyMemo);
   const [privateMemo, setPrivateMemo] = useState(demoData.privateMemo);
   const [absentOpen, setAbsentOpen] = useState(false);
+  const [academyDayOpen, setAcademyDayOpen] = useState(false);
+  const [privateDayOpen, setPrivateDayOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [makeupDraft, setMakeupDraft] = useState<MakeupDraft | null>(null);
   const [resolvedAbsenceIds, setResolvedAbsenceIds] = useState<Set<string>>(
@@ -140,7 +145,7 @@ export function LessonManagementWorkspace({
   );
   const selectedAcademySheet =
     academySheets[selectedDate] ?? createEmptySheet(academyId, selectedDate);
-  const selectedAcademyEvents = selectedAcademySheet.rows.sort(
+  const selectedAcademyEvents = [...selectedAcademySheet.rows].sort(
     (left, right) =>
       left.startTime.localeCompare(right.startTime) ||
       left.studentName.localeCompare(right.studentName, "ko-KR"),
@@ -151,12 +156,6 @@ export function LessonManagementWorkspace({
   const unresolvedAbsences = selectedAcademySheet.rows.filter(
     (row) => row.status === "absent" && !resolvedAbsenceIds.has(row.lessonEventId),
   );
-  const attendanceQueryFactory: DailyAcademyLessonAttendanceQueryFactory = (
-    input,
-  ) => ({
-    queryKey: ["demo", "academy-attendance", input.academyId, input.date] as QueryKey,
-    queryFn: async () => academySheets[input.date] ?? createEmptySheet(input.academyId, input.date),
-  });
   const registrationOptionsQueryFactory = (targetAcademyId: string) => ({
     queryKey: ["demo", "private-registration-options", targetAcademyId] as QueryKey,
     queryFn: async () => demoData.registrationOptions,
@@ -218,12 +217,10 @@ export function LessonManagementWorkspace({
               selectedDate={selectedDate}
               events={academyEvents}
               variant="academy"
-              onSelectDate={setSelectedDate}
-            />
-            <LessonDayPanel
-              date={selectedDate}
-              title={`${selectedDate} 선택 일정`}
-              academyRows={selectedAcademyEvents}
+              onSelectDate={(date) => {
+                setSelectedDate(date);
+                setAcademyDayOpen(true);
+              }}
             />
           </div>
 
@@ -235,18 +232,6 @@ export function LessonManagementWorkspace({
             />
           ) : null}
 
-          <AcademyLessonAttendanceScreen
-            academyId={academyId}
-            academyName={academyName}
-            initialDate={selectedDate}
-            onDateChange={setSelectedDate}
-            attendanceQueryFactory={attendanceQueryFactory}
-            markAttendance={async (input) => {
-              setAcademySheets((current) =>
-                updateAttendanceSheets(current, input.academyId, input.records),
-              );
-            }}
-          />
         </TabsContent>
 
         <TabsContent value="private" className="grid gap-4">
@@ -271,11 +256,10 @@ export function LessonManagementWorkspace({
               selectedDate={selectedDate}
               events={privateEvents}
               variant="private"
-              onSelectDate={setSelectedDate}
-            />
-            <PrivateLessonDayPanel
-              date={selectedDate}
-              lessons={selectedPrivateLessons}
+              onSelectDate={(date) => {
+                setSelectedDate(date);
+                setPrivateDayOpen(true);
+              }}
             />
           </div>
 
@@ -293,6 +277,9 @@ export function LessonManagementWorkspace({
             registrationOptionsQueryFactory={registrationOptionsQueryFactory}
             registerPrivateLesson={async (input) => {
               const lesson = toRegisteredPrivateLesson(input);
+              if (onRegisterPrivateLesson) {
+                await onRegisterPrivateLesson(input);
+              }
               setPrivateLessons((current) => [...current, lesson]);
               return lesson;
             }}
@@ -325,6 +312,53 @@ export function LessonManagementWorkspace({
             reason: "",
           })
         }
+      />
+
+      <AcademyDayAttendanceDialog
+        open={academyDayOpen}
+        date={selectedDate}
+        rows={selectedAcademyEvents}
+        onOpenChange={setAcademyDayOpen}
+        onMark={(row, status) => {
+          setAcademySheets((current) =>
+            updateAttendanceSheets(current, academyId, [
+              {
+                lessonEventId: row.lessonEventId,
+                studentId: row.studentId,
+                status,
+                reason: status === "absent" ? "결석 확인" : undefined,
+                markedAt: new Date().toISOString(),
+              },
+            ]),
+          );
+        }}
+      />
+
+      <PrivateDayAttendanceDialog
+        open={privateDayOpen}
+        date={selectedDate}
+        lessons={selectedPrivateLessons}
+        onOpenChange={setPrivateDayOpen}
+        onMark={(lesson, status) => {
+          if (onMarkPrivateLessonAttendance) {
+            onMarkPrivateLessonAttendance(lesson.id, status);
+          }
+          setPrivateLessons((current) =>
+            current.map((candidate) =>
+              candidate.id === lesson.id
+                ? {
+                    ...candidate,
+                    status,
+                  }
+                : candidate,
+            ),
+          );
+          toast.success(
+            status === "present"
+              ? "출석 처리하고 회차권을 확인했습니다."
+              : "결석 처리했습니다.",
+          );
+        }}
       />
 
       <MakeupDialog
@@ -445,85 +479,6 @@ function LessonMonthCalendar({
   );
 }
 
-function LessonDayPanel({
-  date,
-  title,
-  academyRows,
-}: {
-  date: string;
-  title: string;
-  academyRows: DailyAcademyAttendanceRow[];
-}) {
-  return (
-    <section
-      aria-label={title}
-      className="rounded-lg border border-border bg-card p-4"
-    >
-      <h3 className="text-base font-semibold">{title}</h3>
-      <div className="mt-3 grid gap-2">
-        {academyRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {date} 예정된 학원 레슨이 없습니다.
-          </p>
-        ) : null}
-        {academyRows.map((row) => (
-          <div
-            key={row.lessonEventId}
-            className="rounded-md border border-border bg-background p-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <strong className="text-sm">{row.studentName}</strong>
-              <AttendanceBadge status={row.status} />
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {row.startTime}-{row.endTime} · {row.instrumentName}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PrivateLessonDayPanel({
-  date,
-  lessons,
-}: {
-  date: string;
-  lessons: PrivateLesson[];
-}) {
-  return (
-    <section
-      aria-label={`${date} 개인레슨 일정`}
-      className="rounded-lg border border-border bg-card p-4"
-    >
-      <h3 className="text-base font-semibold">{date} 개인레슨</h3>
-      <div className="mt-3 grid gap-2">
-        {lessons.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            선택한 날짜에 개인레슨이 없습니다.
-          </p>
-        ) : null}
-        {lessons.map((lesson) => (
-          <div
-            key={lesson.id}
-            className="rounded-md border border-border bg-background p-3"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <strong className="text-sm">{lesson.studentName}</strong>
-              <Badge variant="outline">{lesson.teacherName}</Badge>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)} ·{" "}
-              {lesson.instrumentName}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function MemoPanel({
   label,
   value,
@@ -543,6 +498,150 @@ function MemoPanel({
         onChange={(event) => onChange(event.target.value)}
       />
     </Label>
+  );
+}
+
+function AcademyDayAttendanceDialog({
+  open,
+  date,
+  rows,
+  onOpenChange,
+  onMark,
+}: {
+  open: boolean;
+  date: string;
+  rows: DailyAcademyAttendanceRow[];
+  onOpenChange: (open: boolean) => void;
+  onMark: (
+    row: DailyAcademyAttendanceRow,
+    status: "present" | "absent",
+  ) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{date} 출석 확인</DialogTitle>
+          <DialogDescription>
+            선택한 날짜의 학원 수업 출결을 바로 업데이트합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              선택한 날짜에 예정된 학원 레슨이 없습니다.
+            </p>
+          ) : null}
+          {rows.map((row) => (
+            <div
+              key={row.lessonEventId}
+              className="flex flex-col gap-3 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <strong className="text-sm">{row.studentName}</strong>
+                  <AttendanceBadge status={row.status} />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {row.startTime}-{row.endTime} · {row.instrumentName}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  aria-label={`${row.studentName} 출석`}
+                  onClick={() => onMark(row, "present")}
+                >
+                  <Check aria-hidden="true" />
+                  출석
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`${row.studentName} 결석`}
+                  onClick={() => onMark(row, "absent")}
+                >
+                  <X aria-hidden="true" />
+                  결석
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PrivateDayAttendanceDialog({
+  open,
+  date,
+  lessons,
+  onOpenChange,
+  onMark,
+}: {
+  open: boolean;
+  date: string;
+  lessons: PrivateLesson[];
+  onOpenChange: (open: boolean) => void;
+  onMark: (lesson: PrivateLesson, status: "present" | "absent") => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{date} 개인레슨 출석 확인</DialogTitle>
+          <DialogDescription>
+            출석 처리 시 원생의 동일 악기 회차권을 1회 차감합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {lessons.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              선택한 날짜에 개인레슨이 없습니다.
+            </p>
+          ) : null}
+          {lessons.map((lesson) => (
+            <div
+              key={lesson.id}
+              className="flex flex-col gap-3 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <strong className="text-sm">{lesson.studentName}</strong>
+                  <Badge variant={lesson.status === "present" ? "default" : "outline"}>
+                    {formatPrivateLessonStatus(lesson.status)}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)} ·{" "}
+                  {lesson.instrumentName} · {lesson.teacherName}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  aria-label={`${lesson.studentName} 개인레슨 출석`}
+                  onClick={() => onMark(lesson, "present")}
+                >
+                  <Check aria-hidden="true" />
+                  출석
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`${lesson.studentName} 개인레슨 결석`}
+                  onClick={() => onMark(lesson, "absent")}
+                >
+                  <X aria-hidden="true" />
+                  결석
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -873,7 +972,10 @@ function toPrivateCalendarEvent(lesson: PrivateLesson): CalendarEvent {
     endTime: toSeoulHourMinute(lesson.endAt),
     title: lesson.studentName,
     subtitle: lesson.teacherName,
-    status: "scheduled",
+    status:
+      lesson.status === "present" || lesson.status === "absent"
+        ? lesson.status
+        : "scheduled",
   };
 }
 
@@ -953,6 +1055,18 @@ function getEventTone(
   }
 
   return "bg-primary/10 text-primary";
+}
+
+function formatPrivateLessonStatus(status: PrivateLesson["status"]) {
+  const labels: Record<PrivateLesson["status"], string> = {
+    scheduled: "예정",
+    present: "출석",
+    absent: "결석",
+    cancelled: "취소",
+    makeup: "보강",
+  };
+
+  return labels[status];
 }
 
 function pad2(value: number) {

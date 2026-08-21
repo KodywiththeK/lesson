@@ -5,6 +5,7 @@ import {
   fetchLessonTicketRegistrationOptions,
   fetchLessonTicketList,
   registerLessonTicketGrant,
+  type LessonTicketGrantRegistrationSupabaseClient,
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
@@ -73,7 +74,7 @@ describe("fetchLessonTicketList", () => {
       {
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -211,8 +212,21 @@ describe("registerLessonTicketGrant", () => {
   it("기존 회차권이 있으면 회수와 유효기간을 병합해 update한다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const client = {
-      from(table: "lesson_ticket_grants") {
+      from(table: "lesson_ticket_grants" | "ledger_entries") {
         calls.push({ table });
+
+        if (table === "ledger_entries") {
+          return {
+            async insert(values: Record<string, unknown>) {
+              calls[calls.length - 1].insert = values;
+
+              return {
+                data: null,
+                error: null,
+              };
+            },
+          };
+        }
 
         return {
           select(select: string) {
@@ -260,7 +274,7 @@ describe("registerLessonTicketGrant", () => {
           },
         };
       },
-    };
+    } as unknown as LessonTicketGrantRegistrationSupabaseClient;
 
     const result = await registerLessonTicketGrant(client, {
       academyId: "academy-1",
@@ -278,7 +292,7 @@ describe("registerLessonTicketGrant", () => {
       {
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)",
         eq: [
           ["academy_id", "academy-1"],
           ["student_id", "student-1"],
@@ -296,6 +310,8 @@ describe("registerLessonTicketGrant", () => {
           valid_until: "2026-11-30",
           registered_at: "2026-09-20",
           instrument_name: "피아노",
+          paid_amount: 0,
+          paid_at: null,
         },
         eq: [["id", "ticket-1"]],
       },
@@ -312,8 +328,21 @@ describe("registerLessonTicketGrant", () => {
   it("기존 회차권이 없으면 새 회차권을 insert한다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const client = {
-      from(table: "lesson_ticket_grants") {
+      from(table: "lesson_ticket_grants" | "ledger_entries") {
         calls.push({ table });
+
+        if (table === "ledger_entries") {
+          return {
+            async insert(values: Record<string, unknown>) {
+              calls[calls.length - 1].insert = values;
+
+              return {
+                data: null,
+                error: null,
+              };
+            },
+          };
+        }
 
         return {
           select(select: string) {
@@ -338,6 +367,8 @@ describe("registerLessonTicketGrant", () => {
               valid_from: "2026-09-01",
               valid_until: "2026-10-31",
               registered_at: "2026-09-01",
+              paid_amount: 160000,
+              paid_at: "2026-09-01",
               students: {
                 name: "이서윤",
               },
@@ -345,7 +376,7 @@ describe("registerLessonTicketGrant", () => {
           },
         };
       },
-    };
+    } as unknown as LessonTicketGrantRegistrationSupabaseClient;
 
     const result = await registerLessonTicketGrant(client, {
       academyId: "academy-1",
@@ -357,6 +388,7 @@ describe("registerLessonTicketGrant", () => {
       validFrom: "2026-09-01",
       validUntil: "2026-10-31",
       registeredAt: "2026-09-01",
+      paidAmount: 160000,
     });
 
     expect(calls[1]).toMatchObject({
@@ -371,6 +403,20 @@ describe("registerLessonTicketGrant", () => {
         valid_from: "2026-09-01",
         valid_until: "2026-10-31",
         registered_at: "2026-09-01",
+        paid_amount: 160000,
+        paid_at: "2026-09-01",
+      },
+    });
+    expect(calls[2]).toMatchObject({
+      table: "ledger_entries",
+      insert: {
+        academy_id: "academy-1",
+        occurred_on: "2026-09-01",
+        entry_type: "income",
+        source: "lesson-ticket",
+        amount: 160000,
+        description: "이서윤 바이올린 회차권 8회 구매",
+        ref_id: "ticket-2",
       },
     });
     expect(result.event.type).toBe("created-new-ticket");

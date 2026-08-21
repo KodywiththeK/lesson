@@ -16,9 +16,10 @@ import type {
 
 import { queryKeys } from "../api/query-keys";
 
-const academyId = "academy-demo";
+export const demoAcademyId = "academy-demo";
+const academyId = demoAcademyId;
 
-const demoStudents: StudentListRow[] = [
+export const demoStudents: StudentListRow[] = [
   {
     academyId,
     studentId: "student-1",
@@ -53,7 +54,7 @@ const demoStudents: StudentListRow[] = [
   },
 ];
 
-const demoTeachers: TeacherListRow[] = [
+export const demoTeachers: TeacherListRow[] = [
   {
     academyId,
     teacherId: "teacher-1",
@@ -83,7 +84,7 @@ const demoTeachers: TeacherListRow[] = [
   },
 ];
 
-const demoTickets: LessonTicketListItem[] = [
+export const demoTickets: LessonTicketListItem[] = [
   {
     academyId,
     ticketId: "ticket-1",
@@ -112,7 +113,7 @@ const demoTickets: LessonTicketListItem[] = [
   },
 ];
 
-const demoVendors: VendorListRow[] = [
+export const demoVendors: VendorListRow[] = [
   {
     academyId,
     vendorId: "vendor-1",
@@ -131,7 +132,7 @@ const demoVendors: VendorListRow[] = [
   },
 ];
 
-const demoBookSales: BookSale[] = [
+export const demoBookSales: BookSale[] = [
   {
     academyId,
     saleId: "book-sale-1",
@@ -158,7 +159,7 @@ const demoBookSales: BookSale[] = [
   },
 ];
 
-const demoLedgerEntries: LedgerEntry[] = [
+export const demoLedgerEntries: LedgerEntry[] = [
   {
     academyId,
     ledgerId: "ledger-1",

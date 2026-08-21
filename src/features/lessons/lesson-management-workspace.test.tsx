@@ -29,7 +29,7 @@ function renderWorkspace() {
 }
 
 describe("LessonManagementWorkspace", () => {
-  it("HTML 와이어프레임의 레슨 관리 탭과 학원 캘린더를 예시 데이터로 보여준다", () => {
+  it("HTML 와이어프레임의 레슨 관리 탭과 학원 캘린더를 예시 데이터로 보여준다", async () => {
     renderWorkspace();
 
     expect(
@@ -43,9 +43,14 @@ describe("LessonManagementWorkspace", () => {
 
     expect(within(calendar).getByText("김민지")).toBeInTheDocument();
     expect(within(calendar).getByText("이서윤")).toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "2026-08-21 선택 일정" }),
-    ).toHaveTextContent("15:00-15:50");
+    await userEvent.setup().click(
+      within(calendar).getByRole("gridcell", { name: /21/ }),
+    );
+
+    const attendanceDialog = screen.getByRole("dialog", {
+      name: "2026-08-21 출석 확인",
+    });
+    expect(attendanceDialog).toHaveTextContent("15:00-15:50");
   });
 
   it("미등원 인원을 보강 처리하면 메모지에 사유와 보강일을 남긴다", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
 
 import {
@@ -10,6 +10,21 @@ import {
   ListStatusAlert,
 } from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -30,6 +45,7 @@ import {
   type TeacherListSupabaseClient,
 } from "@/lib/api/teachers";
 import { queryKeys } from "@/lib/api/query-keys";
+import type { DemoTeacherRegistrationInput } from "@/lib/demo/academy-demo-state";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type TeacherListQueryOptions = {
@@ -45,6 +61,7 @@ type TeacherListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: TeacherListQueryOptionsFactory;
+  registerTeacher?: (input: DemoTeacherRegistrationInput) => void;
 };
 
 type SupabaseClientState =
@@ -70,10 +87,13 @@ export function TeacherListScreen({
   academyId,
   academyName,
   queryOptionsFactory,
+  registerTeacher,
 }: TeacherListScreenProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [part, setPart] = useState("");
   const [payType, setPayType] = useState<TeacherPayType | "">("");
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createTeacherListSupabaseClient()),
@@ -113,10 +133,31 @@ export function TeacherListScreen({
             선생님 목록
           </h2>
         </div>
-        <Button type="button">
-          <UserPlus aria-hidden="true" />
-          선생님 등록
-        </Button>
+        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+          <DialogTrigger asChild>
+            <Button type="button">
+              <UserPlus aria-hidden="true" />
+              선생님 등록
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>선생님 등록</DialogTitle>
+              <DialogDescription>
+                담당 파트와 급여 형태를 함께 등록합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <TeacherRegistrationForm
+              onSubmit={(input) => {
+                registerTeacher?.(input);
+                setIsRegistrationOpen(false);
+                void queryClient.invalidateQueries({
+                  queryKey: [...queryKeys.academy(academyId), "teachers"],
+                });
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="rounded-lg border border-border bg-card">
@@ -188,6 +229,97 @@ export function TeacherListScreen({
   );
 }
 
+function TeacherRegistrationForm({
+  onSubmit,
+}: {
+  onSubmit: (input: DemoTeacherRegistrationInput) => void;
+}) {
+  const [name, setName] = useState("");
+  const [part, setPart] = useState("피아노");
+  const [contact, setContact] = useState("");
+  const [registeredAt, setRegisteredAt] = useState("2026-08-21");
+  const [payType, setPayType] = useState<TeacherPayType>("monthly");
+  const canSubmit = Boolean(name.trim() && part.trim() && contact.trim());
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        if (!canSubmit) {
+          return;
+        }
+
+        onSubmit({
+          name: name.trim(),
+          part: part.trim(),
+          contact: contact.trim(),
+          registeredAt,
+          payType,
+        });
+      }}
+    >
+      <Label className="grid gap-1">
+        <span>선생님명</span>
+        <Input
+          aria-label="선생님명"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </Label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>담당 파트</span>
+          <Input
+            aria-label="담당 파트"
+            value={part}
+            onChange={(event) => setPart(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>연락처</span>
+          <Input
+            aria-label="연락처"
+            value={contact}
+            onChange={(event) => setContact(event.target.value)}
+          />
+        </Label>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1">
+          <span>등록일</span>
+          <Input
+            aria-label="등록일"
+            type="date"
+            value={registeredAt}
+            onChange={(event) => setRegisteredAt(event.target.value)}
+          />
+        </Label>
+        <Label className="grid gap-1">
+          <span>급여 형태</span>
+          <NativeSelect
+            aria-label="급여 형태"
+            value={payType}
+            onChange={(event) => setPayType(event.target.value as TeacherPayType)}
+          >
+            {teacherPayTypeOptions.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Label>
+      </div>
+      <DialogFooter>
+        <Button type="submit" disabled={!canSubmit}>
+          저장
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
 function createDefaultQueryOptions(
   options: BuildTeacherListOptions,
   supabaseClientState: SupabaseClientState,
@@ -241,34 +373,38 @@ function TeacherListTable({ teachers }: { teachers: TeacherListRow[] }) {
   }
 
   return (
-    <Table aria-label="선생님 목록" className="min-w-[44rem]">
-      <TableHeader className="bg-muted text-muted-foreground">
-        <TableRow>
-          <TableHead className="px-4 py-3">선생님</TableHead>
-          <TableHead className="px-4 py-3">담당 파트</TableHead>
-          <TableHead className="px-4 py-3">연락처</TableHead>
-          <TableHead className="px-4 py-3">등록일</TableHead>
-          <TableHead className="px-4 py-3">급여 형태</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {teachers.map((teacher) => (
-          <TableRow key={teacher.teacherId}>
-            <TableCell className="px-4 py-3 font-medium">
-              {teacher.name}
-            </TableCell>
-            <TableCell className="px-4 py-3">{teacher.part}</TableCell>
-            <TableCell className="px-4 py-3">
-              {teacher.contact || "-"}
-            </TableCell>
-            <TableCell className="px-4 py-3">{teacher.registeredAt}</TableCell>
-            <TableCell className="px-4 py-3">
-              {formatTeacherPayType(teacher.payType)}
-            </TableCell>
+    <div className="overflow-x-auto">
+      <Table aria-label="선생님 목록" className="min-w-[44rem]">
+        <TableHeader className="bg-muted text-muted-foreground">
+          <TableRow>
+            <TableHead className="px-4 py-3">선생님</TableHead>
+            <TableHead className="px-4 py-3">담당 파트</TableHead>
+            <TableHead className="px-4 py-3">연락처</TableHead>
+            <TableHead className="px-4 py-3">등록일</TableHead>
+            <TableHead className="px-4 py-3">급여 형태</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {teachers.map((teacher) => (
+            <TableRow key={teacher.teacherId}>
+              <TableCell className="px-4 py-3 font-medium">
+                {teacher.name}
+              </TableCell>
+              <TableCell className="px-4 py-3">{teacher.part}</TableCell>
+              <TableCell className="px-4 py-3">
+                {teacher.contact || "-"}
+              </TableCell>
+              <TableCell className="px-4 py-3">
+                {teacher.registeredAt}
+              </TableCell>
+              <TableCell className="px-4 py-3">
+                {formatTeacherPayType(teacher.payType)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
