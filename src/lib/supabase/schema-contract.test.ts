@@ -154,4 +154,13 @@ describe("Supabase schema contract", () => {
     expect(contactPolicy).toBeDefined();
     expect(contactPolicy).not.toContain("teacher_can_access_student");
   });
+
+  it("학원 생성 직후 owner 멤버십 생성 전에도 생성자가 학원 row를 조회할 수 있다", () => {
+    const creatorSelectPolicy = migrationSql.match(
+      /create policy "academies_select_creator"[\s\S]*?\);/,
+    )?.[0];
+
+    expect(creatorSelectPolicy).toBeDefined();
+    expect(creatorSelectPolicy).toContain("created_by = (select auth.uid())");
+  });
 });

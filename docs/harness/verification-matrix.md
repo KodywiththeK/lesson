@@ -9,7 +9,7 @@
 | 페이지 또는 route | Component/integration test, browser smoke check | 명령 결과와 필요 시 스크린샷 |
 | 핵심 사용자 흐름 | Playwright E2E | 실패 시 trace 또는 screenshot |
 | 스타일/디자인 시스템 | 데스크톱/모바일 스크린샷, 겹침 확인 | 스크린샷 경로 |
-| Supabase schema | migration dry-run, 필요 시 generated type | migration 출력 |
+| Supabase schema | migration dry-run/apply/list, linked lint, generated type | migration 출력과 type 생성 결과 |
 | Supabase RLS | 역할별 접근 테스트 | 역할별 query 결과 |
 | PDF ingestion | 텍스트 추출, 렌더 페이지 검토, 필요 시 OCR fallback | 추출 경로와 페이지 이미지 경로 |
 | 빌드 설정 | lint, typecheck, build | 명령 결과 |

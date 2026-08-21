@@ -1,8 +1,8 @@
-# Supabase 설정과 마이그레이션 준비
+# Supabase 설정과 마이그레이션
 
 ## 목적
 
-Supabase 설정은 앱 실행, 인증 세션 유지, 원격 DB 마이그레이션 적용, RLS 런타임 검증을 구분해서 준비한다. 공개 키와 비밀 키의 용도를 섞지 않는다.
+Supabase 설정은 앱 실행, 인증 세션 유지, 원격 DB 마이그레이션 적용, RLS 런타임 검증을 구분해서 관리한다. 공개 키와 비밀 키의 용도를 섞지 않는다.
 
 ## 앱 실행에 필요한 환경변수
 
@@ -17,7 +17,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 - 기존 프로젝트 호환을 위해 `NEXT_PUBLIC_SUPABASE_ANON_KEY`도 읽을 수 있지만 새 설정에는 사용하지 않는다.
 - `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY` 같은 서버 전용 키는 `NEXT_PUBLIC_` 접두사를 붙이지 않는다.
 
-## 원격 DB 마이그레이션에 필요한 것
+## 원격 DB 마이그레이션 절차
 
 원격 DB migration 적용에는 공개 API key가 아니라 DB 변경 권한이 필요하다. 다음 중 하나를 준비한다.
 
@@ -34,6 +34,20 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
    - 적용: `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"`
 
 마이그레이션 적용 명령은 실제 원격 DB를 변경할 수 있으므로 실행 전 사용자에게 확인한다.
+
+현재 프로젝트는 Supabase CLI 로그인과 프로젝트 링크를 사용한다.
+
+## 원격 DB 타입 생성
+
+원격 DB에 migration을 적용한 뒤 앱 코드가 실제 schema를 기준으로 타입 검사를 받을 수 있도록 generated type을 갱신한다.
+
+```bash
+supabase gen types typescript --linked --schema public --schema private > src/lib/supabase/database.types.ts
+```
+
+- `src/lib/supabase/database.types.ts`는 커밋 대상이다.
+- browser/server/proxy Supabase helper는 `Database` 타입을 제네릭으로 전달한다.
+- schema 변경 migration을 적용한 뒤에는 항상 이 파일을 다시 생성하고 `pnpm typecheck`를 실행한다.
 
 ## 로컬 DB 검증에 필요한 것
 
@@ -65,5 +79,14 @@ Docker daemon이 꺼져 있으면 로컬 DB reset/lint는 실패한다.
 
 - 앱 실행용 공개 Supabase URL과 publishable key는 로컬 `.env.local`에 설정했다.
 - `.env.local`은 `.gitignore` 대상이므로 커밋하지 않는다.
-- 원격 migration 적용은 아직 하지 않았다.
-- 원격 migration 적용 전 `supabase login`/`supabase link` 또는 non-pooling DB URL이 필요하다.
+- Supabase CLI는 사용자가 로그인했고, 원격 `lesson` 프로젝트에 link된 상태로 사용한다.
+- 원격 migration 적용 완료:
+  - `20260820142318_tenant_core_schema.sql`
+  - `20260820151645_pdf_domain_persistence.sql`
+  - `20260821110548_academy_creator_bootstrap_select.sql`
+- 원격 검증 완료:
+  - `supabase db push --linked`
+  - `supabase migration list --linked`
+  - `supabase db lint --linked --fail-on error`
+  - `supabase gen types typescript --linked --schema public --schema private`
+- 로컬 Docker daemon이 꺼져 있어 `supabase db reset --local`과 `supabase db dump --linked`는 실행 검증하지 못했다.
