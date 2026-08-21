@@ -33,6 +33,36 @@ const domainTables = [
   "audit_events",
 ];
 
+const tenantScopedReferenceTables = [
+  "academy_members",
+  "teachers",
+  "students",
+  "student_instruments",
+  "lesson_events",
+  "attendance_records",
+  "lesson_ticket_grants",
+  "books",
+];
+
+const updatedAtTables = [
+  "profiles",
+  "academies",
+  "academy_members",
+  "teachers",
+  "students",
+  "vendors",
+  "student_contacts",
+  "student_instruments",
+  "lesson_events",
+  "monthly_memos",
+  "lesson_ticket_grants",
+  "books",
+  "book_releases",
+  "fixed_income_snapshots",
+  "teacher_salary_settings",
+  "salary_settlements",
+];
+
 describe("Supabase schema contract", () => {
   it("PDF 도메인 persistence 테이블을 migration에 포함한다", () => {
     for (const tableName of domainTables) {
@@ -72,5 +102,56 @@ describe("Supabase schema contract", () => {
     expect(migrationSql).toContain("create table public.audit_events");
     expect(migrationSql).toContain("create table public.lesson_ticket_adjustments");
     expect(migrationSql).toContain("adjustment_reason text not null");
+  });
+
+  it("public schema 기본 권한은 닫고 명시 grant만 API 표면으로 사용한다", () => {
+    expect(migrationSql).toContain(
+      "alter default privileges for role postgres in schema public\n  revoke select, insert, update, delete on tables from anon, authenticated",
+    );
+    expect(migrationSql).toContain(
+      "alter default privileges for role postgres in schema public\n  revoke execute on functions from public",
+    );
+  });
+
+  it("tenant scope가 있는 참조 테이블은 academy_id와 id 복합 참조 기반을 가진다", () => {
+    for (const tableName of tenantScopedReferenceTables) {
+      expect(migrationSql).toContain(
+        `alter table public.${tableName}\n  add constraint ${tableName}_academy_id_id_key unique (academy_id, id)`,
+      );
+    }
+  });
+
+  it("tenant scope child reference는 academy_id까지 함께 외래키로 묶는다", () => {
+    const requiredCompositeFks = [
+      "foreign key (academy_id, student_id) references public.students (academy_id, id)",
+      "foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)",
+      "foreign key (academy_id, lesson_event_id) references public.lesson_events (academy_id, id)",
+      "foreign key (academy_id, lesson_ticket_grant_id) references public.lesson_ticket_grants (academy_id, id)",
+      "foreign key (academy_id, book_id) references public.books (academy_id, id)",
+    ];
+
+    for (const requiredCompositeFk of requiredCompositeFks) {
+      expect(migrationSql).toContain(requiredCompositeFk);
+    }
+  });
+
+  it("updated_at 컬럼은 공통 trigger로 실제 수정 시각을 갱신한다", () => {
+    expect(migrationSql).toContain("create function private.set_updated_at()");
+
+    for (const tableName of updatedAtTables) {
+      expect(migrationSql).toContain(
+        `create trigger ${tableName}_set_updated_at`,
+      );
+      expect(migrationSql).toContain(`before update on public.${tableName}`);
+    }
+  });
+
+  it("원생 보호자 연락처는 선생님에게 직접 노출하지 않는다", () => {
+    const contactPolicy = migrationSql.match(
+      /create policy "student_contacts_select_allowed_members"[\s\S]*?\);/,
+    )?.[0];
+
+    expect(contactPolicy).toBeDefined();
+    expect(contactPolicy).not.toContain("teacher_can_access_student");
   });
 });

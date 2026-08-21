@@ -252,6 +252,169 @@ create index fixed_income_snapshots_month_idx on public.fixed_income_snapshots (
 create index salary_settlements_month_idx on public.salary_settlements (academy_id, month, teacher_id);
 create index audit_events_academy_occurred_idx on public.audit_events (academy_id, occurred_at);
 
+alter table public.student_contacts
+  add constraint student_contacts_academy_id_id_key unique (academy_id, id),
+  add constraint student_contacts_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.student_instruments
+  add constraint student_instruments_academy_id_id_key unique (academy_id, id),
+  add constraint student_instruments_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade,
+  add constraint student_instruments_academy_teacher_fk
+    foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)
+    on delete set null (teacher_id);
+
+alter table public.lesson_events
+  add constraint lesson_events_academy_id_id_key unique (academy_id, id),
+  add constraint lesson_events_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade,
+  add constraint lesson_events_academy_student_instrument_fk
+    foreign key (academy_id, student_instrument_id) references public.student_instruments (academy_id, id)
+    on delete set null (student_instrument_id),
+  add constraint lesson_events_academy_teacher_fk
+    foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)
+    on delete set null (teacher_id);
+
+alter table public.attendance_records
+  add constraint attendance_records_academy_id_id_key unique (academy_id, id),
+  add constraint attendance_records_academy_lesson_event_fk
+    foreign key (academy_id, lesson_event_id) references public.lesson_events (academy_id, id)
+    on delete cascade,
+  add constraint attendance_records_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.absence_resolutions
+  add constraint absence_resolutions_academy_id_id_key unique (academy_id, id),
+  add constraint absence_resolutions_academy_attendance_record_fk
+    foreign key (academy_id, attendance_record_id) references public.attendance_records (academy_id, id)
+    on delete cascade,
+  add constraint absence_resolutions_academy_lesson_event_fk
+    foreign key (academy_id, lesson_event_id) references public.lesson_events (academy_id, id)
+    on delete cascade,
+  add constraint absence_resolutions_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade,
+  add constraint absence_resolutions_academy_makeup_lesson_event_fk
+    foreign key (academy_id, makeup_lesson_event_id) references public.lesson_events (academy_id, id)
+    on delete set null (makeup_lesson_event_id);
+
+alter table public.monthly_memos
+  add constraint monthly_memos_academy_id_id_key unique (academy_id, id);
+
+alter table public.lesson_ticket_grants
+  add constraint lesson_ticket_grants_academy_id_id_key unique (academy_id, id),
+  add constraint lesson_ticket_grants_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.lesson_ticket_adjustments
+  add constraint lesson_ticket_adjustments_academy_id_id_key unique (academy_id, id),
+  add constraint lesson_ticket_adjustments_academy_lesson_ticket_grant_fk
+    foreign key (academy_id, lesson_ticket_grant_id) references public.lesson_ticket_grants (academy_id, id)
+    on delete cascade,
+  add constraint lesson_ticket_adjustments_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.lesson_ticket_usages
+  add constraint lesson_ticket_usages_academy_id_id_key unique (academy_id, id),
+  add constraint lesson_ticket_usages_academy_lesson_ticket_grant_fk
+    foreign key (academy_id, lesson_ticket_grant_id) references public.lesson_ticket_grants (academy_id, id)
+    on delete cascade,
+  add constraint lesson_ticket_usages_academy_lesson_event_fk
+    foreign key (academy_id, lesson_event_id) references public.lesson_events (academy_id, id)
+    on delete cascade,
+  add constraint lesson_ticket_usages_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.books
+  add constraint books_academy_id_id_key unique (academy_id, id);
+
+alter table public.book_inventory_batches
+  add constraint book_inventory_batches_academy_id_id_key unique (academy_id, id),
+  add constraint book_inventory_batches_academy_book_fk
+    foreign key (academy_id, book_id) references public.books (academy_id, id)
+    on delete cascade;
+
+alter table public.book_releases
+  add constraint book_releases_academy_id_id_key unique (academy_id, id),
+  add constraint book_releases_academy_book_fk
+    foreign key (academy_id, book_id) references public.books (academy_id, id)
+    on delete restrict,
+  add constraint book_releases_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade;
+
+alter table public.fixed_income_snapshots
+  add constraint fixed_income_snapshots_academy_id_id_key unique (academy_id, id),
+  add constraint fixed_income_snapshots_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade,
+  add constraint fixed_income_snapshots_academy_student_instrument_fk
+    foreign key (academy_id, student_instrument_id) references public.student_instruments (academy_id, id)
+    on delete set null (student_instrument_id);
+
+alter table public.teacher_salary_settings
+  add constraint teacher_salary_settings_academy_id_id_key unique (academy_id, id),
+  add constraint teacher_salary_settings_academy_teacher_fk
+    foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)
+    on delete cascade;
+
+alter table public.salary_settlements
+  add constraint salary_settlements_academy_id_id_key unique (academy_id, id),
+  add constraint salary_settlements_academy_teacher_fk
+    foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)
+    on delete cascade;
+
+alter table public.audit_events
+  add constraint audit_events_academy_id_id_key unique (academy_id, id);
+
+create trigger student_contacts_set_updated_at
+before update on public.student_contacts
+for each row execute function private.set_updated_at();
+
+create trigger student_instruments_set_updated_at
+before update on public.student_instruments
+for each row execute function private.set_updated_at();
+
+create trigger lesson_events_set_updated_at
+before update on public.lesson_events
+for each row execute function private.set_updated_at();
+
+create trigger monthly_memos_set_updated_at
+before update on public.monthly_memos
+for each row execute function private.set_updated_at();
+
+create trigger lesson_ticket_grants_set_updated_at
+before update on public.lesson_ticket_grants
+for each row execute function private.set_updated_at();
+
+create trigger books_set_updated_at
+before update on public.books
+for each row execute function private.set_updated_at();
+
+create trigger book_releases_set_updated_at
+before update on public.book_releases
+for each row execute function private.set_updated_at();
+
+create trigger fixed_income_snapshots_set_updated_at
+before update on public.fixed_income_snapshots
+for each row execute function private.set_updated_at();
+
+create trigger teacher_salary_settings_set_updated_at
+before update on public.teacher_salary_settings
+for each row execute function private.set_updated_at();
+
+create trigger salary_settlements_set_updated_at
+before update on public.salary_settlements
+for each row execute function private.set_updated_at();
+
 alter table public.student_contacts enable row level security;
 alter table public.student_instruments enable row level security;
 alter table public.lesson_events enable row level security;
@@ -289,10 +452,7 @@ grant select, insert on public.audit_events to authenticated;
 create policy "student_contacts_select_allowed_members"
 on public.student_contacts for select
 to authenticated
-using (
-  private.has_academy_role(academy_id, array['owner'::public.academy_member_role, 'desk'::public.academy_member_role])
-  or private.teacher_can_access_student(academy_id, student_id)
-);
+using (private.has_academy_role(academy_id, array['owner'::public.academy_member_role, 'desk'::public.academy_member_role]));
 
 create policy "student_contacts_write_owner_desk"
 on public.student_contacts for all

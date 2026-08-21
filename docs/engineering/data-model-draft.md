@@ -60,6 +60,10 @@
 ## 공통 필드 원칙
 
 - 모든 운영 테이블은 `academy_id`를 가진다.
+- tenant scope가 있는 핵심 참조 테이블은 `(academy_id, id)` 복합 unique key를 둔다.
+- tenant scope child table은 단일 FK 외에 `(academy_id, *_id)` 복합 FK를 함께 둔다. RLS가 접근 권한을 막고, FK가 다른 학원 row를 잘못 연결하는 데이터 오염을 막는 이중 안전장치다.
 - 사용자 소유가 아니라 학원 소속 데이터이므로 RLS는 `academy_members`와 배정 관계를 기준으로 작성한다.
+- public schema의 기본 권한은 닫고, 앱에서 필요한 테이블만 `authenticated` role에 명시적으로 grant한다.
+- `updated_at`이 있는 테이블은 공통 trigger로 실제 수정 시각을 갱신한다.
 - 민감 정보 테이블은 role과 목적별로 SELECT column exposure를 별도 검토한다.
 - 삭제보다 상태 전환과 audit 기록을 우선한다. 실제 영구 삭제 정책은 사용자 확인 후 정한다.

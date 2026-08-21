@@ -1,5 +1,19 @@
 create extension if not exists pgcrypto with schema extensions;
 
+revoke all on schema public from anon;
+
+alter default privileges for role postgres in schema public
+  revoke select, insert, update, delete on tables from anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  revoke execute on functions from anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  revoke usage, select on sequences from anon, authenticated;
+
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public;
+
 create type public.academy_member_role as enum ('owner', 'desk', 'teacher');
 create type public.academy_member_status as enum ('active', 'invited', 'disabled');
 create type public.student_status as enum ('enrolled', 'suspended', 'withdrawn');
@@ -65,6 +79,7 @@ create table public.student_teacher_assignments (
   instrument_name text not null,
   active boolean not null default true,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (academy_id, student_id, teacher_id, instrument_name)
 );
 
@@ -103,8 +118,76 @@ create index student_teacher_assignments_student_idx on public.student_teacher_a
 create index vendors_academy_id_idx on public.vendors (academy_id);
 create index ledger_entries_academy_occurred_idx on public.ledger_entries (academy_id, occurred_on);
 
+alter table public.academy_members
+  add constraint academy_members_academy_id_id_key unique (academy_id, id);
+
+alter table public.teachers
+  add constraint teachers_academy_id_id_key unique (academy_id, id),
+  add constraint teachers_academy_member_fk
+    foreign key (academy_id, member_id) references public.academy_members (academy_id, id)
+    on delete set null (member_id);
+
+alter table public.students
+  add constraint students_academy_id_id_key unique (academy_id, id);
+
+alter table public.student_teacher_assignments
+  add constraint student_teacher_assignments_academy_id_id_key unique (academy_id, id),
+  add constraint student_teacher_assignments_academy_student_fk
+    foreign key (academy_id, student_id) references public.students (academy_id, id)
+    on delete cascade,
+  add constraint student_teacher_assignments_academy_teacher_fk
+    foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)
+    on delete cascade;
+
+alter table public.vendors
+  add constraint vendors_academy_id_id_key unique (academy_id, id);
+
+alter table public.ledger_entries
+  add constraint ledger_entries_academy_id_id_key unique (academy_id, id);
+
 create schema private;
 revoke all on schema private from public;
+
+create function private.set_updated_at()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+revoke all on function private.set_updated_at() from public;
+
+create trigger profiles_set_updated_at
+before update on public.profiles
+for each row execute function private.set_updated_at();
+
+create trigger academies_set_updated_at
+before update on public.academies
+for each row execute function private.set_updated_at();
+
+create trigger academy_members_set_updated_at
+before update on public.academy_members
+for each row execute function private.set_updated_at();
+
+create trigger teachers_set_updated_at
+before update on public.teachers
+for each row execute function private.set_updated_at();
+
+create trigger students_set_updated_at
+before update on public.students
+for each row execute function private.set_updated_at();
+
+create trigger student_teacher_assignments_set_updated_at
+before update on public.student_teacher_assignments
+for each row execute function private.set_updated_at();
+
+create trigger vendors_set_updated_at
+before update on public.vendors
+for each row execute function private.set_updated_at();
 
 create function private.is_active_academy_member(target_academy_id uuid)
 returns boolean
