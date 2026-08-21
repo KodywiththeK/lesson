@@ -132,4 +132,16 @@ describe("queryKeys", () => {
       "registration-options",
     ]);
   });
+
+  it("학원 수업 일별 출석 key를 학원과 날짜별로 분리한다", () => {
+    expect(
+      queryKeys.academyLessons.dailyAttendance("academy-1", "2026-08-21"),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "academy-lessons",
+      "daily-attendance",
+      "2026-08-21",
+    ]);
+  });
 });

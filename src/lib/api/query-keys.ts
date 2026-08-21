@@ -119,4 +119,13 @@ export const queryKeys = {
         "registration-options",
       ] as const,
   },
+  academyLessons: {
+    dailyAttendance: (academyId: string, date: string) =>
+      [
+        ...queryKeys.academy(academyId),
+        "academy-lessons",
+        "daily-attendance",
+        date,
+      ] as const,
+  },
 };

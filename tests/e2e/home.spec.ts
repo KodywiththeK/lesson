@@ -46,6 +46,14 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   await expect(
     page.getByRole("heading", { level: 1, name: "레슨 시간표" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "학원 피아노 출석 확인" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "학원 피아노 출석 확인" })
+      .getByRole("button", { name: "출석 확인" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "개인레슨 등록" }).click();
   await expect(page.getByRole("dialog", { name: "개인레슨 등록" })).toBeVisible();
 });

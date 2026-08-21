@@ -1,11 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "../providers";
 import LessonsPage from "./page";
 
 describe("LessonsPage", () => {
-  it("레슨 시간표 화면과 개인레슨 등록 진입점을 보여준다", () => {
+  it("레슨 시간표 화면과 학원 출석/개인레슨 등록 진입점을 보여준다", () => {
     render(
       <AppProviders>
         <LessonsPage />
@@ -14,6 +14,15 @@ describe("LessonsPage", () => {
 
     expect(
       screen.getByRole("heading", { level: 1, name: "레슨 시간표" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "학원 피아노 출석 확인" }),
+    ).toBeInTheDocument();
+    const attendanceSection = screen.getByRole("region", {
+      name: "학원 피아노 출석 확인",
+    });
+    expect(
+      within(attendanceSection).getByRole("button", { name: "출석 확인" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: "개인레슨 등록" }),
