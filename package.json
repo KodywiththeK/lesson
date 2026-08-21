@@ -13,7 +13,7 @@
     "test:run": "vitest run",
     "test:watch": "vitest --watch",
     "test:components": "vitest run --project components",
-    "test:e2e": "next build --webpack && playwright test",
+    "test:e2e": "NEXT_PUBLIC_E2E_DEMO=1 next build --webpack && NEXT_PUBLIC_E2E_DEMO=1 playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {

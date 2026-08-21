@@ -1,36 +1,43 @@
 "use client";
 
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { LessonTicketListScreen } from "@/features/lesson-tickets/lesson-ticket-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
-const currentAcademy = {
-  id: "academy-demo",
-  name: "더 클래식",
-};
-
 export default function PassesPage() {
   const demo = useDemoAcademy();
+  const useTestDemo =
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
   return (
-    <AppShell
-      academyName={currentAcademy.name}
-      permissionContext={{
-        role: "owner",
-      }}
-      pageTitle="회차권 관리"
-    >
-      <LessonTicketListScreen
-        academyId={currentAcademy.id}
-        academyName={currentAcademy.name}
-        today="2026-08-21"
-        queryOptionsFactory={demo.createLessonTicketListQueryOptions}
-        registrationOptionsQueryFactory={
-          demo.createLessonTicketRegistrationOptionsQueryOptions
-        }
-        registerLessonTicketPurchase={demo.registerLessonTicketPurchase}
-      />
-    </AppShell>
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+          pageTitle="회차권 관리"
+        >
+          <LessonTicketListScreen
+            academyId={academy.academyId}
+            academyName={academy.academyName}
+            today="2026-08-21"
+            queryOptionsFactory={
+              useTestDemo ? demo.createLessonTicketListQueryOptions : undefined
+            }
+            registrationOptionsQueryFactory={
+              useTestDemo
+                ? demo.createLessonTicketRegistrationOptionsQueryOptions
+                : undefined
+            }
+            registerLessonTicketPurchase={
+              useTestDemo ? demo.registerLessonTicketPurchase : undefined
+            }
+          />
+        </AppShell>
+      )}
+    </AcademySessionGate>
   );
 }

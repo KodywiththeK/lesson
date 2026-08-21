@@ -42,6 +42,36 @@ export type BookPurchaseListSupabaseClient = {
 
 export type FetchBookPurchaseListOptions = BuildBookPurchaseListOptions;
 
+export type RegisterBookReleaseInput = {
+  academyId: string;
+  studentId: string;
+  studentName: string;
+  bookTitle: string;
+  price: number;
+  shippedAt: string;
+  status: "payment-pending" | "paid";
+};
+
+export type BookReleaseMutationSupabaseClient = {
+  from(table: "books"): {
+    insert(values: Record<string, unknown>): {
+      select(select: "id"): {
+        single(): PromiseLike<SupabaseQueryResult<{ id: string }>>;
+      };
+    };
+  };
+  from(table: "book_releases"): {
+    insert(values: Record<string, unknown>): {
+      select(select: string): {
+        single(): PromiseLike<SupabaseQueryResult<BookReleaseSupabaseRow>>;
+      };
+    };
+  };
+  from(table: "ledger_entries"): {
+    insert(values: Record<string, unknown>): PromiseLike<SupabaseQueryResult<null>>;
+  };
+};
+
 const BOOK_PURCHASE_LIST_SELECT =
   "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at";
 
@@ -72,6 +102,74 @@ export function createBookPurchaseListQueryOptions(
     }),
     queryFn: () => fetchBookPurchaseList(supabase, options),
   };
+}
+
+export async function registerBookRelease(
+  supabase: BookReleaseMutationSupabaseClient,
+  input: RegisterBookReleaseInput,
+): Promise<BookPurchaseListRow> {
+  const { data: book, error: bookError } = await supabase
+    .from("books")
+    .insert({
+      academy_id: input.academyId,
+      title: input.bookTitle,
+      price: input.price,
+    })
+    .select("id")
+    .single();
+
+  if (bookError) {
+    throw new Error(`교재를 등록하지 못했습니다: ${bookError.message}`);
+  }
+
+  if (!book) {
+    throw new Error("교재를 등록했지만 반환된 데이터가 없습니다.");
+  }
+
+  const { data, error } = await supabase
+    .from("book_releases")
+    .insert({
+      academy_id: input.academyId,
+      book_id: book.id,
+      student_id: input.studentId,
+      student_name: input.studentName,
+      book_title: input.bookTitle,
+      price: input.price,
+      shipped_at: input.shippedAt,
+      status: input.status,
+      paid_at: input.status === "paid" ? input.shippedAt : null,
+    })
+    .select(BOOK_PURCHASE_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`교재 출고를 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("교재 출고를 등록했지만 반환된 데이터가 없습니다.");
+  }
+
+  if (input.status === "paid") {
+    const { error: ledgerError } = await supabase.from("ledger_entries").insert({
+      academy_id: input.academyId,
+      occurred_on: input.shippedAt,
+      entry_type: "income",
+      source: "book-sale",
+      amount: input.price,
+      description: `교재 판매: ${input.bookTitle} / ${input.studentName}`,
+      ref_table: "book_releases",
+      ref_id: data.id,
+    });
+
+    if (ledgerError) {
+      throw new Error(`교재 수입 내역을 저장하지 못했습니다: ${ledgerError.message}`);
+    }
+  }
+
+  return buildBookPurchaseList([toBookSale(data)], {
+    academyId: input.academyId,
+  })[0];
 }
 
 function toBookSale(row: BookReleaseSupabaseRow): BookSale {

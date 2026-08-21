@@ -40,6 +40,25 @@ export type TeacherListSupabaseClient = {
 
 export type FetchTeacherListOptions = BuildTeacherListOptions;
 
+export type RegisterTeacherInput = {
+  academyId: string;
+  name: string;
+  part: string;
+  contact: string;
+  registeredAt: string;
+  payType: TeacherPayType;
+};
+
+export type TeacherMutationSupabaseClient = {
+  from(table: "teachers"): {
+    insert(values: Record<string, unknown>): {
+      select(select: string): {
+        single(): PromiseLike<SupabaseQueryResult<TeacherSupabaseRow>>;
+      };
+    };
+  };
+};
+
 const TEACHER_LIST_SELECT =
   "id, academy_id, name, part, phone, registered_on, salary_type";
 
@@ -71,6 +90,34 @@ export function createTeacherListQueryOptions(
     }),
     queryFn: () => fetchTeacherList(supabase, options),
   };
+}
+
+export async function registerTeacher(
+  supabase: TeacherMutationSupabaseClient,
+  input: RegisterTeacherInput,
+): Promise<TeacherListRow> {
+  const { data, error } = await supabase
+    .from("teachers")
+    .insert({
+      academy_id: input.academyId,
+      name: input.name,
+      part: input.part,
+      phone: input.contact || null,
+      registered_on: input.registeredAt,
+      salary_type: input.payType,
+    })
+    .select(TEACHER_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`선생님을 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("선생님을 등록했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toTeacherListRow(data);
 }
 
 function toTeacherListRow(row: TeacherSupabaseRow): TeacherListRow {

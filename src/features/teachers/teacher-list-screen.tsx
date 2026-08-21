@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
 
 import {
@@ -42,6 +47,9 @@ import { formatTeacherPayType } from "@/domain/teacher-list";
 import type { TeacherPayType } from "@/domain/teacher";
 import {
   createTeacherListQueryOptions,
+  registerTeacher as registerTeacherApi,
+  type RegisterTeacherInput,
+  type TeacherMutationSupabaseClient,
   type TeacherListSupabaseClient,
 } from "@/lib/api/teachers";
 import { queryKeys } from "@/lib/api/query-keys";
@@ -61,12 +69,14 @@ type TeacherListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: TeacherListQueryOptionsFactory;
-  registerTeacher?: (input: DemoTeacherRegistrationInput) => void;
+  registerTeacher?: (input: DemoTeacherRegistrationInput) => void | Promise<void>;
 };
+
+type TeacherSupabaseClient = TeacherListSupabaseClient & TeacherMutationSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: TeacherListSupabaseClient;
+      client: TeacherSupabaseClient;
       error: null;
     }
   | {
@@ -119,6 +129,33 @@ export function TeacherListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const registerMutation = useMutation({
+    mutationFn: async (input: DemoTeacherRegistrationInput) => {
+      if (registerTeacher) {
+        await registerTeacher(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      await registerTeacherApi(supabaseClientState.client, {
+        academyId,
+        name: input.name,
+        part: input.part,
+        contact: input.contact,
+        registeredAt: input.registeredAt,
+        payType: input.payType,
+      } satisfies RegisterTeacherInput);
+    },
+    onSuccess: () => {
+      setIsRegistrationOpen(false);
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "teachers"],
+      });
+    },
+  });
   const teachers = teacherListQuery.data?.items ?? [];
   const filterOptions = buildFilterOptions(teacherListQuery.data?.items ?? []);
 
@@ -149,11 +186,7 @@ export function TeacherListScreen({
             </DialogHeader>
             <TeacherRegistrationForm
               onSubmit={(input) => {
-                registerTeacher?.(input);
-                setIsRegistrationOpen(false);
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "teachers"],
-                });
+                registerMutation.mutate(input);
               }}
             />
           </DialogContent>
@@ -345,7 +378,7 @@ function createTeacherListSupabaseClient(): SupabaseClientState {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as TeacherListSupabaseClient,
+      client: client as TeacherSupabaseClient,
       error: null,
     };
   } catch (error) {

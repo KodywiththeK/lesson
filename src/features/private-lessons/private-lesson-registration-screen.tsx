@@ -59,6 +59,8 @@ type PrivateLessonRegistrationScreenProps = {
   registerPrivateLesson?: (
     input: RegisterPrivateLessonEventInput,
   ) => Promise<PrivateLesson>;
+  onRegistered?: (lesson: PrivateLesson) => void;
+  displayMode?: "section" | "button";
 };
 
 type PrivateLessonSupabaseClient = PrivateLessonRegistrationOptionsSupabaseClient &
@@ -79,6 +81,8 @@ export function PrivateLessonRegistrationScreen({
   academyName,
   registrationOptionsQueryFactory,
   registerPrivateLesson,
+  onRegistered,
+  displayMode = "section",
 }: PrivateLessonRegistrationScreenProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -108,7 +112,10 @@ export function PrivateLessonRegistrationScreen({
       createDefaultRegisterPrivateLesson(
         supabaseClientState ?? createMissingSupabaseClientState(),
       ),
-    onSuccess: () => {
+    onSuccess: (lesson) => {
+      if (lesson) {
+        onRegistered?.(lesson);
+      }
       setOpen(false);
       toast.success("개인레슨을 등록했습니다.");
       void queryClient.invalidateQueries({
@@ -122,6 +129,46 @@ export function PrivateLessonRegistrationScreen({
     },
   });
 
+  const registrationDialog = (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button">
+          <CalendarPlus aria-hidden="true" />
+          개인레슨 등록
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>개인레슨 등록</DialogTitle>
+          <DialogDescription>
+            원생, 악기, 선생님, 시간을 순서대로 선택합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <PrivateLessonRegistrationForm
+          academyId={academyId}
+          options={
+            registrationOptionsQuery.data ?? {
+              students: [],
+              teachers: [],
+            }
+          }
+          isLoading={registrationOptionsQuery.isLoading}
+          error={
+            registrationOptionsQuery.isError
+              ? registrationOptionsQuery.error
+              : null
+          }
+          isSaving={registerMutation.isPending}
+          onSubmit={(input) => registerMutation.mutate(input)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (displayMode === "button") {
+    return registrationDialog;
+  }
+
   return (
     <section className="grid gap-4" aria-labelledby="private-lesson-heading">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -133,39 +180,7 @@ export function PrivateLessonRegistrationScreen({
             개인레슨 등록
           </h2>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <CalendarPlus aria-hidden="true" />
-              개인레슨 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>개인레슨 등록</DialogTitle>
-              <DialogDescription>
-                원생, 악기, 선생님, 시간을 순서대로 선택합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <PrivateLessonRegistrationForm
-              academyId={academyId}
-              options={
-                registrationOptionsQuery.data ?? {
-                  students: [],
-                  teachers: [],
-                }
-              }
-              isLoading={registrationOptionsQuery.isLoading}
-              error={
-                registrationOptionsQuery.isError
-                  ? registrationOptionsQuery.error
-                  : null
-              }
-              isSaving={registerMutation.isPending}
-              onSubmit={(input) => registerMutation.mutate(input)}
-            />
-          </DialogContent>
-        </Dialog>
+        {registrationDialog}
       </div>
 
       {!hasInjectedOptions && supabaseClientState?.error ? (

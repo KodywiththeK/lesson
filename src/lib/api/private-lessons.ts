@@ -122,6 +122,50 @@ export type PrivateLessonRegistrationSupabaseClient = {
   from(table: "lesson_events"): PrivateLessonRegistrationFromBuilder;
 };
 
+type AttendanceRecordUpsertFromBuilder = {
+  upsert(
+    values: Record<string, unknown>,
+    options: { onConflict: string },
+  ): {
+    select(select: "id"): PromiseLike<SupabaseQueryResult<Array<{ id: string }>>>;
+  };
+};
+
+type LessonTicketGrantUsageLookupBuilder = {
+  eq(
+    column: "academy_id" | "student_id" | "instrument_id",
+    value: string,
+  ): LessonTicketGrantUsageLookupBuilder;
+  gt(column: "remaining_count", value: number): LessonTicketGrantUsageLookupBuilder;
+  order(column: "valid_until", options: { ascending: boolean }): {
+    limit(
+      count: number,
+    ): PromiseLike<SupabaseQueryResult<LessonTicketGrantUsageRow[]>>;
+  };
+};
+
+type LessonTicketGrantUsageFromBuilder = {
+  select(select: string): LessonTicketGrantUsageLookupBuilder;
+  update(values: Record<string, unknown>): {
+    eq(column: "id", value: string): PromiseLike<SupabaseQueryResult<null>>;
+  };
+};
+
+type LessonTicketUsageInsertFromBuilder = {
+  insert(values: Record<string, unknown>): PromiseLike<SupabaseQueryResult<null>>;
+};
+
+type LessonTicketGrantUsageRow = {
+  id: string;
+  remaining_count: number;
+};
+
+export type MarkPrivateLessonAttendanceSupabaseClient = {
+  from(table: "attendance_records"): AttendanceRecordUpsertFromBuilder;
+  from(table: "lesson_ticket_grants"): LessonTicketGrantUsageFromBuilder;
+  from(table: "lesson_ticket_usages"): LessonTicketUsageInsertFromBuilder;
+};
+
 export type RegisterPrivateLessonEventInput = {
   academyId: string;
   studentId: string;
@@ -133,6 +177,16 @@ export type RegisterPrivateLessonEventInput = {
   teacherName: string;
   startAt: string;
   endAt: string;
+};
+
+export type MarkPrivateLessonAttendanceInput = {
+  academyId: string;
+  lessonEventId: string;
+  studentId: string;
+  instrumentId: string;
+  instrumentName: string;
+  status: "present" | "absent";
+  markedAt: string;
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
@@ -229,6 +283,80 @@ export async function registerPrivateLessonEvent(
   }
 
   return toPrivateLesson(data);
+}
+
+export async function markPrivateLessonAttendance(
+  supabase: MarkPrivateLessonAttendanceSupabaseClient,
+  input: MarkPrivateLessonAttendanceInput,
+) {
+  const { error: attendanceError } = await supabase
+    .from("attendance_records")
+    .upsert(
+      {
+        academy_id: input.academyId,
+        lesson_event_id: input.lessonEventId,
+        student_id: input.studentId,
+        status: input.status,
+        absence_reason: input.status === "absent" ? "결석 확인" : null,
+        marked_at: input.markedAt,
+      },
+      {
+        onConflict: "academy_id,lesson_event_id,student_id",
+      },
+    )
+    .select("id");
+
+  if (attendanceError) {
+    throw new Error(`개인레슨 출결을 저장하지 못했습니다: ${attendanceError.message}`);
+  }
+
+  if (input.status === "absent") {
+    return;
+  }
+
+  const { data: tickets, error: ticketError } = await supabase
+    .from("lesson_ticket_grants")
+    .select("id, remaining_count")
+    .eq("academy_id", input.academyId)
+    .eq("student_id", input.studentId)
+    .eq("instrument_id", input.instrumentId)
+    .gt("remaining_count", 0)
+    .order("valid_until", { ascending: true })
+    .limit(1);
+
+  if (ticketError) {
+    throw new Error(`차감할 회차권을 확인하지 못했습니다: ${ticketError.message}`);
+  }
+
+  const ticket = tickets?.[0];
+
+  if (!ticket) {
+    throw new Error(`${input.instrumentName} 회차권 잔여가 없습니다.`);
+  }
+
+  const { error: updateError } = await supabase
+    .from("lesson_ticket_grants")
+    .update({
+      remaining_count: Math.max(0, ticket.remaining_count - 1),
+    })
+    .eq("id", ticket.id);
+
+  if (updateError) {
+    throw new Error(`회차권 잔여를 차감하지 못했습니다: ${updateError.message}`);
+  }
+
+  const { error: usageError } = await supabase.from("lesson_ticket_usages").insert({
+    academy_id: input.academyId,
+    lesson_ticket_grant_id: ticket.id,
+    lesson_event_id: input.lessonEventId,
+    student_id: input.studentId,
+    instrument_id: input.instrumentId,
+    used_at: input.markedAt,
+  });
+
+  if (usageError) {
+    throw new Error(`회차권 사용 이력을 저장하지 못했습니다: ${usageError.message}`);
+  }
 }
 
 async function fetchTeacherPrivateLessons(

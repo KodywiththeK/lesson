@@ -128,4 +128,8 @@ export const queryKeys = {
         date,
       ] as const,
   },
+  lessonWorkspace: {
+    month: (academyId: string, month: string) =>
+      [...queryKeys.academy(academyId), "lesson-workspace", month] as const,
+  },
 };

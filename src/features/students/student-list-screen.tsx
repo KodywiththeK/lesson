@@ -1,8 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   ListFilterSelect,
@@ -40,8 +46,15 @@ import type {
 } from "@/domain/student-list";
 import {
   createStudentListQueryOptions,
+  registerStudentEnrollment,
+  type RegisterStudentEnrollmentInput,
+  type StudentRegistrationSupabaseClient,
   type StudentListSupabaseClient,
 } from "@/lib/api/students";
+import {
+  createTeacherListQueryOptions,
+  type TeacherListSupabaseClient,
+} from "@/lib/api/teachers";
 import { queryKeys } from "@/lib/api/query-keys";
 import type { DemoStudentRegistrationInput } from "@/lib/demo/academy-demo-state";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -61,12 +74,16 @@ type StudentListScreenProps = {
   academyName: string;
   queryOptionsFactory?: StudentListQueryOptionsFactory;
   teachers?: TeacherListRow[];
-  registerStudent?: (input: DemoStudentRegistrationInput) => void;
+  registerStudent?: (input: DemoStudentRegistrationInput) => void | Promise<void>;
 };
+
+type StudentSupabaseClient = StudentListSupabaseClient &
+  StudentRegistrationSupabaseClient &
+  TeacherListSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: StudentListSupabaseClient;
+      client: StudentSupabaseClient;
       error: null;
     }
   | {
@@ -113,6 +130,61 @@ export function StudentListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const teacherOptionsQuery = useQuery({
+    ...createDefaultTeacherOptionsQueryOptions(
+      academyId,
+      supabaseClientState ?? createMissingSupabaseClientState(),
+    ),
+    enabled: !teachers.length && !supabaseClientState?.error,
+  });
+  const teacherOptions = teachers.length
+    ? teachers
+    : teacherOptionsQuery.data?.items ?? [];
+  const registerMutation = useMutation({
+    mutationFn: async (input: DemoStudentRegistrationInput) => {
+      if (registerStudent) {
+        await registerStudent(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      await registerStudentEnrollment(supabaseClientState.client, {
+        academyId,
+        name: input.name,
+        registeredAt: input.registeredAt,
+        teacherId: input.teacherId ?? "",
+        teacherName: input.teacherName ?? "",
+        lessonType: input.lessonType,
+        weekdays: input.weekdays,
+        instrumentId: input.instrumentId,
+        instrumentName: input.instrumentName,
+        startTime: input.startTime ?? "14:00",
+        endTime: input.endTime ?? "14:50",
+        progress: input.progress,
+        lessonFee: input.lessonFee,
+        discountTotal: input.discountTotal,
+        finalMonthlyFee: input.finalMonthlyFee,
+      } satisfies RegisterStudentEnrollmentInput);
+    },
+    onSuccess: () => {
+      setIsRegistrationOpen(false);
+      toast.success("원생을 등록했습니다.");
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "students"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
+      });
+    },
+    onError: (error) => {
+      toast.error("원생 등록에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const students = studentListQuery.data?.items ?? [];
   const filterOptions = buildFilterOptions(studentListQuery.data?.items ?? []);
 
@@ -142,13 +214,9 @@ export function StudentListScreen({
               </DialogDescription>
             </DialogHeader>
             <StudentRegistrationForm
-              teachers={teachers}
+              teachers={teacherOptions}
               onSubmit={(input) => {
-                registerStudent?.(input);
-                setIsRegistrationOpen(false);
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "students"],
-                });
+                registerMutation.mutate(input);
               }}
             />
           </DialogContent>
@@ -442,12 +510,30 @@ function createDefaultQueryOptions(
   return createStudentListQueryOptions(supabaseClientState.client, options);
 }
 
+function createDefaultTeacherOptionsQueryOptions(
+  academyId: string,
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return {
+      queryKey: queryKeys.teachers.list(academyId),
+      queryFn: async () => {
+        throw supabaseClientState.error;
+      },
+    };
+  }
+
+  return createTeacherListQueryOptions(supabaseClientState.client, {
+    academyId,
+  });
+}
+
 function createStudentListSupabaseClient(): SupabaseClientState {
   try {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as StudentListSupabaseClient,
+      client: client as StudentSupabaseClient,
       error: null,
     };
   } catch (error) {

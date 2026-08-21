@@ -39,6 +39,24 @@ export type FinanceLedgerListSupabaseClient = {
 
 export type FetchFinanceLedgerListOptions = BuildFinanceLedgerListOptions;
 
+export type RegisterManualLedgerEntryInput = {
+  academyId: string;
+  occurredOn: string;
+  type: LedgerEntry["type"];
+  amount: number;
+  description: string;
+};
+
+export type FinanceLedgerMutationSupabaseClient = {
+  from(table: "ledger_entries"): {
+    insert(values: Record<string, unknown>): {
+      select(select: string): {
+        single(): PromiseLike<SupabaseQueryResult<LedgerEntrySupabaseRow>>;
+      };
+    };
+  };
+};
+
 const FINANCE_LEDGER_LIST_SELECT =
   "id, academy_id, occurred_on, entry_type, source, amount, description, ref_id";
 
@@ -70,6 +88,34 @@ export function createFinanceLedgerListQueryOptions(
     }),
     queryFn: () => fetchFinanceLedgerList(supabase, options),
   };
+}
+
+export async function registerManualLedgerEntry(
+  supabase: FinanceLedgerMutationSupabaseClient,
+  input: RegisterManualLedgerEntryInput,
+): Promise<LedgerEntry> {
+  const { data, error } = await supabase
+    .from("ledger_entries")
+    .insert({
+      academy_id: input.academyId,
+      occurred_on: input.occurredOn,
+      entry_type: input.type,
+      source: "manual",
+      amount: input.amount,
+      description: input.description,
+    })
+    .select(FINANCE_LEDGER_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`수동 입출입을 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("수동 입출입을 등록했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toLedgerEntry(data);
 }
 
 function toLedgerEntry(row: LedgerEntrySupabaseRow): LedgerEntry {

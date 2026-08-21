@@ -1,32 +1,37 @@
 "use client";
 
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { FinanceLedgerListScreen } from "@/features/finance/finance-ledger-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
-const currentAcademy = {
-  id: "academy-demo",
-  name: "더 클래식",
-};
-
 export default function FinancePage() {
   const demo = useDemoAcademy();
+  const useTestDemo =
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
   return (
-    <AppShell
-      academyName={currentAcademy.name}
-      permissionContext={{
-        role: "owner",
-      }}
-      pageTitle="수입 관리"
-    >
-      <FinanceLedgerListScreen
-        academyId={currentAcademy.id}
-        academyName={currentAcademy.name}
-        queryOptionsFactory={demo.createFinanceLedgerListQueryOptions}
-        registerManualLedgerEntry={demo.registerManualLedgerEntry}
-      />
-    </AppShell>
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+          pageTitle="수입 관리"
+        >
+          <FinanceLedgerListScreen
+            academyId={academy.academyId}
+            academyName={academy.academyName}
+            queryOptionsFactory={
+              useTestDemo ? demo.createFinanceLedgerListQueryOptions : undefined
+            }
+            registerManualLedgerEntry={
+              useTestDemo ? demo.registerManualLedgerEntry : undefined
+            }
+          />
+        </AppShell>
+      )}
+    </AcademySessionGate>
   );
 }

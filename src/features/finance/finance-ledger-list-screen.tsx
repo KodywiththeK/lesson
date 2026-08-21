@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { CircleDollarSign, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,7 +48,10 @@ import {
 } from "@/domain/finance-ledger";
 import {
   createFinanceLedgerListQueryOptions,
+  registerManualLedgerEntry as registerManualLedgerEntryApi,
+  type FinanceLedgerMutationSupabaseClient,
   type FinanceLedgerListSupabaseClient,
+  type RegisterManualLedgerEntryInput,
 } from "@/lib/api/finance";
 import { queryKeys } from "@/lib/api/query-keys";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -66,12 +74,15 @@ type FinanceLedgerListScreenProps = {
     type: LedgerEntry["type"];
     amount: number;
     description: string;
-  }) => void;
+  }) => void | Promise<void>;
 };
+
+type FinanceLedgerSupabaseClient = FinanceLedgerListSupabaseClient &
+  FinanceLedgerMutationSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: FinanceLedgerListSupabaseClient;
+      client: FinanceLedgerSupabaseClient;
       error: null;
     }
   | {
@@ -134,6 +145,43 @@ export function FinanceLedgerListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const registerMutation = useMutation({
+    mutationFn: async (input: {
+      occurredOn: string;
+      type: LedgerEntry["type"];
+      amount: number;
+      description: string;
+    }) => {
+      if (registerManualLedgerEntry) {
+        await registerManualLedgerEntry(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      await registerManualLedgerEntryApi(supabaseClientState.client, {
+        academyId,
+        occurredOn: input.occurredOn,
+        type: input.type,
+        amount: input.amount,
+        description: input.description,
+      } satisfies RegisterManualLedgerEntryInput);
+    },
+    onSuccess: () => {
+      setIsManualOpen(false);
+      toast.success("수동 입출입을 등록했습니다.");
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "finance"],
+      });
+    },
+    onError: (error) => {
+      toast.error("수동 입출입 등록에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const entries = ledgerListQuery.data ?? [];
 
   return (
@@ -163,17 +211,7 @@ export function FinanceLedgerListScreen({
             </DialogHeader>
             <ManualLedgerForm
               onSubmit={(input) => {
-                if (!registerManualLedgerEntry) {
-                  toast.error("수동 입출입 저장 기능이 연결되지 않았습니다.");
-                  return;
-                }
-
-                registerManualLedgerEntry(input);
-                setIsManualOpen(false);
-                toast.success("수동 입출입을 등록했습니다.");
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "finance"],
-                });
+                registerMutation.mutate(input);
               }}
             />
           </DialogContent>
@@ -361,7 +399,7 @@ function createFinanceLedgerSupabaseClient(): SupabaseClientState {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as FinanceLedgerListSupabaseClient,
+      client: client as FinanceLedgerSupabaseClient,
       error: null,
     };
   } catch (error) {

@@ -1,33 +1,38 @@
 "use client";
 
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { BookPurchaseListScreen } from "@/features/books/book-purchase-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
-const currentAcademy = {
-  id: "academy-demo",
-  name: "더 클래식",
-};
-
 export default function BooksPage() {
   const demo = useDemoAcademy();
+  const useTestDemo =
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
   return (
-    <AppShell
-      academyName={currentAcademy.name}
-      permissionContext={{
-        role: "owner",
-      }}
-      pageTitle="교재 관리"
-    >
-      <BookPurchaseListScreen
-        academyId={currentAcademy.id}
-        academyName={currentAcademy.name}
-        queryOptionsFactory={demo.createBookPurchaseListQueryOptions}
-        students={demo.state.students}
-        registerBookRelease={demo.registerBookRelease}
-      />
-    </AppShell>
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+          pageTitle="교재 관리"
+        >
+          <BookPurchaseListScreen
+            academyId={academy.academyId}
+            academyName={academy.academyName}
+            queryOptionsFactory={
+              useTestDemo ? demo.createBookPurchaseListQueryOptions : undefined
+            }
+            students={useTestDemo ? demo.state.students : undefined}
+            registerBookRelease={
+              useTestDemo ? demo.registerBookRelease : undefined
+            }
+          />
+        </AppShell>
+      )}
+    </AcademySessionGate>
   );
 }

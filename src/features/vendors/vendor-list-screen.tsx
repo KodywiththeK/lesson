@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { RotateCcw, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,6 +42,9 @@ import type {
 } from "@/domain/vendor-list";
 import {
   createVendorListQueryOptions,
+  registerVendor as registerVendorApi,
+  type RegisterVendorInput,
+  type VendorMutationSupabaseClient,
   type VendorListSupabaseClient,
 } from "@/lib/api/vendors";
 import { queryKeys } from "@/lib/api/query-keys";
@@ -61,12 +69,14 @@ type VendorListScreenProps = {
     kind: string;
     memo: string;
     registeredAt: string;
-  }) => void;
+  }) => void | Promise<void>;
 };
+
+type VendorSupabaseClient = VendorListSupabaseClient & VendorMutationSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: VendorListSupabaseClient;
+      client: VendorSupabaseClient;
       error: null;
     }
   | {
@@ -108,6 +118,44 @@ export function VendorListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const registerMutation = useMutation({
+    mutationFn: async (input: {
+      name: string;
+      contact: string;
+      kind: string;
+      memo: string;
+      registeredAt: string;
+    }) => {
+      if (registerVendor) {
+        await registerVendor(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      await registerVendorApi(supabaseClientState.client, {
+        academyId,
+        name: input.name,
+        contact: input.contact,
+        kind: input.kind,
+        memo: input.memo,
+      } satisfies RegisterVendorInput);
+    },
+    onSuccess: () => {
+      setIsRegistrationOpen(false);
+      toast.success("거래처를 등록했습니다.");
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "vendors"],
+      });
+    },
+    onError: (error) => {
+      toast.error("거래처 등록에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const vendors = vendorListQuery.data?.items ?? [];
   const filterOptions = buildFilterOptions(vendorListQuery.data?.items ?? []);
 
@@ -138,17 +186,7 @@ export function VendorListScreen({
             </DialogHeader>
             <VendorRegistrationForm
               onSubmit={(input) => {
-                if (!registerVendor) {
-                  toast.error("거래처 저장 기능이 연결되지 않았습니다.");
-                  return;
-                }
-
-                registerVendor(input);
-                setIsRegistrationOpen(false);
-                toast.success("거래처를 등록했습니다.");
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "vendors"],
-                });
+                registerMutation.mutate(input);
               }}
             />
           </DialogContent>
@@ -323,7 +361,7 @@ function createVendorListSupabaseClient(): SupabaseClientState {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as VendorListSupabaseClient,
+      client: client as VendorSupabaseClient,
       error: null,
     };
   } catch (error) {

@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { BookOpenCheck, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,9 +49,16 @@ import {
 import type { StudentListRow } from "@/domain/student-list";
 import {
   createBookPurchaseListQueryOptions,
+  registerBookRelease as registerBookReleaseApi,
+  type BookReleaseMutationSupabaseClient,
   type BookPurchaseListSupabaseClient,
+  type RegisterBookReleaseInput,
 } from "@/lib/api/books";
 import { queryKeys } from "@/lib/api/query-keys";
+import {
+  createStudentListQueryOptions,
+  type StudentListSupabaseClient,
+} from "@/lib/api/students";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type BookPurchaseListQueryOptions = {
@@ -70,12 +82,16 @@ type BookPurchaseListScreenProps = {
     price: number;
     shippedAt: string;
     status: BookSaleStatus;
-  }) => void;
+  }) => void | Promise<void>;
 };
+
+type BookPurchaseSupabaseClient = BookPurchaseListSupabaseClient &
+  BookReleaseMutationSupabaseClient &
+  StudentListSupabaseClient;
 
 type SupabaseClientState =
   | {
-      client: BookPurchaseListSupabaseClient;
+      client: BookPurchaseSupabaseClient;
       error: null;
     }
   | {
@@ -127,6 +143,60 @@ export function BookPurchaseListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const studentOptionsQuery = useQuery({
+    ...createDefaultStudentOptionsQueryOptions(
+      academyId,
+      supabaseClientState ?? createMissingSupabaseClientState(),
+    ),
+    enabled: !students.length && !supabaseClientState?.error,
+  });
+  const studentOptions = students.length
+    ? students
+    : studentOptionsQuery.data?.items ?? [];
+  const registerMutation = useMutation({
+    mutationFn: async (input: {
+      studentId: string;
+      studentName?: string;
+      bookTitle: string;
+      price: number;
+      shippedAt: string;
+      status: BookSaleStatus;
+    }) => {
+      if (registerBookRelease) {
+        await registerBookRelease(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      await registerBookReleaseApi(supabaseClientState.client, {
+        academyId,
+        studentId: input.studentId,
+        studentName: input.studentName ?? "",
+        bookTitle: input.bookTitle,
+        price: input.price,
+        shippedAt: input.shippedAt,
+        status: input.status,
+      } satisfies RegisterBookReleaseInput);
+    },
+    onSuccess: () => {
+      setIsReleaseOpen(false);
+      toast.success("교재 출고를 등록했습니다.");
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "books"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "finance"],
+      });
+    },
+    onError: (error) => {
+      toast.error("교재 출고 등록에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const purchases = bookPurchaseListQuery.data ?? [];
 
   return (
@@ -155,22 +225,9 @@ export function BookPurchaseListScreen({
               </DialogDescription>
             </DialogHeader>
             <BookReleaseForm
-              students={students}
+              students={studentOptions}
               onSubmit={(input) => {
-                if (!registerBookRelease) {
-                  toast.error("교재 출고 저장 기능이 연결되지 않았습니다.");
-                  return;
-                }
-
-                registerBookRelease(input);
-                setIsReleaseOpen(false);
-                toast.success("교재 출고를 등록했습니다.");
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "books"],
-                });
-                void queryClient.invalidateQueries({
-                  queryKey: [...queryKeys.academy(academyId), "finance"],
-                });
+                registerMutation.mutate(input);
               }}
             />
           </DialogContent>
@@ -368,12 +425,30 @@ function createDefaultQueryOptions(
   return createBookPurchaseListQueryOptions(supabaseClientState.client, options);
 }
 
+function createDefaultStudentOptionsQueryOptions(
+  academyId: string,
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return {
+      queryKey: queryKeys.students.list(academyId),
+      queryFn: async () => {
+        throw supabaseClientState.error;
+      },
+    };
+  }
+
+  return createStudentListQueryOptions(supabaseClientState.client, {
+    academyId,
+  });
+}
+
 function createBookPurchaseListSupabaseClient(): SupabaseClientState {
   try {
     const client: unknown = createSupabaseBrowserClient();
 
     return {
-      client: client as BookPurchaseListSupabaseClient,
+      client: client as BookPurchaseSupabaseClient,
       error: null,
     };
   } catch (error) {

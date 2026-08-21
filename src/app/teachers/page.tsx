@@ -1,32 +1,35 @@
 "use client";
 
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { TeacherListScreen } from "@/features/teachers/teacher-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
-const currentAcademy = {
-  id: "academy-demo",
-  name: "더 클래식",
-};
-
 export default function TeachersPage() {
   const demo = useDemoAcademy();
+  const useTestDemo =
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
   return (
-    <AppShell
-      academyName={currentAcademy.name}
-      permissionContext={{
-        role: "owner",
-      }}
-      pageTitle="선생님 관리"
-    >
-      <TeacherListScreen
-        academyId={currentAcademy.id}
-        academyName={currentAcademy.name}
-        queryOptionsFactory={demo.createTeacherListQueryOptions}
-        registerTeacher={demo.registerTeacher}
-      />
-    </AppShell>
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+          pageTitle="선생님 관리"
+        >
+          <TeacherListScreen
+            academyId={academy.academyId}
+            academyName={academy.academyName}
+            queryOptionsFactory={
+              useTestDemo ? demo.createTeacherListQueryOptions : undefined
+            }
+            registerTeacher={useTestDemo ? demo.registerTeacher : undefined}
+          />
+        </AppShell>
+      )}
+    </AcademySessionGate>
   );
 }

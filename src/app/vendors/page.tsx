@@ -1,32 +1,35 @@
 "use client";
 
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { VendorListScreen } from "@/features/vendors/vendor-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
 
-const currentAcademy = {
-  id: "academy-demo",
-  name: "더 클래식",
-};
-
 export default function VendorsPage() {
   const demo = useDemoAcademy();
+  const useTestDemo =
+    process.env.NODE_ENV === "test" ||
+    process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
   return (
-    <AppShell
-      academyName={currentAcademy.name}
-      permissionContext={{
-        role: "owner",
-      }}
-      pageTitle="거래처 관리"
-    >
-      <VendorListScreen
-        academyId={currentAcademy.id}
-        academyName={currentAcademy.name}
-        queryOptionsFactory={demo.createVendorListQueryOptions}
-        registerVendor={demo.registerVendor}
-      />
-    </AppShell>
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+          pageTitle="거래처 관리"
+        >
+          <VendorListScreen
+            academyId={academy.academyId}
+            academyName={academy.academyName}
+            queryOptionsFactory={
+              useTestDemo ? demo.createVendorListQueryOptions : undefined
+            }
+            registerVendor={useTestDemo ? demo.registerVendor : undefined}
+          />
+        </AppShell>
+      )}
+    </AcademySessionGate>
   );
 }
