@@ -142,4 +142,27 @@ describe("LessonManagementWorkspace", () => {
       screen.getByRole("grid", { name: "2026년 8월 개인레슨 캘린더" }),
     ).toHaveTextContent("한서아");
   });
+
+  it("개인레슨표에서 레슨원생 검색 다이얼로그로 잔여 회차와 최근 레슨을 확인한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
+    await user.click(screen.getByRole("button", { name: "레슨원생 검색" }));
+
+    const searchDialog = await screen.findByRole("dialog", {
+      name: "레슨원생 검색",
+    });
+
+    expect(within(searchDialog).getByText("한서아")).toBeInTheDocument();
+    expect(within(searchDialog).getByText("바이올린 2회")).toBeInTheDocument();
+    expect(within(searchDialog).getByText("최근 레슨: 2026-08-21 바이올린 예정")).toBeInTheDocument();
+
+    await user.type(within(searchDialog).getByRole("searchbox", { name: "레슨원생 검색어" }), "최도윤");
+
+    expect(within(searchDialog).queryByText("한서아")).not.toBeInTheDocument();
+    expect(within(searchDialog).getByText("최도윤")).toBeInTheDocument();
+    expect(within(searchDialog).getByText("첼로 1회")).toBeInTheDocument();
+  });
 });

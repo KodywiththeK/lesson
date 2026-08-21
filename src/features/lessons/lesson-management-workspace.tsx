@@ -7,6 +7,7 @@ import {
   Clipboard,
   ClipboardCheck,
   FileText,
+  Search,
   Send,
   X,
 } from "lucide-react";
@@ -35,7 +36,11 @@ import type {
   DailyAcademyAttendanceRow,
   DailyAcademyAttendanceSheet,
 } from "@/domain/academy-lesson-attendance";
-import type { PrivateLesson } from "@/domain/private-lesson";
+import {
+  buildPrivateLessonStudentSearchResults,
+  type PrivateLesson,
+  type PrivateLessonStudentSearchResult,
+} from "@/domain/private-lesson";
 import type {
   PrivateLessonRegistrationOptions,
   RegisterPrivateLessonEventInput,
@@ -127,6 +132,8 @@ export function LessonManagementWorkspace({
   const [absentOpen, setAbsentOpen] = useState(false);
   const [academyDayOpen, setAcademyDayOpen] = useState(false);
   const [privateDayOpen, setPrivateDayOpen] = useState(false);
+  const [privateStudentSearchOpen, setPrivateStudentSearchOpen] =
+    useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [makeupDraft, setMakeupDraft] = useState<MakeupDraft | null>(null);
   const [resolvedAbsenceIds, setResolvedAbsenceIds] = useState<Set<string>>(
@@ -160,6 +167,25 @@ export function LessonManagementWorkspace({
     queryKey: ["demo", "private-registration-options", targetAcademyId] as QueryKey,
     queryFn: async () => demoData.registrationOptions,
   });
+  const privateLessonStudentResults = useMemo(
+    () =>
+      buildPrivateLessonStudentSearchResults(
+        demoData.registrationOptions.students.map((student) => ({
+          academyId,
+          studentId: student.studentId,
+          studentName: student.studentName,
+        })),
+        demoData.ticketBalances,
+        privateLessons,
+        { academyId },
+      ),
+    [
+      academyId,
+      demoData.registrationOptions.students,
+      demoData.ticketBalances,
+      privateLessons,
+    ],
+  );
 
   return (
     <section className="grid gap-4" aria-labelledby="lesson-workspace-heading">
@@ -239,14 +265,24 @@ export function LessonManagementWorkspace({
             memoButtonLabel="메모지"
             onMemoClick={() => setPrivateMemoOpen((isOpen) => !isOpen)}
             actions={
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setScheduleOpen(true)}
-              >
-                <Send aria-hidden="true" />
-                레슨시간표 보내기
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPrivateStudentSearchOpen(true)}
+                >
+                  <Search aria-hidden="true" />
+                  레슨원생 검색
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setScheduleOpen(true)}
+                >
+                  <Send aria-hidden="true" />
+                  레슨시간표 보내기
+                </Button>
+              </>
             }
           />
 
@@ -382,6 +418,12 @@ export function LessonManagementWorkspace({
         registrationOptions={demoData.registrationOptions}
         selectedDate={selectedDate}
         onOpenChange={setScheduleOpen}
+      />
+
+      <PrivateLessonStudentSearchDialog
+        open={privateStudentSearchOpen}
+        results={privateLessonStudentResults}
+        onOpenChange={setPrivateStudentSearchOpen}
       />
     </section>
   );
@@ -854,6 +896,84 @@ function ScheduleDialog({
   );
 }
 
+function PrivateLessonStudentSearchDialog({
+  open,
+  results,
+  onOpenChange,
+}: {
+  open: boolean;
+  results: PrivateLessonStudentSearchResult[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const filteredResults = results.filter((result) =>
+    search.trim()
+      ? result.studentName
+          .toLocaleLowerCase("ko-KR")
+          .includes(search.trim().toLocaleLowerCase("ko-KR"))
+      : true,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>레슨원생 검색</DialogTitle>
+          <DialogDescription>
+            개인레슨 원생의 회차권 잔여와 최근 레슨 상태를 확인합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>검색</span>
+            <Input
+              aria-label="레슨원생 검색어"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="원생명"
+            />
+          </Label>
+          <div className="grid max-h-[24rem] gap-2 overflow-y-auto pr-1">
+            {filteredResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                조건에 맞는 개인레슨 원생이 없습니다.
+              </p>
+            ) : null}
+            {filteredResults.map((result) => (
+              <article
+                key={result.studentId}
+                className="rounded-md border border-border bg-background p-3"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">
+                      {result.studentName}
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {formatRecentPrivateLesson(result.recentLesson)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {result.remainingTickets.length === 0 ? (
+                      <Badge variant="secondary">회차권 없음</Badge>
+                    ) : null}
+                    {result.remainingTickets.map((ticket) => (
+                      <Badge key={ticket.instrumentId} variant="outline">
+                        {ticket.instrumentName} {ticket.remainingCount}회
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AttendanceBadge({
   status,
 }: {
@@ -1067,6 +1187,16 @@ function formatPrivateLessonStatus(status: PrivateLesson["status"]) {
   };
 
   return labels[status];
+}
+
+function formatRecentPrivateLesson(
+  recentLesson: PrivateLessonStudentSearchResult["recentLesson"],
+) {
+  if (!recentLesson) {
+    return "최근 레슨: 없음";
+  }
+
+  return `최근 레슨: ${recentLesson.date} ${recentLesson.instrumentName} ${recentLesson.statusLabel}`;
 }
 
 function pad2(value: number) {

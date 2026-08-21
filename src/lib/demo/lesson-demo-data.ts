@@ -1,10 +1,14 @@
 import type { DailyAcademyAttendanceSheet } from "@/domain/academy-lesson-attendance";
-import type { PrivateLesson } from "@/domain/private-lesson";
+import type {
+  PrivateLesson,
+  PrivateLessonTicketSearchBalance,
+} from "@/domain/private-lesson";
 import type { PrivateLessonRegistrationOptions } from "@/lib/api/private-lessons";
 
 export type LessonWorkspaceDemoData = {
   academySheets: DailyAcademyAttendanceSheet[];
   privateLessons: PrivateLesson[];
+  ticketBalances: PrivateLessonTicketSearchBalance[];
   registrationOptions: PrivateLessonRegistrationOptions;
   academyMemo: string;
   privateMemo: string;
@@ -128,6 +132,22 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       startAt: "2026-08-22T10:30:00+09:00",
       endAt: "2026-08-22T11:30:00+09:00",
       status: "scheduled",
+    },
+  ],
+  ticketBalances: [
+    {
+      academyId: "academy-demo",
+      studentId: "student-4",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      remainingCount: 2,
+    },
+    {
+      academyId: "academy-demo",
+      studentId: "student-6",
+      instrumentId: "cello",
+      instrumentName: "첼로",
+      remainingCount: 1,
     },
   ],
   registrationOptions: {

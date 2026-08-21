@@ -28,23 +28,32 @@ export default function LessonsPage() {
         demoData={{
           academySheets: Object.values(demo.state.academySheets),
           privateLessons: demo.state.privateLessons,
+          ticketBalances: demo.state.tickets.map((ticket) => ({
+            academyId: ticket.academyId,
+            studentId: ticket.studentId,
+            instrumentId: ticket.instrumentId,
+            instrumentName: ticket.instrumentName,
+            remainingCount: ticket.remainingCount,
+          })),
           registrationOptions: {
-            students: demo.state.students.map((student) => ({
-              studentId: student.studentId,
-              studentName: student.name,
-              instruments: demo.state.enrollments
-                .filter(
-                  (enrollment) =>
-                    enrollment.studentId === student.studentId &&
-                    enrollment.lessonType === "private" &&
-                    enrollment.active,
-                )
-                .map((enrollment) => ({
-                  studentInstrumentId: enrollment.enrollmentId,
-                  instrumentId: enrollment.instrumentId,
-                  instrumentName: enrollment.instrumentName,
-                })),
-            })),
+            students: demo.state.students
+              .map((student) => ({
+                studentId: student.studentId,
+                studentName: student.name,
+                instruments: demo.state.enrollments
+                  .filter(
+                    (enrollment) =>
+                      enrollment.studentId === student.studentId &&
+                      enrollment.lessonType === "private" &&
+                      enrollment.active,
+                  )
+                  .map((enrollment) => ({
+                    studentInstrumentId: enrollment.enrollmentId,
+                    instrumentId: enrollment.instrumentId,
+                    instrumentName: enrollment.instrumentName,
+                  })),
+              }))
+              .filter((student) => student.instruments.length > 0),
             teachers: demo.state.teachers.map((teacher) => ({
               teacherId: teacher.teacherId,
               teacherName: teacher.name,

@@ -23,8 +23,14 @@ describe("AppShell", () => {
       "교재",
       "수입",
     ]);
-    expect(screen.getByRole("button", { name: /수납 등록/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /출석 확인/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /수납 등록/ })).toHaveAttribute(
+      "href",
+      "/finance",
+    );
+    expect(screen.getByRole("link", { name: /출석 확인/ })).toHaveAttribute(
+      "href",
+      "/lessons",
+    );
   });
 
   it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 본인 급여 메뉴를 보여준다", () => {
@@ -47,7 +53,10 @@ describe("AppShell", () => {
     expect(labels).toContain("내 급여");
     expect(labels).not.toContain("수입");
     expect(labels).not.toContain("거래처");
-    expect(screen.queryByRole("button", { name: /수납 등록/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /출석 확인/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /출석 확인/ })).toHaveAttribute(
+      "href",
+      "/lessons",
+    );
   });
 });

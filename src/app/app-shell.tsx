@@ -156,15 +156,19 @@ export function AppShell({
               </div>
               <div className="flex flex-wrap gap-2">
                 {showPaymentAction ? (
-                  <Button variant="outline">
-                    <ReceiptText aria-hidden="true" />
-                    수납 등록
+                  <Button asChild variant="outline">
+                    <Link href="/finance">
+                      <ReceiptText aria-hidden="true" />
+                      수납 등록
+                    </Link>
                   </Button>
                 ) : null}
                 {showAttendanceAction ? (
-                  <Button>
-                    <ClipboardCheck aria-hidden="true" />
-                    출석 확인
+                  <Button asChild>
+                    <Link href="/lessons">
+                      <ClipboardCheck aria-hidden="true" />
+                      출석 확인
+                    </Link>
                   </Button>
                 ) : null}
               </div>

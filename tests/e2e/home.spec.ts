@@ -49,19 +49,27 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   await expect(
     page.getByRole("heading", { level: 2, name: "레슨관리표" }),
   ).toBeVisible();
+  const academyCalendar = page.getByRole("grid", {
+    name: "2026년 8월 학원 레슨 캘린더",
+  });
+  await expect(academyCalendar).toBeVisible();
+  await academyCalendar.getByRole("gridcell", { name: /^21 .*김민지/ }).click();
   await expect(
-    page.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+    page.getByRole("dialog", { name: "2026-08-21 출석 확인" }).getByText("김민지"),
   ).toBeVisible();
-  await expect(
-    page
-      .getByRole("region", { name: "2026-08-21 선택 일정" })
-      .getByText("김민지"),
-  ).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.getByRole("tab", { name: "개인레슨표" }).click();
   await expect(
     page.getByRole("grid", { name: "2026년 8월 개인레슨 캘린더" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "레슨원생 검색" }).click();
+  const searchDialog = page.getByRole("dialog", { name: "레슨원생 검색" });
+  await expect(searchDialog.getByText("한서아")).toBeVisible();
+  await expect(searchDialog.getByText("바이올린 2회")).toBeVisible();
+  await expect(searchDialog.getByText("김민지")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
   await page.getByRole("button", { name: "개인레슨 등록" }).click();
   await expect(page.getByRole("dialog", { name: "개인레슨 등록" })).toBeVisible();
 });

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "../providers";
@@ -27,5 +28,25 @@ describe("LessonsPage", () => {
     expect(
       screen.getByRole("button", { name: "미등원인원" }),
     ).toBeInTheDocument();
+  });
+
+  it("개인레슨표의 레슨원생 검색은 개인레슨 수강 원생만 보여준다", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppProviders>
+        <LessonsPage />
+      </AppProviders>,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
+    await user.click(screen.getByRole("button", { name: "레슨원생 검색" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "레슨원생 검색" });
+
+    expect(within(dialog).getByText("한서아")).toBeInTheDocument();
+    expect(within(dialog).getByText("최도윤")).toBeInTheDocument();
+    expect(within(dialog).queryByText("김민지")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("이서윤")).not.toBeInTheDocument();
   });
 });

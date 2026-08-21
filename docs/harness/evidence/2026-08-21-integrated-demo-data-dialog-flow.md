@@ -4,7 +4,7 @@
 
 - 목표: PDF 요구사항과 `수업.html` 와이어프레임 참고를 바탕으로 원생, 선생님, 레슨 시간표, 회차권, 수입, 거래처, 교재 데이터가 한 앱 상태 안에서 유기적으로 움직이게 보강한다.
 - 완료한 변경: 전역 데모 상태 provider, 레슨 날짜별 출석 다이얼로그, 회차권 구매 수입 자동 반영, 원생/선생님/거래처/교재/수입 등록 다이얼로그, 모바일 레이아웃 안정화를 추가했다.
-- 커버한 요구사항: 원생 등록 시 일정 반영, 개인레슨 출석 시 회차권 1회 차감, 회차권 결제 시 수입 자동 생성, 주요 버튼의 실제 동작, shadcn/ui Dialog 기반 운영 UX, 예시 데이터 기반 즉시 탐색.
+- 커버한 요구사항: 원생 등록 시 일정 반영, 개인레슨 출석 시 회차권 1회 차감, 회차권 결제 시 수입 자동 생성, 주요 버튼의 실제 동작, 개인레슨 원생 검색, shadcn/ui Dialog 기반 운영 UX, 예시 데이터 기반 즉시 탐색.
 
 ## 먼저 작성한 테스트
 
@@ -18,10 +18,15 @@
   - `src/app/books/page.test.tsx`
   - `src/lib/api/lesson-tickets.test.ts`
   - `src/lib/supabase/schema-contract.test.ts`
+  - `src/features/lessons/lesson-management-workspace.test.tsx`
+  - `src/app/app-shell.test.tsx`
+  - `src/app/lessons/page.test.tsx`
 - 시나리오:
   - 원생 등록이 학생 목록, 레슨 일정, 수강료 수입 예정 데이터를 함께 만든다.
   - 회차권 등록이 회차권 목록과 수입 목록에 함께 반영된다.
   - 개인레슨 출석 확인이 동일 원생/악기의 회차권 잔여 회수를 1회 차감한다.
+  - 개인레슨표의 레슨원생 검색 다이얼로그가 개인레슨 원생만 보여주고 잔여 회차와 최근 레슨 상태를 표시한다.
+  - 상단 빠른 액션은 실제 레슨 시간표와 수입 페이지 링크로 동작한다.
   - 수입, 거래처, 교재 출고 버튼이 다이얼로그를 열고 목록에 반영한다.
   - 회차권 구매 금액을 저장할 DB 컬럼과 `ledger_entry_source` enum 값이 스키마 계약에 존재한다.
 - 초기 실패: 전역 데모 상태와 등록/차감 함수, 다이얼로그 연결, `lesson-ticket` 수입 소스가 없어 테스트가 실패하는 상태에서 구현을 시작했다.
@@ -30,12 +35,13 @@
 
 | 명령 또는 확인 | 결과 | 비고 |
 | --- | --- | --- |
-| `pnpm test:run --reporter=dot` | 통과 | 54 files, 224 tests |
+| `pnpm test:run --reporter=dot` | 통과 | 54 files, 226 tests |
 | `pnpm lint` | 통과 | ESLint 오류 없음 |
 | `pnpm typecheck` | 통과 | `next typegen --webpack && tsc --noEmit` |
 | `pnpm build` | 통과 | Supabase JS의 Node.js 20 deprecation warning 표시 |
+| `pnpm test:e2e` | 통과 | 8 passed |
 | `git diff --check` | 통과 | whitespace 오류 없음 |
-| Playwright smoke | 통과 | 레슨 출석 다이얼로그, 회차권 등록 다이얼로그, 모바일 교재 출고 다이얼로그 |
+| Playwright smoke | 통과 | 레슨 출석 다이얼로그, 회차권 등록 다이얼로그, 레슨원생 검색 다이얼로그, 모바일 교재 출고 다이얼로그 |
 
 ## 브라우저 증거
 
@@ -43,10 +49,13 @@
 - 데스크톱 스크린샷:
   - `/tmp/lesson-private-dialog.png`
   - `/tmp/lesson-ticket-dialog.png`
+  - `/tmp/private-student-search-dialog.png`
 - 모바일 스크린샷:
   - `/tmp/books-mobile-dialog-viewport.png`
 - 확인 내용:
   - `/lessons` 개인레슨표 날짜 클릭 시 `2026-08-21 개인레슨 출석 확인` 다이얼로그가 열린다.
+  - `/lessons` 개인레슨표의 `레슨원생 검색` 다이얼로그가 한서아/최도윤만 보여주고 회차권 잔여와 최근 레슨 상태를 표시한다.
+  - 대시보드 상단 `수납 등록`은 `/finance`, `출석 확인`은 `/lessons` 링크로 동작한다.
   - `/passes` 회차권 등록 버튼이 등록 다이얼로그를 연다.
   - `/books` 모바일 390px viewport에서 교재 출고 다이얼로그가 화면 안에 들어온다.
   - 루트 가로 스크롤 방지 검증 결과 `scrollX: 0`, `dialogFits: true`.
@@ -73,9 +82,11 @@
 - 코드 단순화:
   - 데모 변경 로직을 `src/lib/demo/academy-demo-state.ts`의 순수 reducer 성격 함수로 모았다.
   - 페이지별 임시 상태 대신 `DemoAcademyProvider`에서 동일 데이터를 공유하게 했다.
+  - 개인레슨 원생 검색은 기존 도메인 함수 `buildPrivateLessonStudentSearchResults`를 재사용해 UI 전용 계산을 늘리지 않았다.
 - 재사용한 추상화:
   - 기존 shadcn/ui `Dialog`, `Button`, `Table`, `Input`, `NativeSelect` 조합을 우선 사용했다.
   - 기존 TanStack Query invalidate 패턴과 query key 구조를 유지했다.
+  - shadcn/ui `DialogContent`의 z-index를 overlay보다 높게 고정해 모든 다이얼로그가 선명하게 표시되도록 했다.
 - 테스트 정리:
   - 사용자 행동 중심으로 다이얼로그 열기, 폼 입력, 목록 반영을 검증했다.
   - 회차권 차감과 수입 자동 생성은 도메인 상태 테스트와 통합 화면 테스트를 함께 두어 회귀 방어 범위를 나눴다.
@@ -93,5 +104,5 @@
 
 ## Git
 
-- 커밋: 예정
+- 커밋: `feat(lessons): 레슨원생 검색과 빠른 액션 연결`
 - push 여부: 사용자가 직접 push
