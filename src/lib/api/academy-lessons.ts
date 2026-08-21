@@ -88,7 +88,7 @@ type AcademyLessonAttendanceUpsertRow = {
 };
 
 const ACADEMY_LESSON_ATTENDANCE_SELECT =
-  "id, academy_id, student_id, students(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 
 export async function fetchDailyAcademyLessonAttendance(

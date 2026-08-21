@@ -104,7 +104,7 @@ export async function fetchStudentList(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, academy_id, name, student_instruments(instrument_name, weekdays, teachers(name))",
+      "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_name, weekdays, teachers!student_instruments_academy_teacher_fk(name))",
     )
     .eq("academy_id", options.academyId);
 

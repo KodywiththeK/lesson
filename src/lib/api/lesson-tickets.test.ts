@@ -74,7 +74,7 @@ describe("fetchLessonTicketList", () => {
       {
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -189,7 +189,7 @@ describe("fetchLessonTicketRegistrationOptions", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, student_instruments(instrument_id, instrument_name, lesson_type, active)",
+          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_id, instrument_name, lesson_type, active)",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -292,7 +292,7 @@ describe("registerLessonTicketGrant", () => {
       {
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)",
         eq: [
           ["academy_id", "academy-1"],
           ["student_id", "student-1"],

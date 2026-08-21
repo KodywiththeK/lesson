@@ -91,7 +91,7 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students(name), instrument_id, instrument_name, teacher_id, teachers(name), lesson_kind, starts_at, ends_at, status, attendance_records(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
 
 export async function fetchLessonWorkspaceData(
   supabase: LessonWorkspaceSupabaseClient,

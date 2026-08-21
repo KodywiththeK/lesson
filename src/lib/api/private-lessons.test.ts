@@ -78,7 +78,7 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, student_instruments(id, instrument_id, instrument_name, lesson_type, active)",
+          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active)",
         eq: ["academy_id", "academy-1"],
       },
       {
@@ -134,7 +134,7 @@ describe("registerPrivateLessonEvent", () => {
       {
         table: "lesson_events",
         select:
-          "id, academy_id, student_id, students(name), instrument_id, instrument_name, teacher_id, teachers(name), starts_at, ends_at, status",
+          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status",
         eq: [
           ["academy_id", "academy-1"],
           ["teacher_id", "teacher-1"],

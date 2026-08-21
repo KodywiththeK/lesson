@@ -141,7 +141,7 @@ export type LessonTicketGrantRegistrationSupabaseClient = {
 };
 
 const LESSON_TICKET_LIST_SELECT =
-  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students(name)";
+  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)";
 
 export async function fetchLessonTicketList(
   supabase: LessonTicketListSupabaseClient,
@@ -166,7 +166,7 @@ export async function fetchLessonTicketRegistrationOptions(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, academy_id, name, student_instruments(instrument_id, instrument_name, lesson_type, active)",
+      "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_id, instrument_name, lesson_type, active)",
     )
     .eq("academy_id", academyId);
 

@@ -190,10 +190,10 @@ export type MarkPrivateLessonAttendanceInput = {
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
-  "id, academy_id, name, student_instruments(id, instrument_id, instrument_name, lesson_type, active)";
+  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active)";
 const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part";
 const PRIVATE_LESSON_EVENT_SELECT =
-  "id, academy_id, student_id, students(name), instrument_id, instrument_name, teacher_id, teachers(name), starts_at, ends_at, status";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status";
 
 export async function fetchPrivateLessonRegistrationOptions(
   supabase: PrivateLessonRegistrationOptionsSupabaseClient,
