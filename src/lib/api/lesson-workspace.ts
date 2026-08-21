@@ -52,6 +52,13 @@ type MonthlyMemoRow = {
 
 export type LessonWorkspaceSupabaseClient =
   PrivateLessonRegistrationOptionsSupabaseClient & {
+    rpc(
+      functionName: "ensure_monthly_academy_lesson_events",
+      payload: {
+        p_academy_id: string;
+        p_month: string;
+      },
+    ): PromiseLike<SupabaseResult<number>>;
     from(table: "lesson_events"): {
       select(select: string): {
         eq(column: "academy_id", value: string): {
@@ -97,6 +104,20 @@ export async function fetchLessonWorkspaceData(
   supabase: LessonWorkspaceSupabaseClient,
   input: FetchLessonWorkspaceInput,
 ): Promise<LessonWorkspaceDemoData> {
+  const { error: ensureEventsError } = await supabase.rpc(
+    "ensure_monthly_academy_lesson_events",
+    {
+      p_academy_id: input.academyId,
+      p_month: input.month,
+    },
+  );
+
+  if (ensureEventsError) {
+    throw new Error(
+      `레슨관리표 정기 일정을 준비하지 못했습니다: ${ensureEventsError.message}`,
+    );
+  }
+
   const range = toMonthRange(input.month);
   const [eventsResult, ticketsResult, memoResult, registrationOptions] =
     await Promise.all([

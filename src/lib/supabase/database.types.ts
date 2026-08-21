@@ -915,6 +915,8 @@ export type Database = {
           id: string
           instrument_id: string
           instrument_name: string
+          paid_amount: number
+          paid_at: string | null
           registered_at: string
           remaining_count: number
           student_id: string
@@ -930,6 +932,8 @@ export type Database = {
           id?: string
           instrument_id: string
           instrument_name: string
+          paid_amount?: number
+          paid_at?: string | null
           registered_at: string
           remaining_count: number
           student_id: string
@@ -945,6 +949,8 @@ export type Database = {
           id?: string
           instrument_id?: string
           instrument_name?: string
+          paid_amount?: number
+          paid_at?: string | null
           registered_at?: string
           remaining_count?: number
           student_id?: string
@@ -1653,12 +1659,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_monthly_academy_lesson_events: {
+        Args: { p_academy_id: string; p_month: string }
+        Returns: number
+      }
+      mark_private_lesson_attendance: {
+        Args: {
+          p_academy_id: string
+          p_instrument_id: string
+          p_lesson_event_id: string
+          p_marked_at?: string
+          p_status: string
+          p_student_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       academy_member_role: "owner" | "desk" | "teacher"
       academy_member_status: "active" | "invited" | "disabled"
-      ledger_entry_source: "tuition" | "book-sale" | "payroll" | "manual"
+      ledger_entry_source:
+        | "tuition"
+        | "book-sale"
+        | "payroll"
+        | "manual"
+        | "lesson-ticket"
       ledger_entry_type: "income" | "expense"
       student_status: "enrolled" | "suspended" | "withdrawn"
     }
@@ -1793,7 +1818,13 @@ export const Constants = {
     Enums: {
       academy_member_role: ["owner", "desk", "teacher"],
       academy_member_status: ["active", "invited", "disabled"],
-      ledger_entry_source: ["tuition", "book-sale", "payroll", "manual"],
+      ledger_entry_source: [
+        "tuition",
+        "book-sale",
+        "payroll",
+        "manual",
+        "lesson-ticket",
+      ],
       ledger_entry_type: ["income", "expense"],
       student_status: ["enrolled", "suspended", "withdrawn"],
     },

@@ -51,6 +51,13 @@ describe("fetchDailyAcademyLessonAttendance", () => {
 
     expect(calls).toEqual([
       {
+        functionName: "ensure_monthly_academy_lesson_events",
+        payload: {
+          p_academy_id: "academy-1",
+          p_month: "2026-08",
+        },
+      },
+      {
         table: "lesson_events",
         select:
           "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)",
@@ -89,6 +96,19 @@ describe("fetchDailyAcademyLessonAttendance", () => {
         date: "2026-08-21",
       }),
     ).rejects.toThrow("학원 수업 출석표를 불러오지 못했습니다: permission denied");
+  });
+
+  it("정기 학원 레슨 이벤트 생성 실패를 출석표 조회 오류로 전달한다", async () => {
+    const client = createAttendanceClient([], [], {
+      rpcError: new Error("permission denied"),
+    });
+
+    await expect(
+      fetchDailyAcademyLessonAttendance(client, {
+        academyId: "academy-1",
+        date: "2026-08-21",
+      }),
+    ).rejects.toThrow("학원 수업 정기 일정을 준비하지 못했습니다: permission denied");
   });
 
   it("Supabase가 UTC timestamptz를 반환해도 한국 시간 기준 날짜와 시간을 보여준다", async () => {
@@ -197,11 +217,20 @@ function createAttendanceClient(
   calls: Array<Record<string, unknown>>,
   lessonRows: AcademyLessonAttendanceSupabaseRow[],
   options: {
+    rpcError?: Error;
     queryError?: Error;
     upsertError?: Error;
   } = {},
 ): AcademyLessonAttendanceSupabaseClient {
   return {
+    async rpc(functionName: string, payload: Record<string, unknown>) {
+      calls.push({ functionName, payload });
+
+      return {
+        data: 0,
+        error: options.rpcError ?? null,
+      };
+    },
     from(table) {
       calls.push({ table });
 

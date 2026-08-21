@@ -171,4 +171,39 @@ describe("Supabase schema contract", () => {
     expect(migrationSql).toContain("add column if not exists paid_amount");
     expect(migrationSql).toContain("add column if not exists paid_at date");
   });
+
+  it("개인레슨 출석과 회차권 차감은 public RPC 하나로 원자 처리한다", () => {
+    expect(migrationSql).toContain(
+      "create or replace function public.mark_private_lesson_attendance",
+    );
+    expect(migrationSql).toContain("for update");
+    expect(migrationSql).toContain(
+      "on conflict (academy_id, lesson_event_id, student_id, instrument_id)",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.mark_private_lesson_attendance",
+    );
+    expect(migrationSql).toContain(
+      "revoke all on function public.mark_private_lesson_attendance",
+    );
+  });
+
+  it("정기 학원 레슨은 조회 월 기준으로 중복 없이 materialize한다", () => {
+    expect(migrationSql).toContain(
+      "create or replace function public.ensure_monthly_academy_lesson_events",
+    );
+    expect(migrationSql).toContain(
+      "create unique index if not exists lesson_events_generated_enrollment_unique_idx",
+    );
+    expect(migrationSql).toContain(
+      "on conflict (academy_id, student_instrument_id, starts_at)",
+    );
+    expect(migrationSql).toContain("student.status = 'enrolled'");
+    expect(migrationSql).toContain(
+      "grant execute on function public.ensure_monthly_academy_lesson_events",
+    );
+    expect(migrationSql).toContain(
+      "revoke all on function public.ensure_monthly_academy_lesson_events",
+    );
+  });
 });

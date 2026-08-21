@@ -277,13 +277,28 @@ export function LessonManagementWorkspace({
 
       return markPrivateLessonAttendance(supabaseClientState.client, input);
     },
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
+      setPrivateLessonsOverride((current) =>
+        (current ?? privateLessons).map((candidate) =>
+          candidate.id === input.lessonEventId
+            ? {
+                ...candidate,
+                status: input.status,
+              }
+            : candidate,
+        ),
+      );
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
       });
+      toast.success(
+        input.status === "present"
+          ? "출석 처리하고 회차권을 차감했습니다."
+          : "결석 처리하고 회차권을 복구했습니다.",
+      );
     },
     onError: (error) => {
       toast.error("개인레슨 출결 저장에 실패했습니다.", {
@@ -640,6 +655,21 @@ export function LessonManagementWorkspace({
           const markedAt = new Date().toISOString();
           if (onMarkPrivateLessonAttendance) {
             onMarkPrivateLessonAttendance(lesson.id, status);
+            setPrivateLessonsOverride((current) =>
+              (current ?? privateLessons).map((candidate) =>
+                candidate.id === lesson.id
+                  ? {
+                      ...candidate,
+                      status,
+                    }
+                  : candidate,
+              ),
+            );
+            toast.success(
+              status === "present"
+                ? "출석 처리하고 회차권을 확인했습니다."
+                : "결석 처리했습니다.",
+            );
           } else if (supabaseClientState?.client) {
             savePrivateAttendanceMutation.mutate({
               academyId,
@@ -651,21 +681,6 @@ export function LessonManagementWorkspace({
               markedAt,
             });
           }
-          setPrivateLessonsOverride((current) =>
-            (current ?? privateLessons).map((candidate) =>
-              candidate.id === lesson.id
-                ? {
-                    ...candidate,
-                    status,
-                  }
-                : candidate,
-            ),
-          );
-          toast.success(
-            status === "present"
-              ? "출석 처리하고 회차권을 확인했습니다."
-              : "결석 처리했습니다.",
-          );
         }}
       />
 

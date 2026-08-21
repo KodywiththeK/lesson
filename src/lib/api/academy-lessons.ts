@@ -57,6 +57,13 @@ type AcademyLessonAttendanceFromBuilder = {
 };
 
 export type AcademyLessonAttendanceSupabaseClient = {
+  rpc(
+    functionName: "ensure_monthly_academy_lesson_events",
+    payload: {
+      p_academy_id: string;
+      p_month: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<number>>;
   from(
     table: "lesson_events" | "attendance_records",
   ): AcademyLessonAttendanceFromBuilder;
@@ -95,6 +102,20 @@ export async function fetchDailyAcademyLessonAttendance(
   supabase: AcademyLessonAttendanceSupabaseClient,
   input: FetchDailyAcademyLessonAttendanceInput,
 ): Promise<DailyAcademyAttendanceSheet> {
+  const { error: ensureEventsError } = await supabase.rpc(
+    "ensure_monthly_academy_lesson_events",
+    {
+      p_academy_id: input.academyId,
+      p_month: input.date.slice(0, 7),
+    },
+  );
+
+  if (ensureEventsError) {
+    throw new Error(
+      `학원 수업 정기 일정을 준비하지 못했습니다: ${ensureEventsError.message}`,
+    );
+  }
+
   const range = toSeoulDayRange(input.date);
   const { data, error } = await supabase
     .from("lesson_events")

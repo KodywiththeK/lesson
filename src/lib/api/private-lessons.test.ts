@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   fetchPrivateLessonRegistrationOptions,
+  markPrivateLessonAttendance,
   registerPrivateLessonEvent,
   type PrivateLessonEventSupabaseRow,
   type PrivateLessonRegistrationOptionsSupabaseClient,
@@ -200,6 +201,69 @@ describe("registerPrivateLessonEvent", () => {
       }),
     ).rejects.toThrow("선택한 선생님의 해당 시간에 이미 개인레슨이 있습니다.");
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe("markPrivateLessonAttendance", () => {
+  it("개인레슨 출석 처리를 회차권 차감 RPC로 위임한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      async rpc(functionName: string, payload: Record<string, unknown>) {
+        calls.push({ functionName, payload });
+
+        return {
+          data: null,
+          error: null,
+        };
+      },
+    };
+
+    await markPrivateLessonAttendance(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      studentId: "student-1",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      status: "present",
+      markedAt: "2026-08-21T18:05:00+09:00",
+    });
+
+    expect(calls).toEqual([
+      {
+        functionName: "mark_private_lesson_attendance",
+        payload: {
+          p_academy_id: "academy-1",
+          p_lesson_event_id: "lesson-1",
+          p_student_id: "student-1",
+          p_instrument_id: "violin",
+          p_status: "present",
+          p_marked_at: "2026-08-21T18:05:00+09:00",
+        },
+      },
+    ]);
+  });
+
+  it("회차권 차감 RPC 오류를 사용자 메시지로 변환한다", async () => {
+    const client = {
+      async rpc() {
+        return {
+          data: null,
+          error: new Error("회차권 잔여가 없습니다."),
+        };
+      },
+    };
+
+    await expect(
+      markPrivateLessonAttendance(client, {
+        academyId: "academy-1",
+        lessonEventId: "lesson-1",
+        studentId: "student-1",
+        instrumentId: "violin",
+        instrumentName: "바이올린",
+        status: "present",
+        markedAt: "2026-08-21T18:05:00+09:00",
+      }),
+    ).rejects.toThrow("개인레슨 출결을 저장하지 못했습니다: 회차권 잔여가 없습니다.");
   });
 });
 
