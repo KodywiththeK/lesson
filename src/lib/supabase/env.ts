@@ -6,12 +6,16 @@ export type SupabaseBrowserConfig = {
 };
 
 export function getSupabaseBrowserConfig(
-  env: SupabaseBrowserEnv = process.env,
+  env?: SupabaseBrowserEnv,
 ): SupabaseBrowserConfig {
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey =
-    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = env
+    ? env.NEXT_PUBLIC_SUPABASE_URL
+    : process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = env
+    ? env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    : process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL 환경변수가 필요합니다.");
