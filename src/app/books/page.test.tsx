@@ -23,8 +23,7 @@ describe("BooksPage", () => {
     expect(
       screen.getByRole("searchbox", { name: "교재 구매 검색" }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Supabase 환경변수가 설정되면 교재 구매 목록을 불러올 수 있습니다.",
-    );
+    expect(await screen.findByText("바이엘 상")).toBeInTheDocument();
+    expect(screen.getByText("스즈키 바이올린 1")).toBeInTheDocument();
   });
 });

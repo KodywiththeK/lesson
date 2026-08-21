@@ -47,12 +47,20 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
     page.getByRole("heading", { level: 1, name: "레슨 시간표" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { level: 2, name: "학원 피아노 출석 확인" }),
+    page.getByRole("heading", { level: 2, name: "레슨관리표" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
   ).toBeVisible();
   await expect(
     page
-      .getByRole("region", { name: "학원 피아노 출석 확인" })
-      .getByRole("button", { name: "출석 확인" }),
+      .getByRole("region", { name: "2026-08-21 선택 일정" })
+      .getByText("김민지"),
+  ).toBeVisible();
+
+  await page.getByRole("tab", { name: "개인레슨표" }).click();
+  await expect(
+    page.getByRole("grid", { name: "2026년 8월 개인레슨 캘린더" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "개인레슨 등록" }).click();
   await expect(page.getByRole("dialog", { name: "개인레슨 등록" })).toBeVisible();

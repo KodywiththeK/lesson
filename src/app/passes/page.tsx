@@ -1,4 +1,11 @@
+"use client";
+
 import { LessonTicketListScreen } from "@/features/lesson-tickets/lesson-ticket-list-screen";
+import {
+  createDemoLessonTicketListQueryOptions,
+  createDemoLessonTicketRegistrationOptionsQueryOptions,
+  registerDemoLessonTicket,
+} from "@/lib/demo/management-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -8,8 +15,6 @@ const currentAcademy = {
 };
 
 export default function PassesPage() {
-  const today = new Date().toISOString().slice(0, 10);
-
   return (
     <AppShell
       academyName={currentAcademy.name}
@@ -21,7 +26,12 @@ export default function PassesPage() {
       <LessonTicketListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
-        today={today}
+        today="2026-08-21"
+        queryOptionsFactory={createDemoLessonTicketListQueryOptions}
+        registrationOptionsQueryFactory={
+          createDemoLessonTicketRegistrationOptionsQueryOptions
+        }
+        registerLessonTicket={registerDemoLessonTicket}
       />
     </AppShell>
   );

@@ -23,8 +23,7 @@ describe("PassesPage", () => {
     expect(
       screen.getByRole("searchbox", { name: "회차권 검색" }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Supabase 환경변수가 설정되면 회차권 목록을 불러올 수 있습니다.",
-    );
+    const seoaRow = await screen.findByRole("row", { name: /한서아/ });
+    expect(within(seoaRow).getByText("잔여 부족")).toBeInTheDocument();
   });
 });

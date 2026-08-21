@@ -22,8 +22,7 @@ describe("StudentsPage", () => {
       "/students",
     );
     expect(screen.getByRole("searchbox", { name: "원생 검색" })).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Supabase 환경변수가 설정되면 원생 목록을 불러올 수 있습니다.",
-    );
+    expect(await screen.findByText("김민지")).toBeInTheDocument();
+    expect(screen.getByText("한서아")).toBeInTheDocument();
   });
 });

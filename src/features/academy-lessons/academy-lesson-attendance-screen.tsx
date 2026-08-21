@@ -54,6 +54,8 @@ export type DailyAcademyLessonAttendanceQueryFactory = (
 type AcademyLessonAttendanceScreenProps = {
   academyId: string;
   academyName: string;
+  initialDate?: string;
+  onDateChange?: (date: string) => void;
   attendanceQueryFactory?: DailyAcademyLessonAttendanceQueryFactory;
   markAttendance?: (
     input: MarkDailyAcademyLessonAttendanceInput,
@@ -73,11 +75,13 @@ type SupabaseClientState =
 export function AcademyLessonAttendanceScreen({
   academyId,
   academyName,
+  initialDate,
+  onDateChange,
   attendanceQueryFactory,
   markAttendance,
 }: AcademyLessonAttendanceScreenProps) {
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(() => toTodayDateInputValue());
+  const [date, setDate] = useState(() => initialDate ?? toTodayDateInputValue());
   const [open, setOpen] = useState(false);
   const hasInjectedQuery = Boolean(attendanceQueryFactory);
   const hasInjectedMutation = Boolean(markAttendance);
@@ -138,7 +142,10 @@ export function AcademyLessonAttendanceScreen({
               className="min-w-40"
               type="date"
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={(event) => {
+                setDate(event.target.value);
+                onDateChange?.(event.target.value);
+              }}
             />
           </Label>
           <Button

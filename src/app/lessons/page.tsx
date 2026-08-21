@@ -1,5 +1,5 @@
-import { AcademyLessonAttendanceScreen } from "@/features/academy-lessons/academy-lesson-attendance-screen";
-import { PrivateLessonRegistrationScreen } from "@/features/private-lessons/private-lesson-registration-screen";
+import { LessonManagementWorkspaceWithProviders } from "@/features/lessons/lesson-management-workspace";
+import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -17,16 +17,12 @@ export default function LessonsPage() {
       }}
       pageTitle="레슨 시간표"
     >
-      <div className="grid gap-8">
-        <AcademyLessonAttendanceScreen
-          academyId={currentAcademy.id}
-          academyName={currentAcademy.name}
-        />
-        <PrivateLessonRegistrationScreen
-          academyId={currentAcademy.id}
-          academyName={currentAcademy.name}
-        />
-      </div>
+      <LessonManagementWorkspaceWithProviders
+        academyId={currentAcademy.id}
+        academyName={currentAcademy.name}
+        initialDate="2026-08-21"
+        demoData={demoLessonWorkspaceData}
+      />
     </AppShell>
   );
 }

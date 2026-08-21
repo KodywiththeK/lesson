@@ -1,4 +1,7 @@
+"use client";
+
 import { FinanceLedgerListScreen } from "@/features/finance/finance-ledger-list-screen";
+import { createDemoFinanceLedgerListQueryOptions } from "@/lib/demo/management-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -19,6 +22,7 @@ export default function FinancePage() {
       <FinanceLedgerListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
+        queryOptionsFactory={createDemoFinanceLedgerListQueryOptions}
       />
     </AppShell>
   );

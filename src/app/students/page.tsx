@@ -1,4 +1,7 @@
+"use client";
+
 import { StudentListScreen } from "@/features/students/student-list-screen";
+import { createDemoStudentListQueryOptions } from "@/lib/demo/management-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -19,6 +22,7 @@ export default function StudentsPage() {
       <StudentListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
+        queryOptionsFactory={createDemoStudentListQueryOptions}
       />
     </AppShell>
   );

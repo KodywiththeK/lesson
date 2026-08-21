@@ -1,4 +1,7 @@
+"use client";
+
 import { VendorListScreen } from "@/features/vendors/vendor-list-screen";
+import { createDemoVendorListQueryOptions } from "@/lib/demo/management-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -19,6 +22,7 @@ export default function VendorsPage() {
       <VendorListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
+        queryOptionsFactory={createDemoVendorListQueryOptions}
       />
     </AppShell>
   );

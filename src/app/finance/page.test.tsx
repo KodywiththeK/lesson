@@ -23,8 +23,7 @@ describe("FinancePage", () => {
     expect(
       screen.getByRole("searchbox", { name: "입출입 내역 검색" }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Supabase 환경변수가 설정되면 입출입 내역을 불러올 수 있습니다.",
-    );
+    expect(await screen.findByText("김민지 8월 피아노 수강료")).toBeInTheDocument();
+    expect(screen.getByText("피아노 조율비")).toBeInTheDocument();
   });
 });

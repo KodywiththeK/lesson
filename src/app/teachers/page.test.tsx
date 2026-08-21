@@ -23,8 +23,7 @@ describe("TeachersPage", () => {
     expect(
       screen.getByRole("searchbox", { name: "선생님 검색" }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Supabase 환경변수가 설정되면 선생님 목록을 불러올 수 있습니다.",
-    );
+    expect(await screen.findByText("김하늘")).toBeInTheDocument();
+    expect(screen.getByText("오유진")).toBeInTheDocument();
   });
 });

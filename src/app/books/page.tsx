@@ -1,4 +1,7 @@
+"use client";
+
 import { BookPurchaseListScreen } from "@/features/books/book-purchase-list-screen";
+import { createDemoBookPurchaseListQueryOptions } from "@/lib/demo/management-demo-data";
 
 import { AppShell } from "../app-shell";
 
@@ -19,6 +22,7 @@ export default function BooksPage() {
       <BookPurchaseListScreen
         academyId={currentAcademy.id}
         academyName={currentAcademy.name}
+        queryOptionsFactory={createDemoBookPurchaseListQueryOptions}
       />
     </AppShell>
   );
