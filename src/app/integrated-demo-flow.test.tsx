@@ -64,7 +64,9 @@ describe("integrated demo flow", () => {
 
     await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
     await user.click(
-      screen.getByRole("gridcell", { name: /21(?: 메모)? 한서 한서아 18:00 오유진/ }),
+      screen.getByRole("gridcell", {
+        name: /21(?: 메모)? 한서 한서아 \[개인레슨\] 18:00 오유진/,
+      }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "2026-08-21 개인레슨 출석 확인",

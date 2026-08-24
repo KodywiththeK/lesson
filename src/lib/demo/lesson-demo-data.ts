@@ -11,6 +11,7 @@ export type LessonWorkspaceDemoData = {
   privateLessons: PrivateLesson[];
   ticketBalances: PrivateLessonTicketSearchBalance[];
   registrationOptions: PrivateLessonRegistrationOptions;
+  privateRegistrationOptions: PrivateLessonRegistrationOptions;
   calendarMemos: LessonCalendarMemo[];
   academyMemo: string;
   privateMemo: string;
@@ -35,6 +36,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           startTime: "15:00",
           endTime: "15:50",
           status: "present",
+          origin: "regular",
+          originLabel: "정기",
           markedAt: "2026-08-21T15:55:00+09:00",
         },
         {
@@ -50,6 +53,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           startTime: "16:00",
           endTime: "16:50",
           status: "pending",
+          origin: "regular",
+          originLabel: "정기",
         },
         {
           academyId: "academy-demo",
@@ -64,6 +69,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           startTime: "17:00",
           endTime: "17:50",
           status: "absent",
+          origin: "regular",
+          originLabel: "정기",
           absenceReason: "연락 대기",
           markedAt: "2026-08-21T17:10:00+09:00",
         },
@@ -105,6 +112,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           startTime: "11:00",
           endTime: "11:50",
           status: "pending",
+          origin: "special",
+          originLabel: "특강",
         },
       ],
       absenceQueue: [],
@@ -129,6 +138,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       startAt: "2026-08-21T18:00:00+09:00",
       endAt: "2026-08-21T18:40:00+09:00",
       status: "scheduled",
+      origin: "private",
+      originLabel: "개인레슨",
     },
     {
       id: "private-lesson-2",
@@ -142,6 +153,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       startAt: "2026-08-22T10:30:00+09:00",
       endAt: "2026-08-22T11:30:00+09:00",
       status: "scheduled",
+      origin: "private",
+      originLabel: "개인레슨",
     },
   ],
   ticketBalances: [
@@ -161,6 +174,50 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
     },
   ],
   registrationOptions: {
+    students: [
+      {
+        studentId: "student-1",
+        studentName: "김민지",
+        instruments: [
+          {
+            studentInstrumentId: "student-instrument-1",
+            instrumentId: "piano",
+            instrumentName: "피아노",
+          },
+        ],
+      },
+      {
+        studentId: "student-2",
+        studentName: "이서윤",
+        instruments: [
+          {
+            studentInstrumentId: "student-instrument-2",
+            instrumentId: "piano",
+            instrumentName: "피아노",
+          },
+        ],
+      },
+      {
+        studentId: "student-3",
+        studentName: "박지호",
+        instruments: [
+          {
+            studentInstrumentId: "student-instrument-3",
+            instrumentId: "piano",
+            instrumentName: "피아노",
+          },
+        ],
+      },
+    ],
+    teachers: [
+      {
+        teacherId: "teacher-1",
+        teacherName: "김하늘",
+        part: "피아노",
+      },
+    ],
+  },
+  privateRegistrationOptions: {
     students: [
       {
         studentId: "student-4",

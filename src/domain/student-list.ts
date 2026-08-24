@@ -8,9 +8,29 @@ export type StudentListRow = {
   academyId: string;
   studentId: string;
   name: string;
+  registeredOn?: string;
+  status?: string;
   teacherNames: string[];
   instrumentNames: string[];
   weekdayLabels: string[];
+  instruments?: StudentListInstrument[];
+};
+
+export type StudentListInstrument = {
+  studentInstrumentId: string;
+  teacherId: string | null;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+  lessonType: "academy" | "private" | string;
+  weekdayLabels: string[];
+  startTime: string;
+  endTime: string;
+  progress: string;
+  lessonFee: number;
+  discountTotal: number;
+  finalMonthlyFee: number;
+  active: boolean;
 };
 
 export type StudentListFilters = {

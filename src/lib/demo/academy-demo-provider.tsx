@@ -30,11 +30,13 @@ import {
   registerDemoLessonTicketPurchase,
   registerDemoManualLedgerEntry,
   registerDemoVendor,
+  updateDemoAcademyStudent,
   type DemoAcademyState,
   type DemoBookReleaseInput,
   type DemoLessonTicketPurchaseInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
+  type DemoStudentUpdateInput,
   type DemoTeacherRegistrationInput,
   type DemoVendorRegistrationInput,
 } from "./academy-demo-state";
@@ -43,6 +45,7 @@ import { queryKeys } from "../api/query-keys";
 type DemoAcademyContextValue = {
   state: DemoAcademyState;
   registerStudent: (input: DemoStudentRegistrationInput) => void;
+  updateStudent: (input: DemoStudentUpdateInput) => void;
   registerTeacher: (input: DemoTeacherRegistrationInput) => void;
   registerLessonTicketPurchase: (
     input: Omit<DemoLessonTicketPurchaseInput, "studentName" | "instrumentName"> & {
@@ -114,6 +117,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       state,
       registerStudent(input) {
         commitState((current) => registerDemoAcademyStudent(current, input));
+      },
+      updateStudent(input) {
+        commitState((current) => updateDemoAcademyStudent(current, input));
       },
       registerTeacher(input) {
         commitState((current) => registerDemoAcademyTeacher(current, input));

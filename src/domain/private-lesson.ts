@@ -1,4 +1,10 @@
 export type LessonType = "academy" | "private";
+export type LessonEventOrigin =
+  | "regular"
+  | "manual"
+  | "makeup"
+  | "private"
+  | "special";
 
 export type PrivateLessonStatus =
   | "scheduled"
@@ -19,6 +25,8 @@ export type PrivateLesson = {
   startAt: string;
   endAt: string;
   status: PrivateLessonStatus;
+  origin?: LessonEventOrigin;
+  originLabel?: string;
 };
 
 export type PrivateLessonRegistrationDraft = {

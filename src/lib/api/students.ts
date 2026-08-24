@@ -13,8 +13,19 @@ type SupabaseQueryResult<TData> = {
 };
 
 export type StudentInstrumentSupabaseRow = {
+  id?: string | null;
+  teacher_id?: string | null;
+  instrument_id?: string | null;
   instrument_name: string | null;
+  lesson_type?: string | null;
   weekdays: string[] | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  progress?: string | null;
+  lesson_fee?: number | null;
+  discount_total?: number | null;
+  final_monthly_fee?: number | null;
+  active?: boolean | null;
   teachers: {
     name: string | null;
   } | null;
@@ -31,6 +42,8 @@ export type StudentSupabaseRow = {
   id: string;
   academy_id: string;
   name: string;
+  registered_on?: string;
+  status?: string;
   student_instruments: StudentInstrumentSupabaseRow[] | null;
 };
 
@@ -83,18 +96,62 @@ export type StudentRegistrationSupabaseClient = {
       };
     };
   };
-  from(table: "student_instruments"): {
+  from(table: "student_instruments" | "lesson_series"): {
     insert(values: Record<string, unknown>): {
       select(select: string): {
         single(): PromiseLike<SupabaseQueryResult<{ id: string }>>;
       };
     };
   };
-  from(table: "student_teacher_assignments" | "lesson_events"): {
+  from(table: "student_teacher_assignments"): {
     insert(values: Record<string, unknown> | Record<string, unknown>[]): PromiseLike<
       SupabaseQueryResult<null>
     >;
   };
+};
+
+export type StudentUpdateSupabaseClient = {
+  rpc(
+    functionName: "update_student_profile_from_date",
+    payload: {
+      p_academy_id: string;
+      p_student_id: string;
+      p_name: string;
+      p_student_instrument_id: string | null;
+      p_teacher_id: string | null;
+      p_instrument_id: string;
+      p_instrument_name: string;
+      p_lesson_type: string;
+      p_weekdays: string[];
+      p_start_time: string | null;
+      p_end_time: string | null;
+      p_progress: string;
+      p_lesson_fee: number;
+      p_discount_total: number;
+      p_final_monthly_fee: number;
+      p_effective_from: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<null>>;
+};
+
+export type UpdateStudentProfileInput = {
+  academyId: string;
+  studentId: string;
+  name: string;
+  studentInstrumentId?: string;
+  teacherId?: string;
+  teacherName?: string;
+  instrumentId?: string;
+  instrumentName?: string;
+  lessonType?: "academy" | "private" | string;
+  weekdayLabels?: string[];
+  startTime?: string;
+  endTime?: string;
+  progress?: string;
+  lessonFee?: number;
+  discountTotal?: number;
+  finalMonthlyFee?: number;
+  effectiveFrom?: string;
 };
 
 export async function fetchStudentList(
@@ -104,7 +161,7 @@ export async function fetchStudentList(
   const { data, error } = await supabase
     .from("students")
     .select(
-      "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_name, weekdays, teachers!student_instruments_academy_teacher_fk(name))",
+      "id, academy_id, name, registered_on, status, student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, final_monthly_fee, active, teachers!student_instruments_academy_teacher_fk(name))",
     )
     .eq("academy_id", options.academyId);
 
@@ -113,6 +170,73 @@ export async function fetchStudentList(
   }
 
   return buildStudentList((data ?? []).map(toStudentListRow), options);
+}
+
+export async function updateStudentProfile(
+  supabase: StudentUpdateSupabaseClient,
+  input: UpdateStudentProfileInput,
+): Promise<StudentListRow> {
+  const trimmedName = input.name.trim();
+
+  if (!trimmedName) {
+    throw new Error("원생명은 필수입니다.");
+  }
+
+  const { error } = await supabase.rpc("update_student_profile_from_date", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+    p_name: trimmedName,
+    p_student_instrument_id: input.studentInstrumentId ?? null,
+    p_teacher_id: input.teacherId ?? null,
+    p_instrument_id: input.instrumentId ?? "",
+    p_instrument_name: input.instrumentName ?? "",
+    p_lesson_type: input.lessonType ?? "academy",
+    p_weekdays: input.weekdayLabels ?? [],
+    p_start_time: normalizeOptionalTime(input.startTime),
+    p_end_time: normalizeOptionalTime(input.endTime),
+    p_progress: input.progress ?? "",
+    p_lesson_fee: input.lessonFee ?? 0,
+    p_discount_total: input.discountTotal ?? 0,
+    p_final_monthly_fee: input.finalMonthlyFee ?? 0,
+    p_effective_from: input.effectiveFrom ?? toSeoulDate(new Date()),
+  });
+
+  if (error) {
+    throw new Error(`원생 정보를 수정하지 못했습니다: ${error.message}`);
+  }
+
+  const instrumentNames = input.instrumentName ? [input.instrumentName] : [];
+  const teacherNames = input.teacherName ? [input.teacherName] : [];
+  const weekdayLabels = input.weekdayLabels ?? [];
+
+  return {
+    academyId: input.academyId,
+    studentId: input.studentId,
+    name: trimmedName,
+    teacherNames,
+    instrumentNames,
+    weekdayLabels,
+    instruments: input.studentInstrumentId
+      ? [
+          {
+            studentInstrumentId: input.studentInstrumentId,
+            teacherId: input.teacherId ?? null,
+            teacherName: input.teacherName ?? "",
+            instrumentId: input.instrumentId ?? "",
+            instrumentName: input.instrumentName ?? "",
+            lessonType: input.lessonType ?? "academy",
+            weekdayLabels,
+            startTime: input.startTime ?? "",
+            endTime: input.endTime ?? "",
+            progress: input.progress ?? "",
+            lessonFee: input.lessonFee ?? 0,
+            discountTotal: input.discountTotal ?? 0,
+            finalMonthlyFee: input.finalMonthlyFee ?? 0,
+            active: true,
+          },
+        ]
+      : [],
+  };
 }
 
 export function createStudentListQueryOptions(
@@ -196,16 +320,27 @@ export async function registerStudentEnrollment(
   }
 
   if (input.lessonType === "academy") {
-    const events = buildMonthlyLessonEvents(student.id, instrument.id, input);
+    const { error: seriesError } = await supabase
+      .from("lesson_series")
+      .insert({
+        academy_id: input.academyId,
+        student_id: student.id,
+        student_instrument_id: instrument.id,
+        teacher_id: input.teacherId,
+        lesson_kind: "academy",
+        instrument_id: input.instrumentId,
+        instrument_name: input.instrumentName,
+        weekdays: input.weekdays.map(toKoreanWeekdayLabel),
+        start_time: input.startTime,
+        end_time: input.endTime,
+        effective_from: input.registeredAt,
+        active: true,
+      })
+      .select("id")
+      .single();
 
-    if (events.length > 0) {
-      const { error: lessonError } = await supabase
-        .from("lesson_events")
-        .insert(events);
-
-      if (lessonError) {
-        throw new Error(`원생 레슨 일정을 등록하지 못했습니다: ${lessonError.message}`);
-      }
+    if (seriesError) {
+      throw new Error(`원생 정기 레슨 규칙을 등록하지 못했습니다: ${seriesError.message}`);
     }
   }
 
@@ -217,44 +352,6 @@ export async function registerStudentEnrollment(
     instrumentNames: [input.instrumentName],
     weekdayLabels: input.weekdays.map(toKoreanWeekdayLabel),
   };
-}
-
-function buildMonthlyLessonEvents(
-  studentId: string,
-  studentInstrumentId: string,
-  input: RegisterStudentEnrollmentInput,
-) {
-  const registeredDate = new Date(`${input.registeredAt}T00:00:00+09:00`);
-  const year = registeredDate.getFullYear();
-  const month = registeredDate.getMonth();
-  const events: Record<string, unknown>[] = [];
-  const targetWeekdays = new Set(input.weekdays.map(toKoreanWeekdayLabel));
-
-  for (
-    let date = new Date(year, month, registeredDate.getDate());
-    date.getMonth() === month;
-    date.setDate(date.getDate() + 1)
-  ) {
-    if (!targetWeekdays.has(getKoreanWeekdayLabel(date))) {
-      continue;
-    }
-
-    const dateValue = toDateValue(date);
-    events.push({
-      academy_id: input.academyId,
-      student_id: studentId,
-      student_instrument_id: studentInstrumentId,
-      teacher_id: input.teacherId,
-      lesson_kind: "academy",
-      instrument_id: input.instrumentId,
-      instrument_name: input.instrumentName,
-      starts_at: `${dateValue} ${input.startTime}:00+09`,
-      ends_at: `${dateValue} ${input.endTime}:00+09`,
-      generated_from_enrollment: true,
-    });
-  }
-
-  return events;
 }
 
 function toKoreanWeekdayLabel(value: string) {
@@ -271,17 +368,6 @@ function toKoreanWeekdayLabel(value: string) {
   return labels[value] ?? value;
 }
 
-function getKoreanWeekdayLabel(date: Date) {
-  return ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
-}
-
-function toDateValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
   const instruments = row.student_instruments ?? [];
 
@@ -289,6 +375,8 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     academyId: row.academy_id,
     studentId: row.id,
     name: row.name,
+    registeredOn: row.registered_on,
+    status: row.status,
     teacherNames: uniqueNonEmpty(
       instruments.map((instrument) => instrument.teachers?.name),
     ),
@@ -298,7 +386,40 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     weekdayLabels: uniqueNonEmpty(
       instruments.flatMap((instrument) => instrument.weekdays ?? []),
     ),
+    instruments: instruments.map((instrument) => ({
+      studentInstrumentId: instrument.id ?? "",
+      teacherId: instrument.teacher_id ?? null,
+      teacherName: instrument.teachers?.name ?? "",
+      instrumentId: instrument.instrument_id ?? "",
+      instrumentName: instrument.instrument_name ?? "",
+      lessonType: instrument.lesson_type ?? "academy",
+      weekdayLabels: instrument.weekdays ?? [],
+      startTime: normalizeTimeForInput(instrument.start_time),
+      endTime: normalizeTimeForInput(instrument.end_time),
+      progress: instrument.progress ?? "",
+      lessonFee: instrument.lesson_fee ?? 0,
+      discountTotal: instrument.discount_total ?? 0,
+      finalMonthlyFee: instrument.final_monthly_fee ?? 0,
+      active: instrument.active ?? true,
+    })),
   };
+}
+
+function normalizeOptionalTime(value: string | undefined) {
+  return value?.trim() || null;
+}
+
+function toSeoulDate(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function normalizeTimeForInput(value: string | null | undefined) {
+  return value?.slice(0, 5) ?? "";
 }
 
 function uniqueNonEmpty(values: Array<string | null | undefined>) {

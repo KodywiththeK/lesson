@@ -28,6 +28,7 @@ export default function StudentsPage() {
             }
             teachers={useTestDemo ? demo.state.teachers : undefined}
             registerStudent={useTestDemo ? demo.registerStudent : undefined}
+            updateStudent={useTestDemo ? demo.updateStudent : undefined}
           />
         </AppShell>
       )}

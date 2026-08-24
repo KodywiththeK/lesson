@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { buildStudentList } from "@/domain/student-list";
 
@@ -15,9 +15,29 @@ const studentRows = [
     academyId: "academy-1",
     studentId: "student-1",
     name: "김민지",
+    registeredOn: "2026-08-01",
+    status: "enrolled",
     teacherNames: ["박선생"],
     instrumentNames: ["피아노"],
     weekdayLabels: ["월", "수"],
+    instruments: [
+      {
+        studentInstrumentId: "student-instrument-1",
+        teacherId: "teacher-1",
+        teacherName: "박선생",
+        instrumentId: "piano",
+        instrumentName: "피아노",
+        lessonType: "academy",
+        weekdayLabels: ["월", "수"],
+        startTime: "15:00",
+        endTime: "15:50",
+        progress: "체르니 100",
+        lessonFee: 150000,
+        discountTotal: 10000,
+        finalMonthlyFee: 140000,
+        active: true,
+      },
+    ],
   },
   {
     academyId: "academy-1",
@@ -29,8 +49,30 @@ const studentRows = [
   },
 ];
 
+const teacherRows = [
+  {
+    academyId: "academy-1",
+    teacherId: "teacher-1",
+    name: "박선생",
+    part: "피아노",
+    contact: "010-1111-1111",
+    registeredAt: "2026-08-01",
+    payType: "monthly" as const,
+  },
+  {
+    academyId: "academy-1",
+    teacherId: "teacher-2",
+    name: "최선생",
+    part: "바이올린",
+    contact: "010-2222-2222",
+    registeredAt: "2026-08-02",
+    payType: "hourly" as const,
+  },
+];
+
 function renderStudentListScreen(
   queryOptionsFactory: StudentListQueryOptionsFactory,
+  options: Partial<React.ComponentProps<typeof StudentListScreen>> = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -46,6 +88,8 @@ function renderStudentListScreen(
         academyId="academy-1"
         academyName="더 클래식"
         queryOptionsFactory={queryOptionsFactory}
+        teachers={teacherRows}
+        {...options}
       />
     </QueryClientProvider>,
   );
@@ -132,5 +176,52 @@ describe("StudentListScreen", () => {
       "원생 목록을 불러오지 못했습니다.",
     );
     expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
+  });
+
+  it("자세히보기 다이얼로그에서 원생 정보를 확인하고 바로 수정완료한다", async () => {
+    const user = userEvent.setup();
+    const updateStudent = vi.fn();
+
+    renderStudentListScreen(
+      (options) => ({
+        queryKey: ["students", options.academyId, options.search ?? ""],
+        queryFn: async () => buildStudentList(studentRows, options),
+      }),
+      { updateStudent },
+    );
+
+    const table = await screen.findByRole("table", { name: "원생 목록" });
+    await user.click(
+      within(table).getByRole("button", { name: "김민지 자세히보기" }),
+    );
+
+    const detailDialog = await screen.findByRole("dialog", {
+      name: "김민지 원생 상세",
+    });
+    expect(within(detailDialog).getByText("체르니 100")).toBeInTheDocument();
+    expect(within(detailDialog).getByText("150,000원")).toBeInTheDocument();
+
+    await user.click(within(detailDialog).getByRole("button", { name: "수정하기" }));
+    await user.clear(within(detailDialog).getByLabelText("원생명"));
+    await user.type(within(detailDialog).getByLabelText("원생명"), "김민주");
+    await user.selectOptions(within(detailDialog).getByLabelText("담당 선생님"), "teacher-2");
+    await user.click(within(detailDialog).getByLabelText("목요일"));
+
+    await user.click(within(detailDialog).getByRole("button", { name: "수정완료" }));
+
+    await waitFor(() => {
+      expect(updateStudent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          studentId: "student-1",
+          name: "김민주",
+          teacherId: "teacher-2",
+          teacherName: "최선생",
+          weekdayLabels: expect.arrayContaining(["월", "목"]),
+        }),
+      );
+    });
+    const updatedRow = (await screen.findByRole("cell", { name: "김민주" })).closest("tr");
+    expect(updatedRow).not.toBeNull();
+    expect(within(updatedRow as HTMLElement).getByRole("cell", { name: "최선생" })).toBeInTheDocument();
   });
 });

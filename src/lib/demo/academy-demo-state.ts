@@ -24,6 +24,7 @@ import type { StudentListRow } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import { registerVendor } from "@/domain/vendor";
 import type { VendorListRow } from "@/domain/vendor-list";
+import type { UpdateStudentProfileInput } from "@/lib/api/students";
 
 import { demoLessonWorkspaceData } from "./lesson-demo-data";
 import {
@@ -67,6 +68,8 @@ export type DemoStudentRegistrationInput = {
   discountTotal: number;
   finalMonthlyFee: number;
 };
+
+export type DemoStudentUpdateInput = UpdateStudentProfileInput;
 
 export type DemoTeacherRegistrationInput = {
   name: string;
@@ -307,6 +310,121 @@ export function registerDemoAcademyStudent(
         refId: source.enrollmentId,
       })),
     ],
+  };
+}
+
+export function updateDemoAcademyStudent(
+  state: DemoAcademyState,
+  input: DemoStudentUpdateInput,
+): DemoAcademyState {
+  const updatedStudent: StudentListRow = {
+    academyId: input.academyId,
+    studentId: input.studentId,
+    name: input.name,
+    teacherNames: input.teacherName ? [input.teacherName] : [],
+    instrumentNames: input.instrumentName ? [input.instrumentName] : [],
+    weekdayLabels: input.weekdayLabels ?? [],
+    instruments: input.studentInstrumentId
+      ? [
+          {
+            studentInstrumentId: input.studentInstrumentId,
+            teacherId: input.teacherId ?? null,
+            teacherName: input.teacherName ?? "",
+            instrumentId: input.instrumentId ?? "",
+            instrumentName: input.instrumentName ?? "",
+            lessonType: input.lessonType ?? "academy",
+            weekdayLabels: input.weekdayLabels ?? [],
+            startTime: input.startTime ?? "",
+            endTime: input.endTime ?? "",
+            progress: input.progress ?? "",
+            lessonFee: input.lessonFee ?? 0,
+            discountTotal: input.discountTotal ?? 0,
+            finalMonthlyFee: input.finalMonthlyFee ?? 0,
+            active: true,
+          },
+        ]
+      : [],
+  };
+  const students = state.students.map((student) =>
+    student.studentId === input.studentId
+      ? {
+          ...student,
+          ...updatedStudent,
+          registeredOn: student.registeredOn,
+          status: student.status,
+        }
+      : student,
+  );
+  const enrollments = state.enrollments.map((enrollment) =>
+    enrollment.studentId === input.studentId &&
+    (!input.studentInstrumentId ||
+      enrollment.enrollmentId === input.studentInstrumentId)
+      ? {
+          ...enrollment,
+          studentName: input.name,
+          teacherId: input.teacherId ?? enrollment.teacherId,
+          teacherName: input.teacherName ?? enrollment.teacherName,
+          instrumentId: input.instrumentId ?? enrollment.instrumentId,
+          instrumentName: input.instrumentName ?? enrollment.instrumentName,
+          lessonType: (input.lessonType as LessonType | undefined) ?? enrollment.lessonType,
+          weekdays: (input.weekdayLabels ?? enrollment.weekdays).map(toWeekdayValue),
+          startTime: input.startTime ?? enrollment.startTime,
+          endTime: input.endTime ?? enrollment.endTime,
+          progress: input.progress ?? enrollment.progress,
+          lessonFee: input.lessonFee ?? enrollment.lessonFee,
+          discountTotal: input.discountTotal ?? enrollment.discountTotal,
+          finalMonthlyFee: input.finalMonthlyFee ?? enrollment.finalMonthlyFee,
+        }
+      : enrollment,
+  );
+
+  return {
+    ...state,
+    students,
+    enrollments,
+    tickets: state.tickets.map((ticket) =>
+      ticket.studentId === input.studentId
+        ? {
+            ...ticket,
+            studentName: input.name,
+            instrumentName: input.instrumentName ?? ticket.instrumentName,
+          }
+        : ticket,
+    ),
+    privateLessons: state.privateLessons.map((lesson) =>
+      lesson.studentId === input.studentId
+        ? {
+            ...lesson,
+            studentName: input.name,
+            teacherId: input.teacherId ?? lesson.teacherId,
+            teacherName: input.teacherName ?? lesson.teacherName,
+            instrumentId: input.instrumentId ?? lesson.instrumentId,
+            instrumentName: input.instrumentName ?? lesson.instrumentName,
+          }
+        : lesson,
+    ),
+    academySheets: Object.fromEntries(
+      Object.entries(state.academySheets).map(([date, sheet]) => [
+        date,
+        {
+          ...sheet,
+          rows: sheet.rows.map((row) =>
+            row.studentId === input.studentId
+              ? {
+                  ...row,
+                  studentName: input.name,
+                  teacherId: input.teacherId ?? row.teacherId,
+                  teacherName: input.teacherName ?? row.teacherName,
+                  instrumentId: input.instrumentId ?? row.instrumentId,
+                  instrumentName: input.instrumentName ?? row.instrumentName,
+                  startTime: input.startTime ?? row.startTime,
+                  endTime: input.endTime ?? row.endTime,
+                }
+              : row,
+          ),
+        },
+      ]),
+    ),
   };
 }
 
@@ -634,4 +752,25 @@ function formatWeekday(weekday: Weekday) {
   };
 
   return labels[weekday];
+}
+
+function toWeekdayValue(value: string): Weekday {
+  const weekdays: Record<string, Weekday> = {
+    일: "sunday",
+    월: "monday",
+    화: "tuesday",
+    수: "wednesday",
+    목: "thursday",
+    금: "friday",
+    토: "saturday",
+    sunday: "sunday",
+    monday: "monday",
+    tuesday: "tuesday",
+    wednesday: "wednesday",
+    thursday: "thursday",
+    friday: "friday",
+    saturday: "saturday",
+  };
+
+  return weekdays[value] ?? "monday";
 }

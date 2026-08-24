@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
+import { nextRouterReplaceMock } from "@/test/setup";
 
 import { LessonManagementWorkspace } from "./lesson-management-workspace";
 
@@ -29,6 +30,11 @@ function renderWorkspace() {
 }
 
 describe("LessonManagementWorkspace", () => {
+  beforeEach(() => {
+    nextRouterReplaceMock.mockClear();
+    window.history.pushState(null, "", "/lessons");
+  });
+
   it("HTML 와이어프레임의 레슨 관리 탭과 학원 캘린더를 예시 데이터로 보여준다", async () => {
     renderWorkspace();
 
@@ -75,7 +81,73 @@ describe("LessonManagementWorkspace", () => {
     ).toBeInTheDocument();
   });
 
-  it("미등원 인원을 보강 처리하면 메모지에 사유와 보강일을 남긴다", async () => {
+  it("레슨표 탭은 URL 파라미터를 기준으로 선택하고 탭 변경 시 URL을 갱신한다", async () => {
+    const user = userEvent.setup();
+
+    window.history.pushState(null, "", "/lessons?lessonTab=private");
+    renderWorkspace();
+
+    expect(screen.getByRole("tab", { name: "개인레슨표" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    await user.click(screen.getByRole("tab", { name: "학원 레슨표" }));
+
+    expect(nextRouterReplaceMock).toHaveBeenCalledWith(
+      "/lessons?lessonTab=academy",
+      {
+        scroll: false,
+      },
+    );
+  });
+
+  it("학원 레슨표는 캘린더뷰와 테이블뷰를 함께 제공한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    expect(
+      screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "학원 레슨 테이블뷰" }));
+
+    const table = screen.getByRole("table", { name: "2026년 8월 학원 레슨 테이블" });
+    expect(within(table).getByRole("cell", { name: "김민지" })).toBeInTheDocument();
+    expect(within(table).getAllByRole("cell", { name: "김하늘" })[0]).toBeInTheDocument();
+
+    await user.click(
+      within(table).getByRole("button", { name: "김민지 출석 확인 열기" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" }),
+    ).toBeInTheDocument();
+  });
+
+  it("개인레슨표는 캘린더뷰와 테이블뷰를 함께 제공한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
+    await user.click(screen.getByRole("tab", { name: "개인레슨 테이블뷰" }));
+
+    const table = screen.getByRole("table", { name: "2026년 8월 개인레슨 테이블" });
+    expect(within(table).getByRole("cell", { name: "최도윤" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "오유진" })).toBeInTheDocument();
+
+    await user.click(
+      within(table).getByRole("button", { name: "최도윤 개인레슨 출석 확인 열기" }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "2026-08-22 개인레슨 출석 확인" }),
+    ).toBeInTheDocument();
+  });
+
+  it("미등원 인원을 보강 처리하면 보강일 캘린더에 보강 일정이 표시된다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -103,15 +175,58 @@ describe("LessonManagementWorkspace", () => {
       expect(screen.queryByRole("dialog", { name: "보강 입력" })).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: "메모지" }));
+    expect(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getAllByText("박지호"),
+    ).toHaveLength(2);
 
-    const memoDialog = await screen.findByRole("dialog", {
-      name: "2026-08-21 학원레슨 메모 작성",
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /24/ }),
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "2026-08-24 출석 확인" }),
+    ).toHaveTextContent("보강");
+  });
+
+  it("학원 레슨표에서 비정기 일정을 직접 추가하고 출처를 구분한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    const toolbar = screen.getByRole("toolbar", { name: "학원레슨 도구" });
+    await user.click(within(toolbar).getByRole("button", { name: "일정 추가" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "학원 일정 추가" });
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-1");
+    await user.selectOptions(within(dialog).getByLabelText("일정 유형"), "manual");
+    await user.clear(within(dialog).getByLabelText("시작 시간"));
+    await user.type(within(dialog).getByLabelText("시작 시간"), "2026-08-24T19:00");
+    await user.clear(within(dialog).getByLabelText("종료 시간"));
+    await user.type(within(dialog).getByLabelText("종료 시간"), "2026-08-24T19:40");
+    await user.type(within(dialog).getByLabelText("추가 사유"), "콩쿠르 전 보충");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "학원 일정 추가" })).not.toBeInTheDocument();
     });
 
-    expect(within(memoDialog).getByLabelText("학원레슨 특이사항 메모")).toHaveValue(
-      "[2026-08-21] 5시 피아노반 박지호 연락 대기\n[2026-08-21] 박지호 보강 사유: 감기 결석 (보강 예정일: 2026-08-24)",
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /24/ }),
     );
+
+    const dayDialog = await screen.findByRole("dialog", {
+      name: "2026-08-24 출석 확인",
+    });
+    expect(dayDialog).toHaveTextContent("김민지");
+    expect(dayDialog).toHaveTextContent("비정기");
   });
 
   it("레슨표 메모지는 선택 일자별로 저장하고 캘린더에 표시한다", async () => {

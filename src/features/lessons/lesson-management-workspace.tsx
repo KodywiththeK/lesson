@@ -10,17 +10,26 @@ import {
 } from "@tanstack/react-query";
 import {
   CalendarDays,
+  CalendarPlus,
   Check,
   ChevronLeft,
   ChevronRight,
   Clipboard,
   ClipboardCheck,
   FileText,
+  Table2,
   Search,
   Send,
   X,
 } from "lucide-react";
-import { type Dispatch, type ReactNode, type SetStateAction, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -40,11 +49,20 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   DailyAcademyAttendanceRow,
   DailyAcademyAttendanceSheet,
+  LessonEventOrigin,
 } from "@/domain/academy-lesson-attendance";
 import {
   markDailyAcademyLessonAttendance,
@@ -62,7 +80,10 @@ import type {
 } from "@/lib/api/private-lessons";
 import { markPrivateLessonAttendance } from "@/lib/api/private-lessons";
 import {
+  createAcademyLessonEvent,
+  createMakeupLessonEvent,
   createLessonWorkspaceQueryOptions,
+  type CreateAcademyLessonEventInput,
   type LessonWorkspaceSupabaseClient,
 } from "@/lib/api/lesson-workspace";
 import {
@@ -114,11 +135,16 @@ type CalendarEvent = {
   title: string;
   subtitle: string;
   status: "present" | "absent" | "pending" | "scheduled";
+  origin?: LessonEventOrigin;
+  originLabel?: string;
 };
 
 type MakeupDraft = {
   lessonEventId: string;
+  studentId: string;
   studentName: string;
+  startTime: string;
+  endTime: string;
   targetDate: string;
   reason: string;
 };
@@ -128,6 +154,9 @@ type EntityMemoDraft = {
   targetId: string;
   targetName: string;
 };
+
+type LessonTab = "academy" | "private";
+type LessonView = "calendar" | "table";
 
 const seoulFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Seoul",
@@ -169,8 +198,15 @@ export function LessonManagementWorkspace({
   onRegisterPrivateLesson,
   onMarkPrivateLessonAttendance,
 }: LessonManagementWorkspaceProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(initialDate);
+  const urlLessonTab = toLessonTab(searchParams.get("lessonTab"));
+  const [activeLessonTab, setActiveLessonTab] = useState<LessonTab>(urlLessonTab);
+  const [academyView, setAcademyView] = useState<LessonView>("calendar");
+  const [privateView, setPrivateView] = useState<LessonView>("calendar");
   const selectedMonth = selectedDate.slice(0, 7);
   const hasInjectedData = Boolean(demoData);
   const supabaseClientState = useMemo(
@@ -237,6 +273,7 @@ export function LessonManagementWorkspace({
     null,
   );
   const [absentOpen, setAbsentOpen] = useState(false);
+  const [academyEventOpen, setAcademyEventOpen] = useState(false);
   const [academyDayOpen, setAcademyDayOpen] = useState(false);
   const [privateDayOpen, setPrivateDayOpen] = useState(false);
   const [privateStudentSearchOpen, setPrivateStudentSearchOpen] =
@@ -257,6 +294,22 @@ export function LessonManagementWorkspace({
     () => privateLessons.map(toPrivateCalendarEvent).sort(compareCalendarEvents),
     [privateLessons],
   );
+  const academyTableRows = useMemo(
+    () =>
+      Object.values(academySheets)
+        .flatMap((sheet) => sheet.rows)
+        .sort(compareAcademyAttendanceRows),
+    [academySheets],
+  );
+  const privateTableRows = useMemo(
+    () =>
+      [...privateLessons].sort(
+        (left, right) =>
+          left.startAt.localeCompare(right.startAt) ||
+          left.studentName.localeCompare(right.studentName, "ko-KR"),
+      ),
+    [privateLessons],
+  );
   const selectedAcademySheet =
     academySheets[selectedDate] ?? createEmptySheet(academyId, selectedDate);
   const selectedAcademyEvents = [...selectedAcademySheet.rows].sort(
@@ -270,6 +323,8 @@ export function LessonManagementWorkspace({
   const unresolvedAbsences = selectedAcademySheet.rows.filter(
     (row) => row.status === "absent" && !resolvedAbsenceIds.has(row.lessonEventId),
   );
+  const privateRegistrationOptions =
+    initialWorkspaceData.privateRegistrationOptions;
   const registrationOptionsQueryFactory = demoData
     ? (targetAcademyId: string) => ({
         queryKey: [
@@ -277,7 +332,7 @@ export function LessonManagementWorkspace({
           "private-registration-options",
           targetAcademyId,
         ] as QueryKey,
-        queryFn: async () => demoData.registrationOptions,
+        queryFn: async () => demoData.privateRegistrationOptions,
       })
     : undefined;
   const saveAcademyAttendanceMutation = useMutation({
@@ -369,10 +424,52 @@ export function LessonManagementWorkspace({
       });
     },
   });
+  const createAcademyEventMutation = useMutation({
+    mutationFn: (input: CreateAcademyLessonEventInput) => {
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      return createAcademyLessonEvent(supabaseClientState.client, input);
+    },
+    onSuccess: (row) => {
+      setAcademySheetsOverride((current) =>
+        appendAcademyAttendanceRow(current ?? academySheets, academyId, row),
+      );
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
+      });
+      toast.success("학원 일정을 추가했습니다.");
+    },
+    onError: (error) => {
+      toast.error("학원 일정 추가에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+  const createMakeupEventMutation = useMutation({
+    mutationFn: (input: Parameters<typeof createMakeupLessonEvent>[1]) => {
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      return createMakeupLessonEvent(supabaseClientState.client, input);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
+      });
+    },
+    onError: (error) => {
+      toast.error("보강 일정 저장에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
   const privateLessonStudentResults = useMemo(
     () =>
       buildPrivateLessonStudentSearchResults(
-        initialWorkspaceData.registrationOptions.students.map((student) => ({
+        privateRegistrationOptions.students.map((student) => ({
           academyId,
           studentId: student.studentId,
           studentName: student.studentName,
@@ -383,11 +480,29 @@ export function LessonManagementWorkspace({
       ),
     [
       academyId,
-      initialWorkspaceData.registrationOptions.students,
+      privateRegistrationOptions.students,
       initialWorkspaceData.ticketBalances,
       privateLessons,
     ],
   );
+
+  const resetWorkspaceOverrides = () => {
+    setAcademySheetsOverride(null);
+    setPrivateLessonsOverride(null);
+    setCalendarMemosOverride(null);
+  };
+
+  const handleLessonTabChange = (value: string) => {
+    const nextTab = toLessonTab(value);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("lessonTab", nextTab);
+    const nextQuery = nextParams.toString();
+
+    setActiveLessonTab(nextTab);
+    router.replace(`${pathname}${nextQuery ? `?${nextQuery}` : ""}`, {
+      scroll: false,
+    });
+  };
 
   if (!hasInjectedData && supabaseClientState?.error) {
     return (
@@ -436,18 +551,18 @@ export function LessonManagementWorkspace({
               updateSelectedDate(event.target.value, {
                 selectedMonth,
                 setSelectedDate,
-                resetOverrides: () => {
-                  setAcademySheetsOverride(null);
-                  setPrivateLessonsOverride(null);
-                  setCalendarMemosOverride(null);
-                },
+                resetOverrides: resetWorkspaceOverrides,
               })
             }
           />
         </Label>
       </div>
 
-      <Tabs defaultValue="academy" className="gap-4">
+      <Tabs
+        value={activeLessonTab}
+        onValueChange={handleLessonTabChange}
+        className="gap-4"
+      >
         <TabsList className="grid h-auto w-full grid-cols-2 md:w-fit">
           <TabsTrigger value="academy">
             <CalendarDays aria-hidden="true" />
@@ -465,48 +580,74 @@ export function LessonManagementWorkspace({
             memoButtonLabel="메모지"
             onMemoClick={() => setAcademyMemoOpen(true)}
             actions={
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => setAbsentOpen(true)}
-              >
-                <X aria-hidden="true" />
-                미등원인원
-              </Button>
+              <>
+                <Button type="button" onClick={() => setAcademyEventOpen(true)}>
+                  <CalendarPlus aria-hidden="true" />
+                  일정 추가
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setAbsentOpen(true)}
+                >
+                  <X aria-hidden="true" />
+                  미등원인원
+                </Button>
+              </>
             }
           />
 
           <div className="grid gap-4">
-            <LessonMonthCalendar
-              ariaLabel={toCalendarAriaLabel(selectedDate, "학원 레슨 캘린더")}
-              selectedDate={selectedDate}
-              events={academyEvents}
-              memoDates={academyMemoDates}
-              variant="academy"
-              onChangeMonth={(month) => {
-                updateSelectedMonth(month, {
-                  selectedDate,
-                  setSelectedDate,
-                  resetOverrides: () => {
-                    setAcademySheetsOverride(null);
-                    setPrivateLessonsOverride(null);
-                    setCalendarMemosOverride(null);
-                  },
-                });
-              }}
-              onSelectDate={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: () => {
-                    setAcademySheetsOverride(null);
-                    setPrivateLessonsOverride(null);
-                    setCalendarMemosOverride(null);
-                  },
-                });
-                setAcademyDayOpen(true);
-              }}
+            <LessonViewTabs
+              labelPrefix="학원 레슨"
+              value={academyView}
+              onValueChange={setAcademyView}
             />
+            {academyView === "calendar" ? (
+              <LessonMonthCalendar
+                ariaLabel={toCalendarAriaLabel(selectedDate, "학원 레슨 캘린더")}
+                selectedDate={selectedDate}
+                events={academyEvents}
+                memoDates={academyMemoDates}
+                variant="academy"
+                onChangeMonth={(month) => {
+                  updateSelectedMonth(month, {
+                    selectedDate,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                }}
+                onSelectDate={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setAcademyDayOpen(true);
+                }}
+              />
+            ) : (
+              <AcademyLessonTableView
+                selectedMonth={selectedMonth}
+                selectedDate={selectedDate}
+                rows={academyTableRows}
+                onChangeMonth={(month) => {
+                  updateSelectedMonth(month, {
+                    selectedDate,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                }}
+                onOpenDay={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setAcademyDayOpen(true);
+                }}
+              />
+            )}
           </div>
 
         </TabsContent>
@@ -523,6 +664,7 @@ export function LessonManagementWorkspace({
                   academyName={academyName}
                   displayMode="button"
                   registrationOptionsQueryFactory={registrationOptionsQueryFactory}
+                  ticketBalances={initialWorkspaceData.ticketBalances}
                   registerPrivateLesson={
                     demoData || onRegisterPrivateLesson
                       ? async (input) => {
@@ -561,36 +703,56 @@ export function LessonManagementWorkspace({
           />
 
           <div className="grid gap-4">
-            <LessonMonthCalendar
-              ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
-              selectedDate={selectedDate}
-              events={privateEvents}
-              memoDates={privateMemoDates}
-              variant="private"
-              onChangeMonth={(month) => {
-                updateSelectedMonth(month, {
-                  selectedDate,
-                  setSelectedDate,
-                  resetOverrides: () => {
-                    setAcademySheetsOverride(null);
-                    setPrivateLessonsOverride(null);
-                    setCalendarMemosOverride(null);
-                  },
-                });
-              }}
-              onSelectDate={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: () => {
-                    setAcademySheetsOverride(null);
-                    setPrivateLessonsOverride(null);
-                    setCalendarMemosOverride(null);
-                  },
-                });
-                setPrivateDayOpen(true);
-              }}
+            <LessonViewTabs
+              labelPrefix="개인레슨"
+              value={privateView}
+              onValueChange={setPrivateView}
             />
+            {privateView === "calendar" ? (
+              <LessonMonthCalendar
+                ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
+                selectedDate={selectedDate}
+                events={privateEvents}
+                memoDates={privateMemoDates}
+                variant="private"
+                onChangeMonth={(month) => {
+                  updateSelectedMonth(month, {
+                    selectedDate,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                }}
+                onSelectDate={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setPrivateDayOpen(true);
+                }}
+              />
+            ) : (
+              <PrivateLessonTableView
+                selectedMonth={selectedMonth}
+                selectedDate={selectedDate}
+                lessons={privateTableRows}
+                onChangeMonth={(month) => {
+                  updateSelectedMonth(month, {
+                    selectedDate,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                }}
+                onOpenDay={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setPrivateDayOpen(true);
+                }}
+              />
+            )}
           </div>
         </TabsContent>
       </Tabs>
@@ -687,11 +849,51 @@ export function LessonManagementWorkspace({
         onOpenMakeup={(row) =>
           setMakeupDraft({
             lessonEventId: row.lessonEventId,
+            studentId: row.studentId,
             studentName: row.studentName,
+            startTime: row.startTime,
+            endTime: row.endTime,
             targetDate: selectedDate,
             reason: "",
           })
         }
+      />
+
+      <AcademyLessonEventDialog
+        open={academyEventOpen}
+        academyId={academyId}
+        selectedDate={selectedDate}
+        options={initialWorkspaceData.registrationOptions}
+        onOpenChange={setAcademyEventOpen}
+        onSave={(input) => {
+          if (!demoData && supabaseClientState?.client) {
+            createAcademyEventMutation.mutate(input, {
+              onSuccess: () => setAcademyEventOpen(false),
+            });
+            return;
+          }
+
+          setAcademySheetsOverride((current) =>
+            appendAcademyAttendanceRow(current ?? academySheets, academyId, {
+              academyId,
+              lessonEventId: `academy-manual-${Date.now()}`,
+              studentId: input.studentId,
+              studentName: input.studentName,
+              teacherId: input.teacherId,
+              teacherName: input.teacherName,
+              instrumentId: input.instrumentId,
+              instrumentName: input.instrumentName,
+              date: toSeoulDate(input.startAt),
+              startTime: toSeoulHourMinute(input.startAt),
+              endTime: toSeoulHourMinute(input.endAt),
+              status: "pending",
+              origin: input.origin,
+              originLabel: formatOriginLabel(input.origin),
+            }),
+          );
+          setAcademyEventOpen(false);
+          toast.success("학원 일정을 추가했습니다.");
+        }}
       />
 
       <AcademyDayAttendanceDialog
@@ -774,35 +976,50 @@ export function LessonManagementWorkspace({
         onChange={setMakeupDraft}
         onClose={() => setMakeupDraft(null)}
         onConfirm={(draft) => {
-          setResolvedAbsenceIds((current) => new Set(current).add(draft.lessonEventId));
-          const nextMemo = `${academyMemo.trim()}\n[${selectedDate}] ${draft.studentName} 보강 사유: ${draft.reason} (보강 예정일: ${draft.targetDate})`.trim();
-          setCalendarMemosOverride((current) =>
-            upsertCalendarMemo(current ?? calendarMemos, {
-              academyId,
-              lessonKind: "academy",
-              date: selectedDate,
-              content: nextMemo,
-              unread: false,
-            }),
-          );
           if (!demoData && supabaseClientState?.client) {
-            saveMemoMutation.mutate({
+            createMakeupEventMutation.mutate({
               academyId,
-              lessonKind: "academy",
-              date: selectedDate,
-              content: nextMemo,
+              sourceLessonEventId: draft.lessonEventId,
+              studentId: draft.studentId,
+              targetDate: draft.targetDate,
+              startTime: draft.startTime,
+              endTime: draft.endTime,
+              reason: draft.reason,
+            }, {
+              onSuccess: () => {
+                setResolvedAbsenceIds((current) =>
+                  new Set(current).add(draft.lessonEventId),
+                );
+                setMakeupDraft(null);
+                setAbsentOpen(false);
+                toast.success("보강 일정을 저장했습니다.");
+              },
             });
+            return;
           }
+
+          setResolvedAbsenceIds((current) => new Set(current).add(draft.lessonEventId));
+          setAcademySheetsOverride((current) =>
+            appendAcademyAttendanceRow(
+              current ?? academySheets,
+              academyId,
+              toMakeupAttendanceRow({
+                academyId,
+                draft,
+                sourceRows: selectedAcademyEvents,
+              }),
+            ),
+          );
           setMakeupDraft(null);
           setAbsentOpen(false);
-          toast.success("보강 일정을 기록했습니다.");
+          toast.success("보강 일정을 저장했습니다.");
         }}
       />
 
       <ScheduleDialog
         open={scheduleOpen}
         lessons={privateLessons}
-        registrationOptions={initialWorkspaceData.registrationOptions}
+        registrationOptions={privateRegistrationOptions}
         selectedDate={selectedDate}
         onOpenChange={setScheduleOpen}
       />
@@ -848,6 +1065,202 @@ export function LessonManagementWorkspace({
   );
 }
 
+function AcademyLessonEventDialog({
+  open,
+  academyId,
+  selectedDate,
+  options,
+  onOpenChange,
+  onSave,
+}: {
+  open: boolean;
+  academyId: string;
+  selectedDate: string;
+  options: PrivateLessonRegistrationOptions;
+  onOpenChange: (open: boolean) => void;
+  onSave: (input: CreateAcademyLessonEventInput) => void;
+}) {
+  const [studentId, setStudentId] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  const [origin, setOrigin] = useState<"manual" | "special">("manual");
+  const [startAt, setStartAt] = useState(`${selectedDate}T15:00`);
+  const [endAt, setEndAt] = useState(`${selectedDate}T15:50`);
+  const [reason, setReason] = useState("");
+  const selectedStudent = options.students.find(
+    (student) => student.studentId === studentId,
+  );
+  const selectedInstrument = selectedStudent?.instruments.find(
+    (instrument) => instrument.instrumentId === instrumentId,
+  );
+  const selectedTeacher = options.teachers.find(
+    (teacher) => teacher.teacherId === teacherId,
+  );
+  const canSubmit =
+    Boolean(selectedStudent) &&
+    Boolean(selectedInstrument) &&
+    Boolean(selectedTeacher) &&
+    Boolean(startAt) &&
+    Boolean(endAt) &&
+    reason.trim().length > 0;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          setStartAt(`${selectedDate}T15:00`);
+          setEndAt(`${selectedDate}T15:50`);
+        }
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>학원 일정 추가</DialogTitle>
+          <DialogDescription>
+            정기 일정과 별도로 캘린더에 표시할 학원 레슨을 등록합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            if (!selectedStudent || !selectedInstrument || !selectedTeacher) {
+              return;
+            }
+
+            onSave({
+              academyId,
+              studentId: selectedStudent.studentId,
+              studentName: selectedStudent.studentName,
+              studentInstrumentId: selectedInstrument.studentInstrumentId,
+              instrumentId: selectedInstrument.instrumentId,
+              instrumentName: selectedInstrument.instrumentName,
+              teacherId: selectedTeacher.teacherId,
+              teacherName: selectedTeacher.teacherName,
+              startAt: toSeoulIsoOffset(startAt),
+              endAt: toSeoulIsoOffset(endAt),
+              origin,
+              reason,
+            });
+          }}
+        >
+          <Label className="grid gap-1">
+            <span>원생</span>
+            <NativeSelect
+              aria-label="원생"
+              value={studentId}
+              onChange={(event) => {
+                const nextStudentId = event.target.value;
+                const nextStudent = options.students.find(
+                  (student) => student.studentId === nextStudentId,
+                );
+
+                setStudentId(nextStudentId);
+                setInstrumentId(nextStudent?.instruments[0]?.instrumentId ?? "");
+              }}
+            >
+              <NativeSelectOption value="">원생 선택</NativeSelectOption>
+              {options.students.map((student) => (
+                <NativeSelectOption key={student.studentId} value={student.studentId}>
+                  {student.studentName}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
+          <Label className="grid gap-1">
+            <span>악기</span>
+            <NativeSelect
+              aria-label="악기"
+              value={instrumentId}
+              disabled={!selectedStudent}
+              onChange={(event) => setInstrumentId(event.target.value)}
+            >
+              <NativeSelectOption value="">악기 선택</NativeSelectOption>
+              {(selectedStudent?.instruments ?? []).map((instrument) => (
+                <NativeSelectOption
+                  key={instrument.instrumentId}
+                  value={instrument.instrumentId}
+                >
+                  {instrument.instrumentName}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
+          <Label className="grid gap-1">
+            <span>선생님</span>
+            <NativeSelect
+              aria-label="선생님"
+              value={teacherId}
+              disabled={!selectedInstrument}
+              onChange={(event) => setTeacherId(event.target.value)}
+            >
+              <NativeSelectOption value="">선생님 선택</NativeSelectOption>
+              {options.teachers.map((teacher) => (
+                <NativeSelectOption key={teacher.teacherId} value={teacher.teacherId}>
+                  {teacher.teacherName}
+                  {teacher.part ? ` / ${teacher.part}` : ""}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
+          <Label className="grid gap-1">
+            <span>일정 유형</span>
+            <NativeSelect
+              aria-label="일정 유형"
+              value={origin}
+              onChange={(event) =>
+                setOrigin(event.target.value === "special" ? "special" : "manual")
+              }
+            >
+              <NativeSelectOption value="manual">비정기</NativeSelectOption>
+              <NativeSelectOption value="special">특강</NativeSelectOption>
+            </NativeSelect>
+          </Label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Label className="grid gap-1">
+              <span>시작 시간</span>
+              <Input
+                aria-label="시작 시간"
+                type="datetime-local"
+                value={startAt}
+                onChange={(event) => setStartAt(event.target.value)}
+              />
+            </Label>
+            <Label className="grid gap-1">
+              <span>종료 시간</span>
+              <Input
+                aria-label="종료 시간"
+                type="datetime-local"
+                value={endAt}
+                onChange={(event) => setEndAt(event.target.value)}
+              />
+            </Label>
+          </div>
+          <Label className="grid gap-1">
+            <span>추가 사유</span>
+            <Textarea
+              aria-label="추가 사유"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Label>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              취소
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              저장
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function LessonToolbar({
   ariaLabel,
   memoButtonLabel,
@@ -876,6 +1289,84 @@ function LessonToolbar({
   );
 }
 
+function LessonViewTabs({
+  labelPrefix,
+  value,
+  onValueChange,
+}: {
+  labelPrefix: string;
+  value: LessonView;
+  onValueChange: (value: LessonView) => void;
+}) {
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(nextValue) => onValueChange(toLessonView(nextValue))}
+      className="gap-3"
+    >
+      <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+        <TabsTrigger value="calendar">
+          <CalendarDays aria-hidden="true" />
+          {labelPrefix} 캘린더뷰
+        </TabsTrigger>
+        <TabsTrigger value="table">
+          <Table2 aria-hidden="true" />
+          {labelPrefix} 테이블뷰
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
+function LessonMonthControl({
+  variantLabel,
+  selectedMonth,
+  onChangeMonth,
+}: {
+  variantLabel: string;
+  selectedMonth: string;
+  onChangeMonth: (month: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={`${variantLabel} 이전 달`}
+          onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
+        >
+          <ChevronLeft aria-hidden="true" />
+        </Button>
+        <Label className="sr-only" htmlFor={`${toControlId(variantLabel)}-month`}>
+          {variantLabel} 월 선택
+        </Label>
+        <Input
+          id={`${toControlId(variantLabel)}-month`}
+          aria-label={`${variantLabel} 월 선택`}
+          type="month"
+          value={selectedMonth}
+          onChange={(event) => onChangeMonth(event.target.value)}
+          className="w-40"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={`${variantLabel} 다음 달`}
+          onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
+        >
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
+      <p className="text-sm font-medium text-muted-foreground">
+        {formatMonthLabel(selectedMonth)}
+      </p>
+    </div>
+  );
+}
+
 function LessonMonthCalendar({
   ariaLabel,
   selectedDate,
@@ -899,41 +1390,12 @@ function LessonMonthCalendar({
 
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label={`${variantLabel} 이전 달`}
-            onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </Button>
-          <Label className="sr-only" htmlFor={`${variant}-calendar-month`}>
-            {variantLabel} 월 선택
-          </Label>
-          <Input
-            id={`${variant}-calendar-month`}
-            aria-label={`${variantLabel} 월 선택`}
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => onChangeMonth(event.target.value)}
-            className="w-40"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label={`${variantLabel} 다음 달`}
-            onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-          >
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        </div>
-        <p className="text-sm font-medium text-muted-foreground">
-          {formatMonthLabel(selectedMonth)}
-        </p>
+      <div className="mb-3">
+        <LessonMonthControl
+          variantLabel={variantLabel}
+          selectedMonth={selectedMonth}
+          onChangeMonth={onChangeMonth}
+        />
       </div>
       <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
         {["일", "월", "화", "수", "목", "금", "토"].map((weekday) => (
@@ -979,6 +1441,7 @@ function LessonMonthCalendar({
                   </span>
                   <span className="hidden truncate sm:block">{event.title}</span>
                   <span className="hidden truncate font-normal opacity-80 sm:block">
+                    {event.originLabel ? `[${event.originLabel}] ` : ""}
                     {event.startTime} {event.subtitle}
                   </span>
                 </span>
@@ -992,6 +1455,184 @@ function LessonMonthCalendar({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function AcademyLessonTableView({
+  selectedMonth,
+  selectedDate,
+  rows,
+  onChangeMonth,
+  onOpenDay,
+}: {
+  selectedMonth: string;
+  selectedDate: string;
+  rows: DailyAcademyAttendanceRow[];
+  onChangeMonth: (month: string) => void;
+  onOpenDay: (date: string) => void;
+}) {
+  const monthRows = rows.filter((row) => row.date.startsWith(selectedMonth));
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-border bg-card p-3">
+      <LessonMonthControl
+        variantLabel="학원 레슨 테이블"
+        selectedMonth={selectedMonth}
+        onChangeMonth={onChangeMonth}
+      />
+      <Table
+        aria-label={`${formatMonthLabel(selectedMonth)} 학원 레슨 테이블`}
+        className="min-w-[54rem]"
+      >
+        <TableHeader className="bg-muted text-muted-foreground">
+          <TableRow>
+            <TableHead className="px-4 py-3">날짜</TableHead>
+            <TableHead className="px-4 py-3">시간</TableHead>
+            <TableHead className="px-4 py-3">원생</TableHead>
+            <TableHead className="px-4 py-3">악기</TableHead>
+            <TableHead className="px-4 py-3">선생님</TableHead>
+            <TableHead className="px-4 py-3">상태</TableHead>
+            <TableHead className="px-4 py-3 text-right">처리</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {monthRows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                해당 월에 등록된 학원 레슨이 없습니다.
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {monthRows.map((row) => (
+            <TableRow
+              key={row.lessonEventId}
+              data-state={row.date === selectedDate ? "selected" : undefined}
+            >
+              <TableCell className="px-4 py-3">{row.date}</TableCell>
+              <TableCell className="px-4 py-3">
+                {row.startTime}-{row.endTime}
+              </TableCell>
+              <TableCell className="px-4 py-3 font-medium">
+                {row.studentName}
+              </TableCell>
+              <TableCell className="px-4 py-3">{row.instrumentName}</TableCell>
+              <TableCell className="px-4 py-3">{row.teacherName ?? "-"}</TableCell>
+              <TableCell className="px-4 py-3">
+                <div className="flex flex-wrap gap-1">
+                  <OriginBadge label={row.originLabel} />
+                  <AttendanceBadge status={row.status} />
+                </div>
+              </TableCell>
+              <TableCell className="px-4 py-3 text-right">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${row.studentName} 출석 확인 열기`}
+                  onClick={() => onOpenDay(row.date)}
+                >
+                  <ClipboardCheck aria-hidden="true" />
+                  출석 확인
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function PrivateLessonTableView({
+  selectedMonth,
+  selectedDate,
+  lessons,
+  onChangeMonth,
+  onOpenDay,
+}: {
+  selectedMonth: string;
+  selectedDate: string;
+  lessons: PrivateLesson[];
+  onChangeMonth: (month: string) => void;
+  onOpenDay: (date: string) => void;
+}) {
+  const monthLessons = lessons.filter((lesson) =>
+    toSeoulDate(lesson.startAt).startsWith(selectedMonth),
+  );
+
+  return (
+    <div className="grid gap-3 rounded-lg border border-border bg-card p-3">
+      <LessonMonthControl
+        variantLabel="개인레슨 테이블"
+        selectedMonth={selectedMonth}
+        onChangeMonth={onChangeMonth}
+      />
+      <Table
+        aria-label={`${formatMonthLabel(selectedMonth)} 개인레슨 테이블`}
+        className="min-w-[54rem]"
+      >
+        <TableHeader className="bg-muted text-muted-foreground">
+          <TableRow>
+            <TableHead className="px-4 py-3">날짜</TableHead>
+            <TableHead className="px-4 py-3">시간</TableHead>
+            <TableHead className="px-4 py-3">원생</TableHead>
+            <TableHead className="px-4 py-3">악기</TableHead>
+            <TableHead className="px-4 py-3">선생님</TableHead>
+            <TableHead className="px-4 py-3">상태</TableHead>
+            <TableHead className="px-4 py-3 text-right">처리</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {monthLessons.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                해당 월에 등록된 개인레슨이 없습니다.
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {monthLessons.map((lesson) => {
+            const date = toSeoulDate(lesson.startAt);
+
+            return (
+              <TableRow
+                key={lesson.id}
+                data-state={date === selectedDate ? "selected" : undefined}
+              >
+                <TableCell className="px-4 py-3">{date}</TableCell>
+                <TableCell className="px-4 py-3">
+                  {toSeoulHourMinute(lesson.startAt)}-
+                  {toSeoulHourMinute(lesson.endAt)}
+                </TableCell>
+                <TableCell className="px-4 py-3 font-medium">
+                  {lesson.studentName}
+                </TableCell>
+                <TableCell className="px-4 py-3">{lesson.instrumentName}</TableCell>
+                <TableCell className="px-4 py-3">{lesson.teacherName}</TableCell>
+                <TableCell className="px-4 py-3">
+                  <Badge
+                    variant={lesson.status === "present" ? "default" : "outline"}
+                  >
+                    {formatPrivateLessonStatus(lesson.status)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="px-4 py-3 text-right">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${lesson.studentName} 개인레슨 출석 확인 열기`}
+                    onClick={() => onOpenDay(date)}
+                  >
+                    <ClipboardCheck aria-hidden="true" />
+                    출석 확인
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -1171,6 +1812,7 @@ function AcademyDayAttendanceDialog({
               <div>
                 <div className="flex items-center gap-2">
                   <strong className="text-sm">{row.studentName}</strong>
+                  <OriginBadge label={row.originLabel} />
                   <AttendanceBadge status={row.status} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1274,6 +1916,7 @@ function PrivateDayAttendanceDialog({
               <div>
                 <div className="flex items-center gap-2">
                   <strong className="text-sm">{lesson.studentName}</strong>
+                  <OriginBadge label={lesson.originLabel} />
                   <Badge variant={lesson.status === "present" ? "default" : "outline"}>
                     {formatPrivateLessonStatus(lesson.status)}
                   </Badge>
@@ -1643,6 +2286,14 @@ function AttendanceBadge({
   return <Badge variant="secondary">대기</Badge>;
 }
 
+function OriginBadge({ label }: { label: string | undefined }) {
+  if (!label) {
+    return null;
+  }
+
+  return <Badge variant="outline">{label}</Badge>;
+}
+
 function indexSheets(sheets: DailyAcademyAttendanceSheet[]) {
   return Object.fromEntries(sheets.map((sheet) => [sheet.date, sheet]));
 }
@@ -1685,6 +2336,51 @@ function updateAttendanceSheets(
   }
 
   return next;
+}
+
+function appendAcademyAttendanceRow(
+  sheets: Record<string, DailyAcademyAttendanceSheet>,
+  academyId: string,
+  row: DailyAcademyAttendanceRow,
+) {
+  const existingSheet = sheets[row.date] ?? createEmptySheet(academyId, row.date);
+  const rows = [...existingSheet.rows, row].sort(compareAcademyAttendanceRows);
+
+  return {
+    ...sheets,
+    [row.date]: toSheet(academyId, row.date, rows),
+  };
+}
+
+function toMakeupAttendanceRow({
+  academyId,
+  draft,
+  sourceRows,
+}: {
+  academyId: string;
+  draft: MakeupDraft;
+  sourceRows: DailyAcademyAttendanceRow[];
+}): DailyAcademyAttendanceRow {
+  const sourceRow = sourceRows.find(
+    (row) => row.lessonEventId === draft.lessonEventId,
+  );
+
+  return {
+    academyId,
+    lessonEventId: `makeup-${draft.lessonEventId}-${draft.targetDate}`,
+    studentId: draft.studentId,
+    studentName: draft.studentName,
+    instrumentId: sourceRow?.instrumentId ?? "",
+    instrumentName: sourceRow?.instrumentName ?? "",
+    teacherId: sourceRow?.teacherId,
+    teacherName: sourceRow?.teacherName,
+    date: draft.targetDate,
+    startTime: draft.startTime,
+    endTime: draft.endTime,
+    status: "pending",
+    origin: "makeup",
+    originLabel: "보강",
+  };
 }
 
 function toSheet(
@@ -1773,6 +2469,10 @@ function createEmptyWorkspaceData(): LessonWorkspaceDemoData {
       students: [],
       teachers: [],
     },
+    privateRegistrationOptions: {
+      students: [],
+      teachers: [],
+    },
     calendarMemos: [],
     academyMemo: "",
     privateMemo: "",
@@ -1804,6 +2504,8 @@ function toAcademyCalendarEvent(row: DailyAcademyAttendanceRow): CalendarEvent {
     title: row.studentName,
     subtitle: row.instrumentName,
     status: row.status,
+    origin: row.origin,
+    originLabel: row.originLabel,
   };
 }
 
@@ -1819,6 +2521,8 @@ function toPrivateCalendarEvent(lesson: PrivateLesson): CalendarEvent {
       lesson.status === "present" || lesson.status === "absent"
         ? lesson.status
         : "scheduled",
+    origin: lesson.origin,
+    originLabel: lesson.originLabel,
   };
 }
 
@@ -1827,6 +2531,17 @@ function compareCalendarEvents(left: CalendarEvent, right: CalendarEvent) {
     left.date.localeCompare(right.date) ||
     left.startTime.localeCompare(right.startTime) ||
     left.title.localeCompare(right.title, "ko-KR")
+  );
+}
+
+function compareAcademyAttendanceRows(
+  left: DailyAcademyAttendanceRow,
+  right: DailyAcademyAttendanceRow,
+) {
+  return (
+    left.date.localeCompare(right.date) ||
+    left.startTime.localeCompare(right.startTime) ||
+    left.studentName.localeCompare(right.studentName, "ko-KR")
   );
 }
 
@@ -1845,6 +2560,8 @@ function toRegisteredPrivateLesson(
     startAt: input.startAt,
     endAt: input.endAt,
     status: "scheduled",
+    origin: "private",
+    originLabel: "개인레슨",
   };
 }
 
@@ -1974,6 +2691,30 @@ function formatPrivateLessonStatus(status: PrivateLesson["status"]) {
   return labels[status];
 }
 
+function formatOriginLabel(origin: LessonEventOrigin) {
+  const labels: Record<LessonEventOrigin, string> = {
+    regular: "정기",
+    manual: "비정기",
+    makeup: "보강",
+    private: "개인레슨",
+    special: "특강",
+  };
+
+  return labels[origin];
+}
+
+function toLessonTab(value: string | null): LessonTab {
+  return value === "private" ? "private" : "academy";
+}
+
+function toLessonView(value: string): LessonView {
+  return value === "table" ? "table" : "calendar";
+}
+
+function toControlId(value: string) {
+  return value.replace(/\s+/g, "-");
+}
+
 function formatRecentPrivateLesson(
   recentLesson: PrivateLessonStudentSearchResult["recentLesson"],
 ) {
@@ -1986,4 +2727,8 @@ function formatRecentPrivateLesson(
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
+}
+
+function toSeoulIsoOffset(value: string) {
+  return `${value}:00+09:00`;
 }

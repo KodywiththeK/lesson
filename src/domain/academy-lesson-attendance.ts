@@ -1,6 +1,12 @@
 import type { AcademyLessonEvent } from "./academy-lesson-schedule";
 
 export type AcademyLessonAttendanceStatus = "pending" | "present" | "absent";
+export type LessonEventOrigin =
+  | "regular"
+  | "manual"
+  | "makeup"
+  | "private"
+  | "special";
 
 export type DailyAcademyAttendanceOptions = {
   academyId: string;
@@ -20,6 +26,8 @@ export type DailyAcademyAttendanceRow = {
   startTime: string;
   endTime: string;
   status: AcademyLessonAttendanceStatus;
+  origin?: LessonEventOrigin;
+  originLabel?: string;
   absenceReason?: string;
   markedAt?: string;
 };

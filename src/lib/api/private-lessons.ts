@@ -31,6 +31,8 @@ export type PrivateLessonRegistrationOptions = {
   teachers: PrivateLessonRegistrationTeacherOption[];
 };
 
+type LessonRegistrationOptionLessonType = "academy" | "private";
+
 export type PrivateLessonRegistrationStudentSupabaseRow = {
   id: string;
   academy_id: string;
@@ -69,6 +71,7 @@ export type PrivateLessonEventSupabaseRow = {
   starts_at: string;
   ends_at: string;
   status: string;
+  origin?: string | null;
 };
 
 type PrivateLessonRegistrationOptionsSelectBuilder<
@@ -163,11 +166,38 @@ const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
   "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active)";
 const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part";
 const PRIVATE_LESSON_EVENT_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin";
 
 export async function fetchPrivateLessonRegistrationOptions(
   supabase: PrivateLessonRegistrationOptionsSupabaseClient,
   academyId: string,
+): Promise<PrivateLessonRegistrationOptions> {
+  return fetchLessonRegistrationOptionsByType(supabase, academyId, {
+    lessonType: "private",
+    studentErrorLabel: "개인레슨 원생 선택지",
+    teacherErrorLabel: "개인레슨 선생님 선택지",
+  });
+}
+
+export async function fetchAcademyLessonRegistrationOptions(
+  supabase: PrivateLessonRegistrationOptionsSupabaseClient,
+  academyId: string,
+): Promise<PrivateLessonRegistrationOptions> {
+  return fetchLessonRegistrationOptionsByType(supabase, academyId, {
+    lessonType: "academy",
+    studentErrorLabel: "학원 일정 원생 선택지",
+    teacherErrorLabel: "학원 일정 선생님 선택지",
+  });
+}
+
+async function fetchLessonRegistrationOptionsByType(
+  supabase: PrivateLessonRegistrationOptionsSupabaseClient,
+  academyId: string,
+  options: {
+    lessonType: LessonRegistrationOptionLessonType;
+    studentErrorLabel: string;
+    teacherErrorLabel: string;
+  },
 ): Promise<PrivateLessonRegistrationOptions> {
   const [studentsResult, teachersResult] = await Promise.all([
     supabase
@@ -182,18 +212,22 @@ export async function fetchPrivateLessonRegistrationOptions(
 
   if (studentsResult.error) {
     throw new Error(
-      `개인레슨 원생 선택지를 불러오지 못했습니다: ${studentsResult.error.message}`,
+      `${options.studentErrorLabel}를 불러오지 못했습니다: ${studentsResult.error.message}`,
     );
   }
 
   if (teachersResult.error) {
     throw new Error(
-      `개인레슨 선생님 선택지를 불러오지 못했습니다: ${teachersResult.error.message}`,
+      `${options.teacherErrorLabel}를 불러오지 못했습니다: ${teachersResult.error.message}`,
     );
   }
 
   return {
-    students: (studentsResult.data ?? []).map(toPrivateLessonStudentOption),
+    students: (studentsResult.data ?? [])
+      .map((student) =>
+        toLessonRegistrationStudentOption(student, options.lessonType),
+      )
+      .filter((student) => student.instruments.length > 0),
     teachers: (teachersResult.data ?? []).map(toPrivateLessonTeacherOption),
   };
 }
@@ -234,6 +268,10 @@ export async function registerPrivateLessonEvent(
       student_instrument_id: input.studentInstrumentId,
       teacher_id: input.teacherId,
       lesson_kind: "private",
+      origin: "private",
+      series_id: null,
+      source_lesson_event_id: null,
+      counts_for_ticket: true,
       instrument_id: input.instrumentId,
       instrument_name: input.instrumentName,
       starts_at: input.startAt,
@@ -292,8 +330,9 @@ async function fetchTeacherPrivateLessons(
   return (data ?? []).map(toPrivateLesson);
 }
 
-function toPrivateLessonStudentOption(
+function toLessonRegistrationStudentOption(
   row: PrivateLessonRegistrationStudentSupabaseRow,
+  lessonType: LessonRegistrationOptionLessonType,
 ): PrivateLessonRegistrationStudentOption {
   return {
     studentId: row.id,
@@ -301,6 +340,7 @@ function toPrivateLessonStudentOption(
     instruments: (row.student_instruments ?? []).flatMap((instrument) => {
       if (
         instrument.active !== true ||
+        instrument.lesson_type !== lessonType ||
         !instrument.instrument_id ||
         !instrument.instrument_name?.trim()
       ) {
@@ -343,5 +383,7 @@ function toPrivateLesson(row: PrivateLessonEventSupabaseRow): PrivateLesson {
     status: row.status === "cancelled" || row.status === "deleted"
       ? "cancelled"
       : "scheduled",
+    origin: "private",
+    originLabel: "개인레슨",
   };
 }

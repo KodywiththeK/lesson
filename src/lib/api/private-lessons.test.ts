@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fetchAcademyLessonRegistrationOptions,
   fetchPrivateLessonRegistrationOptions,
   markPrivateLessonAttendance,
   registerPrivateLessonEvent,
@@ -10,65 +11,10 @@ import {
 } from "./private-lessons";
 
 describe("fetchPrivateLessonRegistrationOptions", () => {
-  it("현재 학원의 원생, 등록된 활성 악기, 선생님 선택지를 만든다", async () => {
+  it("개인레슨 수강 정보가 있는 원생과 악기만 선택지로 만든다", async () => {
     const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
       [];
-    const client = {
-      from(table: "students" | "teachers") {
-        calls.push({ table });
-
-        return {
-          select(select: string) {
-            calls[calls.length - 1].select = select;
-
-            return {
-              async eq(column: "academy_id", value: string) {
-                calls[calls.length - 1].eq = [column, value];
-
-                return table === "students"
-                  ? {
-                      data: [
-                        {
-                          id: "student-1",
-                          academy_id: "academy-1",
-                          name: "김민지",
-                          student_instruments: [
-                            {
-                              id: "student-instrument-1",
-                              instrument_id: "piano",
-                              instrument_name: "피아노",
-                              lesson_type: "private",
-                              active: true,
-                            },
-                            {
-                              id: "student-instrument-2",
-                              instrument_id: "academy-piano",
-                              instrument_name: "학원 피아노",
-                              lesson_type: "academy",
-                              active: true,
-                            },
-                          ],
-                        },
-                      ],
-                      error: null,
-                    }
-                  : {
-                      data: [
-                        {
-                          id: "teacher-1",
-                          academy_id: "academy-1",
-                          name: "박선생",
-                          part: "피아노",
-                        },
-                      ],
-                      error: null,
-                    };
-              },
-            };
-          },
-        };
-      },
-    } as PrivateLessonRegistrationOptionsSupabaseClient;
+    const client = createRegistrationOptionsClient(calls);
 
     const result = await fetchPrivateLessonRegistrationOptions(
       client,
@@ -99,11 +45,6 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               instrumentId: "piano",
               instrumentName: "피아노",
             },
-            {
-              studentInstrumentId: "student-instrument-2",
-              instrumentId: "academy-piano",
-              instrumentName: "학원 피아노",
-            },
           ],
         },
       ],
@@ -117,6 +58,117 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
     });
   });
 });
+
+describe("fetchAcademyLessonRegistrationOptions", () => {
+  it("학원레슨 수강 정보가 있는 원생과 악기만 선택지로 만든다", async () => {
+    const client = createRegistrationOptionsClient();
+
+    const result = await fetchAcademyLessonRegistrationOptions(
+      client,
+      "academy-1",
+    );
+
+    expect(result.students).toEqual([
+      {
+        studentId: "student-1",
+        studentName: "김민지",
+        instruments: [
+          {
+            studentInstrumentId: "student-instrument-2",
+            instrumentId: "academy-piano",
+            instrumentName: "학원 피아노",
+          },
+        ],
+      },
+      {
+        studentId: "student-2",
+        studentName: "이서윤",
+        instruments: [
+          {
+            studentInstrumentId: "student-instrument-3",
+            instrumentId: "academy-violin",
+            instrumentName: "학원 바이올린",
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+function createRegistrationOptionsClient(
+  calls: Array<{ table: string; select?: string; eq?: [string, string] }> = [],
+): PrivateLessonRegistrationOptionsSupabaseClient {
+  return {
+    from(table: "students" | "teachers") {
+      calls.push({ table });
+
+      return {
+        select(select: string) {
+          calls[calls.length - 1].select = select;
+
+          return {
+            async eq(column: "academy_id", value: string) {
+              calls[calls.length - 1].eq = [column, value];
+
+              return table === "students"
+                ? {
+                    data: [
+                      {
+                        id: "student-1",
+                        academy_id: "academy-1",
+                        name: "김민지",
+                        student_instruments: [
+                          {
+                            id: "student-instrument-1",
+                            instrument_id: "piano",
+                            instrument_name: "피아노",
+                            lesson_type: "private",
+                            active: true,
+                          },
+                          {
+                            id: "student-instrument-2",
+                            instrument_id: "academy-piano",
+                            instrument_name: "학원 피아노",
+                            lesson_type: "academy",
+                            active: true,
+                          },
+                        ],
+                      },
+                      {
+                        id: "student-2",
+                        academy_id: "academy-1",
+                        name: "이서윤",
+                        student_instruments: [
+                          {
+                            id: "student-instrument-3",
+                            instrument_id: "academy-violin",
+                            instrument_name: "학원 바이올린",
+                            lesson_type: "academy",
+                            active: true,
+                          },
+                        ],
+                      },
+                    ],
+                    error: null,
+                  }
+                : {
+                    data: [
+                      {
+                        id: "teacher-1",
+                        academy_id: "academy-1",
+                        name: "박선생",
+                        part: "피아노",
+                      },
+                    ],
+                    error: null,
+                  };
+            },
+          };
+        },
+      };
+    },
+  } as PrivateLessonRegistrationOptionsSupabaseClient;
+}
 
 describe("registerPrivateLessonEvent", () => {
   it("선생님 시간 충돌이 없으면 개인레슨 일정을 insert한다", async () => {
@@ -140,7 +192,7 @@ describe("registerPrivateLessonEvent", () => {
       {
         table: "lesson_events",
         select:
-          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status",
+          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin",
         eq: [
           ["academy_id", "academy-1"],
           ["teacher_id", "teacher-1"],
@@ -155,6 +207,10 @@ describe("registerPrivateLessonEvent", () => {
           student_instrument_id: "student-instrument-1",
           teacher_id: "teacher-1",
           lesson_kind: "private",
+          origin: "private",
+          series_id: null,
+          source_lesson_event_id: null,
+          counts_for_ticket: true,
           instrument_id: "piano",
           instrument_name: "피아노",
           starts_at: "2026-08-21T15:00:00+09:00",
@@ -325,6 +381,7 @@ function createRegistrationClient(
                     starts_at: String(values.starts_at),
                     ends_at: String(values.ends_at),
                     status: "scheduled",
+                    origin: "private",
                   };
 
                   return {

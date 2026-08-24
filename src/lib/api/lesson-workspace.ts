@@ -1,12 +1,14 @@
 import type {
   DailyAcademyAttendanceRow,
   DailyAcademyAttendanceSheet,
+  LessonEventOrigin,
 } from "@/domain/academy-lesson-attendance";
 import type { PrivateLesson } from "@/domain/private-lesson";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
 import type { LessonCalendarMemo, LessonMemoKind } from "@/lib/api/lesson-memos";
 
 import {
+  fetchAcademyLessonRegistrationOptions,
   fetchPrivateLessonRegistrationOptions,
   type PrivateLessonRegistrationOptionsSupabaseClient,
 } from "./private-lessons";
@@ -27,6 +29,7 @@ type LessonWorkspaceEventRow = {
   teacher_id: string;
   teachers: { name: string | null } | null;
   lesson_kind: "academy" | "private" | "makeup";
+  origin: LessonEventOrigin | null;
   starts_at: string;
   ends_at: string;
   status: string;
@@ -55,6 +58,31 @@ type LessonCalendarMemoRow = {
   unread: boolean | null;
 };
 
+export type CreateAcademyLessonEventInput = {
+  academyId: string;
+  studentId: string;
+  studentName: string;
+  studentInstrumentId: string;
+  instrumentId: string;
+  instrumentName: string;
+  teacherId: string;
+  teacherName: string;
+  startAt: string;
+  endAt: string;
+  origin: Extract<LessonEventOrigin, "manual" | "special">;
+  reason: string;
+};
+
+export type CreateMakeupLessonEventInput = {
+  academyId: string;
+  sourceLessonEventId: string;
+  studentId: string;
+  targetDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+};
+
 export type LessonWorkspaceSupabaseClient =
   PrivateLessonRegistrationOptionsSupabaseClient & {
     rpc(
@@ -64,6 +92,18 @@ export type LessonWorkspaceSupabaseClient =
         p_month: string;
       },
     ): PromiseLike<SupabaseResult<number>>;
+    rpc(
+      functionName: "create_makeup_lesson_event",
+      payload: {
+        p_academy_id: string;
+        p_source_lesson_event_id: string;
+        p_student_id: string;
+        p_target_date: string;
+        p_start_time: string;
+        p_end_time: string;
+        p_reason: string;
+      },
+    ): PromiseLike<SupabaseResult<string>>;
     from(table: "lesson_events"): {
       select(select: string): {
         eq(column: "academy_id", value: string): {
@@ -75,6 +115,11 @@ export type LessonWorkspaceSupabaseClient =
               ): PromiseLike<SupabaseResult<LessonWorkspaceEventRow[]>>;
             };
           };
+        };
+      };
+      insert(values: Record<string, unknown>): {
+        select(select: string): {
+          single(): PromiseLike<SupabaseResult<LessonWorkspaceEventRow>>;
         };
       };
     };
@@ -106,7 +151,7 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
 
 export async function fetchLessonWorkspaceData(
   supabase: LessonWorkspaceSupabaseClient,
@@ -127,8 +172,13 @@ export async function fetchLessonWorkspaceData(
   }
 
   const range = toMonthRange(input.month);
-  const [eventsResult, ticketsResult, memosResult, registrationOptions] =
-    await Promise.all([
+  const [
+    eventsResult,
+    ticketsResult,
+    memosResult,
+    registrationOptions,
+    privateRegistrationOptions,
+  ] = await Promise.all([
       supabase
         .from("lesson_events")
         .select(LESSON_WORKSPACE_EVENTS_SELECT)
@@ -148,6 +198,7 @@ export async function fetchLessonWorkspaceData(
         .eq("academy_id", input.academyId)
         .gte("memo_date", range.startDate)
         .lt("memo_date", range.endDate),
+      fetchAcademyLessonRegistrationOptions(supabase, input.academyId),
       fetchPrivateLessonRegistrationOptions(supabase, input.academyId),
     ]);
 
@@ -163,7 +214,9 @@ export async function fetchLessonWorkspaceData(
     throw new Error(`메모를 불러오지 못했습니다: ${memosResult.error.message}`);
   }
 
-  const events = eventsResult.data ?? [];
+  const events = (eventsResult.data ?? []).filter(
+    (event) => event.status === "scheduled",
+  );
   const academyRows = events
     .filter((event) => event.lesson_kind === "academy")
     .map(toAcademyAttendanceRow);
@@ -181,10 +234,68 @@ export async function fetchLessonWorkspaceData(
       remainingCount: ticket.remaining_count,
     })),
     registrationOptions,
+    privateRegistrationOptions,
     calendarMemos: (memosResult.data ?? []).flatMap(toLessonCalendarMemo),
     academyMemo: "",
     privateMemo: "",
   };
+}
+
+export async function createAcademyLessonEvent(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: CreateAcademyLessonEventInput,
+): Promise<DailyAcademyAttendanceRow> {
+  const { data, error } = await supabase
+    .from("lesson_events")
+    .insert({
+      academy_id: input.academyId,
+      student_id: input.studentId,
+      student_instrument_id: input.studentInstrumentId,
+      series_id: null,
+      teacher_id: input.teacherId,
+      lesson_kind: "academy",
+      origin: input.origin,
+      source_lesson_event_id: null,
+      counts_for_ticket: false,
+      instrument_id: input.instrumentId,
+      instrument_name: input.instrumentName,
+      starts_at: input.startAt,
+      ends_at: input.endAt,
+      status: "scheduled",
+      generated_from_enrollment: false,
+      creation_reason: input.reason.trim(),
+    })
+    .select(LESSON_WORKSPACE_EVENTS_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`학원 일정을 추가하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("학원 일정을 추가했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toAcademyAttendanceRow(data);
+}
+
+export async function createMakeupLessonEvent(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: CreateMakeupLessonEventInput,
+) {
+  const { error } = await supabase.rpc("create_makeup_lesson_event", {
+    p_academy_id: input.academyId,
+    p_source_lesson_event_id: input.sourceLessonEventId,
+    p_student_id: input.studentId,
+    p_target_date: input.targetDate,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_reason: input.reason.trim(),
+  });
+
+  if (error) {
+    throw new Error(`보강 일정을 저장하지 못했습니다: ${error.message}`);
+  }
 }
 
 export function createLessonWorkspaceQueryOptions(
@@ -265,6 +376,8 @@ function toAcademyAttendanceRow(
     startTime: toSeoulHourMinute(row.starts_at),
     endTime: toSeoulHourMinute(row.ends_at),
     status,
+    origin: normalizeOrigin(row.origin, row.lesson_kind),
+    originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
     absenceReason:
       status === "absent" ? attendance?.absence_reason?.trim() : undefined,
     markedAt: attendance?.marked_at ?? undefined,
@@ -287,6 +400,8 @@ function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
       row.status === "present" || row.status === "absent"
         ? row.status
         : "scheduled",
+    origin: normalizeOrigin(row.origin, row.lesson_kind),
+    originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
   };
 }
 
@@ -337,4 +452,33 @@ function toSeoulHourMinute(value: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
+}
+
+function normalizeOrigin(
+  origin: LessonWorkspaceEventRow["origin"],
+  lessonKind: LessonWorkspaceEventRow["lesson_kind"],
+): LessonEventOrigin {
+  if (
+    origin === "regular" ||
+    origin === "manual" ||
+    origin === "makeup" ||
+    origin === "private" ||
+    origin === "special"
+  ) {
+    return origin;
+  }
+
+  return lessonKind === "private" ? "private" : "regular";
+}
+
+function formatOriginLabel(origin: LessonEventOrigin) {
+  const labels: Record<LessonEventOrigin, string> = {
+    regular: "정기",
+    manual: "비정기",
+    makeup: "보강",
+    private: "개인레슨",
+    special: "특강",
+  };
+
+  return labels[origin];
 }

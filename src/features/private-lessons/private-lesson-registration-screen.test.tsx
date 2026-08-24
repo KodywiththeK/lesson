@@ -14,6 +14,9 @@ function renderPrivateLessonRegistrationScreen(
   registerPrivateLesson?: ComponentProps<
     typeof PrivateLessonRegistrationScreen
   >["registerPrivateLesson"],
+  ticketBalances?: ComponentProps<
+    typeof PrivateLessonRegistrationScreen
+  >["ticketBalances"],
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -30,6 +33,7 @@ function renderPrivateLessonRegistrationScreen(
         academyName="더 클래식"
         registrationOptionsQueryFactory={registrationOptionsQueryFactory}
         registerPrivateLesson={registerPrivateLesson}
+        ticketBalances={ticketBalances}
       />
     </QueryClientProvider>,
   );
@@ -142,6 +146,75 @@ describe("PrivateLessonRegistrationScreen", () => {
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
     expect(within(dialog).getByLabelText("악기")).toHaveValue("cello");
+  });
+
+  it("개인레슨 회차권 원생은 등록 모달에서 잔여 회차권을 확인한다", async () => {
+    const user = userEvent.setup();
+
+    renderPrivateLessonRegistrationScreen(
+      (academyId) => ({
+        queryKey: ["private-lesson-registration-options", academyId],
+        queryFn: async () => ({
+          students: [
+            {
+              studentId: "student-1",
+              studentName: "김민지",
+              instruments: [
+                {
+                  studentInstrumentId: "student-instrument-1",
+                  instrumentId: "piano",
+                  instrumentName: "피아노",
+                },
+              ],
+            },
+            {
+              studentId: "student-2",
+              studentName: "이서윤",
+              instruments: [
+                {
+                  studentInstrumentId: "student-instrument-2",
+                  instrumentId: "violin",
+                  instrumentName: "바이올린",
+                },
+              ],
+            },
+          ],
+          teachers: [
+            {
+              teacherId: "teacher-1",
+              teacherName: "박선생",
+              part: "피아노",
+            },
+          ],
+        }),
+      }),
+      undefined,
+      [
+        {
+          academyId: "academy-1",
+          studentId: "student-1",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          remainingCount: 3,
+        },
+      ],
+    );
+
+    await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "개인레슨 등록",
+    });
+    expect(
+      within(dialog).getByRole("option", { name: "김민지 · 피아노 3회" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("option", { name: "이서윤 · 회차권 없음" }),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+
+    expect(within(dialog).getByText("선택 악기 잔여 회차권 3회")).toBeInTheDocument();
   });
 
   it("개인레슨 등록 폼 입력을 mutation으로 전달한다", async () => {

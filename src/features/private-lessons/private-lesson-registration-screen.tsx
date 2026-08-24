@@ -31,6 +31,7 @@ import {
 import {
   getPrivateLessonRegistrationFlowState,
   type PrivateLesson,
+  type PrivateLessonTicketSearchBalance,
 } from "@/domain/private-lesson";
 import {
   createPrivateLessonRegistrationOptionsQueryOptions,
@@ -59,6 +60,7 @@ type PrivateLessonRegistrationScreenProps = {
   registerPrivateLesson?: (
     input: RegisterPrivateLessonEventInput,
   ) => Promise<PrivateLesson>;
+  ticketBalances?: PrivateLessonTicketSearchBalance[];
   onRegistered?: (lesson: PrivateLesson) => void;
   displayMode?: "section" | "button";
 };
@@ -81,6 +83,7 @@ export function PrivateLessonRegistrationScreen({
   academyName,
   registrationOptionsQueryFactory,
   registerPrivateLesson,
+  ticketBalances,
   onRegistered,
   displayMode = "section",
 }: PrivateLessonRegistrationScreenProps) {
@@ -152,6 +155,7 @@ export function PrivateLessonRegistrationScreen({
               teachers: [],
             }
           }
+          ticketBalances={ticketBalances}
           isLoading={registrationOptionsQuery.isLoading}
           error={
             registrationOptionsQuery.isError
@@ -196,6 +200,7 @@ export function PrivateLessonRegistrationScreen({
 function PrivateLessonRegistrationForm({
   academyId,
   options,
+  ticketBalances,
   isLoading,
   error,
   isSaving,
@@ -203,6 +208,7 @@ function PrivateLessonRegistrationForm({
 }: {
   academyId: string;
   options: PrivateLessonRegistrationOptions;
+  ticketBalances?: PrivateLessonTicketSearchBalance[];
   isLoading: boolean;
   error: Error | null;
   isSaving: boolean;
@@ -222,6 +228,14 @@ function PrivateLessonRegistrationForm({
   const selectedTeacher = options.teachers.find(
     (teacher) => teacher.teacherId === teacherId,
   );
+  const selectedTicketBalance =
+    selectedStudent && selectedInstrument && ticketBalances
+      ? findTicketBalance(ticketBalances, {
+          academyId,
+          studentId: selectedStudent.studentId,
+          instrumentId: selectedInstrument.instrumentId,
+        })
+      : undefined;
   const flow = getPrivateLessonRegistrationFlowState({
     academyId,
     studentId: studentId || undefined,
@@ -304,7 +318,7 @@ function PrivateLessonRegistrationForm({
           <NativeSelectOption value="">원생 선택</NativeSelectOption>
           {options.students.map((student) => (
             <NativeSelectOption key={student.studentId} value={student.studentId}>
-              {student.studentName}
+              {formatStudentOptionLabel(student, ticketBalances, academyId)}
             </NativeSelectOption>
           ))}
         </NativeSelect>
@@ -328,6 +342,12 @@ function PrivateLessonRegistrationForm({
             </NativeSelectOption>
           ))}
         </NativeSelect>
+        {ticketBalances && selectedInstrument ? (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            선택 악기 잔여 회차권{" "}
+            {selectedTicketBalance ? `${selectedTicketBalance.remainingCount}회` : "없음"}
+          </p>
+        ) : null}
       </Label>
 
       <Label className="grid gap-1">
@@ -396,6 +416,48 @@ function createDefaultRegistrationOptionsQueryOptions(
   return createPrivateLessonRegistrationOptionsQueryOptions(
     supabaseClientState.client,
     academyId,
+  );
+}
+
+function formatStudentOptionLabel(
+  student: PrivateLessonRegistrationOptions["students"][number],
+  ticketBalances: PrivateLessonTicketSearchBalance[] | undefined,
+  academyId: string,
+) {
+  if (!ticketBalances) {
+    return student.studentName;
+  }
+
+  const summaries = student.instruments.flatMap((instrument) => {
+    const ticketBalance = findTicketBalance(ticketBalances, {
+      academyId,
+      studentId: student.studentId,
+      instrumentId: instrument.instrumentId,
+    });
+
+    return ticketBalance
+      ? [`${ticketBalance.instrumentName} ${ticketBalance.remainingCount}회`]
+      : [];
+  });
+
+  return `${student.studentName} · ${
+    summaries.length > 0 ? summaries.join(", ") : "회차권 없음"
+  }`;
+}
+
+function findTicketBalance(
+  ticketBalances: PrivateLessonTicketSearchBalance[],
+  input: {
+    academyId: string;
+    studentId: string;
+    instrumentId: string;
+  },
+) {
+  return ticketBalances.find(
+    (ticket) =>
+      ticket.academyId === input.academyId &&
+      ticket.studentId === input.studentId &&
+      ticket.instrumentId === input.instrumentId,
   );
 }
 

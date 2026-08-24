@@ -17,6 +17,7 @@ const migrationSql = readdirSync(path.join(process.cwd(), "supabase/migrations")
 const domainTables = [
   "student_contacts",
   "student_instruments",
+  "lesson_series",
   "lesson_events",
   "attendance_records",
   "absence_resolutions",
@@ -40,6 +41,7 @@ const tenantScopedReferenceTables = [
   "teachers",
   "students",
   "student_instruments",
+  "lesson_series",
   "lesson_events",
   "attendance_records",
   "lesson_calendar_memos",
@@ -57,6 +59,7 @@ const updatedAtTables = [
   "vendors",
   "student_contacts",
   "student_instruments",
+  "lesson_series",
   "lesson_events",
   "monthly_memos",
   "lesson_calendar_memos",
@@ -199,10 +202,15 @@ describe("Supabase schema contract", () => {
       "create or replace function public.ensure_monthly_academy_lesson_events",
     );
     expect(migrationSql).toContain(
-      "create unique index if not exists lesson_events_generated_enrollment_unique_idx",
+      "create unique index if not exists lesson_events_generated_series_unique_idx",
     );
     expect(migrationSql).toContain(
-      "on conflict (academy_id, student_instrument_id, starts_at)",
+      "on conflict (academy_id, series_id, starts_at)",
+    );
+    expect(migrationSql).toContain("from public.lesson_series series");
+    expect(migrationSql).toContain("calendar.lesson_day >= series.effective_from");
+    expect(migrationSql).toContain(
+      "(series.effective_until is null or calendar.lesson_day <= series.effective_until)",
     );
     expect(migrationSql).toContain("student.status = 'enrolled'");
     expect(migrationSql).toContain(
@@ -210,6 +218,41 @@ describe("Supabase schema contract", () => {
     );
     expect(migrationSql).toContain(
       "revoke all on function public.ensure_monthly_academy_lesson_events",
+    );
+  });
+
+  it("정기 반복 규칙과 실제 캘린더 이벤트를 분리한다", () => {
+    expect(migrationSql).toContain("create table public.lesson_series");
+    expect(migrationSql).toContain("effective_from date not null");
+    expect(migrationSql).toContain("effective_until date");
+    expect(migrationSql).toContain("superseded_by uuid");
+    expect(migrationSql).toContain("add column if not exists series_id uuid");
+    expect(migrationSql).toContain("add column if not exists origin text");
+    expect(migrationSql).toContain("add column if not exists source_lesson_event_id uuid");
+    expect(migrationSql).toContain("add column if not exists counts_for_ticket boolean");
+  });
+
+  it("원생 정기 정보 수정과 보강 일정 생성은 RPC로 원자 처리한다", () => {
+    expect(migrationSql).toContain(
+      "create or replace function public.update_student_profile_from_date",
+    );
+    expect(migrationSql).toContain(
+      "when effective_from < v_effective_from then v_effective_from - 1",
+    );
+    expect(migrationSql).toContain("else effective_from");
+    expect(migrationSql).toContain("status = 'cancelled'");
+    expect(migrationSql).toContain(
+      "not exists (\n      select 1\n      from public.attendance_records",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.create_makeup_lesson_event",
+    );
+    expect(migrationSql).toContain("insert into public.absence_resolutions");
+    expect(migrationSql).toContain(
+      "grant execute on function public.update_student_profile_from_date",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.create_makeup_lesson_event",
     );
   });
 

@@ -26,11 +26,21 @@
 
 ## Lessons
 
-- `recurring_lesson_rules`: 학생 악기 설정에서 생성되는 반복 수업 규칙
-- `lesson_events`: 날짜별 실제 수업 인스턴스
+- `lesson_series`: 정기 반복 수업 규칙. 요일, 시간, 선생님, 효력 시작일/종료일, superseded 관계를 저장한다.
+- `lesson_events`: 날짜별 실제 수업 인스턴스. 정기, 비정기, 보강, 개인레슨, 특강 모두 캘린더에는 이 테이블 row로 표시한다.
 - `attendance_records`: 출석, 결석, 취소, 보강, 패스 상태
-- `absence_resolutions`: 보강/패스 사유, 보강 날짜/시간, 메모
+- `absence_resolutions`: 원본 결석 출석 기록과 보강/패스 처리 결과를 연결한다.
 - `monthly_memos`: 월별 메모와 읽음 상태
+
+### 레슨 일정 원칙
+
+- `student_instruments`는 원생이 어떤 악기/수업 상품을 수강하는지 나타내는 계약/수강 정보다.
+- `lesson_series`는 정기 반복 규칙의 source of truth다.
+- `lesson_events`는 실제 캘린더 source of truth다.
+- 정기 일정 수정은 기존 series를 닫고 새 series를 만들며, 과거 event와 출석 기록이 있는 event는 보존한다.
+- 비정기 학원레슨, 보강, 특강, 개인레슨은 series 없이 event로 직접 생성할 수 있다.
+- event 출처는 `origin`으로 구분한다: `regular`, `manual`, `makeup`, `private`, `special`.
+- 개인레슨 회차권 차감 여부는 event의 `counts_for_ticket`로 결정한다.
 
 ## Tickets
 
