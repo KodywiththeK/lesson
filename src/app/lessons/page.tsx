@@ -45,7 +45,6 @@ export default function LessonsPage() {
                             .filter(
                               (enrollment) =>
                                 enrollment.studentId === student.studentId &&
-                                enrollment.lessonType === "private" &&
                                 enrollment.active,
                             )
                             .map((enrollment) => ({
@@ -63,6 +62,22 @@ export default function LessonsPage() {
                     },
                     academyMemo: "[2026-08-21] 5시 피아노반 박지호 연락 대기",
                     privateMemo: "바이올린 개인레슨은 발표회 곡 위주로 배정",
+                    calendarMemos: [
+                      {
+                        academyId: academy.academyId,
+                        lessonKind: "academy",
+                        date: "2026-08-21",
+                        content: "[2026-08-21] 5시 피아노반 박지호 연락 대기",
+                        unread: false,
+                      },
+                      {
+                        academyId: academy.academyId,
+                        lessonKind: "private",
+                        date: "2026-08-21",
+                        content: "바이올린 개인레슨은 발표회 곡 위주로 배정",
+                        unread: false,
+                      },
+                    ],
                   }
                 : undefined
             }

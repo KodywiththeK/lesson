@@ -23,6 +23,10 @@ export type AcademyLessonAttendanceSupabaseRow = {
   students: {
     name: string | null;
   } | null;
+  teacher_id: string | null;
+  teachers: {
+    name: string | null;
+  } | null;
   instrument_id: string;
   instrument_name: string;
   starts_at: string;
@@ -95,7 +99,7 @@ type AcademyLessonAttendanceUpsertRow = {
 };
 
 const ACADEMY_LESSON_ATTENDANCE_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 
 export async function fetchDailyAcademyLessonAttendance(
@@ -216,6 +220,8 @@ function toDailyAttendanceRow(row: AcademyLessonAttendanceSupabaseRow) {
     lessonEventId: row.id,
     studentId: row.student_id,
     studentName: row.students?.name?.trim() || "이름 없음",
+    teacherId: row.teacher_id ?? undefined,
+    teacherName: row.teachers?.name?.trim() || undefined,
     instrumentId: row.instrument_id,
     instrumentName: row.instrument_name,
     date: toSeoulDate(row.starts_at),

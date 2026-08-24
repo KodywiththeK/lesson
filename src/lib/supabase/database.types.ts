@@ -561,6 +561,91 @@ export type Database = {
           },
         ]
       }
+      entity_memos: {
+        Row: {
+          academy_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          memo_date: string
+          student_id: string | null
+          target_name: string
+          target_type: string
+          teacher_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          academy_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          memo_date: string
+          student_id?: string | null
+          target_name: string
+          target_type: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          academy_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          memo_date?: string
+          student_id?: string | null
+          target_name?: string
+          target_type?: string
+          teacher_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_memos_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_memos_academy_student_fk"
+            columns: ["academy_id", "student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["academy_id", "id"]
+          },
+          {
+            foreignKeyName: "entity_memos_academy_teacher_fk"
+            columns: ["academy_id", "teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["academy_id", "id"]
+          },
+          {
+            foreignKeyName: "entity_memos_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_memos_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "entity_memos_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "teachers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fixed_income_snapshots: {
         Row: {
           academy_id: string
@@ -696,6 +781,57 @@ export type Database = {
           {
             foreignKeyName: "ledger_entries_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lesson_calendar_memos: {
+        Row: {
+          academy_id: string
+          content: string
+          created_at: string
+          id: string
+          lesson_kind: string
+          memo_date: string
+          unread: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          academy_id: string
+          content?: string
+          created_at?: string
+          id?: string
+          lesson_kind: string
+          memo_date: string
+          unread?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          academy_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          lesson_kind?: string
+          memo_date?: string
+          unread?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_calendar_memos_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_calendar_memos_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

@@ -83,8 +83,65 @@ describe("PrivateLessonRegistrationScreen", () => {
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
 
     expect(within(dialog).getByLabelText("악기")).toBeEnabled();
-    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    expect(within(dialog).getByLabelText("악기")).toHaveValue("piano");
     expect(within(dialog).getByLabelText("선생님")).toBeEnabled();
+  });
+
+  it("원생을 선택하면 해당 원생의 첫 악기를 자동 선택한다", async () => {
+    const user = userEvent.setup();
+
+    renderPrivateLessonRegistrationScreen((academyId) => ({
+      queryKey: ["private-lesson-registration-options", academyId],
+      queryFn: async () => ({
+        students: [
+          {
+            studentId: "student-1",
+            studentName: "김민지",
+            instruments: [
+              {
+                studentInstrumentId: "student-instrument-1",
+                instrumentId: "piano",
+                instrumentName: "피아노",
+              },
+              {
+                studentInstrumentId: "student-instrument-2",
+                instrumentId: "violin",
+                instrumentName: "바이올린",
+              },
+            ],
+          },
+          {
+            studentId: "student-2",
+            studentName: "이서윤",
+            instruments: [
+              {
+                studentInstrumentId: "student-instrument-3",
+                instrumentId: "cello",
+                instrumentName: "첼로",
+              },
+            ],
+          },
+        ],
+        teachers: [
+          {
+            teacherId: "teacher-1",
+            teacherName: "박선생",
+            part: "피아노",
+          },
+        ],
+      }),
+    }));
+
+    await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "개인레슨 등록",
+    });
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    expect(within(dialog).getByLabelText("악기")).toHaveValue("piano");
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
+    expect(within(dialog).getByLabelText("악기")).toHaveValue("cello");
   });
 
   it("개인레슨 등록 폼 입력을 mutation으로 전달한다", async () => {

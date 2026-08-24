@@ -255,12 +255,23 @@ export function buildPrivateLessonStudentSearchResults(
     .sort((left, right) =>
       left.studentName.localeCompare(right.studentName, "ko-KR"),
     )
-    .map((student) => ({
-      studentId: student.studentId,
-      studentName: student.studentName,
-      remainingTickets: getStudentRemainingTickets(student, ticketBalances),
-      recentLesson: getRecentPrivateLesson(student, lessons),
-    }));
+    .flatMap((student) => {
+      const remainingTickets = getStudentRemainingTickets(student, ticketBalances);
+      const recentLesson = getRecentPrivateLesson(student, lessons);
+
+      if (remainingTickets.length === 0 && !recentLesson) {
+        return [];
+      }
+
+      return [
+        {
+          studentId: student.studentId,
+          studentName: student.studentName,
+          remainingTickets,
+          recentLesson,
+        },
+      ];
+    });
 }
 
 export function formatPrivateLessonScheduleMessage({

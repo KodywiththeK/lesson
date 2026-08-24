@@ -11,6 +11,8 @@ import {
 import {
   CalendarDays,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clipboard,
   ClipboardCheck,
   FileText,
@@ -64,9 +66,13 @@ import {
   type LessonWorkspaceSupabaseClient,
 } from "@/lib/api/lesson-workspace";
 import {
-  saveMonthlyMemo,
-  type MonthlyMemoSupabaseClient,
-} from "@/lib/api/monthly-memos";
+  saveEntityMemo,
+  saveLessonCalendarMemo,
+  type LessonCalendarMemo,
+  type LessonMemoKind,
+  type LessonMemoSupabaseClient,
+  type SaveEntityMemoInput,
+} from "@/lib/api/lesson-memos";
 import { queryKeys } from "@/lib/api/query-keys";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -88,7 +94,7 @@ type LessonManagementWorkspaceProps = {
 type LessonWorkspaceClient = LessonWorkspaceSupabaseClient &
   AcademyLessonAttendanceSupabaseClient &
   MarkPrivateLessonAttendanceSupabaseClient &
-  MonthlyMemoSupabaseClient;
+  LessonMemoSupabaseClient;
 
 type SupabaseClientState =
   | {
@@ -115,6 +121,12 @@ type MakeupDraft = {
   studentName: string;
   targetDate: string;
   reason: string;
+};
+
+type EntityMemoDraft = {
+  targetType: "student" | "teacher";
+  targetId: string;
+  targetName: string;
 };
 
 const seoulFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -193,19 +205,37 @@ export function LessonManagementWorkspace({
   const [privateLessonsOverride, setPrivateLessonsOverride] = useState<
     PrivateLesson[] | null
   >(null);
-  const [academyMemoOverride, setAcademyMemoOverride] = useState<string | null>(
-    null,
-  );
-  const [privateMemoOverride, setPrivateMemoOverride] = useState<string | null>(
-    null,
-  );
+  const [calendarMemosOverride, setCalendarMemosOverride] = useState<
+    LessonCalendarMemo[] | null
+  >(null);
   const academySheets = academySheetsOverride ?? indexedWorkspaceSheets;
   const privateLessons =
     privateLessonsOverride ?? initialWorkspaceData.privateLessons;
-  const academyMemo = academyMemoOverride ?? initialWorkspaceData.academyMemo;
-  const privateMemo = privateMemoOverride ?? initialWorkspaceData.privateMemo;
+  const calendarMemos =
+    calendarMemosOverride ?? initialWorkspaceData.calendarMemos;
+  const academyMemo = findCalendarMemoContent(
+    calendarMemos,
+    "academy",
+    selectedDate,
+  );
+  const privateMemo = findCalendarMemoContent(
+    calendarMemos,
+    "private",
+    selectedDate,
+  );
+  const academyMemoDates = useMemo(
+    () => toMemoDateSet(calendarMemos, "academy"),
+    [calendarMemos],
+  );
+  const privateMemoDates = useMemo(
+    () => toMemoDateSet(calendarMemos, "private"),
+    [calendarMemos],
+  );
   const [academyMemoOpen, setAcademyMemoOpen] = useState(false);
   const [privateMemoOpen, setPrivateMemoOpen] = useState(false);
+  const [entityMemoDraft, setEntityMemoDraft] = useState<EntityMemoDraft | null>(
+    null,
+  );
   const [absentOpen, setAbsentOpen] = useState(false);
   const [academyDayOpen, setAcademyDayOpen] = useState(false);
   const [privateDayOpen, setPrivateDayOpen] = useState(false);
@@ -307,12 +337,12 @@ export function LessonManagementWorkspace({
     },
   });
   const saveMemoMutation = useMutation({
-    mutationFn: (input: Parameters<typeof saveMonthlyMemo>[1]) => {
+    mutationFn: (input: Parameters<typeof saveLessonCalendarMemo>[1]) => {
       if (!supabaseClientState?.client) {
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
 
-      return saveMonthlyMemo(supabaseClientState.client, input);
+      return saveLessonCalendarMemo(supabaseClientState.client, input);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -321,6 +351,20 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("메모 저장에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+  const saveEntityMemoMutation = useMutation({
+    mutationFn: (input: SaveEntityMemoInput) => {
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      return saveEntityMemo(supabaseClientState.client, input);
+    },
+    onError: (error) => {
+      toast.error("대상 메모 저장에 실패했습니다.", {
         description: error instanceof Error ? error.message : String(error),
       });
     },
@@ -395,8 +439,7 @@ export function LessonManagementWorkspace({
                 resetOverrides: () => {
                   setAcademySheetsOverride(null);
                   setPrivateLessonsOverride(null);
-                  setAcademyMemoOverride(null);
-                  setPrivateMemoOverride(null);
+                  setCalendarMemosOverride(null);
                 },
               })
             }
@@ -438,7 +481,19 @@ export function LessonManagementWorkspace({
               ariaLabel={toCalendarAriaLabel(selectedDate, "학원 레슨 캘린더")}
               selectedDate={selectedDate}
               events={academyEvents}
+              memoDates={academyMemoDates}
               variant="academy"
+              onChangeMonth={(month) => {
+                updateSelectedMonth(month, {
+                  selectedDate,
+                  setSelectedDate,
+                  resetOverrides: () => {
+                    setAcademySheetsOverride(null);
+                    setPrivateLessonsOverride(null);
+                    setCalendarMemosOverride(null);
+                  },
+                });
+              }}
               onSelectDate={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
@@ -446,8 +501,7 @@ export function LessonManagementWorkspace({
                   resetOverrides: () => {
                     setAcademySheetsOverride(null);
                     setPrivateLessonsOverride(null);
-                    setAcademyMemoOverride(null);
-                    setPrivateMemoOverride(null);
+                    setCalendarMemosOverride(null);
                   },
                 });
                 setAcademyDayOpen(true);
@@ -511,7 +565,19 @@ export function LessonManagementWorkspace({
               ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
               selectedDate={selectedDate}
               events={privateEvents}
+              memoDates={privateMemoDates}
               variant="private"
+              onChangeMonth={(month) => {
+                updateSelectedMonth(month, {
+                  selectedDate,
+                  setSelectedDate,
+                  resetOverrides: () => {
+                    setAcademySheetsOverride(null);
+                    setPrivateLessonsOverride(null);
+                    setCalendarMemosOverride(null);
+                  },
+                });
+              }}
               onSelectDate={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
@@ -519,8 +585,7 @@ export function LessonManagementWorkspace({
                   resetOverrides: () => {
                     setAcademySheetsOverride(null);
                     setPrivateLessonsOverride(null);
-                    setAcademyMemoOverride(null);
-                    setPrivateMemoOverride(null);
+                    setCalendarMemosOverride(null);
                   },
                 });
                 setPrivateDayOpen(true);
@@ -533,16 +598,25 @@ export function LessonManagementWorkspace({
       {academyMemoOpen ? (
         <MemoDialog
           open={academyMemoOpen}
-          title="학원레슨 메모 작성"
+          title={`${selectedDate} 학원레슨 메모 작성`}
           label="학원레슨 특이사항 메모"
           value={academyMemo}
           onOpenChange={setAcademyMemoOpen}
           onSave={(value) => {
-            setAcademyMemoOverride(value);
+            setCalendarMemosOverride((current) =>
+              upsertCalendarMemo(current ?? calendarMemos, {
+                academyId,
+                lessonKind: "academy",
+                date: selectedDate,
+                content: value,
+                unread: false,
+              }),
+            );
             if (!demoData && supabaseClientState?.client) {
               saveMemoMutation.mutate({
                 academyId,
-                month: selectedMonth,
+                lessonKind: "academy",
+                date: selectedDate,
                 content: value,
               });
             }
@@ -553,16 +627,25 @@ export function LessonManagementWorkspace({
       {privateMemoOpen ? (
         <MemoDialog
           open={privateMemoOpen}
-          title="개인레슨 메모 작성"
+          title={`${selectedDate} 개인레슨 메모 작성`}
           label="개인레슨 특이사항 메모"
           value={privateMemo}
           onOpenChange={setPrivateMemoOpen}
           onSave={(value) => {
-            setPrivateMemoOverride(value);
+            setCalendarMemosOverride((current) =>
+              upsertCalendarMemo(current ?? calendarMemos, {
+                academyId,
+                lessonKind: "private",
+                date: selectedDate,
+                content: value,
+                unread: false,
+              }),
+            );
             if (!demoData && supabaseClientState?.client) {
               saveMemoMutation.mutate({
                 academyId,
-                month: selectedMonth,
+                lessonKind: "private",
+                date: selectedDate,
                 content: value,
               });
             }
@@ -616,6 +699,7 @@ export function LessonManagementWorkspace({
         date={selectedDate}
         rows={selectedAcademyEvents}
         onOpenChange={setAcademyDayOpen}
+        onOpenEntityMemo={setEntityMemoDraft}
         onMark={(row, status) => {
           const markedAt = new Date().toISOString();
           setAcademySheetsOverride((current) =>
@@ -651,6 +735,7 @@ export function LessonManagementWorkspace({
         date={selectedDate}
         lessons={selectedPrivateLessons}
         onOpenChange={setPrivateDayOpen}
+        onOpenEntityMemo={setEntityMemoDraft}
         onMark={(lesson, status) => {
           const markedAt = new Date().toISOString();
           if (onMarkPrivateLessonAttendance) {
@@ -690,9 +775,24 @@ export function LessonManagementWorkspace({
         onClose={() => setMakeupDraft(null)}
         onConfirm={(draft) => {
           setResolvedAbsenceIds((current) => new Set(current).add(draft.lessonEventId));
-          setAcademyMemoOverride((current) =>
-            `${(current ?? academyMemo).trim()}\n[${selectedDate}] ${draft.studentName} 보강 사유: ${draft.reason} (보강 예정일: ${draft.targetDate})`.trim(),
+          const nextMemo = `${academyMemo.trim()}\n[${selectedDate}] ${draft.studentName} 보강 사유: ${draft.reason} (보강 예정일: ${draft.targetDate})`.trim();
+          setCalendarMemosOverride((current) =>
+            upsertCalendarMemo(current ?? calendarMemos, {
+              academyId,
+              lessonKind: "academy",
+              date: selectedDate,
+              content: nextMemo,
+              unread: false,
+            }),
           );
+          if (!demoData && supabaseClientState?.client) {
+            saveMemoMutation.mutate({
+              academyId,
+              lessonKind: "academy",
+              date: selectedDate,
+              content: nextMemo,
+            });
+          }
           setMakeupDraft(null);
           setAbsentOpen(false);
           toast.success("보강 일정을 기록했습니다.");
@@ -711,6 +811,38 @@ export function LessonManagementWorkspace({
         open={privateStudentSearchOpen}
         results={privateLessonStudentResults}
         onOpenChange={setPrivateStudentSearchOpen}
+      />
+
+      <EntityMemoDialog
+        draft={entityMemoDraft}
+        onClose={() => setEntityMemoDraft(null)}
+        onSave={(content) => {
+          if (!entityMemoDraft) {
+            return;
+          }
+
+          const input: SaveEntityMemoInput = {
+            academyId,
+            targetType: entityMemoDraft.targetType,
+            targetId: entityMemoDraft.targetId,
+            targetName: entityMemoDraft.targetName,
+            content,
+            memoDate: selectedDate,
+          };
+
+          if (!demoData && supabaseClientState?.client) {
+            saveEntityMemoMutation.mutate(input, {
+              onSuccess: () => {
+                setEntityMemoDraft(null);
+                toast.success("대상 메모를 저장했습니다.");
+              },
+            });
+            return;
+          }
+
+          setEntityMemoDraft(null);
+          toast.success("대상 메모를 저장했습니다.");
+        }}
       />
     </section>
   );
@@ -748,19 +880,61 @@ function LessonMonthCalendar({
   ariaLabel,
   selectedDate,
   events,
+  memoDates,
   variant,
+  onChangeMonth,
   onSelectDate,
 }: {
   ariaLabel: string;
   selectedDate: string;
   events: CalendarEvent[];
+  memoDates: Set<string>;
   variant: "academy" | "private";
+  onChangeMonth: (month: string) => void;
   onSelectDate: (date: string) => void;
 }) {
   const calendarDates = buildCalendarDates(selectedDate);
+  const selectedMonth = selectedDate.slice(0, 7);
+  const variantLabel = variant === "academy" ? "학원 레슨 캘린더" : "개인레슨 캘린더";
 
   return (
     <div className="rounded-lg border border-border bg-card p-3">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={`${variantLabel} 이전 달`}
+            onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <Label className="sr-only" htmlFor={`${variant}-calendar-month`}>
+            {variantLabel} 월 선택
+          </Label>
+          <Input
+            id={`${variant}-calendar-month`}
+            aria-label={`${variantLabel} 월 선택`}
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => onChangeMonth(event.target.value)}
+            className="w-40"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={`${variantLabel} 다음 달`}
+            onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
+          >
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </div>
+        <p className="text-sm font-medium text-muted-foreground">
+          {formatMonthLabel(selectedMonth)}
+        </p>
+      </div>
       <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
         {["일", "월", "화", "수", "목", "금", "토"].map((weekday) => (
           <span key={weekday}>{weekday}</span>
@@ -774,6 +948,8 @@ function LessonMonthCalendar({
         {calendarDates.map((date) => {
           const dayEvents = events.filter((event) => event.date === date);
           const isSelected = date === selectedDate;
+          const hasMemo = memoDates.has(date);
+          const isCurrentMonth = date.startsWith(selectedMonth);
 
           return (
             <button
@@ -781,12 +957,18 @@ function LessonMonthCalendar({
               type="button"
               role="gridcell"
               aria-selected={isSelected}
-              className="flex min-h-20 min-w-0 flex-col gap-1 rounded-md border border-border bg-background p-1 text-left transition-colors hover:bg-accent/40 aria-selected:border-primary aria-selected:ring-2 aria-selected:ring-ring/25 sm:min-h-32 sm:p-2"
+              className={`flex min-h-20 min-w-0 flex-col gap-1 rounded-md border border-border bg-background p-1 text-left transition-colors hover:bg-accent/40 aria-selected:border-primary aria-selected:ring-2 aria-selected:ring-ring/25 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"}`}
               onClick={() => onSelectDate(date)}
             >
               <span className="text-xs font-semibold text-muted-foreground">
                 {Number(date.slice(-2))}
               </span>
+              {hasMemo ? (
+                <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-muted px-1 py-0.5 text-xs font-medium text-muted-foreground">
+                  <FileText aria-hidden="true" className="size-3" />
+                  메모
+                </span>
+              ) : null}
               {dayEvents.slice(0, 3).map((event) => (
                 <span
                   key={event.id}
@@ -881,17 +1063,86 @@ function MemoDialog({
   );
 }
 
+function EntityMemoDialog({
+  draft,
+  onClose,
+  onSave,
+}: {
+  draft: EntityMemoDraft | null;
+  onClose: () => void;
+  onSave: (content: string) => void;
+}) {
+  const [content, setContent] = useState("");
+  const targetLabel = draft?.targetType === "teacher" ? "선생님" : "원생";
+
+  return (
+    <Dialog
+      open={Boolean(draft)}
+      onOpenChange={(open) => {
+        if (!open) {
+          setContent("");
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {draft ? `${draft.targetName} ${targetLabel} 메모` : "대상 메모"}
+          </DialogTitle>
+          <DialogDescription>
+            원생 또는 선생님 데이터에 남길 운영 메모를 작성합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <Label className="grid gap-2 text-sm font-medium">
+          <span>메모 내용</span>
+          <Textarea
+            aria-label="메모 내용"
+            className="min-h-32"
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+          />
+        </Label>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setContent("");
+              onClose();
+            }}
+          >
+            취소
+          </Button>
+          <Button
+            type="button"
+            disabled={!content.trim()}
+            onClick={() => {
+              onSave(content);
+              setContent("");
+            }}
+          >
+            메모 저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AcademyDayAttendanceDialog({
   open,
   date,
   rows,
   onOpenChange,
+  onOpenEntityMemo,
   onMark,
 }: {
   open: boolean;
   date: string;
   rows: DailyAcademyAttendanceRow[];
   onOpenChange: (open: boolean) => void;
+  onOpenEntityMemo: (draft: EntityMemoDraft) => void;
   onMark: (
     row: DailyAcademyAttendanceRow,
     status: "present" | "absent",
@@ -929,6 +1180,38 @@ function AcademyDayAttendanceDialog({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
+                  variant="outline"
+                  aria-label={`${row.studentName} 원생 메모`}
+                  onClick={() =>
+                    onOpenEntityMemo({
+                      targetType: "student",
+                      targetId: row.studentId,
+                      targetName: row.studentName,
+                    })
+                  }
+                >
+                  <FileText aria-hidden="true" />
+                  원생 메모
+                </Button>
+                {row.teacherId && row.teacherName ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={`${row.teacherName} 선생님 메모`}
+                    onClick={() =>
+                      onOpenEntityMemo({
+                        targetType: "teacher",
+                        targetId: row.teacherId ?? "",
+                        targetName: row.teacherName ?? "선생님",
+                      })
+                    }
+                  >
+                    <FileText aria-hidden="true" />
+                    선생님 메모
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
                   aria-label={`${row.studentName} 출석`}
                   onClick={() => onMark(row, "present")}
                 >
@@ -958,12 +1241,14 @@ function PrivateDayAttendanceDialog({
   date,
   lessons,
   onOpenChange,
+  onOpenEntityMemo,
   onMark,
 }: {
   open: boolean;
   date: string;
   lessons: PrivateLesson[];
   onOpenChange: (open: boolean) => void;
+  onOpenEntityMemo: (draft: EntityMemoDraft) => void;
   onMark: (lesson: PrivateLesson, status: "present" | "absent") => void;
 }) {
   return (
@@ -999,6 +1284,36 @@ function PrivateDayAttendanceDialog({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`${lesson.studentName} 원생 메모`}
+                  onClick={() =>
+                    onOpenEntityMemo({
+                      targetType: "student",
+                      targetId: lesson.studentId,
+                      targetName: lesson.studentName,
+                    })
+                  }
+                >
+                  <FileText aria-hidden="true" />
+                  원생 메모
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`${lesson.teacherName} 선생님 메모`}
+                  onClick={() =>
+                    onOpenEntityMemo({
+                      targetType: "teacher",
+                      targetId: lesson.teacherId,
+                      targetName: lesson.teacherName,
+                    })
+                  }
+                >
+                  <FileText aria-hidden="true" />
+                  선생님 메모
+                </Button>
                 <Button
                   type="button"
                   aria-label={`${lesson.studentName} 개인레슨 출석`}
@@ -1425,6 +1740,30 @@ function updateSelectedDate(
   options.setSelectedDate(nextDate);
 }
 
+function updateSelectedMonth(
+  nextMonth: string,
+  options: {
+    selectedDate: string;
+    setSelectedDate: Dispatch<SetStateAction<string>>;
+    resetOverrides: () => void;
+  },
+) {
+  if (!nextMonth) {
+    return;
+  }
+
+  const selectedDay = Number(options.selectedDate.slice(8, 10));
+  const nextDate = `${nextMonth}-${pad2(
+    Math.min(selectedDay, getLastDayOfMonth(nextMonth)),
+  )}`;
+
+  if (nextMonth !== options.selectedDate.slice(0, 7)) {
+    options.resetOverrides();
+  }
+
+  options.setSelectedDate(nextDate);
+}
+
 function createEmptyWorkspaceData(): LessonWorkspaceDemoData {
   return {
     academySheets: [],
@@ -1434,6 +1773,7 @@ function createEmptyWorkspaceData(): LessonWorkspaceDemoData {
       students: [],
       teachers: [],
     },
+    calendarMemos: [],
     academyMemo: "",
     privateMemo: "",
   };
@@ -1522,6 +1862,68 @@ function buildCalendarDates(selectedDate: string) {
   }
 
   return dates;
+}
+
+function shiftMonth(month: string, delta: number) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const nextDate = new Date(Date.UTC(year, monthIndex - 1 + delta, 1));
+
+  return `${nextDate.getUTCFullYear()}-${pad2(nextDate.getUTCMonth() + 1)}`;
+}
+
+function getLastDayOfMonth(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+
+  return new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+}
+
+function formatMonthLabel(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+
+  return `${year}년 ${monthIndex}월`;
+}
+
+function findCalendarMemoContent(
+  memos: LessonCalendarMemo[],
+  lessonKind: LessonMemoKind,
+  date: string,
+) {
+  return (
+    memos.find(
+      (memo) => memo.lessonKind === lessonKind && memo.date === date,
+    )?.content ?? ""
+  );
+}
+
+function toMemoDateSet(
+  memos: LessonCalendarMemo[],
+  lessonKind: LessonMemoKind,
+) {
+  return new Set(
+    memos
+      .filter((memo) => memo.lessonKind === lessonKind && memo.content.trim())
+      .map((memo) => memo.date),
+  );
+}
+
+function upsertCalendarMemo(
+  memos: LessonCalendarMemo[],
+  nextMemo: LessonCalendarMemo,
+) {
+  const replaced = memos.some(
+    (memo) =>
+      memo.lessonKind === nextMemo.lessonKind && memo.date === nextMemo.date,
+  );
+
+  if (!replaced) {
+    return [...memos, nextMemo];
+  }
+
+  return memos.map((memo) =>
+    memo.lessonKind === nextMemo.lessonKind && memo.date === nextMemo.date
+      ? nextMemo
+      : memo,
+  );
 }
 
 function toCalendarAriaLabel(selectedDate: string, label: string) {

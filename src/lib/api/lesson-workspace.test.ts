@@ -28,6 +28,22 @@ describe("fetchLessonWorkspaceData", () => {
       instrumentName: "피아노",
       status: "pending",
     });
+    expect(result.calendarMemos).toEqual([
+      {
+        academyId: "academy-1",
+        lessonKind: "academy",
+        date: "2026-08-21",
+        content: "콩쿠르 보강 확인",
+        unread: false,
+      },
+      {
+        academyId: "academy-1",
+        lessonKind: "private",
+        date: "2026-08-22",
+        content: "오유진 선생님 시간표 공유",
+        unread: true,
+      },
+    ]);
   });
 
   it("정기 학원 레슨 이벤트 생성 실패를 레슨관리표 조회 오류로 전달한다", async () => {
@@ -65,10 +81,6 @@ function createLessonWorkspaceClient(
       return {
         select(select: string) {
           calls[calls.length - 1].select = select;
-
-          if (table === "monthly_memos") {
-            return createMonthlyMemoBuilder(calls);
-          }
 
           return createListBuilder(table, calls);
         },
@@ -116,6 +128,28 @@ function createListBuilder(table: string, calls: Array<Record<string, unknown>>)
     },
     lt(column: string, value: string) {
       calls[calls.length - 1].lt = [column, value];
+
+      if (table === "lesson_calendar_memos") {
+        return Promise.resolve({
+          data: [
+            {
+              academy_id: "academy-1",
+              lesson_kind: "academy",
+              memo_date: "2026-08-21",
+              content: "콩쿠르 보강 확인",
+              unread: false,
+            },
+            {
+              academy_id: "academy-1",
+              lesson_kind: "private",
+              memo_date: "2026-08-22",
+              content: "오유진 선생님 시간표 공유",
+              unread: true,
+            },
+          ],
+          error: null,
+        });
+      }
 
       return this;
     },
@@ -177,25 +211,6 @@ function createListBuilder(table: string, calls: Array<Record<string, unknown>>)
         data: [],
         error: null,
       });
-    },
-  };
-}
-
-function createMonthlyMemoBuilder(calls: Array<Record<string, unknown>>) {
-  return {
-    eq(column: string, value: string) {
-      const latestCall = calls[calls.length - 1];
-      latestCall.eq = [...((latestCall.eq as unknown[]) ?? []), [column, value]];
-
-      return this;
-    },
-    async maybeSingle() {
-      return {
-        data: {
-          content: "",
-        },
-        error: null,
-      };
     },
   };
 }

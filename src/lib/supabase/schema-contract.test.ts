@@ -21,6 +21,8 @@ const domainTables = [
   "attendance_records",
   "absence_resolutions",
   "monthly_memos",
+  "lesson_calendar_memos",
+  "entity_memos",
   "lesson_ticket_grants",
   "lesson_ticket_adjustments",
   "lesson_ticket_usages",
@@ -40,6 +42,8 @@ const tenantScopedReferenceTables = [
   "student_instruments",
   "lesson_events",
   "attendance_records",
+  "lesson_calendar_memos",
+  "entity_memos",
   "lesson_ticket_grants",
   "books",
 ];
@@ -55,6 +59,8 @@ const updatedAtTables = [
   "student_instruments",
   "lesson_events",
   "monthly_memos",
+  "lesson_calendar_memos",
+  "entity_memos",
   "lesson_ticket_grants",
   "books",
   "book_releases",
@@ -204,6 +210,26 @@ describe("Supabase schema contract", () => {
     );
     expect(migrationSql).toContain(
       "revoke all on function public.ensure_monthly_academy_lesson_events",
+    );
+  });
+
+  it("레슨표 메모는 일자와 레슨표 종류별로 저장하고 원생/선생님 메모는 대상 FK로 연결한다", () => {
+    expect(migrationSql).toContain("create table public.lesson_calendar_memos");
+    expect(migrationSql).toContain(
+      "unique (academy_id, lesson_kind, memo_date)",
+    );
+    expect(migrationSql).toContain("create table public.entity_memos");
+    expect(migrationSql).toContain(
+      "foreign key (academy_id, student_id) references public.students (academy_id, id)",
+    );
+    expect(migrationSql).toContain(
+      "foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)",
+    );
+    expect(migrationSql).toContain(
+      "alter table public.lesson_calendar_memos enable row level security",
+    );
+    expect(migrationSql).toContain(
+      "alter table public.entity_memos enable row level security",
     );
   });
 });

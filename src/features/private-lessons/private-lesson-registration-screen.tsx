@@ -291,8 +291,13 @@ function PrivateLessonRegistrationForm({
           aria-label="원생"
           value={studentId}
           onChange={(event) => {
-            setStudentId(event.target.value);
-            setInstrumentId("");
+            const nextStudentId = event.target.value;
+            const nextStudent = options.students.find(
+              (student) => student.studentId === nextStudentId,
+            );
+
+            setStudentId(nextStudentId);
+            setInstrumentId(nextStudent?.instruments[0]?.instrumentId ?? "");
             setTeacherId("");
           }}
         >

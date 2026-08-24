@@ -17,6 +17,8 @@ describe("fetchDailyAcademyLessonAttendance", () => {
         academy_id: "academy-1",
         student_id: "student-2",
         students: { name: "이서윤" },
+        teacher_id: "teacher-1",
+        teachers: { name: "박선생" },
         instrument_id: "piano",
         instrument_name: "피아노",
         starts_at: "2026-08-21T16:00:00+09:00",
@@ -29,6 +31,8 @@ describe("fetchDailyAcademyLessonAttendance", () => {
         academy_id: "academy-1",
         student_id: "student-1",
         students: { name: "김민지" },
+        teacher_id: "teacher-1",
+        teachers: { name: "박선생" },
         instrument_id: "piano",
         instrument_name: "피아노",
         starts_at: "2026-08-21T15:00:00+09:00",
@@ -60,7 +64,7 @@ describe("fetchDailyAcademyLessonAttendance", () => {
       {
         table: "lesson_events",
         select:
-          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)",
+          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)",
         eq: [
           ["academy_id", "academy-1"],
           ["lesson_kind", "academy"],
@@ -75,6 +79,7 @@ describe("fetchDailyAcademyLessonAttendance", () => {
     expect(result.rows[0]).toMatchObject({
       lessonEventId: "lesson-1",
       status: "present",
+      teacherName: "박선생",
       markedAt: "2026-08-21T15:05:00+09:00",
     });
     expect(result.summary).toEqual({
@@ -118,6 +123,8 @@ describe("fetchDailyAcademyLessonAttendance", () => {
         academy_id: "academy-1",
         student_id: "student-1",
         students: { name: "김민지" },
+        teacher_id: "teacher-1",
+        teachers: { name: "박선생" },
         instrument_id: "piano",
         instrument_name: "피아노",
         starts_at: "2026-08-20T15:00:00Z",

@@ -4,12 +4,14 @@ import type {
   PrivateLessonTicketSearchBalance,
 } from "@/domain/private-lesson";
 import type { PrivateLessonRegistrationOptions } from "@/lib/api/private-lessons";
+import type { LessonCalendarMemo } from "@/lib/api/lesson-memos";
 
 export type LessonWorkspaceDemoData = {
   academySheets: DailyAcademyAttendanceSheet[];
   privateLessons: PrivateLesson[];
   ticketBalances: PrivateLessonTicketSearchBalance[];
   registrationOptions: PrivateLessonRegistrationOptions;
+  calendarMemos: LessonCalendarMemo[];
   academyMemo: string;
   privateMemo: string;
 };
@@ -25,6 +27,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           lessonEventId: "academy-lesson-1",
           studentId: "student-1",
           studentName: "김민지",
+          teacherId: "teacher-1",
+          teacherName: "김하늘",
           instrumentId: "piano",
           instrumentName: "피아노",
           date: "2026-08-21",
@@ -38,6 +42,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           lessonEventId: "academy-lesson-2",
           studentId: "student-2",
           studentName: "이서윤",
+          teacherId: "teacher-1",
+          teacherName: "김하늘",
           instrumentId: "piano",
           instrumentName: "피아노",
           date: "2026-08-21",
@@ -50,6 +56,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           lessonEventId: "academy-lesson-3",
           studentId: "student-3",
           studentName: "박지호",
+          teacherId: "teacher-1",
+          teacherName: "김하늘",
           instrumentId: "piano",
           instrumentName: "피아노",
           date: "2026-08-21",
@@ -89,6 +97,8 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
           lessonEventId: "academy-lesson-4",
           studentId: "student-5",
           studentName: "정하린",
+          teacherId: "teacher-1",
+          teacherName: "김하늘",
           instrumentId: "piano",
           instrumentName: "피아노",
           date: "2026-08-22",
@@ -188,6 +198,22 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       },
     ],
   },
+  calendarMemos: [
+    {
+      academyId: "academy-demo",
+      lessonKind: "academy",
+      date: "2026-08-21",
+      content: "[2026-08-21] 5시 피아노반 박지호 연락 대기",
+      unread: false,
+    },
+    {
+      academyId: "academy-demo",
+      lessonKind: "private",
+      date: "2026-08-21",
+      content: "[2026-08-21] 오유진 선생님 18시 바이올린 개인레슨",
+      unread: false,
+    },
+  ],
   academyMemo: "[2026-08-21] 5시 피아노반 박지호 연락 대기",
   privateMemo: "[2026-08-21] 오유진 선생님 18시 바이올린 개인레슨",
 };

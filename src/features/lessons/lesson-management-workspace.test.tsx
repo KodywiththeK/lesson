@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -53,6 +53,28 @@ describe("LessonManagementWorkspace", () => {
     expect(attendanceDialog).toHaveTextContent("15:00-15:50");
   });
 
+  it("레슨 캘린더에서 이전/다음 달과 임의 연월로 이동한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(
+      screen.getByRole("button", { name: "학원 레슨 캘린더 다음 달" }),
+    );
+
+    expect(
+      screen.getByRole("grid", { name: "2026년 9월 학원 레슨 캘린더" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("학원 레슨 캘린더 월 선택"), {
+      target: { value: "2027-03" },
+    });
+
+    expect(
+      screen.getByRole("grid", { name: "2027년 3월 학원 레슨 캘린더" }),
+    ).toBeInTheDocument();
+  });
+
   it("미등원 인원을 보강 처리하면 메모지에 사유와 보강일을 남긴다", async () => {
     const user = userEvent.setup();
 
@@ -84,7 +106,7 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "메모지" }));
 
     const memoDialog = await screen.findByRole("dialog", {
-      name: "학원레슨 메모 작성",
+      name: "2026-08-21 학원레슨 메모 작성",
     });
 
     expect(within(memoDialog).getByLabelText("학원레슨 특이사항 메모")).toHaveValue(
@@ -92,7 +114,7 @@ describe("LessonManagementWorkspace", () => {
     );
   });
 
-  it("메모지는 다이얼로그에서 작성하고 저장할 때 반영한다", async () => {
+  it("레슨표 메모지는 선택 일자별로 저장하고 캘린더에 표시한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -102,7 +124,7 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "메모지" }));
 
     const memoDialog = await screen.findByRole("dialog", {
-      name: "학원레슨 메모 작성",
+      name: "2026-08-21 학원레슨 메모 작성",
     });
     const memoInput = within(memoDialog).getByLabelText("학원레슨 특이사항 메모");
 
@@ -112,15 +134,93 @@ describe("LessonManagementWorkspace", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("dialog", { name: "학원레슨 메모 작성" }),
+        screen.queryByRole("dialog", { name: "2026-08-21 학원레슨 메모 작성" }),
       ).not.toBeInTheDocument();
     });
+
+    expect(
+      within(
+        screen.getByRole("gridcell", { name: /21/ }),
+      ).getByText("메모"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "메모지" }));
 
     expect(screen.getByLabelText("학원레슨 특이사항 메모")).toHaveValue(
       "리허설 일정 재공지",
     );
+  });
+
+  it("학원 레슨표와 개인레슨표는 같은 날짜에도 메모를 따로 관리한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(screen.getByRole("button", { name: "메모지" }));
+    let memoDialog = await screen.findByRole("dialog", {
+      name: "2026-08-21 학원레슨 메모 작성",
+    });
+    expect(within(memoDialog).getByLabelText("학원레슨 특이사항 메모")).toHaveValue(
+      "[2026-08-21] 5시 피아노반 박지호 연락 대기",
+    );
+    await user.click(within(memoDialog).getByRole("button", { name: "취소" }));
+
+    await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
+    await user.click(screen.getByRole("button", { name: "메모지" }));
+    memoDialog = await screen.findByRole("dialog", {
+      name: "2026-08-21 개인레슨 메모 작성",
+    });
+
+    expect(within(memoDialog).getByLabelText("개인레슨 특이사항 메모")).toHaveValue(
+      "[2026-08-21] 오유진 선생님 18시 바이올린 개인레슨",
+    );
+  });
+
+  it("일자 출석 다이얼로그에서 원생과 선생님 데이터에 메모를 추가한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /21/ }),
+    );
+
+    const attendanceDialog = await screen.findByRole("dialog", {
+      name: "2026-08-21 출석 확인",
+    });
+    await user.click(
+      within(attendanceDialog).getByRole("button", {
+        name: "김민지 원생 메모",
+      }),
+    );
+
+    let entityMemoDialog = await screen.findByRole("dialog", {
+      name: "김민지 원생 메모",
+    });
+    await user.type(
+      within(entityMemoDialog).getByLabelText("메모 내용"),
+      "콩쿠르 전 스케일 확인",
+    );
+    await user.click(
+      within(entityMemoDialog).getByRole("button", { name: "메모 저장" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "김민지 원생 메모" })).not.toBeInTheDocument();
+    });
+
+    await user.click(
+      within(attendanceDialog).getAllByRole("button", {
+        name: "김하늘 선생님 메모",
+      })[0],
+    );
+    entityMemoDialog = await screen.findByRole("dialog", {
+      name: "김하늘 선생님 메모",
+    });
+
+    expect(within(entityMemoDialog).getByLabelText("메모 내용")).toBeInTheDocument();
   });
 
   it("개인레슨표에서 선생님별 월간 시간표를 만들고 새 개인레슨을 추가한다", async () => {

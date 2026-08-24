@@ -301,7 +301,6 @@ function toPrivateLessonStudentOption(
     instruments: (row.student_instruments ?? []).flatMap((instrument) => {
       if (
         instrument.active !== true ||
-        instrument.lesson_type !== "private" ||
         !instrument.instrument_id ||
         !instrument.instrument_name?.trim()
       ) {

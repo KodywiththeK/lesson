@@ -12,6 +12,8 @@ export type DailyAcademyAttendanceRow = {
   lessonEventId: string;
   studentId: string;
   studentName: string;
+  teacherId?: string;
+  teacherName?: string;
   instrumentId: string;
   instrumentName: string;
   date: string;

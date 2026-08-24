@@ -10,7 +10,7 @@ import {
 } from "./private-lessons";
 
 describe("fetchPrivateLessonRegistrationOptions", () => {
-  it("현재 학원의 원생, 활성 개인레슨 악기, 선생님 선택지를 만든다", async () => {
+  it("현재 학원의 원생, 등록된 활성 악기, 선생님 선택지를 만든다", async () => {
     const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
       [];
     const client = {
@@ -98,6 +98,11 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               studentInstrumentId: "student-instrument-1",
               instrumentId: "piano",
               instrumentName: "피아노",
+            },
+            {
+              studentInstrumentId: "student-instrument-2",
+              instrumentId: "academy-piano",
+              instrumentName: "학원 피아노",
             },
           ],
         },
