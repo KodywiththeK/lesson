@@ -17,6 +17,7 @@ import {
   type BuildLessonTicketListOptions,
 } from "@/domain/lesson-ticket";
 import { buildStudentList } from "@/domain/student-list";
+import { buildStatusManagementList } from "@/domain/status-management";
 import { buildTeacherList } from "@/domain/teacher-list";
 import { buildVendorList } from "@/domain/vendor-list";
 import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons";
@@ -82,9 +83,25 @@ type DemoAcademyContextValue = {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
   };
+  createStudentStatusManagementQueryOptions: (options: {
+    academyId: string;
+    status: "suspended" | "withdrawn";
+    today?: string;
+  }) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<ReturnType<typeof buildStatusManagementList>>;
+  };
   createTeacherListQueryOptions: (options: Parameters<typeof buildTeacherList>[1]) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildTeacherList>>;
+  };
+  createTeacherStatusManagementQueryOptions: (options: {
+    academyId: string;
+    status: "on_leave" | "resigned";
+    today?: string;
+  }) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<ReturnType<typeof buildStatusManagementList>>;
   };
   createLessonTicketListQueryOptions: (options: BuildLessonTicketListOptions) => {
     queryKey: QueryKey;
@@ -232,7 +249,54 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
             "demo",
             revision,
           ],
-          queryFn: async () => buildStudentList(state.students, options),
+          queryFn: async () =>
+            buildStudentList(
+              state.students.filter(
+                (student) =>
+                  (student.status ?? "enrolled") === "enrolled" &&
+                  !student.archivedAt,
+              ),
+              options,
+            ),
+        };
+      },
+      createStudentStatusManagementQueryOptions(options) {
+        return {
+          queryKey: [
+            ...queryKeys.statusManagement.list(options.academyId, {
+              entityType: "student",
+              status: options.status,
+            }),
+            "demo",
+            revision,
+          ],
+          queryFn: async () =>
+            buildStatusManagementList(
+              state.students.map((student) => ({
+                academyId: student.academyId,
+                entityType: "student",
+                entityId: student.studentId,
+                name: student.name,
+                status: (student.status ?? "enrolled") as
+                  | "suspended"
+                  | "withdrawn",
+                changedAt:
+                  student.status === "withdrawn"
+                    ? student.withdrawnAt
+                    : student.suspendedAt,
+                retentionUntil: student.retentionUntil,
+                archivedAt: student.archivedAt,
+                primaryInfo: student.instrumentNames.join(", "),
+                secondaryInfo: student.teacherNames.join(", "),
+                detailSummary: student.weekdayLabels.join(", "),
+              })),
+              {
+                academyId: options.academyId,
+                entityType: "student",
+                status: options.status,
+                today: options.today,
+              },
+            ),
         };
       },
       createTeacherListQueryOptions(options) {
@@ -247,7 +311,54 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
             "demo",
             revision,
           ],
-          queryFn: async () => buildTeacherList(state.teachers, options),
+          queryFn: async () =>
+            buildTeacherList(
+              state.teachers.filter(
+                (teacher) =>
+                  (teacher.status ?? "employed") === "employed" &&
+                  !teacher.archivedAt,
+              ),
+              options,
+            ),
+        };
+      },
+      createTeacherStatusManagementQueryOptions(options) {
+        return {
+          queryKey: [
+            ...queryKeys.statusManagement.list(options.academyId, {
+              entityType: "teacher",
+              status: options.status,
+            }),
+            "demo",
+            revision,
+          ],
+          queryFn: async () =>
+            buildStatusManagementList(
+              state.teachers.map((teacher) => ({
+                academyId: teacher.academyId,
+                entityType: "teacher",
+                entityId: teacher.teacherId,
+                name: teacher.name,
+                status: (teacher.status ?? "employed") as
+                  | "on_leave"
+                  | "resigned",
+                changedAt:
+                  teacher.status === "resigned"
+                    ? teacher.resignedAt
+                    : teacher.onLeaveAt,
+                retentionUntil: teacher.retentionUntil,
+                archivedAt: teacher.archivedAt,
+                primaryInfo: teacher.part,
+                secondaryInfo: teacher.contact,
+                detailSummary: teacher.workScheduleSummary,
+              })),
+              {
+                academyId: options.academyId,
+                entityType: "teacher",
+                status: options.status,
+                today: options.today,
+              },
+            ),
         };
       },
       createLessonTicketListQueryOptions(options) {

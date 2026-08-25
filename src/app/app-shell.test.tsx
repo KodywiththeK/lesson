@@ -19,6 +19,7 @@ describe("AppShell", () => {
       "회차권",
       "원생",
       "선생님",
+      "휴원/퇴원",
       "거래처",
       "교재",
       "수입",
@@ -51,6 +52,7 @@ describe("AppShell", () => {
     expect(labels).toContain("레슨 시간표");
     expect(labels).toContain("원생");
     expect(labels).toContain("내 급여");
+    expect(labels).not.toContain("휴원/퇴원");
     expect(labels).not.toContain("수입");
     expect(labels).not.toContain("거래처");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();

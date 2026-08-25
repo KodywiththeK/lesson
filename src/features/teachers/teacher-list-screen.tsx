@@ -23,6 +23,17 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -49,6 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import type { ListView } from "@/domain/common-list";
 import type {
   BuildTeacherListOptions,
@@ -283,6 +295,9 @@ export function TeacherListScreen({
       );
       toast.success(`선생님 상태를 ${formatTeacherStatus(input.status)}로 변경했습니다.`);
       void invalidateTeachers();
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "status-management"],
+      });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -468,11 +483,12 @@ export function TeacherListScreen({
                 isStatusPending={statusMutation.isPending}
                 isDeletePending={deleteMutation.isPending}
                 onEdit={() => setIsEditingSelectedTeacher(true)}
-                onChangeStatus={(nextStatus) => {
+                onChangeStatus={(nextStatus, reason) => {
                   statusMutation.mutate({
                     academyId,
                     teacherId: selectedTeacher.teacherId,
                     status: nextStatus,
+                    reason,
                   });
                 }}
                 onDelete={() => {
@@ -789,7 +805,7 @@ function TeacherDetail({
   isStatusPending: boolean;
   isDeletePending: boolean;
   onEdit: () => void;
-  onChangeStatus: (status: TeacherStatus) => void;
+  onChangeStatus: (status: TeacherStatus, reason?: string) => void;
   onDelete: () => void;
 }) {
   const currentStatus = teacher.status ?? "employed";
@@ -831,24 +847,18 @@ function TeacherDetail({
             <Pencil aria-hidden="true" />
             수정하기
           </Button>
-          <Button
-            type="button"
-            variant="outline"
+          <TeacherStatusConfirmButton
+            teacher={teacher}
+            nextStatus="on_leave"
             disabled={isStatusPending || currentStatus === "on_leave"}
-            onClick={() => onChangeStatus("on_leave")}
-          >
-            <UserMinus aria-hidden="true" />
-            휴직
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
+            onConfirm={onChangeStatus}
+          />
+          <TeacherStatusConfirmButton
+            teacher={teacher}
+            nextStatus="resigned"
             disabled={isStatusPending || currentStatus === "resigned"}
-            onClick={() => onChangeStatus("resigned")}
-          >
-            <UserCheck aria-hidden="true" />
-            퇴사
-          </Button>
+            onConfirm={onChangeStatus}
+          />
         </div>
         <Button
           type="button"
@@ -861,6 +871,64 @@ function TeacherDetail({
         </Button>
       </DialogFooter>
     </div>
+  );
+}
+
+function TeacherStatusConfirmButton({
+  teacher,
+  nextStatus,
+  disabled,
+  onConfirm,
+}: {
+  teacher: TeacherListRow;
+  nextStatus: "on_leave" | "resigned";
+  disabled: boolean;
+  onConfirm: (status: TeacherStatus, reason?: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const currentStatus = teacher.status ?? "employed";
+  const nextLabel = formatTeacherStatus(nextStatus);
+  const Icon = nextStatus === "on_leave" ? UserMinus : UserCheck;
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant="outline" disabled={disabled}>
+          <Icon aria-hidden="true" />
+          {nextLabel}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>상태 변경 확인</AlertDialogTitle>
+          <AlertDialogDescription>
+            {teacher.name} 선생님 상태를 {formatTeacherStatus(currentStatus)}에서{" "}
+            {nextLabel}로 변경합니다. 퇴사는 30일 보관 후 자동 archive
+            처리됩니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <label className="grid gap-1 text-sm font-medium">
+          <span>상태 변경 메모</span>
+          <Textarea
+            aria-label="상태 변경 메모"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="선택 입력"
+          />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel>취소</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onConfirm(nextStatus, reason.trim() || undefined);
+              setReason("");
+            }}
+          >
+            처리
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

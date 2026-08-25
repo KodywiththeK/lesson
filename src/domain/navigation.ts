@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Archive,
   Banknote,
   BookOpen,
   CalendarDays,
@@ -47,6 +48,12 @@ export const mainNavigation: NavigationItem[] = [
     href: "/teachers",
     description: "선생님 프로필, 담당 파트, 급여 기준을 관리합니다.",
     icon: GraduationCap,
+  },
+  {
+    label: "휴원/퇴원",
+    href: "/status-management",
+    description: "휴원, 퇴원, 휴직, 퇴사 대상을 분리해 관리합니다.",
+    icon: Archive,
   },
   {
     label: "거래처",

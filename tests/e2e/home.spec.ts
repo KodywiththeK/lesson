@@ -101,6 +101,35 @@ test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다"
   ).toBeVisible();
 });
 
+test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 있다", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("link", { name: "휴원/퇴원" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "휴원/퇴원 관리" }),
+  ).toBeVisible();
+  await expect(page.getByText("박지호")).toBeVisible();
+
+  await page.getByRole("button", { name: "박지호 재원 처리" }).click();
+  await expect(
+    page.getByRole("alertdialog", { name: "상태 변경 확인" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("상태 변경 메모")).toBeVisible();
+  await page.getByRole("button", { name: "취소" }).click();
+
+  await page.getByRole("tab", { name: "퇴원" }).click();
+  await expect(page.getByText("유하린")).toBeVisible();
+  await expect(page.getByText("2026-09-10")).toBeVisible();
+
+  await page.getByRole("tab", { name: "선생님" }).click();
+  await expect(page.getByText("문서준")).toBeVisible();
+  await page.getByRole("tab", { name: "퇴사" }).click();
+  await expect(page.getByText("정예린")).toBeVisible();
+});
+
 test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 

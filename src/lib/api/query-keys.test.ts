@@ -53,6 +53,21 @@ describe("queryKeys", () => {
     ]);
   });
 
+  it("휴원/퇴원 관리 key에 대상 종류와 상태를 포함한다", () => {
+    expect(
+      queryKeys.statusManagement.list("academy-1", {
+        entityType: "student",
+        status: "withdrawn",
+      }),
+    ).toEqual([
+      "academy",
+      "academy-1",
+      "status-management",
+      "student",
+      "withdrawn",
+    ]);
+  });
+
   it("학원별 거래처 목록 key에 academyId와 검색/필터를 포함한다", () => {
     expect(
       queryKeys.vendors.list("academy-1", {

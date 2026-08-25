@@ -14,6 +14,10 @@ import {
   type TeacherStatus,
   type TeacherWorkScheduleInput,
 } from "@/domain/teacher";
+import {
+  buildStatusManagementList,
+  type StatusManagementListItem,
+} from "@/domain/status-management";
 
 import { queryKeys } from "./query-keys";
 
@@ -51,16 +55,17 @@ export type TeacherSupabaseRow = {
   contract_end_on?: string | null;
   on_leave_at?: string | null;
   resigned_at?: string | null;
+  retention_until?: string | null;
+  archived_at?: string | null;
   teacher_work_schedules?: TeacherWorkScheduleRow[] | null;
   teacher_salary_settings?: TeacherSalarySettingRow[] | null;
 };
 
-type TeacherListSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<SupabaseQueryResult<TeacherSupabaseRow[]>>;
-};
+type TeacherListSelectBuilder =
+  PromiseLike<SupabaseQueryResult<TeacherSupabaseRow[]>> & {
+    eq(column: string, value: string): TeacherListSelectBuilder;
+    is(column: string, value: null): TeacherListSelectBuilder;
+  };
 
 type TeacherListFromBuilder = {
   select(select: string): TeacherListSelectBuilder;
@@ -100,6 +105,7 @@ export type UpdateTeacherStatusInput = {
   teacherId: string;
   status: TeacherStatus;
   changedAt?: string;
+  reason?: string;
 };
 
 export type DeleteResignedTeacherInput = {
@@ -121,7 +127,7 @@ export type TeacherMutationSupabaseClient = {
 };
 
 const TEACHER_LIST_SELECT =
-  "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)";
+  "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)";
 
 const WEEKDAY_LABELS: Record<string, string> = {
   monday: "월",
@@ -147,13 +153,64 @@ export async function fetchTeacherList(
   const { data, error } = await supabase
     .from("teachers")
     .select(TEACHER_LIST_SELECT)
-    .eq("academy_id", options.academyId);
+    .eq("academy_id", options.academyId)
+    .eq("status", "employed")
+    .is("archived_at", null);
 
   if (error) {
     throw new Error(`선생님 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
   return buildTeacherList((data ?? []).map(toTeacherListRow), options);
+}
+
+export async function fetchTeacherStatusManagementList(
+  supabase: TeacherListSupabaseClient,
+  options: {
+    academyId: string;
+    status: "on_leave" | "resigned";
+    today?: string;
+  },
+): Promise<ListView<StatusManagementListItem>> {
+  const { data, error } = await supabase
+    .from("teachers")
+    .select(TEACHER_LIST_SELECT)
+    .eq("academy_id", options.academyId)
+    .eq("status", options.status)
+    .is("archived_at", null);
+
+  if (error) {
+    throw new Error(`휴직/퇴사 선생님 목록을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return buildStatusManagementList(
+    (data ?? []).map((row) => {
+      const teacher = toTeacherListRow(row);
+
+      return {
+        academyId: teacher.academyId,
+        entityType: "teacher",
+        entityId: teacher.teacherId,
+        name: teacher.name,
+        status: options.status,
+        changedAt:
+          options.status === "resigned"
+            ? teacher.resignedAt
+            : teacher.onLeaveAt,
+        retentionUntil: teacher.retentionUntil,
+        archivedAt: teacher.archivedAt,
+        primaryInfo: teacher.part,
+        secondaryInfo: teacher.contact,
+        detailSummary: teacher.workScheduleSummary,
+      };
+    }),
+    {
+      academyId: options.academyId,
+      entityType: "teacher",
+      status: options.status,
+      today: options.today,
+    },
+  );
 }
 
 export function createTeacherListQueryOptions(
@@ -168,6 +225,23 @@ export function createTeacherListQueryOptions(
       status: options.filters?.status,
     }),
     queryFn: () => fetchTeacherList(supabase, options),
+  };
+}
+
+export function createTeacherStatusManagementQueryOptions(
+  supabase: TeacherListSupabaseClient,
+  options: {
+    academyId: string;
+    status: "on_leave" | "resigned";
+    today?: string;
+  },
+) {
+  return {
+    queryKey: queryKeys.statusManagement.list(options.academyId, {
+      entityType: "teacher",
+      status: options.status,
+    }),
+    queryFn: () => fetchTeacherStatusManagementList(supabase, options),
   };
 }
 
@@ -215,6 +289,7 @@ export async function updateTeacherStatus(
     p_teacher_id: input.teacherId,
     p_status: input.status,
     p_changed_at: input.changedAt ?? new Date().toISOString(),
+    p_reason: input.reason ?? null,
   });
 
   if (error) {
@@ -324,6 +399,10 @@ function toTeacherListRow(row: TeacherSupabaseRow): TeacherListRow {
     status: row.status ?? "employed",
     contractStartOn: row.contract_start_on ?? undefined,
     contractEndOn: row.contract_end_on ?? undefined,
+    onLeaveAt: row.on_leave_at ?? undefined,
+    resignedAt: row.resigned_at ?? undefined,
+    retentionUntil: row.retention_until ?? undefined,
+    archivedAt: row.archived_at ?? undefined,
     monthlySalary: activeSalarySetting?.monthly_salary ?? undefined,
     hourlyRate: activeSalarySetting?.hourly_rate ?? undefined,
     ratioTeacherShare: activeSalarySetting?.ratio_teacher_share ?? undefined,

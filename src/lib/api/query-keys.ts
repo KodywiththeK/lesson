@@ -36,6 +36,11 @@ type LessonTicketListFilters = {
   status?: string;
 };
 
+type StatusManagementListFilters = {
+  entityType: "student" | "teacher";
+  status: "suspended" | "withdrawn" | "on_leave" | "resigned";
+};
+
 export const queryKeys = {
   academy: (academyId: string) => ["academy", academyId] as const,
   students: {
@@ -63,6 +68,15 @@ export const queryKeys = {
         filters.part ?? "",
         filters.payType ?? "",
         filters.status ?? "",
+      ] as const,
+  },
+  statusManagement: {
+    list: (academyId: string, filters: StatusManagementListFilters) =>
+      [
+        ...queryKeys.academy(academyId),
+        "status-management",
+        filters.entityType,
+        filters.status,
       ] as const,
   },
   vendors: {

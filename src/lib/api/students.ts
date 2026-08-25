@@ -5,6 +5,10 @@ import {
   type StudentInstrumentWeeklySchedule,
   type StudentListRow,
 } from "@/domain/student-list";
+import {
+  buildStatusManagementList,
+  type StatusManagementListItem,
+} from "@/domain/status-management";
 
 import { queryKeys } from "./query-keys";
 
@@ -68,16 +72,19 @@ export type StudentSupabaseRow = {
   attendance_code?: string | null;
   registered_on?: string;
   status?: string;
+  suspended_at?: string | null;
+  withdrawn_at?: string | null;
+  retention_until?: string | null;
+  archived_at?: string | null;
   student_contacts?: StudentContactSupabaseRow[] | null;
   student_instruments: StudentInstrumentSupabaseRow[] | null;
 };
 
-type StudentListSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<SupabaseQueryResult<StudentSupabaseRow[]>>;
-};
+type StudentListSelectBuilder =
+  PromiseLike<SupabaseQueryResult<StudentSupabaseRow[]>> & {
+    eq(column: string, value: string): StudentListSelectBuilder;
+    is(column: string, value: null): StudentListSelectBuilder;
+  };
 
 type StudentListFromBuilder = {
   select(select: string): StudentListSelectBuilder;
@@ -188,6 +195,7 @@ export type StudentUpdateSupabaseClient = {
       p_student_id: string;
       p_status: "enrolled" | "suspended" | "withdrawn";
       p_changed_at: string;
+      p_reason?: string | null;
     },
   ): PromiseLike<SupabaseQueryResult<null>>;
   rpc(
@@ -220,7 +228,7 @@ export type UpdateStudentProfileInput = {
 };
 
 const STUDENT_LIST_SELECT =
-  "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+  "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
 
 export async function fetchStudentList(
   supabase: StudentListSupabaseClient,
@@ -229,13 +237,64 @@ export async function fetchStudentList(
   const { data, error } = await supabase
     .from("students")
     .select(STUDENT_LIST_SELECT)
-    .eq("academy_id", options.academyId);
+    .eq("academy_id", options.academyId)
+    .eq("status", "enrolled")
+    .is("archived_at", null);
 
   if (error) {
     throw new Error(`원생 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
   return buildStudentList((data ?? []).map(toStudentListRow), options);
+}
+
+export async function fetchStudentStatusManagementList(
+  supabase: StudentListSupabaseClient,
+  options: {
+    academyId: string;
+    status: "suspended" | "withdrawn";
+    today?: string;
+  },
+): Promise<ListView<StatusManagementListItem>> {
+  const { data, error } = await supabase
+    .from("students")
+    .select(STUDENT_LIST_SELECT)
+    .eq("academy_id", options.academyId)
+    .eq("status", options.status)
+    .is("archived_at", null);
+
+  if (error) {
+    throw new Error(`휴원/퇴원 원생 목록을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return buildStatusManagementList(
+    (data ?? []).map((row) => {
+      const student = toStudentListRow(row);
+
+      return {
+        academyId: student.academyId,
+        entityType: "student",
+        entityId: student.studentId,
+        name: student.name,
+        status: options.status,
+        changedAt:
+          options.status === "withdrawn"
+            ? student.withdrawnAt
+            : student.suspendedAt,
+        retentionUntil: student.retentionUntil,
+        archivedAt: student.archivedAt,
+        primaryInfo: formatJoinedValue(student.instrumentNames),
+        secondaryInfo: formatJoinedValue(student.teacherNames),
+        detailSummary: formatJoinedValue(student.weekdayLabels),
+      };
+    }),
+    {
+      academyId: options.academyId,
+      entityType: "student",
+      status: options.status,
+      today: options.today,
+    },
+  );
 }
 
 export async function updateStudentProfile(
@@ -319,6 +378,23 @@ export function createStudentListQueryOptions(
       pageSize: String(options.pageSize ?? ""),
     }),
     queryFn: () => fetchStudentList(supabase, options),
+  };
+}
+
+export function createStudentStatusManagementQueryOptions(
+  supabase: StudentListSupabaseClient,
+  options: {
+    academyId: string;
+    status: "suspended" | "withdrawn";
+    today?: string;
+  },
+) {
+  return {
+    queryKey: queryKeys.statusManagement.list(options.academyId, {
+      entityType: "student",
+      status: options.status,
+    }),
+    queryFn: () => fetchStudentStatusManagementList(supabase, options),
   };
 }
 
@@ -437,6 +513,7 @@ export async function updateStudentStatus(
     studentId: string;
     status: "enrolled" | "suspended" | "withdrawn";
     changedAt?: string;
+    reason?: string;
   },
 ) {
   const { error } = await supabase.rpc("update_student_status", {
@@ -444,6 +521,7 @@ export async function updateStudentStatus(
     p_student_id: input.studentId,
     p_status: input.status,
     p_changed_at: input.changedAt ?? new Date().toISOString(),
+    p_reason: input.reason ?? null,
   });
 
   if (error) {
@@ -499,6 +577,10 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     attendanceCode: row.attendance_code ?? undefined,
     registeredOn: row.registered_on,
     status: row.status,
+    suspendedAt: row.suspended_at ?? undefined,
+    withdrawnAt: row.withdrawn_at ?? undefined,
+    retentionUntil: row.retention_until ?? undefined,
+    archivedAt: row.archived_at ?? undefined,
     contacts: (row.student_contacts ?? []).map((contact) => ({
       contactId: contact.id ?? "",
       relationship: contact.relationship ?? "",
@@ -597,6 +679,10 @@ function uniqueNonEmpty(values: Array<string | null | undefined>) {
       }),
     ),
   ];
+}
+
+function formatJoinedValue(values: string[]) {
+  return values.length > 0 ? values.join(", ") : "-";
 }
 
 function getPhoneLast4(phone: string) {

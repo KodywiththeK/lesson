@@ -26,7 +26,13 @@ export default function StudentsPage() {
             queryOptionsFactory={
               useTestDemo ? demo.createStudentListQueryOptions : undefined
             }
-            teachers={useTestDemo ? demo.state.teachers : undefined}
+            teachers={
+              useTestDemo
+                ? demo.state.teachers.filter(
+                    (teacher) => (teacher.status ?? "employed") === "employed",
+                  )
+                : undefined
+            }
             registerStudent={useTestDemo ? demo.registerStudent : undefined}
             updateStudent={useTestDemo ? demo.updateStudent : undefined}
             updateStudentStatus={

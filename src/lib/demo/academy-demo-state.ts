@@ -104,6 +104,8 @@ export type DemoStudentStatusInput = {
   academyId: string;
   studentId: string;
   status: "enrolled" | "suspended" | "withdrawn";
+  changedAt?: string;
+  reason?: string;
 };
 
 export type DemoTeacherRegistrationInput = {
@@ -130,6 +132,8 @@ export type DemoTeacherStatusInput = {
   academyId: string;
   teacherId: string;
   status: TeacherStatus;
+  changedAt?: string;
+  reason?: string;
 };
 
 export type DemoLessonTicketPurchaseInput = {
@@ -570,6 +574,8 @@ export function updateDemoStudentStatus(
   state: DemoAcademyState,
   input: DemoStudentStatusInput,
 ): DemoAcademyState {
+  const changedAt = input.changedAt ?? new Date().toISOString();
+
   return {
     ...state,
     students: state.students.map((student) =>
@@ -577,6 +583,15 @@ export function updateDemoStudentStatus(
         ? {
             ...student,
             status: input.status,
+            suspendedAt:
+              input.status === "suspended" ? changedAt : undefined,
+            withdrawnAt:
+              input.status === "withdrawn" ? changedAt : undefined,
+            retentionUntil:
+              input.status === "withdrawn"
+                ? calculateRetentionUntil(changedAt)
+                : undefined,
+            archivedAt: undefined,
           }
         : student,
     ),
@@ -646,6 +661,8 @@ export function updateDemoTeacherStatus(
   state: DemoAcademyState,
   input: DemoTeacherStatusInput,
 ): DemoAcademyState {
+  const changedAt = input.changedAt ?? new Date().toISOString();
+
   return {
     ...state,
     teachers: state.teachers.map((teacher) =>
@@ -654,10 +671,26 @@ export function updateDemoTeacherStatus(
         ? {
             ...teacher,
             status: input.status,
+            onLeaveAt:
+              input.status === "on_leave" ? changedAt : undefined,
+            resignedAt:
+              input.status === "resigned" ? changedAt : undefined,
+            retentionUntil:
+              input.status === "resigned"
+                ? calculateRetentionUntil(changedAt)
+                : undefined,
+            archivedAt: undefined,
           }
         : teacher,
     ),
   };
+}
+
+function calculateRetentionUntil(changedAt: string) {
+  const date = new Date(`${changedAt.slice(0, 10)}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 30);
+
+  return date.toISOString().slice(0, 10);
 }
 
 export function deleteDemoResignedTeacher(

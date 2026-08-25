@@ -24,6 +24,10 @@ export type TeacherListRow = {
   status?: TeacherStatus;
   contractStartOn?: string;
   contractEndOn?: string;
+  onLeaveAt?: string;
+  resignedAt?: string;
+  retentionUntil?: string;
+  archivedAt?: string;
   monthlySalary?: number;
   hourlyRate?: number;
   ratioTeacherShare?: number;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createStudentListQueryOptions,
   deleteWithdrawnStudent,
+  fetchStudentStatusManagementList,
   fetchStudentList,
   registerStudentEnrollment,
   updateStudentProfile,
@@ -17,8 +18,12 @@ function createSupabaseStub(
   rows: StudentSupabaseRow[],
   error: Error | null = null,
 ) {
-  const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-    [];
+  const calls: Array<{
+    table: string;
+    select?: string;
+    eq?: Array<[string, string]>;
+    is?: Array<[string, null]>;
+  }> = [];
   const client: StudentListSupabaseClient = {
     from(table) {
       calls.push({ table });
@@ -27,16 +32,38 @@ function createSupabaseStub(
         select(select) {
           calls[calls.length - 1].select = select;
 
-          return {
-            async eq(column, value) {
-              calls[calls.length - 1].eq = [column, value];
+          const builder = {
+            eq(column: string, value: string) {
+              calls[calls.length - 1].eq = [
+                ...(calls[calls.length - 1].eq ?? []),
+                [column, value],
+              ];
 
-              return {
+              return builder;
+            },
+            is(column: string, value: null) {
+              calls[calls.length - 1].is = [
+                ...(calls[calls.length - 1].is ?? []),
+                [column, value],
+              ];
+
+              return builder;
+            },
+            then<TResult1 = { data: StudentSupabaseRow[] | null; error: Error | null }>(
+              resolve?: (
+                value: { data: StudentSupabaseRow[] | null; error: Error | null },
+              ) => TResult1 | PromiseLike<TResult1>,
+            ) {
+              const value = {
                 data: error ? null : rows,
                 error,
               };
+
+              return Promise.resolve(resolve ? resolve(value) : (value as TResult1));
             },
           };
+
+          return builder;
         },
       };
     },
@@ -87,8 +114,12 @@ describe("fetchStudentList", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
-        eq: ["academy_id", "academy-1"],
+          "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
+        eq: [
+          ["academy_id", "academy-1"],
+          ["status", "enrolled"],
+        ],
+        is: [["archived_at", null]],
       },
     ]);
     expect(result.items.map((student) => student.name)).toEqual(["김민지"]);
@@ -294,6 +325,7 @@ describe("student status mutations", () => {
       studentId: "student-1",
       status: "withdrawn",
       changedAt: "2026-08-24T00:00:00.000Z",
+      reason: "이사",
     });
 
     expect(calls).toEqual([
@@ -304,9 +336,46 @@ describe("student status mutations", () => {
           p_student_id: "student-1",
           p_status: "withdrawn",
           p_changed_at: "2026-08-24T00:00:00.000Z",
+          p_reason: "이사",
         },
       },
     ]);
+  });
+
+  it("휴원/퇴원 관리 목록을 상태별로 조회한다", async () => {
+    const { client, calls } = createSupabaseStub([
+      {
+        id: "student-1",
+        academy_id: "academy-1",
+        name: "김민지",
+        status: "withdrawn",
+        withdrawn_at: "2026-08-01T00:00:00+09:00",
+        retention_until: "2026-08-31",
+        archived_at: null,
+        student_instruments: [],
+      },
+    ]);
+
+    const result = await fetchStudentStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "withdrawn",
+      today: "2026-08-25",
+    });
+
+    expect(calls.at(-1)).toMatchObject({
+      table: "students",
+      eq: [
+        ["academy_id", "academy-1"],
+        ["status", "withdrawn"],
+      ],
+      is: [["archived_at", null]],
+    });
+    expect(result.items[0]).toMatchObject({
+      entityType: "student",
+      name: "김민지",
+      statusLabel: "퇴원",
+      daysRemaining: 6,
+    });
   });
 
   it("퇴원 원생 삭제를 RPC로 전달한다", async () => {

@@ -15,6 +15,17 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -40,6 +51,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import type { ListView } from "@/domain/common-list";
 import type {
   BuildStudentListOptions,
@@ -87,6 +99,7 @@ type StudentListScreenProps = {
       academyId: string;
       studentId: string;
       status: "enrolled" | "suspended" | "withdrawn";
+      reason?: string;
     },
   ) => void | Promise<void>;
   deleteStudent?: (input: { academyId: string; studentId: string }) => void | Promise<void>;
@@ -201,6 +214,9 @@ export function StudentListScreen({
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
       });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "status-management"],
+      });
     },
     onError: (error) => {
       toast.error("원생 등록에 실패했습니다.", {
@@ -213,6 +229,7 @@ export function StudentListScreen({
       academyId: string;
       studentId: string;
       status: "enrolled" | "suspended" | "withdrawn";
+      reason?: string;
     }) => {
       if (updateStudentStatusProp) {
         await updateStudentStatusProp(input);
@@ -971,6 +988,7 @@ function StudentDetailDialog({
     academyId: string;
     studentId: string;
     status: "enrolled" | "suspended" | "withdrawn";
+    reason?: string;
   }) => Promise<unknown>;
   onDelete: (input: { academyId: string; studentId: string }) => Promise<unknown>;
 }) {
@@ -1090,38 +1108,18 @@ function StudentDetailDialog({
             </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
+              <StudentStatusConfirmButton
+                student={student}
+                nextStatus="suspended"
                 disabled={isStatusSaving || student.status === "suspended"}
-                onClick={() =>
-                  void onStatusChange({
-                    academyId: student.academyId,
-                    studentId: student.studentId,
-                    status: "suspended",
-                  })
-                }
-              >
-                휴원
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
+                onConfirm={onStatusChange}
+              />
+              <StudentStatusConfirmButton
+                student={student}
+                nextStatus="withdrawn"
                 disabled={isStatusSaving || student.status === "withdrawn"}
-                onClick={() => {
-                  if (!window.confirm(`${student.name} 원생을 퇴원 처리할까요?`)) {
-                    return;
-                  }
-
-                  void onStatusChange({
-                    academyId: student.academyId,
-                    studentId: student.studentId,
-                    status: "withdrawn",
-                  });
-                }}
-              >
-                퇴원
-              </Button>
+                onConfirm={onStatusChange}
+              />
               <Button
                 type="button"
                 variant="destructive"
@@ -1173,6 +1171,71 @@ function StudentDetailDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StudentStatusConfirmButton({
+  student,
+  nextStatus,
+  disabled,
+  onConfirm,
+}: {
+  student: StudentListRow;
+  nextStatus: "suspended" | "withdrawn";
+  disabled: boolean;
+  onConfirm: (input: {
+    academyId: string;
+    studentId: string;
+    status: "suspended" | "withdrawn";
+    reason?: string;
+  }) => Promise<unknown>;
+}) {
+  const [reason, setReason] = useState("");
+  const nextLabel = formatStudentStatus(nextStatus);
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant="outline" disabled={disabled}>
+          {nextLabel}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>상태 변경 확인</AlertDialogTitle>
+          <AlertDialogDescription>
+            {student.name} 원생 상태를 {formatStudentStatus(student.status)}에서{" "}
+            {nextLabel}으로 변경합니다. 퇴원은 30일 보관 후 자동 archive
+            처리됩니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <label className="grid gap-1 text-sm font-medium">
+          <span>상태 변경 메모</span>
+          <Textarea
+            aria-label="상태 변경 메모"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="선택 입력"
+          />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel>취소</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              void onConfirm({
+                academyId: student.academyId,
+                studentId: student.studentId,
+                status: nextStatus,
+                reason: reason.trim() || undefined,
+              });
+              setReason("");
+            }}
+          >
+            처리
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

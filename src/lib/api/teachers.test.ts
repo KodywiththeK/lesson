@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createTeacherListQueryOptions,
   deleteResignedTeacher,
+  fetchTeacherStatusManagementList,
   fetchTeacherList,
   registerTeacher,
   updateTeacherProfile,
@@ -16,8 +17,12 @@ function createSupabaseStub(
   rows: TeacherSupabaseRow[],
   error: Error | null = null,
 ) {
-  const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-    [];
+  const calls: Array<{
+    table: string;
+    select?: string;
+    eq?: Array<[string, string]>;
+    is?: Array<[string, null]>;
+  }> = [];
   const client: TeacherListSupabaseClient = {
     from(table) {
       calls.push({ table });
@@ -26,16 +31,38 @@ function createSupabaseStub(
         select(select) {
           calls[calls.length - 1].select = select;
 
-          return {
-            async eq(column, value) {
-              calls[calls.length - 1].eq = [column, value];
+          const builder = {
+            eq(column: string, value: string) {
+              calls[calls.length - 1].eq = [
+                ...(calls[calls.length - 1].eq ?? []),
+                [column, value],
+              ];
 
-              return {
+              return builder;
+            },
+            is(column: string, value: null) {
+              calls[calls.length - 1].is = [
+                ...(calls[calls.length - 1].is ?? []),
+                [column, value],
+              ];
+
+              return builder;
+            },
+            then<TResult1 = { data: TeacherSupabaseRow[] | null; error: Error | null }>(
+              resolve?: (
+                value: { data: TeacherSupabaseRow[] | null; error: Error | null },
+              ) => TResult1 | PromiseLike<TResult1>,
+            ) {
+              const value = {
                 data: error ? null : rows,
                 error,
               };
+
+              return Promise.resolve(resolve ? resolve(value) : (value as TResult1));
             },
           };
+
+          return builder;
         },
       };
     },
@@ -88,8 +115,12 @@ describe("fetchTeacherList", () => {
       {
         table: "teachers",
         select:
-          "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)",
-        eq: ["academy_id", "academy-1"],
+          "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)",
+        eq: [
+          ["academy_id", "academy-1"],
+          ["status", "employed"],
+        ],
+        is: [["archived_at", null]],
       },
     ]);
     expect(calls[0].select).not.toContain("resident_registration");
@@ -207,6 +238,7 @@ describe("teacher mutations", () => {
       teacherId: "teacher-1",
       status: "resigned",
       changedAt: "2026-08-25T00:00:00.000Z",
+      reason: "계약 종료",
     });
     await deleteResignedTeacher(client, {
       academyId: "academy-1",
@@ -225,10 +257,54 @@ describe("teacher mutations", () => {
     });
     expect(calls[1].payload).toMatchObject({
       p_status: "resigned",
+      p_reason: "계약 종료",
     });
     expect(calls[2].payload).toEqual({
       p_academy_id: "academy-1",
       p_teacher_id: "teacher-1",
+    });
+  });
+
+  it("휴직/퇴사 관리 목록을 상태별로 조회한다", async () => {
+    const { client, calls } = createSupabaseStub([
+      {
+        id: "teacher-1",
+        academy_id: "academy-1",
+        name: "박선생",
+        part: "피아노",
+        phone: "010-1111-1111",
+        registered_on: "2026-08-01",
+        salary_type: "ratio",
+        status: "resigned",
+        contract_start_on: "2026-09-01",
+        contract_end_on: "2027-08-31",
+        resigned_at: "2026-08-10T00:00:00+09:00",
+        retention_until: "2026-09-09",
+        archived_at: null,
+        teacher_work_schedules: [],
+        teacher_salary_settings: [],
+      },
+    ]);
+
+    const result = await fetchTeacherStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "resigned",
+      today: "2026-08-25",
+    });
+
+    expect(calls.at(-1)).toMatchObject({
+      table: "teachers",
+      eq: [
+        ["academy_id", "academy-1"],
+        ["status", "resigned"],
+      ],
+      is: [["archived_at", null]],
+    });
+    expect(result.items[0]).toMatchObject({
+      entityType: "teacher",
+      name: "박선생",
+      statusLabel: "퇴사",
+      daysRemaining: 15,
     });
   });
 });

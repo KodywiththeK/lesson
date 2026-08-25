@@ -7,6 +7,7 @@ import {
   type LessonTicketListItem,
 } from "@/domain/lesson-ticket";
 import { buildStudentList, type StudentListRow } from "@/domain/student-list";
+import { buildStatusManagementList } from "@/domain/status-management";
 import { buildTeacherList, type TeacherListRow } from "@/domain/teacher-list";
 import { buildVendorList, type VendorListRow } from "@/domain/vendor-list";
 import type {
@@ -51,6 +52,29 @@ export const demoStudents: StudentListRow[] = [
     teacherNames: ["문서준"],
     instrumentNames: ["첼로"],
     weekdayLabels: ["토"],
+  },
+  {
+    academyId,
+    studentId: "student-7",
+    name: "박지호",
+    registeredOn: "2026-06-01",
+    status: "suspended",
+    suspendedAt: "2026-08-20T09:00:00+09:00",
+    teacherNames: ["김하늘"],
+    instrumentNames: ["피아노"],
+    weekdayLabels: ["월"],
+  },
+  {
+    academyId,
+    studentId: "student-8",
+    name: "유하린",
+    registeredOn: "2026-05-15",
+    status: "withdrawn",
+    withdrawnAt: "2026-08-11T09:00:00+09:00",
+    retentionUntil: "2026-09-10",
+    teacherNames: ["오유진"],
+    instrumentNames: ["바이올린"],
+    weekdayLabels: ["금"],
   },
 ];
 
@@ -131,6 +155,32 @@ export const demoTeachers: TeacherListRow[] = [
       },
     ],
     workScheduleSummary: "토",
+  },
+  {
+    academyId,
+    teacherId: "teacher-4",
+    name: "정예린",
+    part: "플루트",
+    contact: "010-7777-8888",
+    registeredAt: "2026-02-10",
+    status: "resigned",
+    contractStartOn: "2026-02-10",
+    contractEndOn: "2027-02-09",
+    resignedAt: "2026-08-10T09:00:00+09:00",
+    retentionUntil: "2026-09-09",
+    payType: "ratio",
+    ratioTeacherShare: 50,
+    salarySummary: "비율제 50%",
+    workSchedules: [
+      {
+        scheduleId: "teacher-schedule-5",
+        weekday: "목",
+        weekdayLabel: "목",
+        startTime: "14:00",
+        endTime: "19:00",
+      },
+    ],
+    workScheduleSummary: "목 14:00-19:00",
   },
 ];
 
@@ -254,7 +304,53 @@ export function createDemoStudentListQueryOptions(
     page: String(options.page ?? 1),
     pageSize: String(options.pageSize ?? ""),
   }),
-    queryFn: async () => buildStudentList(demoStudents, options),
+    queryFn: async () =>
+      buildStudentList(
+        demoStudents.filter(
+          (student) => (student.status ?? "enrolled") === "enrolled" && !student.archivedAt,
+        ),
+        options,
+      ),
+  };
+}
+
+export function createDemoStudentStatusManagementQueryOptions(
+  options: {
+    academyId: string;
+    status: "suspended" | "withdrawn";
+    today?: string;
+  },
+) {
+  return {
+    queryKey: queryKeys.statusManagement.list(options.academyId, {
+      entityType: "student",
+      status: options.status,
+    }),
+    queryFn: async () =>
+      buildStatusManagementList(
+        demoStudents.map((student) => ({
+          academyId: student.academyId,
+          entityType: "student" as const,
+          entityId: student.studentId,
+          name: student.name,
+          status: (student.status ?? "enrolled") as "suspended" | "withdrawn",
+          changedAt:
+            student.status === "withdrawn"
+              ? student.withdrawnAt
+              : student.suspendedAt,
+          retentionUntil: student.retentionUntil,
+          archivedAt: student.archivedAt,
+          primaryInfo: student.instrumentNames.join(", "),
+          secondaryInfo: student.teacherNames.join(", "),
+          detailSummary: student.weekdayLabels.join(", "),
+        })),
+        {
+          academyId: options.academyId,
+          entityType: "student",
+          status: options.status,
+          today: options.today,
+        },
+      ),
   };
 }
 
@@ -268,7 +364,53 @@ export function createDemoTeacherListQueryOptions(
       payType: options.filters?.payType,
       status: options.filters?.status,
     }),
-    queryFn: async () => buildTeacherList(demoTeachers, options),
+    queryFn: async () =>
+      buildTeacherList(
+        demoTeachers.filter(
+          (teacher) => (teacher.status ?? "employed") === "employed" && !teacher.archivedAt,
+        ),
+        options,
+      ),
+  };
+}
+
+export function createDemoTeacherStatusManagementQueryOptions(
+  options: {
+    academyId: string;
+    status: "on_leave" | "resigned";
+    today?: string;
+  },
+) {
+  return {
+    queryKey: queryKeys.statusManagement.list(options.academyId, {
+      entityType: "teacher",
+      status: options.status,
+    }),
+    queryFn: async () =>
+      buildStatusManagementList(
+        demoTeachers.map((teacher) => ({
+          academyId: teacher.academyId,
+          entityType: "teacher" as const,
+          entityId: teacher.teacherId,
+          name: teacher.name,
+          status: (teacher.status ?? "employed") as "on_leave" | "resigned",
+          changedAt:
+            teacher.status === "resigned"
+              ? teacher.resignedAt
+              : teacher.onLeaveAt,
+          retentionUntil: teacher.retentionUntil,
+          archivedAt: teacher.archivedAt,
+          primaryInfo: teacher.part,
+          secondaryInfo: teacher.contact,
+          detailSummary: teacher.workScheduleSummary,
+        })),
+        {
+          academyId: options.academyId,
+          entityType: "teacher",
+          status: options.status,
+          today: options.today,
+        },
+      ),
   };
 }
 

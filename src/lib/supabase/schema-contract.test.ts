@@ -35,6 +35,7 @@ const domainTables = [
   "salary_settlements",
   "teacher_salary_settings",
   "teacher_work_schedules",
+  "entity_status_transitions",
   "audit_events",
 ];
 
@@ -52,6 +53,7 @@ const tenantScopedReferenceTables = [
   "entity_memos",
   "lesson_ticket_grants",
   "books",
+  "entity_status_transitions",
 ];
 
 const updatedAtTables = [
@@ -352,5 +354,20 @@ describe("Supabase schema contract", () => {
     expect(migrationSql).toContain(
       "grant execute on function public.register_teacher_with_profile",
     );
+  });
+
+  it("휴원/퇴원 관리는 soft archive와 상태 전환 감사 로그를 둔다", () => {
+    expect(migrationSql).toContain("add column if not exists archived_at timestamptz");
+    expect(migrationSql).toContain("add column if not exists archive_reason text");
+    expect(migrationSql).toContain("add column if not exists retention_until date");
+    expect(migrationSql).toContain("create table public.entity_status_transitions");
+    expect(migrationSql).toContain("entity_type text not null");
+    expect(migrationSql).toContain("from_status text not null");
+    expect(migrationSql).toContain("to_status text not null");
+    expect(migrationSql).toContain("create or replace function public.archive_expired_people");
+    expect(migrationSql).toContain("status = 'withdrawn'");
+    expect(migrationSql).toContain("status = 'resigned'");
+    expect(migrationSql).toContain("cron.schedule");
+    expect(migrationSql).toContain("lesson-archive-expired-people");
   });
 });
