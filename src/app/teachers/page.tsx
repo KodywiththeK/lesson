@@ -27,6 +27,11 @@ export default function TeachersPage() {
               useTestDemo ? demo.createTeacherListQueryOptions : undefined
             }
             registerTeacher={useTestDemo ? demo.registerTeacher : undefined}
+            updateTeacher={useTestDemo ? demo.updateTeacher : undefined}
+            updateTeacherStatus={
+              useTestDemo ? demo.updateTeacherStatus : undefined
+            }
+            deleteTeacher={useTestDemo ? demo.deleteTeacher : undefined}
           />
         </AppShell>
       )}

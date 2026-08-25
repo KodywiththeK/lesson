@@ -1,9 +1,30 @@
 export type TeacherPayType = "ratio" | "monthly" | "hourly";
+export type TeacherStatus = "employed" | "on_leave" | "resigned";
 
 export type SecureResidentRegistrationNumberRef = {
   encryptedValueRef: string;
   maskedValue: string;
 };
+
+export type TeacherWorkScheduleInput = {
+  weekday: string;
+  startTime?: string;
+  endTime?: string;
+};
+
+export type TeacherSalarySetting =
+  | {
+      payType: "monthly";
+      monthlySalary: number;
+    }
+  | {
+      payType: "hourly";
+      hourlyRate: number;
+    }
+  | {
+      payType: "ratio";
+      ratioTeacherShare: number;
+    };
 
 export type RegisterTeacherInput = {
   academyId: string;
@@ -12,11 +33,21 @@ export type RegisterTeacherInput = {
   part: string;
   contact: string;
   registeredAt: string;
+  contractStartOn: string;
+  contractEndOn: string;
   residentRegistrationNumber: SecureResidentRegistrationNumberRef;
   payType: TeacherPayType;
+  monthlySalary?: number;
+  hourlyRate?: number;
+  ratioAcademyShare?: number;
+  ratioTeacherShare?: number;
+  workSchedules?: TeacherWorkScheduleInput[];
 };
 
 export type TeacherRecord = RegisterTeacherInput & {
+  status: TeacherStatus;
+  salary: TeacherSalarySetting;
+  workSchedules: TeacherWorkScheduleInput[];
   active: true;
 };
 
@@ -50,6 +81,10 @@ export function registerTeacher(input: RegisterTeacherInput): TeacherRecord {
     throw new Error("지원하지 않는 급여 형태입니다.");
   }
 
+  validateContractPeriod(input.contractStartOn, input.contractEndOn);
+  const salary = buildTeacherSalarySetting(input);
+  const workSchedules = normalizeWorkSchedules(input.workSchedules ?? []);
+
   return {
     academyId: input.academyId,
     teacherId: input.teacherId,
@@ -57,11 +92,112 @@ export function registerTeacher(input: RegisterTeacherInput): TeacherRecord {
     part,
     contact,
     registeredAt: input.registeredAt,
+    contractStartOn: input.contractStartOn,
+    contractEndOn: input.contractEndOn,
     residentRegistrationNumber: {
       encryptedValueRef,
       maskedValue,
     },
     payType: input.payType,
+    monthlySalary: input.monthlySalary,
+    hourlyRate: input.hourlyRate,
+    ratioAcademyShare: input.ratioAcademyShare,
+    ratioTeacherShare: input.ratioTeacherShare,
+    salary,
+    workSchedules,
+    status: "employed",
     active: true,
   };
+}
+
+export function buildTeacherSalarySetting(
+  input: Pick<
+    RegisterTeacherInput,
+    | "payType"
+    | "monthlySalary"
+    | "hourlyRate"
+    | "ratioAcademyShare"
+    | "ratioTeacherShare"
+  >,
+): TeacherSalarySetting {
+  if (input.payType === "monthly") {
+    if (!isPositiveMoney(input.monthlySalary)) {
+      throw new Error("월급제는 월급 금액이 필요합니다.");
+    }
+
+    return {
+      payType: "monthly",
+      monthlySalary: Number(input.monthlySalary),
+    };
+  }
+
+  if (input.payType === "hourly") {
+    if (!isPositiveMoney(input.hourlyRate)) {
+      throw new Error("시급제는 시급 금액이 필요합니다.");
+    }
+
+    return {
+      payType: "hourly",
+      hourlyRate: Number(input.hourlyRate),
+    };
+  }
+
+  if (input.payType !== "ratio") {
+    throw new Error("지원하지 않는 급여 형태입니다.");
+  }
+
+  const academyShare = Number(input.ratioAcademyShare);
+  const teacherShare = Number(input.ratioTeacherShare);
+
+  if (
+    !Number.isFinite(academyShare) ||
+    !Number.isFinite(teacherShare) ||
+    academyShare < 0 ||
+    teacherShare < 0 ||
+    academyShare + teacherShare !== 10
+  ) {
+    throw new Error("비율제는 학원 몫과 선생님 몫의 합계가 10이어야 합니다.");
+  }
+
+  return {
+    payType: "ratio",
+    ratioTeacherShare: teacherShare * 10,
+  };
+}
+
+export function normalizeWorkSchedules(
+  schedules: TeacherWorkScheduleInput[],
+): TeacherWorkScheduleInput[] {
+  return schedules.map((schedule) => {
+    const startTime = schedule.startTime?.trim() || undefined;
+    const endTime = schedule.endTime?.trim() || undefined;
+
+    if (Boolean(startTime) !== Boolean(endTime)) {
+      throw new Error("근무 시작 시간과 종료 시간은 함께 입력해야 합니다.");
+    }
+
+    if (startTime && endTime && startTime >= endTime) {
+      throw new Error("근무 종료 시간은 시작 시간보다 늦어야 합니다.");
+    }
+
+    return {
+      weekday: schedule.weekday,
+      ...(startTime ? { startTime } : {}),
+      ...(endTime ? { endTime } : {}),
+    };
+  });
+}
+
+function validateContractPeriod(contractStartOn: string, contractEndOn: string) {
+  if (!contractStartOn || !contractEndOn) {
+    throw new Error("계약 시작일과 종료일은 필수입니다.");
+  }
+
+  if (contractEndOn < contractStartOn) {
+    throw new Error("계약 종료일은 계약 시작일보다 빠를 수 없습니다.");
+  }
+}
+
+function isPositiveMoney(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }

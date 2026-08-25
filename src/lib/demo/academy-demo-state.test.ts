@@ -16,18 +16,27 @@ describe("academy demo state", () => {
     const next = registerDemoAcademyStudent(state, {
       name: "윤라온",
       registeredAt: "2026-08-21",
-      instrumentId: "piano",
-      instrumentName: "피아노",
-      teacherId: "teacher-1",
-      teacherName: "김하늘",
-      lessonType: "academy",
-      weekdays: ["friday"],
-      startTime: "14:00",
-      endTime: "14:50",
-      progress: "바이엘 상",
-      lessonFee: 150000,
-      discountTotal: 10000,
-      finalMonthlyFee: 140000,
+      contact: {
+        relationship: "모",
+        phone: "010-9999-1234",
+      },
+      instruments: [
+        {
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          teacherId: "teacher-1",
+          teacherName: "김하늘",
+          lessonType: "academy",
+          weeklySchedules: [
+            { weekday: "friday", startTime: "14:00", endTime: "14:50" },
+          ],
+          progress: "바이엘 상",
+          lessonFee: 150000,
+          discountTotal: 10000,
+          discountLabel: "형제할인",
+          finalMonthlyFee: 140000,
+        },
+      ],
     });
 
     expect(next.students.some((student) => student.name === "윤라온")).toBe(true);

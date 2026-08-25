@@ -43,6 +43,9 @@ describe("TeachersPage", () => {
     await user.type(within(dialog).getByLabelText("선생님명"), "박소연");
     await user.clear(within(dialog).getByLabelText("연락처"));
     await user.type(within(dialog).getByLabelText("연락처"), "010-7777-8888");
+    await user.type(within(dialog).getByLabelText("계약 시작일"), "2026-09-01");
+    await user.type(within(dialog).getByLabelText("계약 종료일"), "2027-08-31");
+    await user.type(within(dialog).getByLabelText("월급"), "2500000");
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
     expect(await screen.findByText("박소연")).toBeInTheDocument();

@@ -23,6 +23,8 @@ import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons"
 
 import {
   createInitialDemoAcademyState,
+  deleteDemoWithdrawnStudent,
+  deleteDemoResignedTeacher,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
@@ -31,13 +33,19 @@ import {
   registerDemoManualLedgerEntry,
   registerDemoVendor,
   updateDemoAcademyStudent,
+  updateDemoAcademyTeacher,
+  updateDemoStudentStatus,
+  updateDemoTeacherStatus,
   type DemoAcademyState,
   type DemoBookReleaseInput,
   type DemoLessonTicketPurchaseInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
   type DemoStudentUpdateInput,
+  type DemoStudentStatusInput,
   type DemoTeacherRegistrationInput,
+  type DemoTeacherStatusInput,
+  type DemoTeacherUpdateInput,
   type DemoVendorRegistrationInput,
 } from "./academy-demo-state";
 import { queryKeys } from "../api/query-keys";
@@ -46,7 +54,12 @@ type DemoAcademyContextValue = {
   state: DemoAcademyState;
   registerStudent: (input: DemoStudentRegistrationInput) => void;
   updateStudent: (input: DemoStudentUpdateInput) => void;
+  updateStudentStatus: (input: DemoStudentStatusInput) => void;
+  deleteStudent: (input: { academyId: string; studentId: string }) => void;
   registerTeacher: (input: DemoTeacherRegistrationInput) => void;
+  updateTeacher: (input: DemoTeacherUpdateInput) => void;
+  updateTeacherStatus: (input: DemoTeacherStatusInput) => void;
+  deleteTeacher: (input: { academyId: string; teacherId: string }) => void;
   registerLessonTicketPurchase: (
     input: Omit<DemoLessonTicketPurchaseInput, "studentName" | "instrumentName"> & {
       studentName?: string;
@@ -121,8 +134,23 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       updateStudent(input) {
         commitState((current) => updateDemoAcademyStudent(current, input));
       },
+      updateStudentStatus(input) {
+        commitState((current) => updateDemoStudentStatus(current, input));
+      },
+      deleteStudent(input) {
+        commitState((current) => deleteDemoWithdrawnStudent(current, input));
+      },
       registerTeacher(input) {
         commitState((current) => registerDemoAcademyTeacher(current, input));
+      },
+      updateTeacher(input) {
+        commitState((current) => updateDemoAcademyTeacher(current, input));
+      },
+      updateTeacherStatus(input) {
+        commitState((current) => updateDemoTeacherStatus(current, input));
+      },
+      deleteTeacher(input) {
+        commitState((current) => deleteDemoResignedTeacher(current, input));
       },
       async registerLessonTicketPurchase(input) {
         commitState((current) =>
@@ -214,6 +242,7 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
               q: options.search,
               part: options.filters?.part,
               payType: options.filters?.payType,
+              status: options.filters?.status,
             }),
             "demo",
             revision,

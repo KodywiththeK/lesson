@@ -22,6 +22,8 @@ describe("queryKeys", () => {
       "박선생",
       "피아노",
       "월",
+      "",
+      "",
     ]);
   });
 
@@ -37,6 +39,7 @@ describe("queryKeys", () => {
         q: "박",
         part: "피아노",
         payType: "ratio",
+        status: "employed",
       }),
     ).toEqual([
       "academy",
@@ -46,6 +49,7 @@ describe("queryKeys", () => {
       "박",
       "피아노",
       "ratio",
+      "employed",
     ]);
   });
 

@@ -22,6 +22,20 @@ import {
 } from "@/domain/student-registration";
 import type { StudentListRow } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
+import {
+  formatTeacherSalarySummary,
+  formatTeacherWorkScheduleSummary,
+  type TeacherWorkSchedule,
+} from "@/domain/teacher-list";
+import type {
+  TeacherPayType,
+  TeacherStatus,
+  TeacherWorkScheduleInput,
+} from "@/domain/teacher";
+import {
+  buildTeacherSalarySetting,
+  normalizeWorkSchedules,
+} from "@/domain/teacher";
 import { registerVendor } from "@/domain/vendor";
 import type { VendorListRow } from "@/domain/vendor-list";
 import type { UpdateStudentProfileInput } from "@/lib/api/students";
@@ -55,28 +69,67 @@ export type DemoAcademyState = {
 export type DemoStudentRegistrationInput = {
   name: string;
   registeredAt: string;
+  age?: number;
+  grade?: string;
+  school?: string;
+  occupation?: string;
+  contact: {
+    relationship: string;
+    phone: string;
+  };
+  instruments: DemoStudentRegistrationInstrumentInput[];
+};
+
+export type DemoStudentRegistrationInstrumentInput = {
   instrumentId: string;
   instrumentName: string;
   teacherId: string;
   teacherName: string;
   lessonType: LessonType;
-  weekdays: Weekday[];
-  startTime?: string;
-  endTime?: string;
+  weeklySchedules: Array<{
+    weekday: Weekday | string;
+    startTime?: string;
+    endTime?: string;
+  }>;
   progress: string;
   lessonFee: number;
   discountTotal: number;
+  discountLabel?: string;
   finalMonthlyFee: number;
 };
 
 export type DemoStudentUpdateInput = UpdateStudentProfileInput;
+
+export type DemoStudentStatusInput = {
+  academyId: string;
+  studentId: string;
+  status: "enrolled" | "suspended" | "withdrawn";
+};
 
 export type DemoTeacherRegistrationInput = {
   name: string;
   part: string;
   contact: string;
   registeredAt: string;
-  payType: TeacherListRow["payType"];
+  contractStartOn: string;
+  contractEndOn: string;
+  payType: TeacherPayType;
+  monthlySalary?: number;
+  hourlyRate?: number;
+  ratioAcademyShare?: number;
+  ratioTeacherShare?: number;
+  workSchedules?: TeacherWorkScheduleInput[];
+};
+
+export type DemoTeacherUpdateInput = DemoTeacherRegistrationInput & {
+  academyId: string;
+  teacherId: string;
+};
+
+export type DemoTeacherStatusInput = {
+  academyId: string;
+  teacherId: string;
+  status: TeacherStatus;
 };
 
 export type DemoLessonTicketPurchaseInput = {
@@ -134,6 +187,11 @@ const initialEnrollments: StudentEnrollment[] = [
     lessonType: "academy",
     active: true,
     weekdays: ["monday", "wednesday", "friday"],
+    weeklySchedules: [
+      { weekday: "monday", startTime: "15:00", endTime: "15:50" },
+      { weekday: "wednesday", startTime: "15:00", endTime: "15:50" },
+      { weekday: "friday", startTime: "15:00", endTime: "15:50" },
+    ],
     startTime: "15:00",
     endTime: "15:50",
     progress: "체르니 100",
@@ -153,6 +211,10 @@ const initialEnrollments: StudentEnrollment[] = [
     lessonType: "academy",
     active: true,
     weekdays: ["tuesday", "friday"],
+    weeklySchedules: [
+      { weekday: "tuesday", startTime: "16:00", endTime: "16:50" },
+      { weekday: "friday", startTime: "16:00", endTime: "16:50" },
+    ],
     startTime: "16:00",
     endTime: "16:50",
     progress: "바이엘 하권",
@@ -172,6 +234,9 @@ const initialEnrollments: StudentEnrollment[] = [
     lessonType: "academy",
     active: true,
     weekdays: ["friday"],
+    weeklySchedules: [
+      { weekday: "friday", startTime: "17:00", endTime: "17:50" },
+    ],
     startTime: "17:00",
     endTime: "17:50",
     progress: "소나티네",
@@ -191,6 +256,9 @@ const initialEnrollments: StudentEnrollment[] = [
     lessonType: "private",
     active: true,
     weekdays: ["friday"],
+    weeklySchedules: [
+      { weekday: "friday", startTime: "18:00", endTime: "18:50" },
+    ],
     startTime: "18:00",
     endTime: "18:50",
     progress: "스즈키 1권",
@@ -210,6 +278,9 @@ const initialEnrollments: StudentEnrollment[] = [
     lessonType: "private",
     active: true,
     weekdays: ["saturday"],
+    weeklySchedules: [
+      { weekday: "saturday", startTime: "10:30", endTime: "11:20" },
+    ],
     startTime: "10:30",
     endTime: "11:20",
     progress: "활쓰기 기초",
@@ -244,37 +315,54 @@ export function registerDemoAcademyStudent(
   input: DemoStudentRegistrationInput,
 ): DemoAcademyState {
   const studentId = `student-demo-${state.students.length + 1}`;
+  const attendanceCode = `${getPhoneLast4(input.contact.phone) ?? "0000"}${String(
+    state.students.length + 1,
+  ).padStart(4, "0")}`;
   const registration = registerStudent({
     academyId: state.academyId,
     studentId,
     name: input.name,
+    age: input.age,
+    grade: input.grade,
+    school: input.school,
+    occupation: input.occupation,
+    attendanceCode,
     registeredAt: input.registeredAt,
-    guardians: [],
-    instruments: [
+    guardians: [
       {
-        instrumentId: input.instrumentId,
-        instrumentName: input.instrumentName,
-        teacherId: input.teacherId,
-        teacherName: input.teacherName,
-        lessonType: input.lessonType,
-        weekdays: input.weekdays,
-        startTime: input.startTime,
-        endTime: input.endTime,
-        progress: input.progress,
-        lessonFee: input.lessonFee,
-        discounts:
-          input.discountTotal > 0
-            ? [
-                {
-                  type: "manual",
-                  label: "직접 할인",
-                  amount: input.discountTotal,
-                },
-              ]
-            : [],
-        finalMonthlyFee: input.finalMonthlyFee,
+        relationship: input.contact.relationship,
+        phone: input.contact.phone,
       },
     ],
+    instruments: input.instruments.map((instrument) => ({
+      instrumentId: instrument.instrumentId,
+      instrumentName: instrument.instrumentName,
+      teacherId: instrument.teacherId,
+      teacherName: instrument.teacherName,
+      lessonType: instrument.lessonType,
+      weekdays: instrument.weeklySchedules.map((schedule) =>
+        toWeekdayValue(schedule.weekday),
+      ),
+      weeklySchedules: instrument.weeklySchedules.map((schedule) => ({
+        weekday: toWeekdayValue(schedule.weekday),
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+      })),
+      progress: instrument.progress,
+      lessonFee: instrument.lessonFee,
+      discountLabel: instrument.discountLabel,
+      discounts:
+        instrument.discountTotal > 0
+          ? [
+              {
+                type: "manual",
+                label: instrument.discountLabel || "직접입력",
+                amount: instrument.discountTotal,
+              },
+            ]
+          : [],
+      finalMonthlyFee: instrument.finalMonthlyFee,
+    })),
   });
   const enrollments = [...state.enrollments, ...registration.enrollments];
   const academySheets = mergeSheets(
@@ -290,9 +378,53 @@ export function registerDemoAcademyStudent(
         academyId: state.academyId,
         studentId,
         name: input.name,
-        teacherNames: [input.teacherName],
-        instrumentNames: [input.instrumentName],
-        weekdayLabels: input.weekdays.map(formatWeekday),
+        age: input.age,
+        grade: input.grade,
+        school: input.school,
+        occupation: input.occupation,
+        registeredOn: input.registeredAt,
+        status: "enrolled",
+        attendanceCode,
+        contacts: [
+          {
+            contactId: `contact-demo-${studentId}`,
+            relationship: input.contact.relationship,
+            phone: input.contact.phone,
+            phoneLast4: getPhoneLast4(input.contact.phone),
+          },
+        ],
+        teacherNames: uniqueNonEmpty(input.instruments.map((item) => item.teacherName)),
+        instrumentNames: uniqueNonEmpty(input.instruments.map((item) => item.instrumentName)),
+        weekdayLabels: uniqueNonEmpty(
+          input.instruments.flatMap((item) =>
+            item.weeklySchedules.map((schedule) => formatWeekday(schedule.weekday)),
+          ),
+        ),
+        instruments: input.instruments.map((instrument, index) => ({
+          studentInstrumentId: `${studentId}:${instrument.instrumentId}:${index}`,
+          teacherId: instrument.teacherId,
+          teacherName: instrument.teacherName,
+          instrumentId: instrument.instrumentId,
+          instrumentName: instrument.instrumentName,
+          lessonType: instrument.lessonType,
+          weekdayLabels: instrument.weeklySchedules.map((schedule) =>
+            formatWeekday(schedule.weekday),
+          ),
+          startTime: instrument.weeklySchedules[0]?.startTime ?? "",
+          endTime: instrument.weeklySchedules[0]?.endTime ?? "",
+          progress: instrument.progress,
+          lessonFee: instrument.lessonFee,
+          discountTotal: instrument.discountTotal,
+          discountLabel: instrument.discountLabel,
+          finalMonthlyFee: instrument.finalMonthlyFee,
+          active: true,
+          weeklySchedules: instrument.weeklySchedules.map((schedule) => ({
+            weekday: toWeekdayValue(schedule.weekday),
+            weekdayLabel: formatWeekday(schedule.weekday),
+            startTime: schedule.startTime ?? "",
+            endTime: schedule.endTime ?? "",
+          })),
+        })),
       },
     ],
     enrollments,
@@ -341,6 +473,12 @@ export function updateDemoAcademyStudent(
             discountTotal: input.discountTotal ?? 0,
             finalMonthlyFee: input.finalMonthlyFee ?? 0,
             active: true,
+            weeklySchedules: (input.weekdayLabels ?? []).map((weekdayLabel) => ({
+              weekday: toWeekdayValue(weekdayLabel),
+              weekdayLabel,
+              startTime: input.startTime ?? "",
+              endTime: input.endTime ?? "",
+            })),
           },
         ]
       : [],
@@ -428,26 +566,119 @@ export function updateDemoAcademyStudent(
   };
 }
 
+export function updateDemoStudentStatus(
+  state: DemoAcademyState,
+  input: DemoStudentStatusInput,
+): DemoAcademyState {
+  return {
+    ...state,
+    students: state.students.map((student) =>
+      student.studentId === input.studentId
+        ? {
+            ...student,
+            status: input.status,
+          }
+        : student,
+    ),
+    enrollments: state.enrollments,
+  };
+}
+
+export function deleteDemoWithdrawnStudent(
+  state: DemoAcademyState,
+  input: { academyId: string; studentId: string },
+): DemoAcademyState {
+  const student = state.students.find(
+    (item) =>
+      item.academyId === input.academyId && item.studentId === input.studentId,
+  );
+
+  if (student?.status !== "withdrawn") {
+    throw new Error("퇴원 상태의 원생만 삭제할 수 있습니다.");
+  }
+
+  return {
+    ...state,
+    students: state.students.filter(
+      (item) => item.studentId !== input.studentId,
+    ),
+    enrollments: state.enrollments.filter(
+      (item) => item.studentId !== input.studentId,
+    ),
+    tickets: state.tickets.filter((item) => item.studentId !== input.studentId),
+    privateLessons: state.privateLessons.filter(
+      (item) => item.studentId !== input.studentId,
+    ),
+  };
+}
+
 export function registerDemoAcademyTeacher(
   state: DemoAcademyState,
   input: DemoTeacherRegistrationInput,
 ): DemoAcademyState {
   const teacherId = `teacher-demo-${state.teachers.length + 1}`;
+  const row = buildDemoTeacherListRow(state.academyId, teacherId, input);
 
   return {
     ...state,
-    teachers: [
-      ...state.teachers,
-      {
-        academyId: state.academyId,
-        teacherId,
-        name: input.name,
-        part: input.part,
-        contact: input.contact,
-        registeredAt: input.registeredAt,
-        payType: input.payType,
-      },
-    ],
+    teachers: [...state.teachers, row],
+  };
+}
+
+export function updateDemoAcademyTeacher(
+  state: DemoAcademyState,
+  input: DemoTeacherUpdateInput,
+): DemoAcademyState {
+  return {
+    ...state,
+    teachers: state.teachers.map((teacher) =>
+      teacher.teacherId === input.teacherId
+        ? {
+            ...buildDemoTeacherListRow(input.academyId, input.teacherId, input),
+            status: teacher.status ?? "employed",
+          }
+        : teacher,
+    ),
+  };
+}
+
+export function updateDemoTeacherStatus(
+  state: DemoAcademyState,
+  input: DemoTeacherStatusInput,
+): DemoAcademyState {
+  return {
+    ...state,
+    teachers: state.teachers.map((teacher) =>
+      teacher.academyId === input.academyId &&
+      teacher.teacherId === input.teacherId
+        ? {
+            ...teacher,
+            status: input.status,
+          }
+        : teacher,
+    ),
+  };
+}
+
+export function deleteDemoResignedTeacher(
+  state: DemoAcademyState,
+  input: { academyId: string; teacherId: string },
+): DemoAcademyState {
+  const teacher = state.teachers.find(
+    (item) =>
+      item.academyId === input.academyId &&
+      item.teacherId === input.teacherId,
+  );
+
+  if (teacher?.status !== "resigned") {
+    throw new Error("퇴사 상태의 선생님만 삭제할 수 있습니다.");
+  }
+
+  return {
+    ...state,
+    teachers: state.teachers.filter(
+      (item) => item.teacherId !== input.teacherId,
+    ),
   };
 }
 
@@ -701,19 +932,23 @@ function buildAcademySheets(
   month: string,
 ) {
   const events = generateAcademyLessonEvents(
-    enrollments.map((enrollment) => ({
-      academyId: enrollment.academyId,
-      enrollmentId: enrollment.enrollmentId,
-      studentId: enrollment.studentId,
-      studentName: enrollment.studentName,
-      instrumentId: enrollment.instrumentId,
-      instrumentName: enrollment.instrumentName,
-      lessonType: enrollment.lessonType,
-      active: enrollment.active,
-      weekdays: enrollment.weekdays,
-      startTime: enrollment.startTime ?? "",
-      endTime: enrollment.endTime ?? "",
-    })),
+    enrollments.flatMap((enrollment) =>
+      enrollment.weeklySchedules
+        .filter((schedule) => schedule.startTime && schedule.endTime)
+        .map((schedule) => ({
+          academyId: enrollment.academyId,
+          enrollmentId: `${enrollment.enrollmentId}:${schedule.weekday}`,
+          studentId: enrollment.studentId,
+          studentName: enrollment.studentName,
+          instrumentId: enrollment.instrumentId,
+          instrumentName: enrollment.instrumentName,
+          lessonType: enrollment.lessonType,
+          active: enrollment.active,
+          weekdays: [schedule.weekday],
+          startTime: schedule.startTime ?? "",
+          endTime: schedule.endTime ?? "",
+        })),
+    ),
     { academyId, month },
   );
   const dates = [...new Set(events.map((event) => event.date))];
@@ -740,7 +975,47 @@ function mergeSheets(
   };
 }
 
-function formatWeekday(weekday: Weekday) {
+function buildDemoTeacherListRow(
+  academyId: string,
+  teacherId: string,
+  input: DemoTeacherRegistrationInput,
+): TeacherListRow {
+  const salary = buildTeacherSalarySetting(input);
+  const workSchedules: TeacherWorkSchedule[] = normalizeWorkSchedules(
+    input.workSchedules ?? [],
+  ).map((schedule, index) => ({
+    scheduleId: `teacher-schedule-demo-${teacherId}-${index}`,
+    weekday: schedule.weekday,
+    weekdayLabel: formatWeekday(schedule.weekday),
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+  }));
+  const row: TeacherListRow = {
+    academyId,
+    teacherId,
+    name: input.name,
+    part: input.part,
+    contact: input.contact,
+    registeredAt: input.registeredAt,
+    contractStartOn: input.contractStartOn,
+    contractEndOn: input.contractEndOn,
+    payType: input.payType,
+    status: "employed",
+    monthlySalary: salary.payType === "monthly" ? salary.monthlySalary : undefined,
+    hourlyRate: salary.payType === "hourly" ? salary.hourlyRate : undefined,
+    ratioTeacherShare:
+      salary.payType === "ratio" ? salary.ratioTeacherShare : undefined,
+    workSchedules,
+  };
+
+  return {
+    ...row,
+    salarySummary: formatTeacherSalarySummary(row),
+    workScheduleSummary: formatTeacherWorkScheduleSummary(workSchedules),
+  };
+}
+
+function formatWeekday(weekday: Weekday | string) {
   const labels: Record<Weekday, string> = {
     sunday: "일",
     monday: "월",
@@ -751,7 +1026,7 @@ function formatWeekday(weekday: Weekday) {
     saturday: "토",
   };
 
-  return labels[weekday];
+  return labels[toWeekdayValue(weekday)] ?? weekday;
 }
 
 function toWeekdayValue(value: string): Weekday {
@@ -773,4 +1048,20 @@ function toWeekdayValue(value: string): Weekday {
   };
 
   return weekdays[value] ?? "monday";
+}
+
+function uniqueNonEmpty(values: Array<string | null | undefined>) {
+  return [
+    ...new Set(
+      values.flatMap((value) => {
+        const trimmedValue = value?.trim();
+
+        return trimmedValue ? [trimmedValue] : [];
+      }),
+    ),
+  ];
+}
+
+function getPhoneLast4(phone: string) {
+  return phone.replace(/\D/g, "").slice(-4) || undefined;
 }

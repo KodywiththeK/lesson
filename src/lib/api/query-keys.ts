@@ -4,12 +4,15 @@ type StudentListFilters = {
   teacherName?: string;
   instrumentName?: string;
   weekdayLabel?: string;
+  page?: string;
+  pageSize?: string;
 };
 
 type TeacherListFilters = {
   q?: string;
   part?: string;
   payType?: string;
+  status?: string;
 };
 
 type VendorListFilters = {
@@ -46,6 +49,8 @@ export const queryKeys = {
         filters.teacherName ?? "",
         filters.instrumentName ?? "",
         filters.weekdayLabel ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   teachers: {
@@ -57,6 +62,7 @@ export const queryKeys = {
         filters.q ?? "",
         filters.part ?? "",
         filters.payType ?? "",
+        filters.status ?? "",
       ] as const,
   },
   vendors: {

@@ -17,6 +17,7 @@ const migrationSql = readdirSync(path.join(process.cwd(), "supabase/migrations")
 const domainTables = [
   "student_contacts",
   "student_instruments",
+  "student_instrument_weekly_schedules",
   "lesson_series",
   "lesson_events",
   "attendance_records",
@@ -33,14 +34,17 @@ const domainTables = [
   "fixed_income_snapshots",
   "salary_settlements",
   "teacher_salary_settings",
+  "teacher_work_schedules",
   "audit_events",
 ];
 
 const tenantScopedReferenceTables = [
   "academy_members",
   "teachers",
+  "teacher_work_schedules",
   "students",
   "student_instruments",
+  "student_instrument_weekly_schedules",
   "lesson_series",
   "lesson_events",
   "attendance_records",
@@ -55,10 +59,12 @@ const updatedAtTables = [
   "academies",
   "academy_members",
   "teachers",
+  "teacher_work_schedules",
   "students",
   "vendors",
   "student_contacts",
   "student_instruments",
+  "student_instrument_weekly_schedules",
   "lesson_series",
   "lesson_events",
   "monthly_memos",
@@ -256,6 +262,45 @@ describe("Supabase schema contract", () => {
     );
   });
 
+  it("원생 등록 확장은 복수 악기와 요일별 시간표를 RPC로 원자 처리한다", () => {
+    expect(migrationSql).toContain("add column if not exists age integer");
+    expect(migrationSql).toContain("add column if not exists attendance_code text");
+    expect(migrationSql).toContain("add column if not exists phone_last4 text");
+    expect(migrationSql).toContain("add column if not exists discount_label text");
+    expect(migrationSql).toContain(
+      "create table public.student_instrument_weekly_schedules",
+    );
+    expect(migrationSql).toContain(
+      "create unique index if not exists students_academy_attendance_code_key",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.register_student_with_enrollments",
+    );
+    expect(migrationSql).toContain("jsonb_array_elements(p_enrollments)");
+    expect(migrationSql).toContain("insert into public.lesson_series");
+    expect(migrationSql).toContain(
+      "grant execute on function public.register_student_with_enrollments",
+    );
+  });
+
+  it("휴원/퇴원/삭제 정책은 RPC로 제한한다", () => {
+    expect(migrationSql).toContain(
+      "create or replace function public.update_student_status",
+    );
+    expect(migrationSql).toContain("status = 'cancelled'");
+    expect(migrationSql).toContain("origin = 'regular'");
+    expect(migrationSql).toContain(
+      "create or replace function public.delete_withdrawn_student",
+    );
+    expect(migrationSql).toContain("and status = 'withdrawn'");
+    expect(migrationSql).toContain(
+      "grant execute on function public.update_student_status",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.delete_withdrawn_student",
+    );
+  });
+
   it("레슨표 메모는 일자와 레슨표 종류별로 저장하고 원생/선생님 메모는 대상 FK로 연결한다", () => {
     expect(migrationSql).toContain("create table public.lesson_calendar_memos");
     expect(migrationSql).toContain(
@@ -273,6 +318,39 @@ describe("Supabase schema contract", () => {
     );
     expect(migrationSql).toContain(
       "alter table public.entity_memos enable row level security",
+    );
+  });
+
+  it("선생님 관리는 계약기간, 상태, 근무시간, 급여 상세 RPC를 갖는다", () => {
+    expect(migrationSql).toContain("add column if not exists status text");
+    expect(migrationSql).toContain(
+      "add column if not exists contract_start_on date",
+    );
+    expect(migrationSql).toContain(
+      "add column if not exists contract_end_on date",
+    );
+    expect(migrationSql).toContain("create table public.teacher_work_schedules");
+    expect(migrationSql).toContain(
+      "constraint teacher_work_schedules_time_pair_check",
+    );
+    expect(migrationSql).toContain(
+      "constraint teacher_work_schedules_academy_teacher_fk",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.register_teacher_with_profile",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.update_teacher_profile",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.update_teacher_status",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.delete_resigned_teacher",
+    );
+    expect(migrationSql).toContain("and status = 'resigned'");
+    expect(migrationSql).toContain(
+      "grant execute on function public.register_teacher_with_profile",
     );
   });
 });

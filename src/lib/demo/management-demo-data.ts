@@ -62,7 +62,29 @@ export const demoTeachers: TeacherListRow[] = [
     part: "피아노",
     contact: "010-1111-2222",
     registeredAt: "2026-03-02",
+    status: "employed",
+    contractStartOn: "2026-03-02",
+    contractEndOn: "2027-03-01",
     payType: "monthly",
+    monthlySalary: 2600000,
+    salarySummary: "월급제 2,600,000원",
+    workSchedules: [
+      {
+        scheduleId: "teacher-schedule-1",
+        weekday: "월",
+        weekdayLabel: "월",
+        startTime: "13:00",
+        endTime: "20:00",
+      },
+      {
+        scheduleId: "teacher-schedule-2",
+        weekday: "수",
+        weekdayLabel: "수",
+        startTime: "13:00",
+        endTime: "20:00",
+      },
+    ],
+    workScheduleSummary: "월 13:00-20:00, 수 13:00-20:00",
   },
   {
     academyId,
@@ -71,7 +93,22 @@ export const demoTeachers: TeacherListRow[] = [
     part: "바이올린",
     contact: "010-3333-4444",
     registeredAt: "2026-04-01",
+    status: "employed",
+    contractStartOn: "2026-04-01",
+    contractEndOn: "2027-03-31",
     payType: "ratio",
+    ratioTeacherShare: 60,
+    salarySummary: "비율제 60%",
+    workSchedules: [
+      {
+        scheduleId: "teacher-schedule-3",
+        weekday: "금",
+        weekdayLabel: "금",
+        startTime: "15:00",
+        endTime: "21:00",
+      },
+    ],
+    workScheduleSummary: "금 15:00-21:00",
   },
   {
     academyId,
@@ -80,7 +117,20 @@ export const demoTeachers: TeacherListRow[] = [
     part: "첼로",
     contact: "010-5555-6666",
     registeredAt: "2026-05-10",
+    status: "on_leave",
+    contractStartOn: "2026-05-10",
+    contractEndOn: "2027-05-09",
     payType: "hourly",
+    hourlyRate: 35000,
+    salarySummary: "시급제 35,000원",
+    workSchedules: [
+      {
+        scheduleId: "teacher-schedule-4",
+        weekday: "토",
+        weekdayLabel: "토",
+      },
+    ],
+    workScheduleSummary: "토",
   },
 ];
 
@@ -198,10 +248,12 @@ export function createDemoStudentListQueryOptions(
   return {
     queryKey: queryKeys.students.list(options.academyId, {
       q: options.search,
-      teacherName: options.filters?.teacherName,
-      instrumentName: options.filters?.instrumentName,
-      weekdayLabel: options.filters?.weekdayLabel,
-    }),
+    teacherName: options.filters?.teacherName,
+    instrumentName: options.filters?.instrumentName,
+    weekdayLabel: options.filters?.weekdayLabel,
+    page: String(options.page ?? 1),
+    pageSize: String(options.pageSize ?? ""),
+  }),
     queryFn: async () => buildStudentList(demoStudents, options),
   };
 }
@@ -214,6 +266,7 @@ export function createDemoTeacherListQueryOptions(
       q: options.search,
       part: options.filters?.part,
       payType: options.filters?.payType,
+      status: options.filters?.status,
     }),
     queryFn: async () => buildTeacherList(demoTeachers, options),
   };
