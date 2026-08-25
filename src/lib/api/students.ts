@@ -2,6 +2,7 @@ import type { ListView } from "@/domain/common-list";
 import {
   buildStudentList,
   type BuildStudentListOptions,
+  type StudentInstrumentWeeklySchedule,
   type StudentListRow,
 } from "@/domain/student-list";
 
@@ -24,11 +25,29 @@ export type StudentInstrumentSupabaseRow = {
   progress?: string | null;
   lesson_fee?: number | null;
   discount_total?: number | null;
+  discount_label?: string | null;
   final_monthly_fee?: number | null;
   active?: boolean | null;
+  student_instrument_weekly_schedules?:
+    | StudentInstrumentWeeklyScheduleSupabaseRow[]
+    | null;
   teachers: {
     name: string | null;
   } | null;
+};
+
+export type StudentInstrumentWeeklyScheduleSupabaseRow = {
+  id?: string | null;
+  weekday: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+};
+
+export type StudentContactSupabaseRow = {
+  id?: string | null;
+  relationship: string | null;
+  phone: string | null;
+  phone_last4?: string | null;
 };
 
 export type StudentRegistrationTeacherOptionRow = {
@@ -42,8 +61,14 @@ export type StudentSupabaseRow = {
   id: string;
   academy_id: string;
   name: string;
+  age?: number | null;
+  grade?: string | null;
+  school?: string | null;
+  occupation?: string | null;
+  attendance_code?: string | null;
   registered_on?: string;
   status?: string;
+  student_contacts?: StudentContactSupabaseRow[] | null;
   student_instruments: StudentInstrumentSupabaseRow[] | null;
 };
 
@@ -68,46 +93,70 @@ export type RegisterStudentEnrollmentInput = {
   academyId: string;
   name: string;
   registeredAt: string;
-  teacherId: string;
-  teacherName: string;
+  age?: number;
+  grade?: string;
+  school?: string;
+  occupation?: string;
+  contact: {
+    relationship: string;
+    phone: string;
+  };
+  instruments: RegisterStudentEnrollmentInstrumentInput[];
+};
+
+export type RegisterStudentEnrollmentInstrumentInput = {
+  teacherId?: string | null;
+  teacherName?: string;
   lessonType: "academy" | "private";
-  weekdays: string[];
   instrumentId: string;
   instrumentName: string;
-  startTime: string;
-  endTime: string;
+  weeklySchedules: RegisterStudentWeeklyScheduleInput[];
   progress: string;
   lessonFee: number;
   discountTotal: number;
+  discountLabel?: string;
   finalMonthlyFee: number;
 };
 
+export type RegisterStudentWeeklyScheduleInput = {
+  weekday: string;
+  startTime?: string;
+  endTime?: string;
+};
+
 export type StudentRegistrationSupabaseClient = {
-  from(table: "students"): {
-    insert(values: Record<string, unknown>): {
-      select(select: string): {
-        single(): PromiseLike<
-          SupabaseQueryResult<{
-            id: string;
-            academy_id: string;
-            name: string;
-          }>
-        >;
-      };
-    };
-  };
-  from(table: "student_instruments" | "lesson_series"): {
-    insert(values: Record<string, unknown>): {
-      select(select: string): {
-        single(): PromiseLike<SupabaseQueryResult<{ id: string }>>;
-      };
-    };
-  };
-  from(table: "student_teacher_assignments"): {
-    insert(values: Record<string, unknown> | Record<string, unknown>[]): PromiseLike<
-      SupabaseQueryResult<null>
-    >;
-  };
+  rpc(
+    functionName: "register_student_with_enrollments",
+    payload: RegisterStudentEnrollmentRpcPayload,
+  ): PromiseLike<SupabaseQueryResult<string>>;
+};
+
+type RegisterStudentEnrollmentRpcPayload = {
+  p_academy_id: string;
+  p_name: string;
+  p_registered_on: string;
+  p_age: number | null;
+  p_grade: string | null;
+  p_school: string | null;
+  p_occupation: string | null;
+  p_contact_relationship: string;
+  p_contact_phone: string;
+  p_enrollments: Array<{
+    instrument_id: string;
+    instrument_name: string;
+    teacher_id: string | null;
+    lesson_type: string;
+    progress: string;
+    lesson_fee: number;
+    discount_total: number;
+    discount_label: string | null;
+    final_monthly_fee: number;
+    weekly_schedules: Array<{
+      weekday: string;
+      start_time: string | null;
+      end_time: string | null;
+    }>;
+  }>;
 };
 
 export type StudentUpdateSupabaseClient = {
@@ -132,6 +181,22 @@ export type StudentUpdateSupabaseClient = {
       p_effective_from: string;
     },
   ): PromiseLike<SupabaseQueryResult<null>>;
+  rpc(
+    functionName: "update_student_status",
+    payload: {
+      p_academy_id: string;
+      p_student_id: string;
+      p_status: "enrolled" | "suspended" | "withdrawn";
+      p_changed_at: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<null>>;
+  rpc(
+    functionName: "delete_withdrawn_student",
+    payload: {
+      p_academy_id: string;
+      p_student_id: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<null>>;
 };
 
 export type UpdateStudentProfileInput = {
@@ -154,15 +219,16 @@ export type UpdateStudentProfileInput = {
   effectiveFrom?: string;
 };
 
+const STUDENT_LIST_SELECT =
+  "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+
 export async function fetchStudentList(
   supabase: StudentListSupabaseClient,
   options: FetchStudentListOptions,
 ): Promise<ListView<StudentListRow>> {
   const { data, error } = await supabase
     .from("students")
-    .select(
-      "id, academy_id, name, registered_on, status, student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, final_monthly_fee, active, teachers!student_instruments_academy_teacher_fk(name))",
-    )
+    .select(STUDENT_LIST_SELECT)
     .eq("academy_id", options.academyId);
 
   if (error) {
@@ -249,6 +315,8 @@ export function createStudentListQueryOptions(
       teacherName: options.filters?.teacherName,
       instrumentName: options.filters?.instrumentName,
       weekdayLabel: options.filters?.weekdayLabel,
+      page: String(options.page ?? 1),
+      pageSize: String(options.pageSize ?? ""),
     }),
     queryFn: () => fetchStudentList(supabase, options),
   };
@@ -258,100 +326,146 @@ export async function registerStudentEnrollment(
   supabase: StudentRegistrationSupabaseClient,
   input: RegisterStudentEnrollmentInput,
 ): Promise<StudentListRow> {
-  const { data: student, error: studentError } = await supabase
-    .from("students")
-    .insert({
-      academy_id: input.academyId,
-      name: input.name,
-      status: "enrolled",
-      registered_on: input.registeredAt,
-    })
-    .select("id, academy_id, name")
-    .single();
+  const trimmedName = input.name.trim();
 
-  if (studentError) {
-    throw new Error(`원생을 등록하지 못했습니다: ${studentError.message}`);
+  if (!trimmedName) {
+    throw new Error("원생명은 필수입니다.");
   }
 
-  if (!student) {
+  if (input.instruments.length === 0) {
+    throw new Error("하나 이상의 수강 악기가 필요합니다.");
+  }
+
+  const { data: studentId, error } = await supabase.rpc(
+    "register_student_with_enrollments",
+    {
+      p_academy_id: input.academyId,
+      p_name: trimmedName,
+      p_registered_on: input.registeredAt,
+      p_age: input.age ?? null,
+      p_grade: normalizeOptionalText(input.grade),
+      p_school: normalizeOptionalText(input.school),
+      p_occupation: normalizeOptionalText(input.occupation),
+      p_contact_relationship: input.contact.relationship.trim() || "본인",
+      p_contact_phone: input.contact.phone.trim(),
+      p_enrollments: input.instruments.map((instrument) => ({
+        instrument_id: instrument.instrumentId,
+        instrument_name: instrument.instrumentName,
+        teacher_id: instrument.teacherId || null,
+        lesson_type: instrument.lessonType,
+        progress: instrument.progress,
+        lesson_fee: instrument.lessonFee,
+        discount_total: instrument.discountTotal,
+        discount_label: normalizeOptionalText(instrument.discountLabel),
+        final_monthly_fee: instrument.finalMonthlyFee,
+        weekly_schedules: instrument.weeklySchedules.map((schedule) => ({
+          weekday: toKoreanWeekdayLabel(schedule.weekday),
+          start_time: normalizeOptionalTime(schedule.startTime),
+          end_time: normalizeOptionalTime(schedule.endTime),
+        })),
+      })),
+    },
+  );
+
+  if (error) {
+    throw new Error(`원생을 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!studentId) {
     throw new Error("원생을 등록했지만 반환된 데이터가 없습니다.");
   }
 
-  const { data: instrument, error: instrumentError } = await supabase
-    .from("student_instruments")
-    .insert({
-      academy_id: input.academyId,
-      student_id: student.id,
-      teacher_id: input.teacherId,
-      instrument_id: input.instrumentId,
-      instrument_name: input.instrumentName,
-      lesson_type: input.lessonType,
-      weekdays: input.weekdays.map(toKoreanWeekdayLabel),
-      start_time: input.startTime,
-      end_time: input.endTime,
-      progress: input.progress,
-      lesson_fee: input.lessonFee,
-      discount_total: input.discountTotal,
-      final_monthly_fee: input.finalMonthlyFee,
-    })
-    .select("id")
-    .single();
-
-  if (instrumentError) {
-    throw new Error(`원생 수강 악기를 등록하지 못했습니다: ${instrumentError.message}`);
-  }
-
-  if (!instrument) {
-    throw new Error("원생 수강 악기를 등록했지만 반환된 데이터가 없습니다.");
-  }
-
-  const { error: assignmentError } = await supabase
-    .from("student_teacher_assignments")
-    .insert({
-      academy_id: input.academyId,
-      student_id: student.id,
-      teacher_id: input.teacherId,
-      instrument_name: input.instrumentName,
-      active: true,
-    });
-
-  if (assignmentError) {
-    throw new Error(`원생 선생님 배정을 등록하지 못했습니다: ${assignmentError.message}`);
-  }
-
-  if (input.lessonType === "academy") {
-    const { error: seriesError } = await supabase
-      .from("lesson_series")
-      .insert({
-        academy_id: input.academyId,
-        student_id: student.id,
-        student_instrument_id: instrument.id,
-        teacher_id: input.teacherId,
-        lesson_kind: "academy",
-        instrument_id: input.instrumentId,
-        instrument_name: input.instrumentName,
-        weekdays: input.weekdays.map(toKoreanWeekdayLabel),
-        start_time: input.startTime,
-        end_time: input.endTime,
-        effective_from: input.registeredAt,
-        active: true,
-      })
-      .select("id")
-      .single();
-
-    if (seriesError) {
-      throw new Error(`원생 정기 레슨 규칙을 등록하지 못했습니다: ${seriesError.message}`);
-    }
-  }
+  const instruments = input.instruments.map((instrument) => ({
+    studentInstrumentId: "",
+    teacherId: instrument.teacherId ?? null,
+    teacherName: instrument.teacherName ?? "",
+    instrumentId: instrument.instrumentId,
+    instrumentName: instrument.instrumentName,
+    lessonType: instrument.lessonType,
+    weekdayLabels: uniqueNonEmpty(
+      instrument.weeklySchedules.map((schedule) =>
+        toKoreanWeekdayLabel(schedule.weekday),
+      ),
+    ),
+    startTime: instrument.weeklySchedules[0]?.startTime ?? "",
+    endTime: instrument.weeklySchedules[0]?.endTime ?? "",
+    progress: instrument.progress,
+    lessonFee: instrument.lessonFee,
+    discountTotal: instrument.discountTotal,
+    discountLabel: instrument.discountLabel,
+    finalMonthlyFee: instrument.finalMonthlyFee,
+    active: true,
+    weeklySchedules: instrument.weeklySchedules.map((schedule) => ({
+      weekday: schedule.weekday,
+      weekdayLabel: toKoreanWeekdayLabel(schedule.weekday),
+      startTime: schedule.startTime ?? "",
+      endTime: schedule.endTime ?? "",
+    })),
+  }));
 
   return {
     academyId: input.academyId,
-    studentId: student.id,
-    name: student.name,
-    teacherNames: [input.teacherName],
-    instrumentNames: [input.instrumentName],
-    weekdayLabels: input.weekdays.map(toKoreanWeekdayLabel),
+    studentId,
+    name: trimmedName,
+    age: input.age,
+    grade: input.grade,
+    school: input.school,
+    occupation: input.occupation,
+    registeredOn: input.registeredAt,
+    status: "enrolled",
+    contacts: [
+      {
+        contactId: "",
+        relationship: input.contact.relationship,
+        phone: input.contact.phone,
+        phoneLast4: getPhoneLast4(input.contact.phone),
+      },
+    ],
+    teacherNames: uniqueNonEmpty(input.instruments.map((item) => item.teacherName)),
+    instrumentNames: uniqueNonEmpty(input.instruments.map((item) => item.instrumentName)),
+    weekdayLabels: uniqueNonEmpty(
+      instruments.flatMap((instrument) => instrument.weekdayLabels),
+    ),
+    instruments,
   };
+}
+
+export async function updateStudentStatus(
+  supabase: StudentUpdateSupabaseClient,
+  input: {
+    academyId: string;
+    studentId: string;
+    status: "enrolled" | "suspended" | "withdrawn";
+    changedAt?: string;
+  },
+) {
+  const { error } = await supabase.rpc("update_student_status", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+    p_status: input.status,
+    p_changed_at: input.changedAt ?? new Date().toISOString(),
+  });
+
+  if (error) {
+    throw new Error(`원생 상태를 변경하지 못했습니다: ${error.message}`);
+  }
+}
+
+export async function deleteWithdrawnStudent(
+  supabase: StudentUpdateSupabaseClient,
+  input: {
+    academyId: string;
+    studentId: string;
+  },
+) {
+  const { error } = await supabase.rpc("delete_withdrawn_student", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+  });
+
+  if (error) {
+    throw new Error(`퇴원 원생을 삭제하지 못했습니다: ${error.message}`);
+  }
 }
 
 function toKoreanWeekdayLabel(value: string) {
@@ -370,13 +484,27 @@ function toKoreanWeekdayLabel(value: string) {
 
 function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
   const instruments = row.student_instruments ?? [];
+  const mappedInstruments = instruments.map((instrument) =>
+    toStudentListInstrument(instrument),
+  );
 
   return {
     academyId: row.academy_id,
     studentId: row.id,
     name: row.name,
+    age: row.age ?? undefined,
+    grade: row.grade ?? undefined,
+    school: row.school ?? undefined,
+    occupation: row.occupation ?? undefined,
+    attendanceCode: row.attendance_code ?? undefined,
     registeredOn: row.registered_on,
     status: row.status,
+    contacts: (row.student_contacts ?? []).map((contact) => ({
+      contactId: contact.id ?? "",
+      relationship: contact.relationship ?? "",
+      phone: contact.phone ?? "",
+      phoneLast4: contact.phone_last4 ?? undefined,
+    })),
     teacherNames: uniqueNonEmpty(
       instruments.map((instrument) => instrument.teachers?.name),
     ),
@@ -384,28 +512,65 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
       instruments.map((instrument) => instrument.instrument_name),
     ),
     weekdayLabels: uniqueNonEmpty(
-      instruments.flatMap((instrument) => instrument.weekdays ?? []),
+      mappedInstruments.flatMap((instrument) => instrument.weekdayLabels),
     ),
-    instruments: instruments.map((instrument) => ({
-      studentInstrumentId: instrument.id ?? "",
-      teacherId: instrument.teacher_id ?? null,
-      teacherName: instrument.teachers?.name ?? "",
-      instrumentId: instrument.instrument_id ?? "",
-      instrumentName: instrument.instrument_name ?? "",
-      lessonType: instrument.lesson_type ?? "academy",
-      weekdayLabels: instrument.weekdays ?? [],
-      startTime: normalizeTimeForInput(instrument.start_time),
-      endTime: normalizeTimeForInput(instrument.end_time),
-      progress: instrument.progress ?? "",
-      lessonFee: instrument.lesson_fee ?? 0,
-      discountTotal: instrument.discount_total ?? 0,
-      finalMonthlyFee: instrument.final_monthly_fee ?? 0,
-      active: instrument.active ?? true,
-    })),
+    instruments: mappedInstruments,
   };
 }
 
+function toStudentListInstrument(instrument: StudentInstrumentSupabaseRow) {
+  const weeklySchedules = normalizeWeeklySchedulesForRow(instrument);
+
+  return {
+    studentInstrumentId: instrument.id ?? "",
+    teacherId: instrument.teacher_id ?? null,
+    teacherName: instrument.teachers?.name ?? "",
+    instrumentId: instrument.instrument_id ?? "",
+    instrumentName: instrument.instrument_name ?? "",
+    lessonType: instrument.lesson_type ?? "academy",
+    weekdayLabels: uniqueNonEmpty(
+      weeklySchedules.map((schedule) => schedule.weekdayLabel),
+    ),
+    startTime: weeklySchedules[0]?.startTime ?? normalizeTimeForInput(instrument.start_time),
+    endTime: weeklySchedules[0]?.endTime ?? normalizeTimeForInput(instrument.end_time),
+    progress: instrument.progress ?? "",
+    lessonFee: instrument.lesson_fee ?? 0,
+    discountTotal: instrument.discount_total ?? 0,
+    discountLabel: instrument.discount_label ?? undefined,
+    finalMonthlyFee: instrument.final_monthly_fee ?? 0,
+    active: instrument.active ?? true,
+    weeklySchedules,
+  };
+}
+
+function normalizeWeeklySchedulesForRow(
+  instrument: StudentInstrumentSupabaseRow,
+): StudentInstrumentWeeklySchedule[] {
+  const scheduleRows = instrument.student_instrument_weekly_schedules ?? [];
+
+  if (scheduleRows.length > 0) {
+    return scheduleRows.map((schedule) => ({
+      scheduleId: schedule.id ?? undefined,
+      weekday: toWeekdayValue(schedule.weekday ?? ""),
+      weekdayLabel: toKoreanWeekdayLabel(schedule.weekday ?? ""),
+      startTime: normalizeTimeForInput(schedule.start_time),
+      endTime: normalizeTimeForInput(schedule.end_time),
+    }));
+  }
+
+  return (instrument.weekdays ?? []).map((weekday) => ({
+    weekday: toWeekdayValue(weekday),
+    weekdayLabel: toKoreanWeekdayLabel(weekday),
+    startTime: normalizeTimeForInput(instrument.start_time),
+    endTime: normalizeTimeForInput(instrument.end_time),
+  }));
+}
+
 function normalizeOptionalTime(value: string | undefined) {
+  return value?.trim() || null;
+}
+
+function normalizeOptionalText(value: string | undefined) {
   return value?.trim() || null;
 }
 
@@ -432,4 +597,29 @@ function uniqueNonEmpty(values: Array<string | null | undefined>) {
       }),
     ),
   ];
+}
+
+function getPhoneLast4(phone: string) {
+  return phone.replace(/\D/g, "").slice(-4) || undefined;
+}
+
+function toWeekdayValue(value: string) {
+  const weekdays: Record<string, string> = {
+    월: "monday",
+    화: "tuesday",
+    수: "wednesday",
+    목: "thursday",
+    금: "friday",
+    토: "saturday",
+    일: "sunday",
+    monday: "monday",
+    tuesday: "tuesday",
+    wednesday: "wednesday",
+    thursday: "thursday",
+    friday: "friday",
+    saturday: "saturday",
+    sunday: "sunday",
+  };
+
+  return weekdays[value] ?? value;
 }

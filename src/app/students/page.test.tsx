@@ -40,7 +40,17 @@ describe("StudentsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "원생 등록" });
 
     await user.type(within(dialog).getByLabelText("원생명"), "윤라온");
-    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+    await user.type(within(dialog).getByLabelText("연락처"), "010-9999-1234");
+    await user.click(within(dialog).getByLabelText("피아노 금요일"));
+    await user.type(
+      within(dialog).getByLabelText("피아노 금 시작 시간"),
+      "14:00",
+    );
+    await user.type(
+      within(dialog).getByLabelText("피아노 금 종료 시간"),
+      "14:50",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "등록" }));
 
     expect(await screen.findByText("윤라온")).toBeInTheDocument();
   });

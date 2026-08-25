@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   createStudentListQueryOptions,
+  deleteWithdrawnStudent,
   fetchStudentList,
+  registerStudentEnrollment,
   updateStudentProfile,
+  updateStudentStatus,
   type StudentSupabaseRow,
   type StudentListSupabaseClient,
   type StudentUpdateSupabaseClient,
+  type StudentRegistrationSupabaseClient,
 } from "./students";
 
 function createSupabaseStub(
@@ -83,7 +87,7 @@ describe("fetchStudentList", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, registered_on, status, student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, final_monthly_fee, active, teachers!student_instruments_academy_teacher_fk(name))",
+          "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -112,6 +116,100 @@ describe("fetchStudentList", () => {
         academyId: "academy-1",
       }),
     ).rejects.toThrow("원생 목록을 불러오지 못했습니다: permission denied");
+  });
+});
+
+describe("registerStudentEnrollment", () => {
+  it("복수 악기와 요일별 스케줄을 원생 등록 RPC payload로 전달한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client: StudentRegistrationSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload });
+
+        return {
+          data: "student-1",
+          error: null,
+        };
+      },
+    };
+
+    const result = await registerStudentEnrollment(client, {
+      academyId: "academy-1",
+      name: "김민지",
+      registeredAt: "2026-08-21",
+      age: 8,
+      grade: "초등 1학년",
+      school: "한빛초",
+      occupation: "학생",
+      contact: {
+        relationship: "모",
+        phone: "010-1111-2222",
+      },
+      instruments: [
+        {
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          teacherId: "teacher-1",
+          teacherName: "박선생",
+          lessonType: "academy",
+          weeklySchedules: [
+            { weekday: "monday", startTime: "15:00", endTime: "15:50" },
+            { weekday: "wednesday" },
+          ],
+          progress: "바이엘 상",
+          lessonFee: 150000,
+          discountTotal: 10000,
+          discountLabel: "형제할인",
+          finalMonthlyFee: 140000,
+        },
+      ],
+    });
+
+    expect(calls).toEqual([
+      {
+        functionName: "register_student_with_enrollments",
+        payload: {
+          p_academy_id: "academy-1",
+          p_name: "김민지",
+          p_registered_on: "2026-08-21",
+          p_age: 8,
+          p_grade: "초등 1학년",
+          p_school: "한빛초",
+          p_occupation: "학생",
+          p_contact_relationship: "모",
+          p_contact_phone: "010-1111-2222",
+          p_enrollments: [
+            {
+              instrument_id: "piano",
+              instrument_name: "피아노",
+              teacher_id: "teacher-1",
+              lesson_type: "academy",
+              progress: "바이엘 상",
+              lesson_fee: 150000,
+              discount_total: 10000,
+              discount_label: "형제할인",
+              final_monthly_fee: 140000,
+              weekly_schedules: [
+                { weekday: "월", start_time: "15:00", end_time: "15:50" },
+                { weekday: "수", start_time: null, end_time: null },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    expect(result).toMatchObject({
+      studentId: "student-1",
+      name: "김민지",
+      contacts: [
+        {
+          relationship: "모",
+          phone: "010-1111-2222",
+          phoneLast4: "2222",
+        },
+      ],
+      weekdayLabels: ["월", "수"],
+    });
   });
 });
 
@@ -180,6 +278,64 @@ describe("updateStudentProfile", () => {
   });
 });
 
+describe("student status mutations", () => {
+  it("휴원/퇴원 상태 변경을 RPC로 전달한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client: StudentUpdateSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload });
+
+        return { data: null, error: null };
+      },
+    };
+
+    await updateStudentStatus(client, {
+      academyId: "academy-1",
+      studentId: "student-1",
+      status: "withdrawn",
+      changedAt: "2026-08-24T00:00:00.000Z",
+    });
+
+    expect(calls).toEqual([
+      {
+        functionName: "update_student_status",
+        payload: {
+          p_academy_id: "academy-1",
+          p_student_id: "student-1",
+          p_status: "withdrawn",
+          p_changed_at: "2026-08-24T00:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
+  it("퇴원 원생 삭제를 RPC로 전달한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client: StudentUpdateSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload });
+
+        return { data: null, error: null };
+      },
+    };
+
+    await deleteWithdrawnStudent(client, {
+      academyId: "academy-1",
+      studentId: "student-1",
+    });
+
+    expect(calls).toEqual([
+      {
+        functionName: "delete_withdrawn_student",
+        payload: {
+          p_academy_id: "academy-1",
+          p_student_id: "student-1",
+        },
+      },
+    ]);
+  });
+});
+
 describe("createStudentListQueryOptions", () => {
   it("학원 범위와 검색/필터를 queryKey와 queryFn에 함께 묶는다", async () => {
     const { client } = createSupabaseStub([]);
@@ -203,6 +359,8 @@ describe("createStudentListQueryOptions", () => {
       "박선생",
       "피아노",
       "월",
+      "1",
+      "",
     ]);
     await expect(options.queryFn()).resolves.toMatchObject({
       items: [],

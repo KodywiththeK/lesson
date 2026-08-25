@@ -102,7 +102,7 @@ describe("registerStudent", () => {
     expect(result.scheduleSources).toEqual([
       {
         academyId: "academy-1",
-        enrollmentId: "student-1:piano",
+        enrollmentId: "student-1:piano:monday",
         studentId: "student-1",
         studentName: "김민지",
         instrumentId: "piano",
@@ -207,7 +207,37 @@ describe("registerStudent", () => {
     ).toThrow("최종 수강료가 레슨비와 할인 합계와 일치하지 않습니다.");
   });
 
-  it("학원 수업은 수업 요일과 시간이 필요하다", () => {
+  it("시간이 없는 요일은 수강 정보에는 남기되 반복 일정 소스로 만들지 않는다", () => {
+    const result = registerStudent({
+      academyId: "academy-1",
+      studentId: "student-1",
+      name: "김민지",
+      registeredAt: "2026-08-20",
+      guardians: [],
+      instruments: [
+        {
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          teacherId: "teacher-1",
+          teacherName: "박선생",
+          lessonType: "academy",
+          weekdays: ["monday"],
+          weeklySchedules: [{ weekday: "monday" }],
+          progress: "바이엘 2",
+          lessonFee: 160000,
+          discounts: [],
+          finalMonthlyFee: 160000,
+        },
+      ],
+    });
+
+    expect(result.enrollments[0].weeklySchedules).toEqual([
+      { weekday: "monday" },
+    ]);
+    expect(result.scheduleSources).toEqual([]);
+  });
+
+  it("학원 수업은 하나 이상의 수업 요일이 필요하다", () => {
     expect(() =>
       registerStudent({
         academyId: "academy-1",

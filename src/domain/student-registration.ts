@@ -19,16 +19,24 @@ export type StudentInstrumentInput = {
   teacherName: string;
   lessonType: LessonType;
   weekdays: Weekday[];
+  weeklySchedules?: StudentInstrumentWeeklyScheduleInput[];
   startTime?: string;
   endTime?: string;
   progress: string;
   lessonFee: number;
+  discountLabel?: string;
   discounts: Array<{
     type: DiscountType;
     label: string;
     amount: number;
   }>;
   finalMonthlyFee: number;
+};
+
+export type StudentInstrumentWeeklyScheduleInput = {
+  weekday: Weekday;
+  startTime?: string;
+  endTime?: string;
 };
 
 export type RegisterStudentInput = {
@@ -38,6 +46,8 @@ export type RegisterStudentInput = {
   age?: number;
   grade?: string;
   school?: string;
+  occupation?: string;
+  attendanceCode?: string;
   registeredAt: string;
   guardians: StudentGuardianInput[];
   instruments: StudentInstrumentInput[];
@@ -50,6 +60,8 @@ export type StudentRecord = {
   age?: number;
   grade?: string;
   school?: string;
+  occupation?: string;
+  attendanceCode?: string;
   registeredAt: string;
   status: "enrolled";
   guardians: StudentGuardianInput[];
@@ -67,11 +79,13 @@ export type StudentEnrollment = {
   lessonType: LessonType;
   active: true;
   weekdays: Weekday[];
+  weeklySchedules: StudentInstrumentWeeklyScheduleInput[];
   startTime?: string;
   endTime?: string;
   progress: string;
   lessonFee: number;
   discountTotal: number;
+  discountLabel?: string;
   finalMonthlyFee: number;
 };
 
@@ -110,6 +124,8 @@ export function registerStudent(input: RegisterStudentInput): RegisterStudentRes
       age: input.age,
       grade: input.grade,
       school: input.school,
+      occupation: input.occupation,
+      attendanceCode: input.attendanceCode,
       registeredAt: input.registeredAt,
       status: "enrolled",
       guardians: input.guardians,
@@ -117,7 +133,7 @@ export function registerStudent(input: RegisterStudentInput): RegisterStudentRes
     enrollments,
     scheduleSources: enrollments
       .filter((enrollment) => enrollment.lessonType === "academy")
-      .map(toScheduleSource),
+      .flatMap(toScheduleSource),
     fixedIncomeSources: enrollments
       .filter(
         (enrollment) =>
@@ -140,7 +156,9 @@ function createEnrollment(
   input: RegisterStudentInput,
   instrument: StudentInstrumentInput,
 ): StudentEnrollment {
-  validateInstrument(instrument);
+  const weeklySchedules = normalizeWeeklySchedules(instrument);
+
+  validateInstrument(instrument, weeklySchedules);
 
   const discountTotal = instrument.discounts.reduce(
     (total, discount) => total + discount.amount,
@@ -162,17 +180,22 @@ function createEnrollment(
     teacherName: instrument.teacherName,
     lessonType: instrument.lessonType,
     active: true,
-    weekdays: instrument.weekdays,
+    weekdays: weeklySchedules.map((schedule) => schedule.weekday),
+    weeklySchedules,
     startTime: instrument.startTime,
     endTime: instrument.endTime,
     progress: instrument.progress,
     lessonFee: instrument.lessonFee,
     discountTotal,
+    discountLabel: instrument.discountLabel,
     finalMonthlyFee: instrument.finalMonthlyFee,
   };
 }
 
-function validateInstrument(instrument: StudentInstrumentInput) {
+function validateInstrument(
+  instrument: StudentInstrumentInput,
+  weeklySchedules: StudentInstrumentWeeklyScheduleInput[],
+) {
   if (instrument.lessonFee < 0 || instrument.finalMonthlyFee < 0) {
     throw new Error("수강료는 0 이상이어야 합니다.");
   }
@@ -185,29 +208,72 @@ function validateInstrument(instrument: StudentInstrumentInput) {
     return;
   }
 
-  if (instrument.weekdays.length === 0) {
+  if (weeklySchedules.length === 0) {
     throw new Error("학원 수업은 하나 이상의 수업 요일이 필요합니다.");
   }
 
-  if (!instrument.startTime || !instrument.endTime) {
-    throw new Error("학원 수업은 시작 시간과 종료 시간이 필요합니다.");
+  if (
+    weeklySchedules.some(
+      (schedule) =>
+        Boolean(schedule.startTime) !== Boolean(schedule.endTime),
+    )
+  ) {
+    throw new Error("요일별 시작 시간과 종료 시간은 함께 입력해야 합니다.");
+  }
+
+  if (
+    weeklySchedules.some(
+      (schedule) =>
+        schedule.startTime &&
+        schedule.endTime &&
+        schedule.endTime <= schedule.startTime,
+    )
+  ) {
+    throw new Error("종료 시간은 시작 시간보다 늦어야 합니다.");
   }
 }
 
-function toScheduleSource(enrollment: StudentEnrollment): AcademyLessonEnrollment {
-  return {
+function toScheduleSource(enrollment: StudentEnrollment): AcademyLessonEnrollment[] {
+  const completeSchedules = enrollment.weeklySchedules.filter(
+    (schedule) => schedule.startTime && schedule.endTime,
+  );
+
+  if (completeSchedules.length === 0) {
+    return [];
+  }
+
+  return completeSchedules.map((schedule) => ({
     academyId: enrollment.academyId,
-    enrollmentId: enrollment.enrollmentId,
+    enrollmentId: `${enrollment.enrollmentId}:${schedule.weekday}`,
     studentId: enrollment.studentId,
     studentName: enrollment.studentName,
     instrumentId: enrollment.instrumentId,
     instrumentName: enrollment.instrumentName,
     lessonType: "academy",
     active: true,
-    weekdays: enrollment.weekdays,
-    startTime: enrollment.startTime ?? "",
-    endTime: enrollment.endTime ?? "",
-  };
+    weekdays: [schedule.weekday],
+    startTime: schedule.startTime ?? "",
+    endTime: schedule.endTime ?? "",
+  }));
+}
+
+function normalizeWeeklySchedules(
+  instrument: StudentInstrumentInput,
+): StudentInstrumentWeeklyScheduleInput[] {
+  const sourceSchedules =
+    instrument.weeklySchedules && instrument.weeklySchedules.length > 0
+      ? instrument.weeklySchedules
+      : instrument.weekdays.map((weekday) => ({
+          weekday,
+          startTime: instrument.startTime,
+          endTime: instrument.endTime,
+        }));
+
+  return sourceSchedules.map((schedule) => ({
+    weekday: schedule.weekday,
+    startTime: schedule.startTime?.trim() || undefined,
+    endTime: schedule.endTime?.trim() || undefined,
+  }));
 }
 
 function toMonth(date: string) {

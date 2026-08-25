@@ -178,6 +178,101 @@ describe("StudentListScreen", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
   });
 
+  it("신규 원생 등록 모달에서 복수 악기와 요일별 시간을 등록 payload로 만든다", async () => {
+    const user = userEvent.setup();
+    const registerStudent = vi.fn();
+
+    renderStudentListScreen(
+      (options) => ({
+        queryKey: ["students", options.academyId, options.search ?? ""],
+        queryFn: async () => buildStudentList(studentRows, options),
+      }),
+      { registerStudent },
+    );
+
+    await screen.findByRole("cell", { name: "김민지" });
+    await user.click(screen.getByRole("button", { name: "원생 등록" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "원생 등록" });
+    await user.type(within(dialog).getByLabelText("원생명"), "윤라온");
+    await user.type(within(dialog).getByLabelText("연락처"), "010-7777-8888");
+    await user.click(within(dialog).getByLabelText("피아노 월요일"));
+    await user.type(
+      within(dialog).getByLabelText("피아노 월 시작 시간"),
+      "14:00",
+    );
+    await user.type(
+      within(dialog).getByLabelText("피아노 월 종료 시간"),
+      "14:50",
+    );
+    await user.click(within(dialog).getByLabelText("바이올린 선택"));
+    await user.click(within(dialog).getByLabelText("바이올린 금요일"));
+
+    await user.click(within(dialog).getByRole("button", { name: "등록" }));
+
+    await waitFor(() => {
+      expect(registerStudent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "윤라온",
+          contact: {
+            relationship: "모",
+            phone: "010-7777-8888",
+          },
+          instruments: expect.arrayContaining([
+            expect.objectContaining({
+              instrumentName: "피아노",
+              teacherId: "teacher-1",
+              lessonType: "academy",
+              weeklySchedules: [
+                { weekday: "monday", startTime: "14:00", endTime: "14:50" },
+              ],
+            }),
+            expect.objectContaining({
+              instrumentName: "바이올린",
+              teacherId: "teacher-2",
+              lessonType: "private",
+              weeklySchedules: [{ weekday: "friday" }],
+            }),
+          ]),
+        }),
+      );
+    });
+  });
+
+  it("원생이 10명을 넘으면 페이지네이션과 페이지당 개수 변경을 제공한다", async () => {
+    const user = userEvent.setup();
+    const manyStudents = Array.from({ length: 12 }, (_, index) => ({
+      academyId: "academy-1",
+      studentId: `student-${index + 1}`,
+      name: `원생${String(index + 1).padStart(2, "0")}`,
+      teacherNames: ["박선생"],
+      instrumentNames: ["피아노"],
+      weekdayLabels: ["월"],
+    }));
+
+    renderStudentListScreen((options) => ({
+      queryKey: [
+        "students",
+        options.academyId,
+        options.page ?? 1,
+        options.pageSize ?? 10,
+      ],
+      queryFn: async () => buildStudentList(manyStudents, options),
+    }));
+
+    expect(await screen.findByText("총 12명 · 1/2페이지")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "원생01" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "다음" }));
+
+    expect(await screen.findByText("총 12명 · 2/2페이지")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "원생11" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("페이지당 원생 수"), "20");
+
+    expect(await screen.findByText("총 12명 · 1/1페이지")).toBeInTheDocument();
+  });
+
   it("자세히보기 다이얼로그에서 원생 정보를 확인하고 바로 수정완료한다", async () => {
     const user = userEvent.setup();
     const updateStudent = vi.fn();
