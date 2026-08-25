@@ -102,7 +102,7 @@ describe("LessonManagementWorkspace", () => {
     );
   });
 
-  it("학원 레슨표는 캘린더뷰와 테이블뷰를 함께 제공한다", async () => {
+  it("학원 레슨표는 월간 캘린더와 선택 일자 테이블뷰를 함께 제공한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -113,9 +113,11 @@ describe("LessonManagementWorkspace", () => {
 
     await user.click(screen.getByRole("tab", { name: "학원 레슨 테이블뷰" }));
 
-    const table = screen.getByRole("table", { name: "2026년 8월 학원 레슨 테이블" });
+    const table = screen.getByRole("table", {
+      name: "2026-08-21 학원 레슨 테이블",
+    });
     expect(within(table).getByRole("cell", { name: "김민지" })).toBeInTheDocument();
-    expect(within(table).getAllByRole("cell", { name: "김하늘" })[0]).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: "정하린" })).not.toBeInTheDocument();
 
     await user.click(
       within(table).getByRole("button", { name: "김민지 출석 확인 열기" }),
@@ -124,6 +126,76 @@ describe("LessonManagementWorkspace", () => {
     expect(
       await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" }),
     ).toBeInTheDocument();
+  });
+
+  it("학원 레슨 출석 다이얼로그에서 검색, 일괄 처리, 선택 초기화를 수행한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /21/ }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "2026-08-21 출석 확인",
+    });
+
+    await user.type(within(dialog).getByRole("searchbox", { name: "원생 검색" }), "이서윤");
+    expect(within(dialog).getByText("이서윤")).toBeInTheDocument();
+    expect(within(dialog).queryByText("김민지")).not.toBeInTheDocument();
+
+    await user.clear(within(dialog).getByRole("searchbox", { name: "원생 검색" }));
+    await user.click(within(dialog).getByRole("button", { name: "전체출석" }));
+
+    expect(within(dialog).getAllByText("출석").length).toBeGreaterThanOrEqual(3);
+
+    await user.click(within(dialog).getByRole("checkbox", { name: "이서윤 선택" }));
+    await user.click(within(dialog).getByRole("button", { name: "선택 초기화" }));
+
+    const seoyunRow = within(dialog).getByRole("row", { name: /이서윤/ });
+    expect(within(seoyunRow).getByText("대기")).toBeInTheDocument();
+  });
+
+  it("학원 레슨 출석 다이얼로그에서 이번 일정만 다른 날짜로 이동한다", async () => {
+    const user = userEvent.setup();
+
+    renderWorkspace();
+
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원 레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /21/ }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "2026-08-21 출석 확인",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "이서윤 일정 이동" }));
+
+    const moveDialog = await screen.findByRole("dialog", {
+      name: "이서윤 일정 이동",
+    });
+    await user.clear(within(moveDialog).getByLabelText("이동 날짜"));
+    await user.type(within(moveDialog).getByLabelText("이동 날짜"), "2026-08-24");
+    await user.clear(within(moveDialog).getByLabelText("시작 시간"));
+    await user.type(within(moveDialog).getByLabelText("시작 시간"), "18:00");
+    await user.clear(within(moveDialog).getByLabelText("종료 시간"));
+    await user.type(within(moveDialog).getByLabelText("종료 시간"), "18:50");
+    await user.type(within(moveDialog).getByLabelText("이동 사유"), "콩쿠르 보충");
+    await user.click(within(moveDialog).getByRole("button", { name: "이동 저장" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "이서윤 일정 이동" })).not.toBeInTheDocument();
+    });
+
+    const movedDayDialog = await screen.findByRole("dialog", {
+      name: "2026-08-24 출석 확인",
+    });
+    expect(movedDayDialog).toHaveTextContent("이서윤");
+    expect(movedDayDialog).toHaveTextContent("이동");
   });
 
   it("개인레슨표는 캘린더뷰와 테이블뷰를 함께 제공한다", async () => {
@@ -155,10 +227,13 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "미등원인원" }));
 
     const absentDialog = await screen.findByRole("dialog", {
-      name: "2026-08-21 미등원 인원",
+      name: "2026년 8월 미등원 인원",
     });
 
     expect(within(absentDialog).getByText("박지호")).toBeInTheDocument();
+    expect(absentDialog).toHaveTextContent("2026-08-21");
+    expect(within(absentDialog).getByText("강도현")).toBeInTheDocument();
+    expect(absentDialog).toHaveTextContent("2026-08-22");
 
     await user.click(within(absentDialog).getByRole("button", { name: "박지호 보강 입력" }));
 
@@ -258,6 +333,12 @@ describe("LessonManagementWorkspace", () => {
         screen.getByRole("gridcell", { name: /21/ }),
       ).getByText("메모"),
     ).toBeInTheDocument();
+
+    const reminder = screen.getByRole("region", {
+      name: "학원레슨 메모 리마인더",
+    });
+    expect(reminder).toHaveTextContent("리허설 일정 재공지");
+    expect(reminder).toHaveTextContent("2026-08-21");
 
     await user.click(screen.getByRole("button", { name: "메모지" }));
 

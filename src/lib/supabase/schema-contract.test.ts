@@ -264,6 +264,27 @@ describe("Supabase schema contract", () => {
     );
   });
 
+  it("학원 레슨 1회 일정 이동과 출결 초기화는 RPC로 원자 처리한다", () => {
+    expect(migrationSql).toContain(
+      "drop constraint if exists lesson_events_origin_check",
+    );
+    expect(migrationSql).toContain("'rescheduled'");
+    expect(migrationSql).toContain(
+      "create or replace function public.move_academy_lesson_event",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.reset_academy_lesson_attendance",
+    );
+    expect(migrationSql).toContain("lesson_event.rescheduled");
+    expect(migrationSql).toContain("attendance.reset");
+    expect(migrationSql).toContain(
+      "grant execute on function public.move_academy_lesson_event",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.reset_academy_lesson_attendance",
+    );
+  });
+
   it("원생 등록 확장은 복수 악기와 요일별 시간표를 RPC로 원자 처리한다", () => {
     expect(migrationSql).toContain("add column if not exists age integer");
     expect(migrationSql).toContain("add column if not exists attendance_code text");

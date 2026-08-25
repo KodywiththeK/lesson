@@ -4,7 +4,8 @@ export type LessonEventOrigin =
   | "manual"
   | "makeup"
   | "private"
-  | "special";
+  | "special"
+  | "rescheduled";
 
 export type PrivateLessonStatus =
   | "scheduled"

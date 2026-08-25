@@ -6,7 +6,8 @@ export type LessonEventOrigin =
   | "manual"
   | "makeup"
   | "private"
-  | "special";
+  | "special"
+  | "rescheduled";
 
 export type DailyAcademyAttendanceOptions = {
   academyId: string;

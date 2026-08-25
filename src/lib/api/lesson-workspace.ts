@@ -83,6 +83,22 @@ export type CreateMakeupLessonEventInput = {
   reason: string;
 };
 
+export type MoveAcademyLessonEventInput = {
+  academyId: string;
+  lessonEventId: string;
+  targetDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+};
+
+export type ResetAcademyLessonAttendanceInput = {
+  academyId: string;
+  lessonEventId: string;
+  studentId: string;
+  reason?: string;
+};
+
 export type LessonWorkspaceSupabaseClient =
   PrivateLessonRegistrationOptionsSupabaseClient & {
     rpc(
@@ -104,6 +120,26 @@ export type LessonWorkspaceSupabaseClient =
         p_reason: string;
       },
     ): PromiseLike<SupabaseResult<string>>;
+    rpc(
+      functionName: "move_academy_lesson_event",
+      payload: {
+        p_academy_id: string;
+        p_lesson_event_id: string;
+        p_target_date: string;
+        p_start_time: string;
+        p_end_time: string;
+        p_reason: string;
+      },
+    ): PromiseLike<SupabaseResult<LessonWorkspaceEventRow>>;
+    rpc(
+      functionName: "reset_academy_lesson_attendance",
+      payload: {
+        p_academy_id: string;
+        p_lesson_event_id: string;
+        p_student_id: string;
+        p_reason: string | null;
+      },
+    ): PromiseLike<SupabaseResult<null>>;
     from(table: "lesson_events"): {
       select(select: string): {
         eq(column: "academy_id", value: string): {
@@ -298,6 +334,46 @@ export async function createMakeupLessonEvent(
   }
 }
 
+export async function moveAcademyLessonEvent(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: MoveAcademyLessonEventInput,
+): Promise<DailyAcademyAttendanceRow> {
+  const { data, error } = await supabase.rpc("move_academy_lesson_event", {
+    p_academy_id: input.academyId,
+    p_lesson_event_id: input.lessonEventId,
+    p_target_date: input.targetDate,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_reason: input.reason.trim(),
+  });
+
+  if (error) {
+    throw new Error(`학원 일정을 이동하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("학원 일정을 이동했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toAcademyAttendanceRow(data);
+}
+
+export async function resetAcademyLessonAttendance(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: ResetAcademyLessonAttendanceInput,
+) {
+  const { error } = await supabase.rpc("reset_academy_lesson_attendance", {
+    p_academy_id: input.academyId,
+    p_lesson_event_id: input.lessonEventId,
+    p_student_id: input.studentId,
+    p_reason: input.reason?.trim() || null,
+  });
+
+  if (error) {
+    throw new Error(`학원 수업 출결을 초기화하지 못했습니다: ${error.message}`);
+  }
+}
+
 export function createLessonWorkspaceQueryOptions(
   supabase: LessonWorkspaceSupabaseClient,
   input: FetchLessonWorkspaceInput,
@@ -463,7 +539,8 @@ function normalizeOrigin(
     origin === "manual" ||
     origin === "makeup" ||
     origin === "private" ||
-    origin === "special"
+    origin === "special" ||
+    origin === "rescheduled"
   ) {
     return origin;
   }
@@ -478,6 +555,7 @@ function formatOriginLabel(origin: LessonEventOrigin) {
     makeup: "보강",
     private: "개인레슨",
     special: "특강",
+    rescheduled: "이동",
   };
 
   return labels[origin];

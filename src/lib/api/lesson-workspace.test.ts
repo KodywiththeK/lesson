@@ -4,6 +4,8 @@ import {
   createAcademyLessonEvent,
   createMakeupLessonEvent,
   fetchLessonWorkspaceData,
+  moveAcademyLessonEvent,
+  resetAcademyLessonAttendance,
   type LessonWorkspaceSupabaseClient,
 } from "./lesson-workspace";
 
@@ -174,6 +176,66 @@ describe("createMakeupLessonEvent", () => {
   });
 });
 
+describe("moveAcademyLessonEvent", () => {
+  it("학원 레슨 1회 일정 이동을 RPC로 위임하고 이동된 row를 반환한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls);
+
+    const result = await moveAcademyLessonEvent(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      targetDate: "2026-08-24",
+      startTime: "18:00",
+      endTime: "18:50",
+      reason: "콩쿠르 보충",
+    });
+
+    expect(calls.at(-1)).toEqual({
+      functionName: "move_academy_lesson_event",
+      payload: {
+        p_academy_id: "academy-1",
+        p_lesson_event_id: "lesson-1",
+        p_target_date: "2026-08-24",
+        p_start_time: "18:00",
+        p_end_time: "18:50",
+        p_reason: "콩쿠르 보충",
+      },
+    });
+    expect(result).toMatchObject({
+      lessonEventId: "lesson-moved",
+      date: "2026-08-24",
+      startTime: "18:00",
+      endTime: "18:50",
+      origin: "rescheduled",
+      originLabel: "이동",
+    });
+  });
+});
+
+describe("resetAcademyLessonAttendance", () => {
+  it("학원 레슨 출결 초기화를 RPC로 위임한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls);
+
+    await resetAcademyLessonAttendance(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      studentId: "student-1",
+      reason: "오입력 정정",
+    });
+
+    expect(calls.at(-1)).toEqual({
+      functionName: "reset_academy_lesson_attendance",
+      payload: {
+        p_academy_id: "academy-1",
+        p_lesson_event_id: "lesson-1",
+        p_student_id: "student-1",
+        p_reason: "오입력 정정",
+      },
+    });
+  });
+});
+
 function createLessonWorkspaceClient(
   calls: Array<Record<string, unknown>>,
   options: {
@@ -184,6 +246,28 @@ function createLessonWorkspaceClient(
   return {
     async rpc(functionName: string, payload: Record<string, unknown>) {
       calls.push({ functionName, payload });
+
+      if (functionName === "move_academy_lesson_event") {
+        return {
+          data: {
+            id: "lesson-moved",
+            academy_id: payload.p_academy_id,
+            student_id: "student-1",
+            students: { name: "김민지" },
+            instrument_id: "piano",
+            instrument_name: "피아노",
+            teacher_id: "teacher-1",
+            teachers: { name: "박선생" },
+            lesson_kind: "academy",
+            origin: "rescheduled",
+            starts_at: "2026-08-24T18:00:00+09:00",
+            ends_at: "2026-08-24T18:50:00+09:00",
+            status: "scheduled",
+            attendance_records: [],
+          },
+          error: options.rpcError ?? null,
+        };
+      }
 
       return {
         data: null,
