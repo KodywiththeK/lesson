@@ -15,7 +15,9 @@ import {
 } from "./students";
 
 function createSupabaseStub(
-  rows: StudentSupabaseRow[],
+  rows:
+    | StudentSupabaseRow[]
+    | Record<string, StudentSupabaseRow[] | Array<Record<string, unknown>>>,
   error: Error | null = null,
 ) {
   const calls: Array<{
@@ -23,8 +25,12 @@ function createSupabaseStub(
     select?: string;
     eq?: Array<[string, string]>;
     is?: Array<[string, null]>;
+    order?: Array<[string, { ascending?: boolean } | undefined]>;
   }> = [];
-  const client: StudentListSupabaseClient = {
+  const rowsByTable: Record<string, Array<Record<string, unknown>>> = Array.isArray(rows)
+    ? { students: rows as Array<Record<string, unknown>> }
+    : rows;
+  const client = {
     from(table) {
       calls.push({ table });
 
@@ -49,13 +55,26 @@ function createSupabaseStub(
 
               return builder;
             },
-            then<TResult1 = { data: StudentSupabaseRow[] | null; error: Error | null }>(
+            order(column: string, options?: { ascending?: boolean }) {
+              calls[calls.length - 1].order = [
+                ...(calls[calls.length - 1].order ?? []),
+                [column, options],
+              ];
+
+              return builder;
+            },
+            then<TResult1 = { data: Array<Record<string, unknown>> | null; error: Error | null }>(
               resolve?: (
-                value: { data: StudentSupabaseRow[] | null; error: Error | null },
+                value: {
+                  data: Array<Record<string, unknown>> | null;
+                  error: Error | null;
+                },
               ) => TResult1 | PromiseLike<TResult1>,
             ) {
               const value = {
-                data: error ? null : rows,
+                data: error
+                  ? null
+                  : (rowsByTable[table] ?? []),
                 error,
               };
 
@@ -67,7 +86,7 @@ function createSupabaseStub(
         },
       };
     },
-  };
+  } as StudentListSupabaseClient;
 
   return { client, calls };
 }
@@ -362,7 +381,7 @@ describe("student status mutations", () => {
       today: "2026-08-25",
     });
 
-    expect(calls.at(-1)).toMatchObject({
+    expect(calls.find((call) => call.table === "students")).toMatchObject({
       table: "students",
       eq: [
         ["academy_id", "academy-1"],
@@ -370,11 +389,57 @@ describe("student status mutations", () => {
       ],
       is: [["archived_at", null]],
     });
+    expect(
+      calls.find((call) => call.table === "entity_status_transitions"),
+    ).toMatchObject({
+      table: "entity_status_transitions",
+      eq: [
+        ["academy_id", "academy-1"],
+        ["entity_type", "student"],
+        ["to_status", "withdrawn"],
+      ],
+      order: [["changed_at", { ascending: false }]],
+    });
     expect(result.items[0]).toMatchObject({
       entityType: "student",
       name: "김민지",
       statusLabel: "퇴원",
       daysRemaining: 6,
+    });
+  });
+
+  it("휴원/퇴원 관리 목록에 최신 상태 변경 메모를 붙인다", async () => {
+    const { client } = createSupabaseStub({
+      students: [
+        {
+          id: "student-1",
+          academy_id: "academy-1",
+          name: "김민지",
+          status: "suspended",
+          suspended_at: "2026-08-20T00:00:00+09:00",
+          archived_at: null,
+          student_instruments: [],
+        },
+      ],
+      entity_status_transitions: [
+        {
+          entity_type: "student",
+          entity_id: "student-1",
+          to_status: "suspended",
+          reason: "방학 기간 휴원",
+          changed_at: "2026-08-20T00:00:00+09:00",
+        },
+      ],
+    });
+
+    const result = await fetchStudentStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "suspended",
+      today: "2026-08-25",
+    });
+
+    expect(result.items[0]).toMatchObject({
+      statusReason: "방학 기간 휴원",
     });
   });
 

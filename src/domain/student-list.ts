@@ -19,6 +19,7 @@ export type StudentListRow = {
   withdrawnAt?: string;
   retentionUntil?: string;
   archivedAt?: string;
+  statusReason?: string;
   contacts?: StudentListContact[];
   teacherNames: string[];
   instrumentNames: string[];

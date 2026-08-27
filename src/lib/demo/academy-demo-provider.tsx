@@ -289,6 +289,7 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
                 primaryInfo: student.instrumentNames.join(", "),
                 secondaryInfo: student.teacherNames.join(", "),
                 detailSummary: student.weekdayLabels.join(", "),
+                statusReason: student.statusReason,
               })),
               {
                 academyId: options.academyId,
@@ -351,6 +352,7 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
                 primaryInfo: teacher.part,
                 secondaryInfo: teacher.contact,
                 detailSummary: teacher.workScheduleSummary,
+                statusReason: teacher.statusReason,
               })),
               {
                 academyId: options.academyId,

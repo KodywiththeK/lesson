@@ -17,6 +17,7 @@ export type StatusManagementRow = {
   primaryInfo?: string;
   secondaryInfo?: string;
   detailSummary?: string;
+  statusReason?: string | null;
 };
 
 export type StatusManagementListItem = StatusManagementRow & {
@@ -66,6 +67,7 @@ export function buildStatusManagementList(
       (item) => item.primaryInfo ?? "",
       (item) => item.secondaryInfo ?? "",
       (item) => item.detailSummary ?? "",
+      (item) => item.statusReason ?? "",
     ],
   });
 }

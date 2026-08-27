@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { RotateCcw, UserRoundCheck } from "lucide-react";
+import { Eye, RotateCcw, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -23,6 +23,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -319,7 +327,9 @@ export function StatusManagementScreen({
 
           statusMutation.mutate({
             ...pendingTransition,
-            reason: reason.trim() || undefined,
+            reason: requiresStatusReason(pendingTransition.toStatus)
+              ? reason.trim() || undefined
+              : undefined,
           });
         }}
       />
@@ -398,56 +408,78 @@ function StatusManagementTable({
   emptyMessage: string;
   onTransition: (transition: PendingTransition) => void;
 }) {
+  const [selectedItem, setSelectedItem] =
+    useState<StatusManagementListItem | null>(null);
+
   if (items.length === 0) {
     return <p className="p-4 text-sm text-muted-foreground">{emptyMessage}</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="휴원/퇴원 관리 목록" className="min-w-[58rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
+    <div className="overflow-hidden">
+      <Table aria-label="휴원/퇴원 관리 목록" className="w-full table-fixed">
+        <TableHeader className="hidden bg-muted text-muted-foreground md:table-header-group">
           <TableRow>
-            <TableHead className="px-4 py-3">이름</TableHead>
-            <TableHead className="px-4 py-3">상태</TableHead>
-            <TableHead className="px-4 py-3">정보</TableHead>
-            <TableHead className="px-4 py-3">처리일</TableHead>
-            <TableHead className="px-4 py-3">보관 만료일</TableHead>
-            <TableHead className="px-4 py-3">남은 일수</TableHead>
-            <TableHead className="px-4 py-3">자동 보관 상태</TableHead>
-            <TableHead className="px-4 py-3 text-right">상태 변경</TableHead>
+            <TableHead className="w-[28%] px-4 py-3">대상</TableHead>
+            <TableHead className="w-[24%] px-4 py-3">처리/보관</TableHead>
+            <TableHead className="w-[28%] px-4 py-3">처리 메모</TableHead>
+            <TableHead className="w-[20%] px-4 py-3 text-right">관리</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((item) => (
-            <TableRow key={`${item.entityType}-${item.entityId}`}>
-              <TableCell className="px-4 py-3 font-medium">
-                {item.name}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                <Badge variant="outline">{item.statusLabel}</Badge>
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                <div className="grid gap-1 text-sm">
+            <TableRow
+              key={`${item.entityType}-${item.entityId}`}
+              className="grid gap-3 border-b p-4 md:table-row md:p-0"
+            >
+              <TableCell className="block whitespace-normal p-0 md:table-cell md:px-4 md:py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{item.name}</span>
+                  <Badge variant="outline">{item.statusLabel}</Badge>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
                   <span>{item.primaryInfo || "-"}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{item.secondaryInfo || "-"}</span>
+                </div>
+                {item.detailSummary ? (
+                  <p className="mt-1 text-xs text-muted-foreground md:hidden">
+                    {item.detailSummary}
+                  </p>
+                ) : null}
+              </TableCell>
+              <TableCell className="block whitespace-normal p-0 text-sm md:table-cell md:px-4 md:py-3">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground md:hidden">
+                  처리/보관
+                </span>
+                <div className="grid gap-1">
+                  <span>처리일 {item.changedOn}</span>
                   <span className="text-muted-foreground">
-                    {item.secondaryInfo || "-"}
+                    {formatRetentionSummary(item)}
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="px-4 py-3">{item.changedOn}</TableCell>
-              <TableCell className="px-4 py-3">
-                {item.retentionUntil ?? "-"}
+              <TableCell className="block whitespace-normal p-0 text-sm md:table-cell md:px-4 md:py-3">
+                <span className="mb-1 block text-xs font-medium text-muted-foreground md:hidden">
+                  처리 메모
+                </span>
+                <span className="line-clamp-2 text-muted-foreground">
+                  {item.statusReason || "-"}
+                </span>
               </TableCell>
-              <TableCell className="px-4 py-3">
-                {item.daysRemaining === undefined
-                  ? "-"
-                  : `${item.daysRemaining}일`}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {item.archiveStateLabel}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                <div className="flex justify-end gap-2">
+              <TableCell className="block whitespace-normal p-0 md:table-cell md:px-4 md:py-3">
+                <div className="flex flex-wrap justify-start gap-2 md:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${item.name} 자세히보기`}
+                    title="자세히보기"
+                    onClick={() => setSelectedItem(item)}
+                  >
+                    <Eye aria-hidden="true" />
+                    <span className="sr-only">자세히보기</span>
+                  </Button>
                   {getTransitions(item).map((transition) => (
                     <Button
                       key={`${item.entityId}-${transition.toStatus}`}
@@ -477,8 +509,91 @@ function StatusManagementTable({
           ))}
         </TableBody>
       </Table>
+      <StatusManagementDetailDialog
+        item={selectedItem}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedItem(null);
+          }
+        }}
+      />
     </div>
   );
+}
+
+function StatusManagementDetailDialog({
+  item,
+  onOpenChange,
+}: {
+  item: StatusManagementListItem | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>
+            {item ? `${item.name} 상태 상세` : "상태 상세"}
+          </DialogTitle>
+          <DialogDescription>
+            상태 변경 이력에서 가져온 처리 정보와 메모를 확인합니다.
+          </DialogDescription>
+        </DialogHeader>
+        {item ? (
+          <div className="grid gap-4">
+            <div className="grid gap-3 rounded-md border border-border bg-background p-4 sm:grid-cols-2">
+              <DetailItem label="이름" value={item.name} />
+              <DetailItem label="상태" value={item.statusLabel} />
+              <DetailItem label="처리일" value={item.changedOn} />
+              <DetailItem label="보관 만료일" value={item.retentionUntil ?? "-"} />
+              <DetailItem
+                label="남은 일수"
+                value={
+                  item.daysRemaining === undefined
+                    ? "-"
+                    : `${item.daysRemaining}일`
+                }
+              />
+              <DetailItem label="자동 보관 상태" value={item.archiveStateLabel} />
+              <DetailItem label="주요 정보" value={item.primaryInfo || "-"} />
+              <DetailItem label="보조 정보" value={item.secondaryInfo || "-"} />
+            </div>
+            <div className="grid gap-1">
+              <p className="text-sm font-medium">처리 메모</p>
+              <p className="min-h-20 rounded-md border border-border bg-muted/30 p-3 text-sm leading-6">
+                {item.statusReason || "남긴 메모가 없습니다."}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            닫기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
+function formatRetentionSummary(item: StatusManagementListItem) {
+  if (!item.retentionUntil) {
+    return item.archiveStateLabel;
+  }
+
+  const daysText =
+    item.daysRemaining === undefined ? "" : ` · ${item.daysRemaining}일 남음`;
+
+  return `${item.retentionUntil}${daysText} · ${item.archiveStateLabel}`;
 }
 
 function StatusTransitionDialog({
@@ -496,6 +611,10 @@ function StatusTransitionDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const shouldShowReason = transition
+    ? requiresStatusReason(transition.toStatus)
+    : false;
+
   return (
     <AlertDialog open={Boolean(transition)} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -514,15 +633,17 @@ function StatusTransitionDialog({
                 {transition.fromLabel} -&gt; {transition.toLabel}
               </span>
             </div>
-            <label className="grid gap-1 text-sm font-medium">
-              <span>상태 변경 메모</span>
-              <Textarea
-                aria-label="상태 변경 메모"
-                value={reason}
-                onChange={(event) => onReasonChange(event.target.value)}
-                placeholder="선택 입력"
-              />
-            </label>
+            {shouldShowReason ? (
+              <label className="grid gap-1 text-sm font-medium">
+                <span>상태 변경 메모</span>
+                <Textarea
+                  aria-label="상태 변경 메모"
+                  value={reason}
+                  onChange={(event) => onReasonChange(event.target.value)}
+                  placeholder="선택 입력"
+                />
+              </label>
+            ) : null}
           </div>
         ) : null}
         <AlertDialogFooter>
@@ -534,6 +655,12 @@ function StatusTransitionDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+function requiresStatusReason(
+  status: PendingTransition["toStatus"],
+) {
+  return ["suspended", "withdrawn", "on_leave", "resigned"].includes(status);
 }
 
 function getTransitions(item: StatusManagementListItem) {

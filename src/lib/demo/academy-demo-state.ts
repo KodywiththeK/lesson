@@ -592,6 +592,7 @@ export function updateDemoStudentStatus(
                 ? calculateRetentionUntil(changedAt)
                 : undefined,
             archivedAt: undefined,
+            statusReason: input.reason?.trim() || undefined,
           }
         : student,
     ),
@@ -680,6 +681,7 @@ export function updateDemoTeacherStatus(
                 ? calculateRetentionUntil(changedAt)
                 : undefined,
             archivedAt: undefined,
+            statusReason: input.reason?.trim() || undefined,
           }
         : teacher,
     ),

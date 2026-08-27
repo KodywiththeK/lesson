@@ -28,6 +28,7 @@ export type TeacherListRow = {
   resignedAt?: string;
   retentionUntil?: string;
   archivedAt?: string;
+  statusReason?: string;
   monthlySalary?: number;
   hourlyRate?: number;
   ratioTeacherShare?: number;

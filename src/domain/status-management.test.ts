@@ -27,6 +27,7 @@ describe("status-management", () => {
           status: "withdrawn",
           changedAt: "2026-08-01T00:00:00+09:00",
           retentionUntil: "2026-08-31",
+          statusReason: "이사로 퇴원",
         },
         {
           entityType: "teacher",
@@ -53,8 +54,35 @@ describe("status-management", () => {
         retentionUntil: "2026-08-31",
         daysRemaining: 6,
         archiveStateLabel: "보관 중",
+        statusReason: "이사로 퇴원",
       }),
     ]);
+  });
+
+  it("상태 변경 메모도 검색 대상에 포함한다", () => {
+    const result = buildStatusManagementList(
+      [
+        {
+          entityType: "student",
+          entityId: "student-1",
+          academyId: "academy-1",
+          name: "김민지",
+          status: "suspended",
+          changedAt: "2026-08-20T00:00:00+09:00",
+          statusReason: "방학 기간 휴원",
+        },
+      ],
+      {
+        academyId: "academy-1",
+        entityType: "student",
+        status: "suspended",
+        today: "2026-08-25",
+      },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      statusReason: "방학 기간 휴원",
+    });
   });
 
   it("상태 표시명을 원생과 선생님 문맥에 맞게 바꾼다", () => {

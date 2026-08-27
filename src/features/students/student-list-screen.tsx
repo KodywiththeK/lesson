@@ -24,7 +24,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -105,6 +104,11 @@ type StudentListScreenProps = {
   deleteStudent?: (input: { academyId: string; studentId: string }) => void | Promise<void>;
 };
 
+type StudentStatusChangeRequest = {
+  student: StudentListRow;
+  nextStatus: "suspended" | "withdrawn";
+};
+
 type StudentSupabaseClient = StudentListSupabaseClient &
   StudentRegistrationSupabaseClient &
   StudentUpdateSupabaseClient &
@@ -141,6 +145,8 @@ export function StudentListScreen({
   const [selectedStudent, setSelectedStudent] = useState<StudentListRow | null>(
     null,
   );
+  const [pendingStatusChange, setPendingStatusChange] =
+    useState<StudentStatusChangeRequest | null>(null);
   const [studentOverrides, setStudentOverrides] = useState<
     Record<string, StudentListRow>
   >({});
@@ -502,8 +508,14 @@ export function StudentListScreen({
           }
         }}
         onSubmit={(input) => updateMutation.mutateAsync(input)}
-        onStatusChange={(input) => statusMutation.mutateAsync(input)}
+        onRequestStatusChange={setPendingStatusChange}
         onDelete={(input) => deleteMutation.mutateAsync(input)}
+      />
+      <StudentStatusConfirmationDialog
+        request={pendingStatusChange}
+        isSaving={statusMutation.isPending}
+        onCancel={() => setPendingStatusChange(null)}
+        onConfirm={(input) => statusMutation.mutateAsync(input)}
       />
     </section>
   );
@@ -974,7 +986,7 @@ function StudentDetailDialog({
   isDeleting,
   onOpenChange,
   onSubmit,
-  onStatusChange,
+  onRequestStatusChange,
   onDelete,
 }: {
   student: StudentListRow | null;
@@ -984,12 +996,7 @@ function StudentDetailDialog({
   isDeleting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: UpdateStudentProfileInput) => Promise<StudentListRow>;
-  onStatusChange: (input: {
-    academyId: string;
-    studentId: string;
-    status: "enrolled" | "suspended" | "withdrawn";
-    reason?: string;
-  }) => Promise<unknown>;
+  onRequestStatusChange: (request: StudentStatusChangeRequest) => void;
   onDelete: (input: { academyId: string; studentId: string }) => Promise<unknown>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -1108,18 +1115,32 @@ function StudentDetailDialog({
             </div>
 
             <DialogFooter>
-              <StudentStatusConfirmButton
-                student={student}
-                nextStatus="suspended"
+              <Button
+                type="button"
+                variant="outline"
                 disabled={isStatusSaving || student.status === "suspended"}
-                onConfirm={onStatusChange}
-              />
-              <StudentStatusConfirmButton
-                student={student}
-                nextStatus="withdrawn"
+                onClick={() =>
+                  onRequestStatusChange({
+                    student,
+                    nextStatus: "suspended",
+                  })
+                }
+              >
+                휴원
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 disabled={isStatusSaving || student.status === "withdrawn"}
-                onConfirm={onStatusChange}
-              />
+                onClick={() =>
+                  onRequestStatusChange({
+                    student,
+                    nextStatus: "withdrawn",
+                  })
+                }
+              >
+                퇴원
+              </Button>
               <Button
                 type="button"
                 variant="destructive"
@@ -1174,15 +1195,15 @@ function StudentDetailDialog({
   );
 }
 
-function StudentStatusConfirmButton({
-  student,
-  nextStatus,
-  disabled,
+function StudentStatusConfirmationDialog({
+  request,
+  isSaving,
+  onCancel,
   onConfirm,
 }: {
-  student: StudentListRow;
-  nextStatus: "suspended" | "withdrawn";
-  disabled: boolean;
+  request: StudentStatusChangeRequest | null;
+  isSaving: boolean;
+  onCancel: () => void;
   onConfirm: (input: {
     academyId: string;
     studentId: string;
@@ -1191,22 +1212,29 @@ function StudentStatusConfirmButton({
   }) => Promise<unknown>;
 }) {
   const [reason, setReason] = useState("");
-  const nextLabel = formatStudentStatus(nextStatus);
+  const student = request?.student ?? null;
+  const nextStatus = request?.nextStatus ?? null;
+  const nextLabel = nextStatus ? formatStudentStatus(nextStatus) : "";
 
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button type="button" variant="outline" disabled={disabled}>
-          {nextLabel}
-        </Button>
-      </AlertDialogTrigger>
+    <AlertDialog
+      open={Boolean(request)}
+      onOpenChange={(open) => {
+        if (!open && !isSaving) {
+          setReason("");
+          onCancel();
+        }
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>상태 변경 확인</AlertDialogTitle>
           <AlertDialogDescription>
-            {student.name} 원생 상태를 {formatStudentStatus(student.status)}에서{" "}
-            {nextLabel}으로 변경합니다. 퇴원은 30일 보관 후 자동 archive
-            처리됩니다.
+            {student
+              ? `${student.name} 원생 상태를 ${formatStudentStatus(
+                  student.status,
+                )}에서 ${nextLabel}으로 변경합니다. 퇴원은 30일 보관 후 자동 archive 처리됩니다.`
+              : "원생 상태를 변경합니다."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <label className="grid gap-1 text-sm font-medium">
@@ -1219,16 +1247,25 @@ function StudentStatusConfirmButton({
           />
         </label>
         <AlertDialogFooter>
-          <AlertDialogCancel>취소</AlertDialogCancel>
+          <AlertDialogCancel disabled={isSaving}>취소</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => {
+            disabled={isSaving || !student || !nextStatus}
+            onClick={(event) => {
+              event.preventDefault();
+
+              if (!student || !nextStatus) {
+                return;
+              }
+
               void onConfirm({
                 academyId: student.academyId,
                 studentId: student.studentId,
                 status: nextStatus,
                 reason: reason.trim() || undefined,
-              });
-              setReason("");
+              }).then(() => {
+                setReason("");
+                onCancel();
+              }).catch(() => undefined);
             }}
           >
             처리

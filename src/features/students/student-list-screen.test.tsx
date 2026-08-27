@@ -319,4 +319,30 @@ describe("StudentListScreen", () => {
     expect(updatedRow).not.toBeNull();
     expect(within(updatedRow as HTMLElement).getByRole("cell", { name: "최선생" })).toBeInTheDocument();
   });
+
+  it("원생 상세 다이얼로그에서 휴원 확인창을 최상위 레이어로 띄운다", async () => {
+    const user = userEvent.setup();
+
+    renderStudentListScreen((options) => ({
+      queryKey: ["students", options.academyId, options.search ?? ""],
+      queryFn: async () => buildStudentList(studentRows, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "원생 목록" });
+    await user.click(
+      within(table).getByRole("button", { name: "김민지 자세히보기" }),
+    );
+
+    const detailDialog = await screen.findByRole("dialog", {
+      name: "김민지 원생 상세",
+    });
+    await user.click(within(detailDialog).getByRole("button", { name: "휴원" }));
+
+    const confirmDialog = await screen.findByRole("alertdialog", {
+      name: "상태 변경 확인",
+    });
+
+    expect(confirmDialog).toBeVisible();
+    expect(confirmDialog).toHaveStyle({ zIndex: "1000" });
+  });
 });

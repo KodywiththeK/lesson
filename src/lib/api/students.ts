@@ -86,12 +86,34 @@ type StudentListSelectBuilder =
     is(column: string, value: null): StudentListSelectBuilder;
   };
 
+type EntityStatusTransitionSupabaseRow = {
+  entity_type: string | null;
+  entity_id: string | null;
+  to_status: string | null;
+  reason: string | null;
+  changed_at: string | null;
+};
+
+type EntityStatusTransitionSelectBuilder =
+  PromiseLike<SupabaseQueryResult<EntityStatusTransitionSupabaseRow[]>> & {
+    eq(column: string, value: string): EntityStatusTransitionSelectBuilder;
+    order(
+      column: string,
+      options?: { ascending?: boolean },
+    ): EntityStatusTransitionSelectBuilder;
+  };
+
 type StudentListFromBuilder = {
   select(select: string): StudentListSelectBuilder;
 };
 
+type EntityStatusTransitionFromBuilder = {
+  select(select: string): EntityStatusTransitionSelectBuilder;
+};
+
 export type StudentListSupabaseClient = {
   from(table: "students"): StudentListFromBuilder;
+  from(table: "entity_status_transitions"): EntityStatusTransitionFromBuilder;
 };
 
 export type FetchStudentListOptions = BuildStudentListOptions;
@@ -229,6 +251,8 @@ export type UpdateStudentProfileInput = {
 
 const STUDENT_LIST_SELECT =
   "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+const STATUS_TRANSITION_SELECT =
+  "entity_type, entity_id, to_status, reason, changed_at";
 
 export async function fetchStudentList(
   supabase: StudentListSupabaseClient,
@@ -267,6 +291,12 @@ export async function fetchStudentStatusManagementList(
     throw new Error(`휴원/퇴원 원생 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
+  const statusReasons = await fetchLatestStatusReasonMap(supabase, {
+    academyId: options.academyId,
+    entityType: "student",
+    status: options.status,
+  });
+
   return buildStatusManagementList(
     (data ?? []).map((row) => {
       const student = toStudentListRow(row);
@@ -286,6 +316,7 @@ export async function fetchStudentStatusManagementList(
         primaryInfo: formatJoinedValue(student.instrumentNames),
         secondaryInfo: formatJoinedValue(student.teacherNames),
         detailSummary: formatJoinedValue(student.weekdayLabels),
+        statusReason: statusReasons.get(student.studentId),
       };
     }),
     {
@@ -295,6 +326,29 @@ export async function fetchStudentStatusManagementList(
       today: options.today,
     },
   );
+}
+
+async function fetchLatestStatusReasonMap(
+  supabase: StudentListSupabaseClient,
+  options: {
+    academyId: string;
+    entityType: "student";
+    status: "suspended" | "withdrawn";
+  },
+) {
+  const { data, error } = await supabase
+    .from("entity_status_transitions")
+    .select(STATUS_TRANSITION_SELECT)
+    .eq("academy_id", options.academyId)
+    .eq("entity_type", options.entityType)
+    .eq("to_status", options.status)
+    .order("changed_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`원생 상태 변경 메모를 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return buildLatestReasonMap(data ?? []);
 }
 
 export async function updateStudentProfile(
@@ -654,6 +708,23 @@ function normalizeOptionalTime(value: string | undefined) {
 
 function normalizeOptionalText(value: string | undefined) {
   return value?.trim() || null;
+}
+
+function buildLatestReasonMap(rows: EntityStatusTransitionSupabaseRow[]) {
+  const reasons = new Map<string, string | undefined>();
+
+  for (const row of rows) {
+    const entityId = row.entity_id;
+    const reason = row.reason?.trim();
+
+    if (!entityId || reasons.has(entityId)) {
+      continue;
+    }
+
+    reasons.set(entityId, reason || undefined);
+  }
+
+  return reasons;
 }
 
 function toSeoulDate(date: Date) {

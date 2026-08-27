@@ -14,7 +14,9 @@ import {
 } from "./teachers";
 
 function createSupabaseStub(
-  rows: TeacherSupabaseRow[],
+  rows:
+    | TeacherSupabaseRow[]
+    | Record<string, TeacherSupabaseRow[] | Array<Record<string, unknown>>>,
   error: Error | null = null,
 ) {
   const calls: Array<{
@@ -22,8 +24,12 @@ function createSupabaseStub(
     select?: string;
     eq?: Array<[string, string]>;
     is?: Array<[string, null]>;
+    order?: Array<[string, { ascending?: boolean } | undefined]>;
   }> = [];
-  const client: TeacherListSupabaseClient = {
+  const rowsByTable: Record<string, Array<Record<string, unknown>>> = Array.isArray(rows)
+    ? { teachers: rows as Array<Record<string, unknown>> }
+    : rows;
+  const client = {
     from(table) {
       calls.push({ table });
 
@@ -48,13 +54,26 @@ function createSupabaseStub(
 
               return builder;
             },
-            then<TResult1 = { data: TeacherSupabaseRow[] | null; error: Error | null }>(
+            order(column: string, options?: { ascending?: boolean }) {
+              calls[calls.length - 1].order = [
+                ...(calls[calls.length - 1].order ?? []),
+                [column, options],
+              ];
+
+              return builder;
+            },
+            then<TResult1 = { data: Array<Record<string, unknown>> | null; error: Error | null }>(
               resolve?: (
-                value: { data: TeacherSupabaseRow[] | null; error: Error | null },
+                value: {
+                  data: Array<Record<string, unknown>> | null;
+                  error: Error | null;
+                },
               ) => TResult1 | PromiseLike<TResult1>,
             ) {
               const value = {
-                data: error ? null : rows,
+                data: error
+                  ? null
+                  : (rowsByTable[table] ?? []),
                 error,
               };
 
@@ -66,7 +85,7 @@ function createSupabaseStub(
         },
       };
     },
-  };
+  } as TeacherListSupabaseClient;
 
   return { client, calls };
 }
@@ -292,7 +311,7 @@ describe("teacher mutations", () => {
       today: "2026-08-25",
     });
 
-    expect(calls.at(-1)).toMatchObject({
+    expect(calls.find((call) => call.table === "teachers")).toMatchObject({
       table: "teachers",
       eq: [
         ["academy_id", "academy-1"],
@@ -300,11 +319,62 @@ describe("teacher mutations", () => {
       ],
       is: [["archived_at", null]],
     });
+    expect(
+      calls.find((call) => call.table === "entity_status_transitions"),
+    ).toMatchObject({
+      table: "entity_status_transitions",
+      eq: [
+        ["academy_id", "academy-1"],
+        ["entity_type", "teacher"],
+        ["to_status", "resigned"],
+      ],
+      order: [["changed_at", { ascending: false }]],
+    });
     expect(result.items[0]).toMatchObject({
       entityType: "teacher",
       name: "박선생",
       statusLabel: "퇴사",
       daysRemaining: 15,
+    });
+  });
+
+  it("휴직/퇴사 관리 목록에 최신 상태 변경 메모를 붙인다", async () => {
+    const { client } = createSupabaseStub({
+      teachers: [
+        {
+          id: "teacher-1",
+          academy_id: "academy-1",
+          name: "박선생",
+          part: "피아노",
+          phone: "010-1111-1111",
+          registered_on: "2026-08-01",
+          salary_type: "ratio",
+          status: "on_leave",
+          on_leave_at: "2026-08-20T00:00:00+09:00",
+          archived_at: null,
+          teacher_work_schedules: [],
+          teacher_salary_settings: [],
+        },
+      ],
+      entity_status_transitions: [
+        {
+          entity_type: "teacher",
+          entity_id: "teacher-1",
+          to_status: "on_leave",
+          reason: "콩쿠르 시즌 휴직",
+          changed_at: "2026-08-20T00:00:00+09:00",
+        },
+      ],
+    });
+
+    const result = await fetchTeacherStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "on_leave",
+      today: "2026-08-25",
+    });
+
+    expect(result.items[0]).toMatchObject({
+      statusReason: "콩쿠르 시즌 휴직",
     });
   });
 });

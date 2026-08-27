@@ -67,12 +67,34 @@ type TeacherListSelectBuilder =
     is(column: string, value: null): TeacherListSelectBuilder;
   };
 
+type EntityStatusTransitionSupabaseRow = {
+  entity_type: string | null;
+  entity_id: string | null;
+  to_status: string | null;
+  reason: string | null;
+  changed_at: string | null;
+};
+
+type EntityStatusTransitionSelectBuilder =
+  PromiseLike<SupabaseQueryResult<EntityStatusTransitionSupabaseRow[]>> & {
+    eq(column: string, value: string): EntityStatusTransitionSelectBuilder;
+    order(
+      column: string,
+      options?: { ascending?: boolean },
+    ): EntityStatusTransitionSelectBuilder;
+  };
+
 type TeacherListFromBuilder = {
   select(select: string): TeacherListSelectBuilder;
 };
 
+type EntityStatusTransitionFromBuilder = {
+  select(select: string): EntityStatusTransitionSelectBuilder;
+};
+
 export type TeacherListSupabaseClient = {
   from(table: "teachers"): TeacherListFromBuilder;
+  from(table: "entity_status_transitions"): EntityStatusTransitionFromBuilder;
 };
 
 export type FetchTeacherListOptions = BuildTeacherListOptions;
@@ -128,6 +150,8 @@ export type TeacherMutationSupabaseClient = {
 
 const TEACHER_LIST_SELECT =
   "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)";
+const STATUS_TRANSITION_SELECT =
+  "entity_type, entity_id, to_status, reason, changed_at";
 
 const WEEKDAY_LABELS: Record<string, string> = {
   monday: "월",
@@ -183,6 +207,12 @@ export async function fetchTeacherStatusManagementList(
     throw new Error(`휴직/퇴사 선생님 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
+  const statusReasons = await fetchLatestStatusReasonMap(supabase, {
+    academyId: options.academyId,
+    entityType: "teacher",
+    status: options.status,
+  });
+
   return buildStatusManagementList(
     (data ?? []).map((row) => {
       const teacher = toTeacherListRow(row);
@@ -202,6 +232,7 @@ export async function fetchTeacherStatusManagementList(
         primaryInfo: teacher.part,
         secondaryInfo: teacher.contact,
         detailSummary: teacher.workScheduleSummary,
+        statusReason: statusReasons.get(teacher.teacherId),
       };
     }),
     {
@@ -211,6 +242,29 @@ export async function fetchTeacherStatusManagementList(
       today: options.today,
     },
   );
+}
+
+async function fetchLatestStatusReasonMap(
+  supabase: TeacherListSupabaseClient,
+  options: {
+    academyId: string;
+    entityType: "teacher";
+    status: "on_leave" | "resigned";
+  },
+) {
+  const { data, error } = await supabase
+    .from("entity_status_transitions")
+    .select(STATUS_TRANSITION_SELECT)
+    .eq("academy_id", options.academyId)
+    .eq("entity_type", options.entityType)
+    .eq("to_status", options.status)
+    .order("changed_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`선생님 상태 변경 메모를 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return buildLatestReasonMap(data ?? []);
 }
 
 export function createTeacherListQueryOptions(
@@ -427,6 +481,23 @@ function toTeacherWorkSchedule(row: TeacherWorkScheduleRow): TeacherWorkSchedule
     startTime,
     endTime,
   };
+}
+
+function buildLatestReasonMap(rows: EntityStatusTransitionSupabaseRow[]) {
+  const reasons = new Map<string, string | undefined>();
+
+  for (const row of rows) {
+    const entityId = row.entity_id;
+    const reason = row.reason?.trim();
+
+    if (!entityId || reasons.has(entityId)) {
+      continue;
+    }
+
+    reasons.set(entityId, reason || undefined);
+  }
+
+  return reasons;
 }
 
 function toWeekdayLabel(value: string) {
