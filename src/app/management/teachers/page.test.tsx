@@ -7,6 +7,8 @@ import TeachersPage from "./page";
 
 describe("TeachersPage", () => {
   it("인원·거래처 메뉴의 선생님 하위 메뉴에서 선생님 목록 화면으로 진입할 수 있다", async () => {
+    window.history.pushState(null, "", "/management/teachers");
+
     render(
       <AppProviders>
         <TeachersPage />
@@ -14,7 +16,7 @@ describe("TeachersPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "선생님 관리" }),
+      screen.getByRole("heading", { level: 1, name: "인원·거래처" }),
     ).toBeInTheDocument();
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
@@ -27,12 +29,16 @@ describe("TeachersPage", () => {
     expect(
       screen.getByRole("searchbox", { name: "선생님 검색" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "선생님 관리" }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByText("김하늘")).toBeInTheDocument();
     expect(screen.getByText("오유진")).toBeInTheDocument();
   });
 
   it("선생님 등록 다이얼로그에서 등록한 선생님을 목록에 반영한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/teachers");
 
     render(
       <AppProviders>

@@ -18,7 +18,7 @@ export default function StatusManagementPage() {
         <AppShell
           academyName={academy.academyName}
           permissionContext={academy.permissionContext}
-          pageTitle="휴원/퇴원 관리"
+          pageTitle="인원·거래처"
         >
           <StatusManagementScreen
             academyId={academy.academyId}

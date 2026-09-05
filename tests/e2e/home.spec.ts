@@ -17,7 +17,7 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
 
   await expect(navigation.getByRole("link", { name: /레슨 시간표/ })).toHaveAttribute(
     "href",
-    "/lessons",
+    "/lessons/academy",
   );
   await expect(navigation.getByRole("link", { name: /회차권/ })).toHaveAttribute(
     "href",
@@ -36,7 +36,7 @@ test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", asyn
   await expect(page).toHaveURL(/\/management\/students$/);
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "원생 관리" }),
+    page.getByRole("heading", { level: 1, name: "인원·거래처" }),
   ).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "원생 검색" })).toBeVisible();
 });
@@ -53,20 +53,34 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 2, name: "레슨관리표" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.getByLabel("레슨 관리 날짜")).toHaveCount(0);
   const academyCalendar = page.getByRole("grid", {
-    name: "2026년 8월 학원 레슨 캘린더",
+    name: "2026년 9월 학원레슨 캘린더",
   });
   await expect(academyCalendar).toBeVisible();
-  await academyCalendar.getByRole("gridcell", { name: /^21 .*김민지/ }).click();
+  const todayCell = academyCalendar.getByRole("gridcell", { name: /5 오늘/ });
+  await expect(todayCell).toHaveAttribute("aria-current", "date");
+  await todayCell.click();
+  const attendanceDialog = page.getByRole("dialog", { name: "2026-09-05 출석 확인" });
+  await expect(attendanceDialog.getByRole("tab", { name: "출석관리" })).toBeVisible();
   await expect(
-    page.getByRole("dialog", { name: "2026-08-21 출석 확인" }).getByText("김민지"),
+    attendanceDialog.getByRole("tab", { name: "메모 0" }),
   ).toBeVisible();
+  await attendanceDialog.getByRole("tab", { name: "메모 0" }).click();
+  await expect(attendanceDialog.getByLabel("메모 대상 유형")).toHaveCount(0);
+  await expect(attendanceDialog.getByLabel("관련 원생")).toBeVisible();
+  await expect(attendanceDialog.getByLabel("관련 선생님")).toBeVisible();
+  await expect(attendanceDialog.getByLabel("메모 내용")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  await page.getByRole("tab", { name: "개인레슨표" }).click();
+  await page
+    .getByRole("navigation", { name: "레슨 시간표 하위 메뉴" })
+    .getByRole("link", { name: "개인레슨표" })
+    .click();
+  await expect(page).toHaveURL(/\/lessons\/private$/);
   await expect(
-    page.getByRole("grid", { name: "2026년 8월 개인레슨 캘린더" }),
+    page.getByRole("grid", { name: "2026년 9월 개인레슨 캘린더" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "레슨원생 검색" }).click();
   const searchDialog = page.getByRole("dialog", { name: "레슨원생 검색" });
@@ -100,7 +114,7 @@ test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다"
   await expect(page).toHaveURL(/\/management\/teachers$/);
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "선생님 관리" }),
+    page.getByRole("heading", { level: 1, name: "인원·거래처" }),
   ).toBeVisible();
   await expect(
     page.getByRole("searchbox", { name: "선생님 검색" }),
@@ -116,7 +130,7 @@ test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 
   await expect(page).toHaveURL(/\/management\/status$/);
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "휴원/퇴원 관리" }),
+    page.getByRole("heading", { level: 1, name: "인원·거래처" }),
   ).toBeVisible();
   await expect(page.getByText("박지호")).toBeVisible();
 
@@ -144,7 +158,7 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
   await expect(page).toHaveURL(/\/management\/vendors$/);
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "거래처 관리" }),
+    page.getByRole("heading", { level: 1, name: "인원·거래처" }),
   ).toBeVisible();
   await expect(
     page.getByRole("searchbox", { name: "거래처 검색" }),

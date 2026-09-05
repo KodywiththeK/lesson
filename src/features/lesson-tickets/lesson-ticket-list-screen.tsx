@@ -15,6 +15,10 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,7 +127,6 @@ const defaultThresholds = {
 
 export function LessonTicketListScreen({
   academyId,
-  academyName,
   today,
   queryOptionsFactory,
   registrationOptionsQueryFactory,
@@ -226,46 +229,54 @@ export function LessonTicketListScreen({
     },
   });
 
+  const registrationAction = useMemo(
+    () => (
+      <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <TicketPlus aria-hidden="true" />
+            회차권 등록
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>회차권 등록</DialogTitle>
+            <DialogDescription>
+              개인레슨 회차권을 신규 등록하거나 기존 회차권에 추가합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <LessonTicketRegistrationForm
+            academyId={academyId}
+            options={registrationOptionsQuery.data ?? []}
+            isLoading={registrationOptionsQuery.isLoading}
+            error={
+              registrationOptionsQuery.isError
+                ? registrationOptionsQuery.error
+                : null
+            }
+            isSaving={registerMutation.isPending}
+            onSubmit={(input) => registerMutation.mutate(input)}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [
+      academyId,
+      isRegistrationOpen,
+      registerMutation,
+      registrationOptionsQuery.data,
+      registrationOptionsQuery.error,
+      registrationOptionsQuery.isError,
+      registrationOptionsQuery.isLoading,
+    ],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(registrationAction);
+
   return (
-    <section className="grid gap-4" aria-labelledby="lesson-ticket-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="lesson-ticket-heading" className="text-2xl font-semibold">
-            회차권 목록
-          </h2>
-        </div>
-        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <TicketPlus aria-hidden="true" />
-              회차권 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>회차권 등록</DialogTitle>
-              <DialogDescription>
-                개인레슨 회차권을 신규 등록하거나 기존 회차권에 추가합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <LessonTicketRegistrationForm
-              academyId={academyId}
-              options={registrationOptionsQuery.data ?? []}
-              isLoading={registrationOptionsQuery.isLoading}
-              error={
-                registrationOptionsQuery.isError
-                  ? registrationOptionsQuery.error
-                  : null
-              }
-              isSaving={registerMutation.isPending}
-              onSubmit={(input) => registerMutation.mutate(input)}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="회차권 목록">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {registrationAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">

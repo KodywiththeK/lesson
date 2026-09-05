@@ -1,10 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
-import { AppShell } from "./app-shell";
+import { AppShell, useAppShellHeaderActions } from "./app-shell";
 
 describe("AppShell", () => {
-  it("owner에게 운영 전체 메뉴와 주요 액션을 보여준다", () => {
+  it("owner에게 운영 전체 메뉴를 보여주고 공통 헤더 액션은 노출하지 않는다", () => {
+    window.history.pushState(null, "", "/");
+
     render(
       <AppShell
         academyName="더 클래식"
@@ -12,10 +15,15 @@ describe("AppShell", () => {
       />,
     );
 
+    const header = screen.getByRole("banner");
+    expect(within(header).queryByText("현재 학원: 더 클래식")).not.toBeInTheDocument();
+
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "대시보드",
       "레슨 시간표",
+      "학원레슨표",
+      "개인레슨표",
       "회차권",
       "인원·거래처",
       "원생",
@@ -41,17 +49,13 @@ describe("AppShell", () => {
     expect(
       within(navigation).getByRole("link", { name: "거래처" }),
     ).toHaveAttribute("href", "/management/vendors");
-    expect(screen.getByRole("link", { name: /수납 등록/ })).toHaveAttribute(
-      "href",
-      "/finance",
-    );
-    expect(screen.getByRole("link", { name: /출석 확인/ })).toHaveAttribute(
-      "href",
-      "/lessons",
-    );
+    expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
   });
 
   it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 본인 급여 메뉴를 보여준다", () => {
+    window.history.pushState(null, "", "/management/students");
+
     render(
       <AppShell
         academyName="더 클래식"
@@ -67,6 +71,8 @@ describe("AppShell", () => {
     const labels = within(navigation).getAllByRole("link").map((link) => link.textContent);
 
     expect(labels).toContain("레슨 시간표");
+    expect(labels).toContain("학원레슨표");
+    expect(labels).toContain("개인레슨표");
     expect(labels).toContain("인원·거래처");
     expect(labels).toContain("원생");
     expect(labels).toContain("내 급여");
@@ -79,9 +85,163 @@ describe("AppShell", () => {
     expect(labels).not.toContain("수입");
     expect(labels).not.toContain("거래처");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /출석 확인/ })).toHaveAttribute(
-      "href",
-      "/lessons",
+    expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
+  });
+
+  it("children 메뉴는 기본 펼침이고 toggle로 접고 펼친다", async () => {
+    window.history.pushState(null, "", "/management/students");
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{ role: "owner" }}
+      />,
+    );
+
+    const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
+    expect(within(navigation).getByRole("link", { name: "원생" })).toBeInTheDocument();
+
+    await userEvent.click(
+      within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 접기" }),
+    );
+    expect(within(navigation).queryByRole("link", { name: "원생" })).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }),
+    );
+    expect(within(navigation).getByRole("link", { name: "원생" })).toBeInTheDocument();
+  });
+
+  it("lg 이하 화면을 위한 drawer 메뉴 버튼으로 주요 메뉴를 연다", async () => {
+    window.history.pushState(null, "", "/lessons/academy");
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{ role: "owner" }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "메뉴 열기" }));
+
+    const drawer = screen.getByRole("dialog", { name: "주요 메뉴" });
+    expect(within(drawer).getByText("현재 학원: 더 클래식")).toBeInTheDocument();
+    const navigation = within(drawer).getByRole("navigation", {
+      name: "모바일 주요 메뉴",
+    });
+
+    expect(within(navigation).getByRole("link", { name: "레슨 시간표" }))
+      .toHaveAttribute("href", "/lessons/academy");
+    expect(within(navigation).getByRole("link", { name: "학원레슨표" }))
+      .toHaveAttribute("href", "/lessons/academy");
+    expect(within(navigation).getByRole("link", { name: "개인레슨표" }))
+      .toHaveAttribute("href", "/lessons/private");
+  });
+
+  it("children 페이지는 상위 메뉴 제목과 하위 탭을 헤더에 표시한다", () => {
+    window.history.pushState(null, "", "/management/teachers");
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{ role: "owner" }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "인원·거래처" }),
+    ).toBeInTheDocument();
+    const tabs = screen.getByRole("navigation", { name: "인원·거래처 하위 메뉴" });
+    expect(within(tabs).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "원생",
+      "선생님",
+      "휴원/퇴원",
+      "거래처",
+    ]);
+    expect(within(tabs).getByRole("link", { name: "선생님" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
   });
+
+  it("header action slot에 등록된 페이지 액션만 보여준다", () => {
+    window.history.pushState(null, "", "/passes");
+
+    function HeaderActionProbe() {
+      useAppShellHeaderActions(
+        <button type="button">회차권 등록</button>,
+      );
+
+      return <p>회차권 목록</p>;
+    }
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{ role: "owner" }}
+      >
+        <HeaderActionProbe />
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("button", { name: "회차권 등록" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
+  });
+
+  it("md 이하에서는 페이지 액션을 작업 메뉴 안에 표시한다", async () => {
+    const restoreMatchMedia = mockHeaderMediaQuery(true);
+    window.history.pushState(null, "", "/passes");
+
+    function HeaderActionProbe() {
+      useAppShellHeaderActions(<button type="button">회차권 등록</button>);
+
+      return <p>회차권 목록</p>;
+    }
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{ role: "owner" }}
+      >
+        <HeaderActionProbe />
+      </AppShell>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "작업 메뉴 열기" }),
+    );
+
+    const actionDrawer = screen.getByRole("dialog", { name: "페이지 작업" });
+    expect(
+      within(actionDrawer).getByRole("button", { name: "회차권 등록" }),
+    ).toBeInTheDocument();
+
+    restoreMatchMedia();
+  });
 });
+
+function mockHeaderMediaQuery(matches: boolean) {
+  const originalMatchMedia = window.matchMedia;
+
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+
+  return () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: originalMatchMedia,
+    });
+  };
+}

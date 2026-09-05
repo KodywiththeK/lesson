@@ -15,6 +15,10 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -86,7 +90,6 @@ type SupabaseClientState =
 
 export function VendorListScreen({
   academyId,
-  academyName,
   queryOptionsFactory,
   registerVendor,
 }: VendorListScreenProps) {
@@ -158,40 +161,39 @@ export function VendorListScreen({
   });
   const vendors = vendorListQuery.data?.items ?? [];
   const filterOptions = buildFilterOptions(vendorListQuery.data?.items ?? []);
+  const registrationAction = useMemo(
+    () => (
+      <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <UserPlus aria-hidden="true" />
+            거래처 등록
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>거래처 등록</DialogTitle>
+            <DialogDescription>
+              악기, 교재, 수리 등 운영 거래처를 추가합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <VendorRegistrationForm
+            onSubmit={(input) => {
+              registerMutation.mutate(input);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [isRegistrationOpen, registerMutation],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(registrationAction);
 
   return (
-    <section className="grid gap-4" aria-labelledby="vendor-list-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="vendor-list-heading" className="text-2xl font-semibold">
-            거래처 목록
-          </h2>
-        </div>
-        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <UserPlus aria-hidden="true" />
-              거래처 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>거래처 등록</DialogTitle>
-              <DialogDescription>
-                악기, 교재, 수리 등 운영 거래처를 추가합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <VendorRegistrationForm
-              onSubmit={(input) => {
-                registerMutation.mutate(input);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="거래처 목록">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {registrationAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">

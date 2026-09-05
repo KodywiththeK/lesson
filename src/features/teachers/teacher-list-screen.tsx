@@ -24,6 +24,10 @@ import {
   ListStatusAlert,
 } from "@/components/management/list-controls";
 import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -164,7 +168,6 @@ const weekdayOptions = [
 
 export function TeacherListScreen({
   academyId,
-  academyName,
   queryOptionsFactory,
   registerTeacher,
   updateTeacher,
@@ -329,42 +332,41 @@ export function TeacherListScreen({
 
   const teachers = teacherListQuery.data?.items ?? [];
   const filterOptions = buildFilterOptions(teacherListQuery.data?.items ?? []);
+  const registrationAction = useMemo(
+    () => (
+      <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <UserPlus aria-hidden="true" />
+            선생님 등록
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>선생님 등록</DialogTitle>
+            <DialogDescription>
+              계약기간, 근무시간, 급여 상세를 함께 등록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <TeacherProfileForm
+            submitLabel="저장"
+            isSubmitting={registerMutation.isPending}
+            onSubmit={(input) => {
+              registerMutation.mutate(input);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [isRegistrationOpen, registerMutation],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(registrationAction);
 
   return (
-    <section className="grid gap-4" aria-labelledby="teacher-list-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="teacher-list-heading" className="text-2xl font-semibold">
-            선생님 목록
-          </h2>
-        </div>
-        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <UserPlus aria-hidden="true" />
-              선생님 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>선생님 등록</DialogTitle>
-              <DialogDescription>
-                계약기간, 근무시간, 급여 상세를 함께 등록합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <TeacherProfileForm
-              submitLabel="저장"
-              isSubmitting={registerMutation.isPending}
-              onSubmit={(input) => {
-                registerMutation.mutate(input);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="선생님 목록">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {registrationAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_10rem_10rem_10rem_auto]">

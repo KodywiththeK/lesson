@@ -8,6 +8,7 @@ import StatusManagementPage from "./page";
 describe("StatusManagementPage", () => {
   it("휴원/퇴원 통합 관리 화면에서 원생과 선생님 상태 목록을 전환한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/status");
 
     render(
       <AppProviders>
@@ -16,7 +17,7 @@ describe("StatusManagementPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "휴원/퇴원 관리" }),
+      screen.getByRole("heading", { level: 1, name: "인원·거래처" }),
     ).toBeInTheDocument();
     const table = await screen.findByRole("table", {
       name: "휴원/퇴원 관리 목록",
@@ -68,6 +69,7 @@ describe("StatusManagementPage", () => {
 
   it("재원 처리 확인창은 메모 없이 더블체크한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/status");
 
     render(
       <AppProviders>
@@ -88,6 +90,7 @@ describe("StatusManagementPage", () => {
 
   it("휴원/퇴원 처리 확인창은 상태 변경 메모를 남길 수 있다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/status");
 
     render(
       <AppProviders>

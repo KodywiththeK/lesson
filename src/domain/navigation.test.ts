@@ -40,4 +40,20 @@ describe("mainNavigation", () => {
       "/management/vendors",
     ]);
   });
+
+  it("레슨 시간표 메뉴는 학원레슨표와 개인레슨표 하위 메뉴를 가진다", () => {
+    const lessonNavigation = mainNavigation.find(
+      (item) => item.label === "레슨 시간표",
+    );
+
+    expect(lessonNavigation?.href).toBe("/lessons/academy");
+    expect(lessonNavigation?.children?.map((item) => item.label)).toEqual([
+      "학원레슨표",
+      "개인레슨표",
+    ]);
+    expect(lessonNavigation?.children?.map((item) => item.href)).toEqual([
+      "/lessons/academy",
+      "/lessons/private",
+    ]);
+  });
 });

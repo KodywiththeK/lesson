@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "./providers";
 import FinancePage from "./finance/page";
-import LessonsPage from "./lessons/page";
+import PrivateLessonsPage from "./lessons/private/page";
 import PassesPage from "./passes/page";
 
 describe("integrated demo flow", () => {
@@ -56,16 +56,20 @@ describe("integrated demo flow", () => {
 
   it("개인레슨 출석 확인이 회차권 잔여 회수를 차감한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/lessons/private");
+
     const view = render(
       <AppProviders>
-        <LessonsPage />
+        <PrivateLessonsPage />
       </AppProviders>,
     );
 
-    await user.click(screen.getByRole("tab", { name: "개인레슨표" }));
+    fireEvent.change(screen.getByLabelText("개인레슨 캘린더 월 선택"), {
+      target: { value: "2026-08" },
+    });
     await user.click(
       screen.getByRole("gridcell", {
-        name: /21(?: 메모)? 한서 한서아 \[개인레슨\] 18:00 오유진/,
+        name: /21(?: 메모 \d+)? 한서 한서아 \[개인레슨\] 18:00 오유진/,
       }),
     );
     const dialog = await screen.findByRole("dialog", {

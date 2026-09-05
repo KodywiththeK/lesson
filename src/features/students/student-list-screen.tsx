@@ -16,6 +16,10 @@ import {
   ListStatusAlert,
 } from "@/components/management/list-controls";
 import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -126,7 +130,6 @@ type SupabaseClientState =
 
 export function StudentListScreen({
   academyId,
-  academyName,
   queryOptionsFactory,
   teachers = [],
   registerStudent,
@@ -185,9 +188,10 @@ export function StudentListScreen({
     ),
     enabled: !teachers.length && !supabaseClientState?.error,
   });
-  const teacherOptions = teachers.length
-    ? teachers
-    : teacherOptionsQuery.data?.items ?? [];
+  const teacherOptions = useMemo(
+    () => (teachers.length ? teachers : teacherOptionsQuery.data?.items ?? []),
+    [teacherOptionsQuery.data?.items, teachers],
+  );
   const registerMutation = useMutation({
     mutationFn: async (input: DemoStudentRegistrationInput) => {
       if (registerStudent) {
@@ -362,41 +366,40 @@ export function StudentListScreen({
     (student) => studentOverrides[student.studentId] ?? student,
   );
   const filterOptions = buildFilterOptions(students);
+  const registrationAction = useMemo(
+    () => (
+      <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <UserPlus aria-hidden="true" />
+            원생 등록
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>원생 등록</DialogTitle>
+            <DialogDescription>
+              원생의 수강 악기와 레슨 기준을 함께 등록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <StudentRegistrationForm
+            teachers={teacherOptions}
+            onSubmit={(input) => {
+              registerMutation.mutate(input);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [isRegistrationOpen, registerMutation, teacherOptions],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(registrationAction);
 
   return (
-    <section className="grid gap-4" aria-labelledby="student-list-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="student-list-heading" className="text-2xl font-semibold">
-            원생 목록
-          </h2>
-        </div>
-        <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <UserPlus aria-hidden="true" />
-              원생 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
-            <DialogHeader>
-              <DialogTitle>원생 등록</DialogTitle>
-              <DialogDescription>
-                원생의 수강 악기와 레슨 기준을 함께 등록합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <StudentRegistrationForm
-              teachers={teacherOptions}
-              onSubmit={(input) => {
-                registerMutation.mutate(input);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="원생 목록">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {registrationAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_repeat(3,11rem)_auto]">

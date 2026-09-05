@@ -7,6 +7,8 @@ import StudentsPage from "./page";
 
 describe("StudentsPage", () => {
   it("인원·거래처 메뉴의 원생 하위 메뉴에서 원생 목록 화면으로 진입할 수 있다", async () => {
+    window.history.pushState(null, "", "/management/students");
+
     render(
       <AppProviders>
         <StudentsPage />
@@ -14,7 +16,7 @@ describe("StudentsPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "원생 관리" }),
+      screen.getByRole("heading", { level: 1, name: "인원·거래처" }),
     ).toBeInTheDocument();
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
@@ -26,12 +28,16 @@ describe("StudentsPage", () => {
       "/management/students",
     );
     expect(screen.getByRole("searchbox", { name: "원생 검색" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "원생 관리" }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByText("김민지")).toBeInTheDocument();
     expect(screen.getByText("한서아")).toBeInTheDocument();
   });
 
   it("원생 등록 다이얼로그에서 등록한 원생을 목록에 반영한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/students");
 
     render(
       <AppProviders>

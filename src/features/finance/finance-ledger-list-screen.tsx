@@ -15,6 +15,10 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,7 +115,6 @@ const sourceFilterOptions: Array<{
 
 export function FinanceLedgerListScreen({
   academyId,
-  academyName,
   queryOptionsFactory,
   registerManualLedgerEntry,
 }: FinanceLedgerListScreenProps) {
@@ -183,40 +186,39 @@ export function FinanceLedgerListScreen({
     },
   });
   const entries = ledgerListQuery.data ?? [];
+  const manualEntryAction = useMemo(
+    () => (
+      <Dialog open={isManualOpen} onOpenChange={setIsManualOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <CircleDollarSign aria-hidden="true" />
+            수동 입출입 등록
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>수동 입출입 등록</DialogTitle>
+            <DialogDescription>
+              자동 수납 외 조정 내역을 직접 기록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <ManualLedgerForm
+            onSubmit={(input) => {
+              registerMutation.mutate(input);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [isManualOpen, registerMutation],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(manualEntryAction);
 
   return (
-    <section className="grid gap-4" aria-labelledby="finance-ledger-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="finance-ledger-heading" className="text-2xl font-semibold">
-            입출입 내역
-          </h2>
-        </div>
-        <Dialog open={isManualOpen} onOpenChange={setIsManualOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <CircleDollarSign aria-hidden="true" />
-              수동 입출입 등록
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>수동 입출입 등록</DialogTitle>
-              <DialogDescription>
-                자동 수납 외 조정 내역을 직접 기록합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <ManualLedgerForm
-              onSubmit={(input) => {
-                registerMutation.mutate(input);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="입출입 내역">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {manualEntryAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_10rem_10rem_auto]">

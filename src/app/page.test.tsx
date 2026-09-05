@@ -25,6 +25,8 @@ describe("Home", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "대시보드",
       "레슨 시간표",
+      "학원레슨표",
+      "개인레슨표",
       "회차권",
       "인원·거래처",
       "원생",
@@ -37,5 +39,8 @@ describe("Home", () => {
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
     ).toHaveAttribute("href", "/management/students");
+    expect(
+      within(navigation).getByRole("link", { name: "레슨 시간표" }),
+    ).toHaveAttribute("href", "/lessons/academy");
   });
 });

@@ -31,10 +31,25 @@ export const mainNavigation: NavigationItem[] = [
   },
   {
     label: "레슨 시간표",
-    href: "/lessons",
+    href: "/lessons/academy",
     description: "학원 피아노 레슨표와 개인레슨 일정을 관리합니다.",
     icon: CalendarDays,
-    feature: "lesson-schedule",
+    children: [
+      {
+        label: "학원레슨표",
+        href: "/lessons/academy",
+        description: "학원 피아노 정기/비정기 레슨표를 관리합니다.",
+        icon: CalendarDays,
+        feature: "lesson-schedule",
+      },
+      {
+        label: "개인레슨표",
+        href: "/lessons/private",
+        description: "개인레슨 일정과 출석을 관리합니다.",
+        icon: CalendarDays,
+        feature: "lesson-schedule",
+      },
+    ],
   },
   {
     label: "회차권",

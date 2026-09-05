@@ -15,6 +15,10 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import {
+  PageHeaderActionFallback,
+  usePageHeaderActions,
+} from "@/components/layout/page-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,7 +113,6 @@ const statusFilterOptions: Array<{
 
 export function BookPurchaseListScreen({
   academyId,
-  academyName,
   queryOptionsFactory,
   students = [],
   registerBookRelease,
@@ -150,9 +153,10 @@ export function BookPurchaseListScreen({
     ),
     enabled: !students.length && !supabaseClientState?.error,
   });
-  const studentOptions = students.length
-    ? students
-    : studentOptionsQuery.data?.items ?? [];
+  const studentOptions = useMemo(
+    () => (students.length ? students : studentOptionsQuery.data?.items ?? []),
+    [studentOptionsQuery.data?.items, students],
+  );
   const registerMutation = useMutation({
     mutationFn: async (input: {
       studentId: string;
@@ -198,41 +202,40 @@ export function BookPurchaseListScreen({
     },
   });
   const purchases = bookPurchaseListQuery.data ?? [];
+  const releaseAction = useMemo(
+    () => (
+      <Dialog open={isReleaseOpen} onOpenChange={setIsReleaseOpen}>
+        <DialogTrigger asChild>
+          <Button type="button">
+            <BookOpenCheck aria-hidden="true" />
+            교재 출고
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>교재 출고</DialogTitle>
+            <DialogDescription>
+              원생에게 출고한 교재와 결제 상태를 기록합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <BookReleaseForm
+            students={studentOptions}
+            onSubmit={(input) => {
+              registerMutation.mutate(input);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    ),
+    [isReleaseOpen, registerMutation, studentOptions],
+  );
+  const isHeaderActionMounted = usePageHeaderActions(releaseAction);
 
   return (
-    <section className="grid gap-4" aria-labelledby="book-purchase-heading">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="book-purchase-heading" className="text-2xl font-semibold">
-            교재 구매 목록
-          </h2>
-        </div>
-        <Dialog open={isReleaseOpen} onOpenChange={setIsReleaseOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">
-              <BookOpenCheck aria-hidden="true" />
-              교재 출고
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>교재 출고</DialogTitle>
-              <DialogDescription>
-                원생에게 출고한 교재와 결제 상태를 기록합니다.
-              </DialogDescription>
-            </DialogHeader>
-            <BookReleaseForm
-              students={studentOptions}
-              onSubmit={(input) => {
-                registerMutation.mutate(input);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <section className="grid gap-4" aria-label="교재 구매 목록">
+      <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+        {releaseAction}
+      </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">

@@ -7,6 +7,8 @@ import VendorsPage from "./page";
 
 describe("VendorsPage", () => {
   it("인원·거래처 메뉴의 거래처 하위 메뉴에서 거래처 목록 화면으로 진입할 수 있다", async () => {
+    window.history.pushState(null, "", "/management/vendors");
+
     render(
       <AppProviders>
         <VendorsPage />
@@ -14,7 +16,7 @@ describe("VendorsPage", () => {
     );
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "거래처 관리" }),
+      screen.getByRole("heading", { level: 1, name: "인원·거래처" }),
     ).toBeInTheDocument();
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
@@ -27,12 +29,16 @@ describe("VendorsPage", () => {
     expect(
       screen.getByRole("searchbox", { name: "거래처 검색" }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "거래처 관리" }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByText("클래식 악기사")).toBeInTheDocument();
     expect(screen.getByText("뮤직북 유통")).toBeInTheDocument();
   });
 
   it("거래처 등록 다이얼로그에서 입력한 거래처를 목록에 반영한다", async () => {
     const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/vendors");
 
     render(
       <AppProviders>

@@ -133,7 +133,6 @@ const teacherStatusTabs = [
 
 export function StatusManagementScreen({
   academyId,
-  academyName,
   studentQueryOptionsFactory,
   teacherQueryOptionsFactory,
   updateStudentStatus,
@@ -251,16 +250,7 @@ export function StatusManagementScreen({
   const items = statusQuery.data?.items ?? [];
 
   return (
-    <section className="grid gap-4" aria-labelledby="status-management-heading">
-      <div>
-        <p className="text-sm font-medium text-muted-foreground">
-          {academyName}
-        </p>
-        <h2 id="status-management-heading" className="text-2xl font-semibold">
-          휴원/퇴원 관리
-        </h2>
-      </div>
-
+    <section className="grid gap-4" aria-label="휴원/퇴원 관리">
       <Tabs
         value={entityType}
         onValueChange={(value) =>

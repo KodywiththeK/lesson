@@ -18,7 +18,7 @@ export default function StudentsPage() {
         <AppShell
           academyName={academy.academyName}
           permissionContext={academy.permissionContext}
-          pageTitle="원생 관리"
+          pageTitle="인원·거래처"
         >
           <StudentListScreen
             academyId={academy.academyId}

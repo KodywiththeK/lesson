@@ -5,8 +5,12 @@ import { afterEach, vi } from "vitest";
 export const nextRouterReplaceMock = vi.fn((href: string) => {
   window.history.pushState(null, "", href);
 });
+export const nextRedirectMock = vi.fn((href: string) => {
+  throw new Error(`NEXT_REDIRECT:${href}`);
+});
 
 vi.mock("next/navigation", () => ({
+  redirect: nextRedirectMock,
   usePathname: () => window.location.pathname,
   useRouter: () => ({
     replace: nextRouterReplaceMock,
@@ -47,6 +51,7 @@ if (!globalThis.ResizeObserver) {
 }
 
 afterEach(() => {
+  nextRedirectMock.mockClear();
   nextRouterReplaceMock.mockClear();
   cleanup();
 });

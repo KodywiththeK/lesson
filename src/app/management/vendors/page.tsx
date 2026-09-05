@@ -18,7 +18,7 @@ export default function VendorsPage() {
         <AppShell
           academyName={academy.academyName}
           permissionContext={academy.permissionContext}
-          pageTitle="거래처 관리"
+          pageTitle="인원·거래처"
         >
           <VendorListScreen
             academyId={academy.academyId}
