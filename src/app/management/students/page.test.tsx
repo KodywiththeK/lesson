@@ -2,11 +2,11 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { AppProviders } from "../providers";
+import { AppProviders } from "../../providers";
 import StudentsPage from "./page";
 
 describe("StudentsPage", () => {
-  it("원생 메뉴에서 원생 목록 화면으로 진입할 수 있다", async () => {
+  it("인원·거래처 메뉴의 원생 하위 메뉴에서 원생 목록 화면으로 진입할 수 있다", async () => {
     render(
       <AppProviders>
         <StudentsPage />
@@ -18,9 +18,12 @@ describe("StudentsPage", () => {
     ).toBeInTheDocument();
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
+    expect(
+      within(navigation).getByRole("link", { name: "인원·거래처" }),
+    ).toHaveAttribute("href", "/management/students");
     expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute(
       "href",
-      "/students",
+      "/management/students",
     );
     expect(screen.getByRole("searchbox", { name: "원생 검색" })).toBeInTheDocument();
     expect(await screen.findByText("김민지")).toBeInTheDocument();

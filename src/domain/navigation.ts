@@ -11,11 +11,15 @@ import {
   UsersRound,
 } from "lucide-react";
 
+import type { FeatureKey } from "./permissions";
+
 export type NavigationItem = {
   label: string;
   href: string;
   description: string;
   icon: LucideIcon;
+  feature?: FeatureKey;
+  children?: NavigationItem[];
 };
 
 export const mainNavigation: NavigationItem[] = [
@@ -30,47 +34,63 @@ export const mainNavigation: NavigationItem[] = [
     href: "/lessons",
     description: "학원 피아노 레슨표와 개인레슨 일정을 관리합니다.",
     icon: CalendarDays,
+    feature: "lesson-schedule",
   },
   {
     label: "회차권",
     href: "/passes",
     description: "회차권 등록, 추가, 차감, 만료 임박 상태를 관리합니다.",
     icon: ScrollText,
+    feature: "tickets",
   },
   {
-    label: "원생",
-    href: "/students",
-    description: "원생 기본정보와 악기별 수강 설정을 관리합니다.",
+    label: "인원·거래처",
+    href: "/management/students",
+    description: "원생, 선생님, 휴원/퇴원, 거래처를 한 영역에서 관리합니다.",
     icon: UsersRound,
-  },
-  {
-    label: "선생님",
-    href: "/teachers",
-    description: "선생님 프로필, 담당 파트, 급여 기준을 관리합니다.",
-    icon: GraduationCap,
-  },
-  {
-    label: "휴원/퇴원",
-    href: "/status-management",
-    description: "휴원, 퇴원, 휴직, 퇴사 대상을 분리해 관리합니다.",
-    icon: Archive,
-  },
-  {
-    label: "거래처",
-    href: "/vendors",
-    description: "교재, 조율, 운영 거래처 정보를 관리합니다.",
-    icon: Handshake,
+    children: [
+      {
+        label: "원생",
+        href: "/management/students",
+        description: "원생 기본정보와 악기별 수강 설정을 관리합니다.",
+        icon: UsersRound,
+        feature: "students",
+      },
+      {
+        label: "선생님",
+        href: "/management/teachers",
+        description: "선생님 프로필, 담당 파트, 급여 기준을 관리합니다.",
+        icon: GraduationCap,
+        feature: "teachers",
+      },
+      {
+        label: "휴원/퇴원",
+        href: "/management/status",
+        description: "휴원, 퇴원, 휴직, 퇴사 대상을 분리해 관리합니다.",
+        icon: Archive,
+        feature: "status-management",
+      },
+      {
+        label: "거래처",
+        href: "/management/vendors",
+        description: "교재, 조율, 운영 거래처 정보를 관리합니다.",
+        icon: Handshake,
+        feature: "vendors",
+      },
+    ],
   },
   {
     label: "교재",
     href: "/books",
     description: "교재 재고, 출고, 결제 완료 상태를 관리합니다.",
     icon: BookOpen,
+    feature: "books",
   },
   {
     label: "수입",
     href: "/finance",
     description: "수강료, 교재, 급여, 입출입 내역을 확인합니다.",
     icon: Banknote,
+    feature: "income-management",
   },
 ];

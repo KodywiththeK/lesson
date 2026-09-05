@@ -9,12 +9,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { mainNavigation } from "@/domain/navigation";
+import { mainNavigation, type NavigationItem } from "@/domain/navigation";
 import {
   type FeatureKey,
   type PermissionContext,
   canAccessFeature,
-  getVisibleNavigationItems,
 } from "@/domain/permissions";
 
 type AppShellProps = {
@@ -61,16 +60,8 @@ const nextMilestones = [
   "목록/검색/필터",
 ];
 
-const navigationFeatureByHref: Record<string, FeatureKey> = {
-  "/": "lesson-schedule",
-  "/lessons": "lesson-schedule",
-  "/passes": "tickets",
-  "/students": "students",
-  "/teachers": "teachers",
-  "/status-management": "status-management",
-  "/vendors": "vendors",
-  "/books": "books",
-  "/finance": "income-management",
+type VisibleNavigationItem = NavigationItem & {
+  children?: VisibleNavigationItem[];
 };
 
 export function AppShell({
@@ -79,15 +70,7 @@ export function AppShell({
   pageTitle = "음악학원 관리",
   children,
 }: AppShellProps) {
-  const visibleFeatureKeys = getVisibleNavigationItems(permissionContext);
-  const visibleNavigation = mainNavigation.filter((item) => {
-    if (item.href === "/") {
-      return true;
-    }
-
-    const feature = navigationFeatureByHref[item.href];
-    return feature ? visibleFeatureKeys.includes(feature) : false;
-  });
+  const visibleNavigation = getVisibleNavigation(permissionContext);
   const visibleWorkQueue = workQueue.filter((item) => {
     if (!item.feature) {
       return true;
@@ -118,20 +101,9 @@ export function AppShell({
             aria-label="주요 메뉴"
             className="flex gap-1 overflow-x-auto pb-1 lg:grid lg:overflow-visible lg:pb-0"
           >
-            {visibleNavigation.map((item) => {
-              const Icon = item.icon;
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="group flex min-h-10 flex-none items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:min-h-11 lg:gap-3"
-                >
-                  <Icon aria-hidden="true" className="size-4" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+            {visibleNavigation.map((item) => (
+              <NavigationEntry key={item.href} item={item} />
+            ))}
             {permissionContext.role === "teacher" ? (
               <Link
                 href="/my/payroll"
@@ -182,6 +154,84 @@ export function AppShell({
         </section>
       </div>
     </main>
+  );
+}
+
+function getVisibleNavigation(
+  permissionContext: PermissionContext,
+): VisibleNavigationItem[] {
+  return mainNavigation.flatMap((item) => {
+    const visibleChildren = item.children?.filter((child) =>
+      isNavigationItemVisible(child, permissionContext),
+    );
+    const visibleItem = {
+      ...item,
+      children: visibleChildren,
+    };
+
+    if (isNavigationItemVisible(visibleItem, permissionContext)) {
+      return [visibleItem];
+    }
+
+    return [];
+  });
+}
+
+function isNavigationItemVisible(
+  item: NavigationItem,
+  permissionContext: PermissionContext,
+): boolean {
+  if (item.href === "/") {
+    return true;
+  }
+
+  if (item.feature) {
+    return canAccessFeature(permissionContext, item.feature);
+  }
+
+  return item.children?.some((child) =>
+    isNavigationItemVisible(child, permissionContext),
+  ) === true;
+}
+
+function NavigationEntry({ item }: { item: VisibleNavigationItem }) {
+  if (item.children?.length) {
+    return (
+      <div className="flex flex-none gap-1 lg:grid lg:gap-0.5">
+        <NavigationLink item={item} />
+        <div className="flex gap-1 lg:grid lg:pl-5">
+          {item.children.map((child) => (
+            <NavigationLink key={child.href} item={child} variant="child" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return <NavigationLink item={item} />;
+}
+
+function NavigationLink({
+  item,
+  variant = "default",
+}: {
+  item: NavigationItem;
+  variant?: "default" | "child";
+}) {
+  const Icon = item.icon;
+  const sizeClass =
+    variant === "child"
+      ? "min-h-9 px-3 text-xs lg:min-h-9"
+      : "min-h-10 px-3 text-sm lg:min-h-11";
+
+  return (
+    <Link
+      href={item.href}
+      className={`group flex flex-none items-center gap-2 rounded-md font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:gap-3 ${sizeClass}`}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+      <span>{item.label}</span>
+    </Link>
   );
 }
 

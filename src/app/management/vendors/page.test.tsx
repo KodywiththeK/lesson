@@ -2,11 +2,11 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { AppProviders } from "../providers";
+import { AppProviders } from "../../providers";
 import VendorsPage from "./page";
 
 describe("VendorsPage", () => {
-  it("거래처 메뉴에서 거래처 목록 화면으로 진입할 수 있다", async () => {
+  it("인원·거래처 메뉴의 거래처 하위 메뉴에서 거래처 목록 화면으로 진입할 수 있다", async () => {
     render(
       <AppProviders>
         <VendorsPage />
@@ -19,8 +19,11 @@ describe("VendorsPage", () => {
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     expect(
+      within(navigation).getByRole("link", { name: "인원·거래처" }),
+    ).toHaveAttribute("href", "/management/students");
+    expect(
       within(navigation).getByRole("link", { name: "거래처" }),
-    ).toHaveAttribute("href", "/vendors");
+    ).toHaveAttribute("href", "/management/vendors");
     expect(
       screen.getByRole("searchbox", { name: "거래처 검색" }),
     ).toBeInTheDocument();

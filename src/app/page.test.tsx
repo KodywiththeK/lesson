@@ -26,6 +26,7 @@ describe("Home", () => {
       "대시보드",
       "레슨 시간표",
       "회차권",
+      "인원·거래처",
       "원생",
       "선생님",
       "휴원/퇴원",
@@ -33,5 +34,8 @@ describe("Home", () => {
       "교재",
       "수입",
     ]);
+    expect(
+      within(navigation).getByRole("link", { name: "인원·거래처" }),
+    ).toHaveAttribute("href", "/management/students");
   });
 });

@@ -17,6 +17,7 @@ describe("AppShell", () => {
       "대시보드",
       "레슨 시간표",
       "회차권",
+      "인원·거래처",
       "원생",
       "선생님",
       "휴원/퇴원",
@@ -24,6 +25,22 @@ describe("AppShell", () => {
       "교재",
       "수입",
     ]);
+    expect(
+      within(navigation).getByRole("link", { name: "인원·거래처" }),
+    ).toHaveAttribute("href", "/management/students");
+    expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute(
+      "href",
+      "/management/students",
+    );
+    expect(
+      within(navigation).getByRole("link", { name: "선생님" }),
+    ).toHaveAttribute("href", "/management/teachers");
+    expect(
+      within(navigation).getByRole("link", { name: "휴원/퇴원" }),
+    ).toHaveAttribute("href", "/management/status");
+    expect(
+      within(navigation).getByRole("link", { name: "거래처" }),
+    ).toHaveAttribute("href", "/management/vendors");
     expect(screen.getByRole("link", { name: /수납 등록/ })).toHaveAttribute(
       "href",
       "/finance",
@@ -50,8 +67,14 @@ describe("AppShell", () => {
     const labels = within(navigation).getAllByRole("link").map((link) => link.textContent);
 
     expect(labels).toContain("레슨 시간표");
+    expect(labels).toContain("인원·거래처");
     expect(labels).toContain("원생");
     expect(labels).toContain("내 급여");
+    expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute(
+      "href",
+      "/management/students",
+    );
+    expect(labels).not.toContain("선생님");
     expect(labels).not.toContain("휴원/퇴원");
     expect(labels).not.toContain("수입");
     expect(labels).not.toContain("거래처");

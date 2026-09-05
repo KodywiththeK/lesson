@@ -10,6 +10,7 @@ Discover -> Plan -> Red -> Green -> Refactor -> Verify -> Consolidate -> Evidenc
 
 - 관련 문서와 기존 코드를 먼저 읽는다.
 - `docs/product/pdf-understanding.md`와 `docs/product/open-questions.md`를 확인한다.
+- 코드 품질에 영향이 있는 작업은 `docs/engineering/code-quality.md`를 확인한다.
 - PDF 기반 요구사항은 텍스트 추출본과 렌더 이미지 노트를 함께 확인한다.
 - Supabase 작업은 최신 Supabase 문서와 changelog를 확인한 뒤 진행한다.
 
@@ -18,7 +19,7 @@ Discover -> Plan -> Red -> Green -> Refactor -> Verify -> Consolidate -> Evidenc
 - 작업을 작은 phase로 나눈다.
 - 작성할 테스트 파일과 시나리오를 먼저 이름 붙인다.
 - 작업 완료를 증명할 검증 명령을 정한다.
-- 제품 정책, 민감 권한, 계산 기준처럼 문서/코드에서 안전하게 추론할 수 없는 결정은 사용자에게 질문한다.
+- 제품 정책, 민감 권한, 계산 기준, UX 의사결정처럼 문서/코드에서 안전하게 추론할 수 없는 결정은 사용자에게 질문한다.
 
 ## Red
 
@@ -46,6 +47,7 @@ Discover -> Plan -> Red -> Green -> Refactor -> Verify -> Consolidate -> Evidenc
 ## Consolidate
 
 - `docs/harness/quality-consolidation.md`를 적용한다.
+- `docs/engineering/code-quality.md`의 가독성, 예측 가능성, 응집도, 결합도 기준으로 변경 diff를 리뷰한다.
 - 개발 중 임시 테스트를 유지보수 가능한 회귀 테스트로 정리한다.
 - 일회용 코드와 우연한 복잡성을 제거한다.
 

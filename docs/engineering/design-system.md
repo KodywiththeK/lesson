@@ -22,7 +22,9 @@
 
 - 기본 shell은 persistent sidebar와 compact main content다.
 - main content는 작은 header, toolbar filter, table 또는 calendar body를 중심으로 구성한다.
-- 원생/선생님/거래처, 수입 탭처럼 하위 영역이 나뉘는 곳은 tabs를 사용한다.
+- 수입 세부 내역이나 휴원/퇴원 상태처럼 같은 화면 안에서 하위 영역이 나뉘는 곳은 tabs를 사용한다.
+- 서로 독립된 목록 화면을 하나의 상위 업무로 묶을 때는 중첩 URL과 하위 navigation을 사용한다.
+- 같은 데이터 맥락 안에서 빠르게 상태만 전환하는 화면은 tabs를 사용한다.
 - 생성/수정 흐름은 dialogs를 기본으로 한다.
 - 현재 맥락을 유지하는 편이 좋은 workflow에만 drawer 또는 side panel을 사용한다.
 
