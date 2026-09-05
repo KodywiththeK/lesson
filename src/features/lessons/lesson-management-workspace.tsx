@@ -24,7 +24,6 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type Dispatch,
   type ReactNode,
@@ -62,6 +61,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { usePageHeaderActions } from "@/components/layout/page-actions";
 import type {
   DailyAcademyAttendanceRow,
   DailyAcademyAttendanceSheet,
@@ -93,12 +93,14 @@ import {
   type MoveAcademyLessonEventInput,
 } from "@/lib/api/lesson-workspace";
 import {
-  saveEntityMemo,
-  saveLessonCalendarMemo,
+  createLessonCalendarMemo,
+  deleteLessonCalendarMemo,
+  updateLessonCalendarMemo,
   type LessonCalendarMemo,
   type LessonMemoKind,
   type LessonMemoSupabaseClient,
-  type SaveEntityMemoInput,
+  type LessonCalendarMemoPayload,
+  type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
 import { queryKeys } from "@/lib/api/query-keys";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
@@ -109,6 +111,7 @@ import { PrivateLessonRegistrationScreen } from "../private-lessons/private-less
 type LessonManagementWorkspaceProps = {
   academyId: string;
   academyName: string;
+  lessonKind?: LessonTab;
   initialDate?: string;
   demoData?: LessonWorkspaceDemoData;
   onRegisterPrivateLesson?: (input: RegisterPrivateLessonEventInput) => Promise<void>;
@@ -163,14 +166,25 @@ type MoveLessonDraft = {
   reason: string;
 };
 
-type EntityMemoDraft = {
-  targetType: "student" | "teacher";
-  targetId: string;
-  targetName: string;
+export type LessonRouteKind = "academy" | "private";
+type LessonTab = LessonRouteKind;
+type LessonView = "calendar" | "table";
+
+type LessonMemoTargetOption = {
+  id: string;
+  name: string;
 };
 
-type LessonTab = "academy" | "private";
-type LessonView = "calendar" | "table";
+type LessonMemoTargetOptions = {
+  students: LessonMemoTargetOption[];
+  teachers: LessonMemoTargetOption[];
+};
+
+type LessonMemoDraft = {
+  studentId: string;
+  teacherId: string;
+  content: string;
+};
 
 const seoulFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Seoul",
@@ -193,6 +207,7 @@ const internalQueryClient = new QueryClient({
     },
   },
 });
+let localMemoIdSequence = 0;
 
 export function LessonManagementWorkspaceWithProviders(
   props: LessonManagementWorkspaceProps,
@@ -207,18 +222,14 @@ export function LessonManagementWorkspaceWithProviders(
 export function LessonManagementWorkspace({
   academyId,
   academyName,
-  initialDate = toDateInputValue(new Date()),
+  lessonKind = "academy",
+  initialDate = getTodayDate(),
   demoData,
   onRegisterPrivateLesson,
   onMarkPrivateLessonAttendance,
 }: LessonManagementWorkspaceProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(initialDate);
-  const urlLessonTab = toLessonTab(searchParams.get("lessonTab"));
-  const [activeLessonTab, setActiveLessonTab] = useState<LessonTab>(urlLessonTab);
   const [academyView, setAcademyView] = useState<LessonView>("calendar");
   const [privateView, setPrivateView] = useState<LessonView>("calendar");
   const selectedMonth = selectedDate.slice(0, 7);
@@ -263,36 +274,13 @@ export function LessonManagementWorkspace({
     privateLessonsOverride ?? initialWorkspaceData.privateLessons;
   const calendarMemos =
     calendarMemosOverride ?? initialWorkspaceData.calendarMemos;
-  const academyMemo = findCalendarMemoContent(
-    calendarMemos,
-    "academy",
-    selectedDate,
-  );
-  const privateMemo = findCalendarMemoContent(
-    calendarMemos,
-    "private",
-    selectedDate,
-  );
-  const academyMemoDates = useMemo(
-    () => toMemoDateSet(calendarMemos, "academy"),
+  const academyMemoCounts = useMemo(
+    () => toMemoCountMap(calendarMemos, "academy"),
     [calendarMemos],
   );
-  const privateMemoDates = useMemo(
-    () => toMemoDateSet(calendarMemos, "private"),
+  const privateMemoCounts = useMemo(
+    () => toMemoCountMap(calendarMemos, "private"),
     [calendarMemos],
-  );
-  const academyMonthMemos = useMemo(
-    () => filterMonthMemos(calendarMemos, "academy", selectedMonth),
-    [calendarMemos, selectedMonth],
-  );
-  const privateMonthMemos = useMemo(
-    () => filterMonthMemos(calendarMemos, "private", selectedMonth),
-    [calendarMemos, selectedMonth],
-  );
-  const [academyMemoOpen, setAcademyMemoOpen] = useState(false);
-  const [privateMemoOpen, setPrivateMemoOpen] = useState(false);
-  const [entityMemoDraft, setEntityMemoDraft] = useState<EntityMemoDraft | null>(
-    null,
   );
   const [absentOpen, setAbsentOpen] = useState(false);
   const [academyEventOpen, setAcademyEventOpen] = useState(false);
@@ -345,6 +333,18 @@ export function LessonManagementWorkspace({
   const selectedPrivateLessons = privateLessons
     .filter((lesson) => toSeoulDate(lesson.startAt) === selectedDate)
     .sort((left, right) => left.startAt.localeCompare(right.startAt));
+  const selectedAcademyMemos = getLessonMemosForDate(
+    calendarMemos,
+    "academy",
+    selectedDate,
+  );
+  const selectedPrivateMemos = getLessonMemosForDate(
+    calendarMemos,
+    "private",
+    selectedDate,
+  );
+  const selectedAcademyMemoTargets = toAcademyMemoTargetOptions(selectedAcademyEvents);
+  const selectedPrivateMemoTargets = toPrivateMemoTargetOptions(selectedPrivateLessons);
   const unresolvedAbsences = academyTableRows.filter(
     (row) =>
       row.date.startsWith(selectedMonth) &&
@@ -353,16 +353,20 @@ export function LessonManagementWorkspace({
   );
   const privateRegistrationOptions =
     initialWorkspaceData.privateRegistrationOptions;
-  const registrationOptionsQueryFactory = demoData
-    ? (targetAcademyId: string) => ({
-        queryKey: [
-          "demo",
-          "private-registration-options",
-          targetAcademyId,
-        ] as QueryKey,
-        queryFn: async () => demoData.privateRegistrationOptions,
-      })
-    : undefined;
+  const registrationOptionsQueryFactory = useMemo(
+    () =>
+      demoData
+        ? (targetAcademyId: string) => ({
+            queryKey: [
+              "demo",
+              "private-registration-options",
+              targetAcademyId,
+            ] as QueryKey,
+            queryFn: async () => demoData.privateRegistrationOptions,
+          })
+        : undefined,
+    [demoData],
+  );
   const saveAcademyAttendanceMutation = useMutation({
     mutationFn: (input: Parameters<typeof markDailyAcademyLessonAttendance>[1]) => {
       if (!supabaseClientState?.client) {
@@ -472,39 +476,111 @@ export function LessonManagementWorkspace({
       });
     },
   });
-  const saveMemoMutation = useMutation({
-    mutationFn: (input: Parameters<typeof saveLessonCalendarMemo>[1]) => {
+  const createMemoMutation = useMutation({
+    mutationFn: (input: LessonCalendarMemoPayload) => {
       if (!supabaseClientState?.client) {
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
 
-      return saveLessonCalendarMemo(supabaseClientState.client, input);
+      return createLessonCalendarMemo(supabaseClientState.client, input);
     },
-    onSuccess: () => {
+    onSuccess: (memo) => {
+      setCalendarMemosOverride((current) => [...(current ?? calendarMemos), memo]);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
+      toast.success("메모를 등록했습니다.");
     },
     onError: (error) => {
-      toast.error("메모 저장에 실패했습니다.", {
+      toast.error("메모 추가에 실패했습니다.", {
         description: error instanceof Error ? error.message : String(error),
       });
     },
   });
-  const saveEntityMemoMutation = useMutation({
-    mutationFn: (input: SaveEntityMemoInput) => {
+  const updateMemoMutation = useMutation({
+    mutationFn: (input: UpdateLessonCalendarMemoInput) => {
       if (!supabaseClientState?.client) {
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
 
-      return saveEntityMemo(supabaseClientState.client, input);
+      return updateLessonCalendarMemo(supabaseClientState.client, input);
+    },
+    onSuccess: (memo) => {
+      setCalendarMemosOverride((current) =>
+        (current ?? calendarMemos).map((candidate) =>
+          candidate.id === memo.id ? memo : candidate,
+        ),
+      );
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
+      });
+      toast.success("메모를 수정했습니다.");
     },
     onError: (error) => {
-      toast.error("대상 메모 저장에 실패했습니다.", {
+      toast.error("메모 수정에 실패했습니다.", {
         description: error instanceof Error ? error.message : String(error),
       });
     },
   });
+  const deleteMemoMutation = useMutation({
+    mutationFn: (input: { academyId: string; memoId: string }) => {
+      if (!supabaseClientState?.client) {
+        throw new Error("Supabase client 상태를 만들지 못했습니다.");
+      }
+
+      return deleteLessonCalendarMemo(supabaseClientState.client, input);
+    },
+    onSuccess: (_data, input) => {
+      setCalendarMemosOverride((current) =>
+        (current ?? calendarMemos).filter((memo) => memo.id !== input.memoId),
+      );
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
+      });
+      toast.success("메모를 삭제했습니다.");
+    },
+    onError: (error) => {
+      toast.error("메모 삭제에 실패했습니다.", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+  const createCalendarMemo = (input: LessonCalendarMemoPayload) => {
+    if (!demoData && supabaseClientState?.client) {
+      createMemoMutation.mutate(input);
+      return;
+    }
+
+    setCalendarMemosOverride((current) => [
+      ...(current ?? calendarMemos),
+      toLocalLessonCalendarMemo(input),
+    ]);
+    toast.success("메모를 등록했습니다.");
+  };
+  const updateCalendarMemo = (input: UpdateLessonCalendarMemoInput) => {
+    if (!demoData && supabaseClientState?.client) {
+      updateMemoMutation.mutate(input);
+      return;
+    }
+
+    setCalendarMemosOverride((current) =>
+      (current ?? calendarMemos).map((memo) =>
+        memo.id === input.memoId ? applyLessonCalendarMemoUpdate(memo, input) : memo,
+      ),
+    );
+    toast.success("메모를 수정했습니다.");
+  };
+  const deleteCalendarMemo = (memoId: string) => {
+    if (!demoData && supabaseClientState?.client) {
+      deleteMemoMutation.mutate({ academyId, memoId });
+      return;
+    }
+
+    setCalendarMemosOverride((current) =>
+      (current ?? calendarMemos).filter((memo) => memo.id !== memoId),
+    );
+    toast.success("메모를 삭제했습니다.");
+  };
   const createAcademyEventMutation = useMutation({
     mutationFn: (input: CreateAcademyLessonEventInput) => {
       if (!supabaseClientState?.client) {
@@ -689,17 +765,85 @@ export function LessonManagementWorkspace({
     toast.success("학원 일정을 이동했습니다.");
   };
 
-  const handleLessonTabChange = (value: string) => {
-    const nextTab = toLessonTab(value);
-    const nextParams = new URLSearchParams(searchParams.toString());
-    nextParams.set("lessonTab", nextTab);
-    const nextQuery = nextParams.toString();
-
-    setActiveLessonTab(nextTab);
-    router.replace(`${pathname}${nextQuery ? `?${nextQuery}` : ""}`, {
-      scroll: false,
-    });
-  };
+  const academyHeaderActions = useMemo(
+    () => (
+      <>
+        <Button type="button" onClick={() => setAcademyEventOpen(true)}>
+          <CalendarPlus aria-hidden="true" />
+          일정 추가
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={() => setAbsentOpen(true)}
+        >
+          <X aria-hidden="true" />
+          미등원인원
+        </Button>
+      </>
+    ),
+    [setAbsentOpen, setAcademyEventOpen],
+  );
+  const privateHeaderActions = useMemo(
+    () => (
+      <>
+        <PrivateLessonRegistrationScreen
+          academyId={academyId}
+          academyName={academyName}
+          displayMode="button"
+          registrationOptionsQueryFactory={registrationOptionsQueryFactory}
+          ticketBalances={initialWorkspaceData.ticketBalances}
+          registerPrivateLesson={
+            demoData || onRegisterPrivateLesson
+              ? async (input) => {
+                  if (onRegisterPrivateLesson) {
+                    await onRegisterPrivateLesson(input);
+                  }
+                  return toRegisteredPrivateLesson(input);
+                }
+              : undefined
+          }
+          onRegistered={(lesson) => {
+            setPrivateLessonsOverride((current) => [
+              ...(current ?? privateLessons),
+              lesson,
+            ]);
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setPrivateStudentSearchOpen(true)}
+        >
+          <Search aria-hidden="true" />
+          레슨원생 검색
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setScheduleOpen(true)}
+        >
+          <Send aria-hidden="true" />
+          레슨시간표 보내기
+        </Button>
+      </>
+    ),
+    [
+      academyId,
+      academyName,
+      demoData,
+      initialWorkspaceData.ticketBalances,
+      onRegisterPrivateLesson,
+      privateLessons,
+      registrationOptionsQueryFactory,
+      setPrivateLessonsOverride,
+      setPrivateStudentSearchOpen,
+      setScheduleOpen,
+    ],
+  );
+  const lessonHeaderActions =
+    lessonKind === "academy" ? academyHeaderActions : privateHeaderActions;
+  const isHeaderActionMounted = usePageHeaderActions(lessonHeaderActions);
 
   if (!hasInjectedData && supabaseClientState?.error) {
     return (
@@ -728,320 +872,120 @@ export function LessonManagementWorkspace({
   }
 
   return (
-    <section className="grid gap-4" aria-labelledby="lesson-workspace-heading">
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {academyName}
-          </p>
-          <h2 id="lesson-workspace-heading" className="text-xl font-semibold">
-            레슨관리표
-          </h2>
+    <section className="grid gap-4" aria-label={`${academyName} 레슨 시간표 운영`}>
+      {!isHeaderActionMounted ? (
+        <LessonToolbar
+          ariaLabel={lessonKind === "academy" ? "학원레슨 도구" : "개인레슨 도구"}
+          actions={lessonHeaderActions}
+        />
+      ) : null}
+
+      {lessonKind === "academy" ? (
+        <div className="grid min-w-0 gap-4">
+          <LessonViewTabs
+            labelPrefix="학원레슨"
+            value={academyView}
+            onValueChange={setAcademyView}
+          />
+          {academyView === "calendar" ? (
+            <LessonMonthCalendar
+              ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
+              selectedDate={selectedDate}
+              events={academyEvents}
+              memoCounts={academyMemoCounts}
+              variant="academy"
+              onChangeMonth={(month) => {
+                updateSelectedMonth(month, {
+                  selectedDate,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+              }}
+              onSelectDate={(date) => {
+                updateSelectedDate(date, {
+                  selectedMonth,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+                setAcademyDayOpen(true);
+              }}
+            />
+          ) : (
+            <AcademyLessonTableView
+              selectedDate={selectedDate}
+              rows={selectedAcademyEvents}
+              onChangeDate={(date) => {
+                updateSelectedDate(date, {
+                  selectedMonth,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+              }}
+              onOpenDay={(date) => {
+                updateSelectedDate(date, {
+                  selectedMonth,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+                setAcademyDayOpen(true);
+              }}
+            />
+          )}
         </div>
-        <Label className="grid gap-1 text-sm font-medium md:min-w-48">
-          <span>날짜 선택</span>
-          <Input
-            aria-label="레슨 관리 날짜"
-            type="date"
-            value={selectedDate}
-            onChange={(event) =>
-              updateSelectedDate(event.target.value, {
-                selectedMonth,
-                setSelectedDate,
-                resetOverrides: resetWorkspaceOverrides,
-              })
-            }
+      ) : (
+        <div className="grid min-w-0 gap-4">
+          <LessonViewTabs
+            labelPrefix="개인레슨"
+            value={privateView}
+            onValueChange={setPrivateView}
           />
-        </Label>
-      </div>
-
-      <Tabs
-        value={activeLessonTab}
-        onValueChange={handleLessonTabChange}
-        className="gap-4"
-      >
-        <TabsList className="grid h-auto w-full grid-cols-2 md:w-fit">
-          <TabsTrigger value="academy">
-            <CalendarDays aria-hidden="true" />
-            학원 레슨표
-          </TabsTrigger>
-          <TabsTrigger value="private">
-            <CalendarDays aria-hidden="true" />
-            개인레슨표
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="academy" className="grid gap-4">
-          <LessonToolbar
-            ariaLabel="학원레슨 도구"
-            memoButtonLabel="메모지"
-            onMemoClick={() => setAcademyMemoOpen(true)}
-            actions={
-              <>
-                <Button type="button" onClick={() => setAcademyEventOpen(true)}>
-                  <CalendarPlus aria-hidden="true" />
-                  일정 추가
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={() => setAbsentOpen(true)}
-                >
-                  <X aria-hidden="true" />
-                  미등원인원
-                </Button>
-              </>
-            }
-          />
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="grid min-w-0 gap-4">
-              <LessonViewTabs
-                labelPrefix="학원 레슨"
-                value={academyView}
-                onValueChange={setAcademyView}
-              />
-              {academyView === "calendar" ? (
-                <LessonMonthCalendar
-                  ariaLabel={toCalendarAriaLabel(selectedDate, "학원 레슨 캘린더")}
-                  selectedDate={selectedDate}
-                  events={academyEvents}
-                  memoDates={academyMemoDates}
-                  variant="academy"
-                  onChangeMonth={(month) => {
-                    updateSelectedMonth(month, {
-                      selectedDate,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                  }}
-                  onSelectDate={(date) => {
-                    updateSelectedDate(date, {
-                      selectedMonth,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                    setAcademyDayOpen(true);
-                  }}
-                />
-              ) : (
-                <AcademyLessonTableView
-                  selectedDate={selectedDate}
-                  rows={selectedAcademyEvents}
-                  onChangeDate={(date) => {
-                    updateSelectedDate(date, {
-                      selectedMonth,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                  }}
-                  onOpenDay={(date) => {
-                    updateSelectedDate(date, {
-                      selectedMonth,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                    setAcademyDayOpen(true);
-                  }}
-                />
-              )}
-            </div>
-            <LessonMemoReminder
-              title="학원레슨 메모 리마인더"
+          {privateView === "calendar" ? (
+            <LessonMonthCalendar
+              ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
               selectedDate={selectedDate}
-              selectedMemo={academyMemo}
-              memos={academyMonthMemos}
-              onOpenMemo={() => setAcademyMemoOpen(true)}
+              events={privateEvents}
+              memoCounts={privateMemoCounts}
+              variant="private"
+              onChangeMonth={(month) => {
+                updateSelectedMonth(month, {
+                  selectedDate,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+              }}
               onSelectDate={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
                   setSelectedDate,
                   resetOverrides: resetWorkspaceOverrides,
                 });
+                setPrivateDayOpen(true);
               }}
             />
-          </div>
-
-        </TabsContent>
-
-        <TabsContent value="private" className="grid gap-4">
-          <LessonToolbar
-            ariaLabel="개인레슨 도구"
-            memoButtonLabel="메모지"
-            onMemoClick={() => setPrivateMemoOpen(true)}
-            actions={
-              <>
-                <PrivateLessonRegistrationScreen
-                  academyId={academyId}
-                  academyName={academyName}
-                  displayMode="button"
-                  registrationOptionsQueryFactory={registrationOptionsQueryFactory}
-                  ticketBalances={initialWorkspaceData.ticketBalances}
-                  registerPrivateLesson={
-                    demoData || onRegisterPrivateLesson
-                      ? async (input) => {
-                          if (onRegisterPrivateLesson) {
-                            await onRegisterPrivateLesson(input);
-                          }
-                          return toRegisteredPrivateLesson(input);
-                        }
-                      : undefined
-                  }
-                  onRegistered={(lesson) => {
-                    setPrivateLessonsOverride((current) => [
-                      ...(current ?? privateLessons),
-                      lesson,
-                    ]);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setPrivateStudentSearchOpen(true)}
-                >
-                  <Search aria-hidden="true" />
-                  레슨원생 검색
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setScheduleOpen(true)}
-                >
-                  <Send aria-hidden="true" />
-                  레슨시간표 보내기
-                </Button>
-              </>
-            }
-          />
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="grid min-w-0 gap-4">
-              <LessonViewTabs
-                labelPrefix="개인레슨"
-                value={privateView}
-                onValueChange={setPrivateView}
-              />
-              {privateView === "calendar" ? (
-                <LessonMonthCalendar
-                  ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
-                  selectedDate={selectedDate}
-                  events={privateEvents}
-                  memoDates={privateMemoDates}
-                  variant="private"
-                  onChangeMonth={(month) => {
-                    updateSelectedMonth(month, {
-                      selectedDate,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                  }}
-                  onSelectDate={(date) => {
-                    updateSelectedDate(date, {
-                      selectedMonth,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                    setPrivateDayOpen(true);
-                  }}
-                />
-              ) : (
-                <PrivateLessonTableView
-                  selectedMonth={selectedMonth}
-                  selectedDate={selectedDate}
-                  lessons={privateTableRows}
-                  onChangeMonth={(month) => {
-                    updateSelectedMonth(month, {
-                      selectedDate,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                  }}
-                  onOpenDay={(date) => {
-                    updateSelectedDate(date, {
-                      selectedMonth,
-                      setSelectedDate,
-                      resetOverrides: resetWorkspaceOverrides,
-                    });
-                    setPrivateDayOpen(true);
-                  }}
-                />
-              )}
-            </div>
-            <LessonMemoReminder
-              title="개인레슨 메모 리마인더"
+          ) : (
+            <PrivateLessonTableView
+              selectedMonth={selectedMonth}
               selectedDate={selectedDate}
-              selectedMemo={privateMemo}
-              memos={privateMonthMemos}
-              onOpenMemo={() => setPrivateMemoOpen(true)}
-              onSelectDate={(date) => {
+              lessons={privateTableRows}
+              onChangeMonth={(month) => {
+                updateSelectedMonth(month, {
+                  selectedDate,
+                  setSelectedDate,
+                  resetOverrides: resetWorkspaceOverrides,
+                });
+              }}
+              onOpenDay={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
                   setSelectedDate,
                   resetOverrides: resetWorkspaceOverrides,
                 });
+                setPrivateDayOpen(true);
               }}
             />
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {academyMemoOpen ? (
-        <MemoDialog
-          open={academyMemoOpen}
-          title={`${selectedDate} 학원레슨 메모 작성`}
-          label="학원레슨 특이사항 메모"
-          value={academyMemo}
-          onOpenChange={setAcademyMemoOpen}
-          onSave={(value) => {
-            setCalendarMemosOverride((current) =>
-              upsertCalendarMemo(current ?? calendarMemos, {
-                academyId,
-                lessonKind: "academy",
-                date: selectedDate,
-                content: value,
-                unread: false,
-              }),
-            );
-            if (!demoData && supabaseClientState?.client) {
-              saveMemoMutation.mutate({
-                academyId,
-                lessonKind: "academy",
-                date: selectedDate,
-                content: value,
-              });
-            }
-          }}
-        />
-      ) : null}
-
-      {privateMemoOpen ? (
-        <MemoDialog
-          open={privateMemoOpen}
-          title={`${selectedDate} 개인레슨 메모 작성`}
-          label="개인레슨 특이사항 메모"
-          value={privateMemo}
-          onOpenChange={setPrivateMemoOpen}
-          onSave={(value) => {
-            setCalendarMemosOverride((current) =>
-              upsertCalendarMemo(current ?? calendarMemos, {
-                academyId,
-                lessonKind: "private",
-                date: selectedDate,
-                content: value,
-                unread: false,
-              }),
-            );
-            if (!demoData && supabaseClientState?.client) {
-              saveMemoMutation.mutate({
-                academyId,
-                lessonKind: "private",
-                date: selectedDate,
-                content: value,
-              });
-            }
-          }}
-        />
-      ) : null}
+          )}
+        </div>
+      )}
 
       <AbsentDialog
         open={absentOpen}
@@ -1101,10 +1045,15 @@ export function LessonManagementWorkspace({
 
       <AcademyDayAttendanceDialog
         open={academyDayOpen}
+        academyId={academyId}
         date={selectedDate}
         rows={selectedAcademyEvents}
+        memos={selectedAcademyMemos}
+        memoTargets={selectedAcademyMemoTargets}
         onOpenChange={setAcademyDayOpen}
-        onOpenEntityMemo={setEntityMemoDraft}
+        onCreateMemo={(input) => createCalendarMemo(input)}
+        onUpdateMemo={(input) => updateCalendarMemo(input)}
+        onDeleteMemo={deleteCalendarMemo}
         onMark={(row, status) => markAcademyAttendanceRows([row], status, "결석 확인")}
         onMarkMany={markAcademyAttendanceRows}
         onReset={resetAcademyAttendanceRows}
@@ -1128,10 +1077,15 @@ export function LessonManagementWorkspace({
 
       <PrivateDayAttendanceDialog
         open={privateDayOpen}
+        academyId={academyId}
         date={selectedDate}
         lessons={selectedPrivateLessons}
+        memos={selectedPrivateMemos}
+        memoTargets={selectedPrivateMemoTargets}
         onOpenChange={setPrivateDayOpen}
-        onOpenEntityMemo={setEntityMemoDraft}
+        onCreateMemo={(input) => createCalendarMemo(input)}
+        onUpdateMemo={(input) => updateCalendarMemo(input)}
+        onDeleteMemo={deleteCalendarMemo}
         onMark={(lesson, status) => {
           const markedAt = new Date().toISOString();
           if (onMarkPrivateLessonAttendance) {
@@ -1222,38 +1176,6 @@ export function LessonManagementWorkspace({
         open={privateStudentSearchOpen}
         results={privateLessonStudentResults}
         onOpenChange={setPrivateStudentSearchOpen}
-      />
-
-      <EntityMemoDialog
-        draft={entityMemoDraft}
-        onClose={() => setEntityMemoDraft(null)}
-        onSave={(content) => {
-          if (!entityMemoDraft) {
-            return;
-          }
-
-          const input: SaveEntityMemoInput = {
-            academyId,
-            targetType: entityMemoDraft.targetType,
-            targetId: entityMemoDraft.targetId,
-            targetName: entityMemoDraft.targetName,
-            content,
-            memoDate: selectedDate,
-          };
-
-          if (!demoData && supabaseClientState?.client) {
-            saveEntityMemoMutation.mutate(input, {
-              onSuccess: () => {
-                setEntityMemoDraft(null);
-                toast.success("대상 메모를 저장했습니다.");
-              },
-            });
-            return;
-          }
-
-          setEntityMemoDraft(null);
-          toast.success("대상 메모를 저장했습니다.");
-        }}
       />
     </section>
   );
@@ -1457,14 +1379,10 @@ function AcademyLessonEventDialog({
 
 function LessonToolbar({
   ariaLabel,
-  memoButtonLabel,
   actions,
-  onMemoClick,
 }: {
   ariaLabel: string;
-  memoButtonLabel: string;
   actions: ReactNode;
-  onMemoClick: () => void;
 }) {
   return (
     <div
@@ -1473,10 +1391,6 @@ function LessonToolbar({
       className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={onMemoClick}>
-          <FileText aria-hidden="true" />
-          {memoButtonLabel}
-        </Button>
         {actions}
       </div>
     </div>
@@ -1565,7 +1479,7 @@ function LessonMonthCalendar({
   ariaLabel,
   selectedDate,
   events,
-  memoDates,
+  memoCounts,
   variant,
   onChangeMonth,
   onSelectDate,
@@ -1573,13 +1487,14 @@ function LessonMonthCalendar({
   ariaLabel: string;
   selectedDate: string;
   events: CalendarEvent[];
-  memoDates: Set<string>;
+  memoCounts: Map<string, number>;
   variant: "academy" | "private";
   onChangeMonth: (month: string) => void;
   onSelectDate: (date: string) => void;
 }) {
   const calendarDates = buildCalendarDates(selectedDate);
   const selectedMonth = selectedDate.slice(0, 7);
+  const today = getTodayDate();
   const variantLabel = variant === "academy" ? "학원 레슨 캘린더" : "개인레슨 캘린더";
 
   return (
@@ -1604,25 +1519,32 @@ function LessonMonthCalendar({
         {calendarDates.map((date) => {
           const dayEvents = events.filter((event) => event.date === date);
           const isSelected = date === selectedDate;
-          const hasMemo = memoDates.has(date);
+          const memoCount = memoCounts.get(date) ?? 0;
           const isCurrentMonth = date.startsWith(selectedMonth);
+          const isToday = date === today;
 
           return (
             <button
               key={date}
               type="button"
               role="gridcell"
+              aria-current={isToday ? "date" : undefined}
               aria-selected={isSelected}
-              className={`flex min-h-20 min-w-0 flex-col gap-1 rounded-md border border-border bg-background p-1 text-left transition-colors hover:bg-accent/40 aria-selected:border-primary aria-selected:ring-2 aria-selected:ring-ring/25 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"}`}
+              className={`flex min-h-20 min-w-0 flex-col gap-1 rounded-md border bg-background p-1 text-left transition-colors hover:bg-accent/40 aria-selected:border-primary aria-selected:ring-2 aria-selected:ring-ring/25 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border"}`}
               onClick={() => onSelectDate(date)}
             >
-              <span className="text-xs font-semibold text-muted-foreground">
-                {Number(date.slice(-2))}
+              <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                <span>{Number(date.slice(-2))}</span>
+                {isToday ? (
+                  <span className="rounded-sm bg-primary px-1 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                    오늘
+                  </span>
+                ) : null}
               </span>
-              {hasMemo ? (
+              {memoCount > 0 ? (
                 <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-muted px-1 py-0.5 text-xs font-medium text-muted-foreground">
                   <FileText aria-hidden="true" className="size-3" />
-                  메모
+                  메모 {memoCount}
                 </span>
               ) : null}
               {dayEvents.slice(0, 3).map((event) => (
@@ -1653,68 +1575,202 @@ function LessonMonthCalendar({
   );
 }
 
-function LessonMemoReminder({
-  title,
-  selectedDate,
-  selectedMemo,
+function LessonMemoTabPanel({
+  academyId,
+  lessonKind,
+  date,
   memos,
-  onOpenMemo,
-  onSelectDate,
+  targets,
+  onCreateMemo,
+  onUpdateMemo,
+  onDeleteMemo,
 }: {
-  title: string;
-  selectedDate: string;
-  selectedMemo: string;
+  academyId: string;
+  lessonKind: LessonMemoKind;
+  date: string;
   memos: LessonCalendarMemo[];
-  onOpenMemo: () => void;
-  onSelectDate: (date: string) => void;
+  targets: LessonMemoTargetOptions;
+  onCreateMemo: (input: LessonCalendarMemoPayload) => void;
+  onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
+  onDeleteMemo: (memoId: string) => void;
 }) {
+  const [draft, setDraft] = useState<LessonMemoDraft>(() =>
+    createEmptyMemoDraft(),
+  );
+  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const editingMemo = memos.find((memo) => memo.id === editingMemoId) ?? null;
+  const canSubmit = canSubmitLessonMemo(draft, targets);
+  const submitLabel = editingMemo ? "메모 수정 저장" : "메모 등록";
+
+  const submitMemo = () => {
+    const resolvedTarget = resolveLessonMemoTarget(draft, targets);
+
+    if (!resolvedTarget || !canSubmit) {
+      return;
+    }
+
+    if (editingMemo) {
+      onUpdateMemo({
+        academyId,
+        memoId: editingMemo.id,
+        content: draft.content.trim(),
+        ...resolvedTarget,
+      });
+    } else {
+      onCreateMemo({
+        academyId,
+        lessonKind,
+        date,
+        content: draft.content.trim(),
+        ...resolvedTarget,
+      });
+    }
+
+    setDraft(createEmptyMemoDraft());
+    setEditingMemoId(null);
+  };
+
   return (
-    <aside
-      role="region"
-      aria-label={title}
-      className="grid h-fit gap-3 rounded-lg border border-border bg-card p-3"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-xs text-muted-foreground">{selectedDate}</p>
+    <div className="grid gap-3">
+      <form
+        className="grid gap-3 rounded-md border border-border bg-muted/30 p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitMemo();
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>관련 원생</span>
+            <NativeSelect
+              aria-label="관련 원생"
+              value={draft.studentId}
+              onChange={(event) =>
+                setDraft((current) =>
+                  ({
+                    ...current,
+                    studentId: event.target.value,
+                  }),
+                )
+              }
+            >
+              <NativeSelectOption value="">선택 안 함</NativeSelectOption>
+              {targets.students.map((student) => (
+                <NativeSelectOption key={student.id} value={student.id}>
+                  {student.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>관련 선생님</span>
+            <NativeSelect
+              aria-label="관련 선생님"
+              value={draft.teacherId}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  teacherId: event.target.value,
+                }))
+              }
+            >
+              <NativeSelectOption value="">선택 안 함</NativeSelectOption>
+              {targets.teachers.map((teacher) => (
+                <NativeSelectOption key={teacher.id} value={teacher.id}>
+                  {teacher.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenMemo}>
-          <FileText aria-hidden="true" />
-          메모 열기
-        </Button>
-      </div>
-      <div className="rounded-md border border-border bg-background p-3">
-        {selectedMemo.trim() ? (
-          <p className="whitespace-pre-wrap text-sm">{selectedMemo}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
+        <Label className="grid gap-2 text-sm font-medium">
+          <span>메모 내용</span>
+          <Textarea
+            aria-label="메모 내용"
+            className="min-h-28"
+            value={draft.content}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                content: event.target.value,
+              }))
+            }
+          />
+        </Label>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={!canSubmit}>
+            <FileText aria-hidden="true" />
+            {submitLabel}
+          </Button>
+          {editingMemo ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDraft(createEmptyMemoDraft());
+                setEditingMemoId(null);
+              }}
+            >
+              수정 취소
+            </Button>
+          ) : null}
+        </div>
+      </form>
+
+      <div className="grid gap-2">
+        {memos.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
             선택한 날짜에 작성된 메모가 없습니다.
           </p>
-        )}
-      </div>
-      <div className="grid gap-2">
-        <p className="text-xs font-medium text-muted-foreground">
-          이번 달 메모 {memos.length}건
-        </p>
-        {memos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">이번 달 메모가 없습니다.</p>
         ) : null}
         {memos.map((memo) => (
-          <button
-            key={`${memo.lessonKind}-${memo.date}`}
-            type="button"
-            className="min-w-0 rounded-md border border-border bg-background p-2 text-left text-sm transition-colors hover:bg-accent/50"
-            onClick={() => onSelectDate(memo.date)}
+          <article
+            key={memo.id}
+            className="grid gap-3 rounded-md border border-border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
           >
-            <span className="block font-medium">{memo.date}</span>
-            <span className="mt-1 block truncate text-muted-foreground">
-              {memo.content?.trim() || "내용 없음"}
-            </span>
-          </button>
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap gap-1">
+                {toLessonMemoTargetBadges(memo).map((label) => (
+                  <Badge key={label} variant="secondary">
+                    {label}
+                  </Badge>
+                ))}
+              </div>
+              <p className="whitespace-pre-wrap text-sm">{memo.content}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`${memo.content} 메모 수정`}
+                onClick={() => {
+                  setDraft(toLessonMemoDraft(memo));
+                  setEditingMemoId(memo.id);
+                }}
+              >
+                수정
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`${memo.content} 메모 삭제`}
+                onClick={() => {
+                  onDeleteMemo(memo.id);
+                  if (editingMemoId === memo.id) {
+                    setDraft(createEmptyMemoDraft());
+                    setEditingMemoId(null);
+                  }
+                }}
+              >
+                삭제
+              </Button>
+            </div>
+          </article>
         ))}
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -1897,156 +1953,32 @@ function PrivateLessonTableView({
   );
 }
 
-function MemoDialog({
-  open,
-  title,
-  label,
-  value,
-  onOpenChange,
-  onSave,
-}: {
-  open: boolean;
-  title: string;
-  label: string;
-  value: string;
-  onOpenChange: (open: boolean) => void;
-  onSave: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen) {
-          setDraft(value);
-        }
-        onOpenChange(nextOpen);
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            선택한 레슨표의 운영 메모를 작성하고 저장합니다.
-          </DialogDescription>
-        </DialogHeader>
-        <Label className="grid gap-2 text-sm font-medium">
-          <span>{label}</span>
-          <Textarea
-            aria-label={label}
-            className="min-h-40"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-        </Label>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            취소
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              onSave(draft);
-              onOpenChange(false);
-              toast.success("메모를 저장했습니다.");
-            }}
-          >
-            메모 저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EntityMemoDialog({
-  draft,
-  onClose,
-  onSave,
-}: {
-  draft: EntityMemoDraft | null;
-  onClose: () => void;
-  onSave: (content: string) => void;
-}) {
-  const [content, setContent] = useState("");
-  const targetLabel = draft?.targetType === "teacher" ? "선생님" : "원생";
-
-  return (
-    <Dialog
-      open={Boolean(draft)}
-      onOpenChange={(open) => {
-        if (!open) {
-          setContent("");
-          onClose();
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {draft ? `${draft.targetName} ${targetLabel} 메모` : "대상 메모"}
-          </DialogTitle>
-          <DialogDescription>
-            원생 또는 선생님 데이터에 남길 운영 메모를 작성합니다.
-          </DialogDescription>
-        </DialogHeader>
-        <Label className="grid gap-2 text-sm font-medium">
-          <span>메모 내용</span>
-          <Textarea
-            aria-label="메모 내용"
-            className="min-h-32"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-          />
-        </Label>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setContent("");
-              onClose();
-            }}
-          >
-            취소
-          </Button>
-          <Button
-            type="button"
-            disabled={!content.trim()}
-            onClick={() => {
-              onSave(content);
-              setContent("");
-            }}
-          >
-            메모 저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function AcademyDayAttendanceDialog({
   open,
+  academyId,
   date,
   rows,
+  memos,
+  memoTargets,
   onOpenChange,
-  onOpenEntityMemo,
+  onCreateMemo,
+  onUpdateMemo,
+  onDeleteMemo,
   onMark,
   onMarkMany,
   onReset,
   onMove,
 }: {
   open: boolean;
+  academyId: string;
   date: string;
   rows: DailyAcademyAttendanceRow[];
+  memos: LessonCalendarMemo[];
+  memoTargets: LessonMemoTargetOptions;
   onOpenChange: (open: boolean) => void;
-  onOpenEntityMemo: (draft: EntityMemoDraft) => void;
+  onCreateMemo: (input: LessonCalendarMemoPayload) => void;
+  onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
+  onDeleteMemo: (memoId: string) => void;
   onMark: (
     row: DailyAcademyAttendanceRow,
     status: "present" | "absent",
@@ -2118,14 +2050,19 @@ function AcademyDayAttendanceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-6xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{date} 출석 확인</DialogTitle>
           <DialogDescription>
             선택한 날짜의 학원 수업 출결, 일정 이동, 메모를 한 화면에서 정리합니다.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 overflow-hidden">
+        <Tabs defaultValue="attendance" className="gap-3">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+            <TabsTrigger value="attendance">출석관리</TabsTrigger>
+            <TabsTrigger value="memos">메모 {memos.length}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="attendance" className="grid gap-3 overflow-hidden">
           <div className="grid gap-2 rounded-md border border-border bg-muted/30 p-3 lg:grid-cols-[minmax(0,1fr)_11rem]">
             <Label className="grid gap-1 text-sm font-medium">
               <span>원생 검색</span>
@@ -2287,40 +2224,6 @@ function AcademyDayAttendanceDialog({
                         </Button>
                         <Button
                           type="button"
-                          variant="outline"
-                          size="sm"
-                          aria-label={`${row.studentName} 원생 메모`}
-                          onClick={() =>
-                            onOpenEntityMemo({
-                              targetType: "student",
-                              targetId: row.studentId,
-                              targetName: row.studentName,
-                            })
-                          }
-                        >
-                          <FileText aria-hidden="true" />
-                          원생 메모
-                        </Button>
-                        {row.teacherId && row.teacherName ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            aria-label={`${row.teacherName} 선생님 메모`}
-                            onClick={() =>
-                              onOpenEntityMemo({
-                                targetType: "teacher",
-                                targetId: row.teacherId ?? "",
-                                targetName: row.teacherName ?? "선생님",
-                              })
-                            }
-                          >
-                            <FileText aria-hidden="true" />
-                            선생님 메모
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
                           size="sm"
                           aria-label={`${row.studentName} 출석`}
                           onClick={() => onMark(row, "present")}
@@ -2355,7 +2258,29 @@ function AcademyDayAttendanceDialog({
               검색 조건에 맞는 원생이 없습니다.
             </p>
           ) : null}
-        </div>
+          </TabsContent>
+          <TabsContent value="memos">
+            <LessonMemoTabPanel
+              academyId={academyId}
+              lessonKind="academy"
+              date={date}
+              memos={memos}
+              targets={memoTargets}
+              onCreateMemo={onCreateMemo}
+              onUpdateMemo={onUpdateMemo}
+              onDeleteMemo={onDeleteMemo}
+            />
+          </TabsContent>
+        </Tabs>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            닫기
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -2457,104 +2382,114 @@ function MoveAcademyLessonDialog({
 
 function PrivateDayAttendanceDialog({
   open,
+  academyId,
   date,
   lessons,
+  memos,
+  memoTargets,
   onOpenChange,
-  onOpenEntityMemo,
+  onCreateMemo,
+  onUpdateMemo,
+  onDeleteMemo,
   onMark,
 }: {
   open: boolean;
+  academyId: string;
   date: string;
   lessons: PrivateLesson[];
+  memos: LessonCalendarMemo[];
+  memoTargets: LessonMemoTargetOptions;
   onOpenChange: (open: boolean) => void;
-  onOpenEntityMemo: (draft: EntityMemoDraft) => void;
+  onCreateMemo: (input: LessonCalendarMemoPayload) => void;
+  onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
+  onDeleteMemo: (memoId: string) => void;
   onMark: (lesson: PrivateLesson, status: "present" | "absent") => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{date} 개인레슨 출석 확인</DialogTitle>
           <DialogDescription>
             출석 처리 시 원생의 동일 악기 회차권을 1회 차감합니다.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-2">
-          {lessons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              선택한 날짜에 개인레슨이 없습니다.
-            </p>
-          ) : null}
-          {lessons.map((lesson) => (
-            <div
-              key={lesson.id}
-              className="flex flex-col gap-3 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <strong className="text-sm">{lesson.studentName}</strong>
-                  <OriginBadge label={lesson.originLabel} />
-                  <Badge variant={lesson.status === "present" ? "default" : "outline"}>
-                    {formatPrivateLessonStatus(lesson.status)}
-                  </Badge>
+        <Tabs defaultValue="attendance" className="gap-3">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+            <TabsTrigger value="attendance">출석관리</TabsTrigger>
+            <TabsTrigger value="memos">메모 {memos.length}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="attendance" className="grid gap-2">
+            {lessons.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                선택한 날짜에 개인레슨이 없습니다.
+              </p>
+            ) : null}
+            {lessons.map((lesson) => (
+              <div
+                key={lesson.id}
+                className="flex flex-col gap-3 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-sm">{lesson.studentName}</strong>
+                    <OriginBadge label={lesson.originLabel} />
+                    <Badge
+                      variant={lesson.status === "present" ? "default" : "outline"}
+                    >
+                      {formatPrivateLessonStatus(lesson.status)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {toSeoulHourMinute(lesson.startAt)}-
+                    {toSeoulHourMinute(lesson.endAt)} · {lesson.instrumentName} ·{" "}
+                    {lesson.teacherName}
+                  </p>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)} ·{" "}
-                  {lesson.instrumentName} · {lesson.teacherName}
-                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    aria-label={`${lesson.studentName} 개인레슨 출석`}
+                    onClick={() => onMark(lesson, "present")}
+                  >
+                    <Check aria-hidden="true" />
+                    출석
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={`${lesson.studentName} 개인레슨 결석`}
+                    onClick={() => onMark(lesson, "absent")}
+                  >
+                    <X aria-hidden="true" />
+                    결석
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label={`${lesson.studentName} 원생 메모`}
-                  onClick={() =>
-                    onOpenEntityMemo({
-                      targetType: "student",
-                      targetId: lesson.studentId,
-                      targetName: lesson.studentName,
-                    })
-                  }
-                >
-                  <FileText aria-hidden="true" />
-                  원생 메모
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label={`${lesson.teacherName} 선생님 메모`}
-                  onClick={() =>
-                    onOpenEntityMemo({
-                      targetType: "teacher",
-                      targetId: lesson.teacherId,
-                      targetName: lesson.teacherName,
-                    })
-                  }
-                >
-                  <FileText aria-hidden="true" />
-                  선생님 메모
-                </Button>
-                <Button
-                  type="button"
-                  aria-label={`${lesson.studentName} 개인레슨 출석`}
-                  onClick={() => onMark(lesson, "present")}
-                >
-                  <Check aria-hidden="true" />
-                  출석
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label={`${lesson.studentName} 개인레슨 결석`}
-                  onClick={() => onMark(lesson, "absent")}
-                >
-                  <X aria-hidden="true" />
-                  결석
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </TabsContent>
+          <TabsContent value="memos">
+            <LessonMemoTabPanel
+              academyId={academyId}
+              lessonKind="private"
+              date={date}
+              memos={memos}
+              targets={memoTargets}
+              onCreateMemo={onCreateMemo}
+              onUpdateMemo={onUpdateMemo}
+              onDeleteMemo={onDeleteMemo}
+            />
+          </TabsContent>
+        </Tabs>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            닫기
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -3249,62 +3184,180 @@ function formatMonthLabel(month: string) {
   return `${year}년 ${monthIndex}월`;
 }
 
-function findCalendarMemoContent(
+function getLessonMemosForDate(
   memos: LessonCalendarMemo[],
   lessonKind: LessonMemoKind,
   date: string,
-) {
-  return (
-    memos.find(
-      (memo) => memo.lessonKind === lessonKind && memo.date === date,
-    )?.content ?? ""
-  );
-}
-
-function toMemoDateSet(
-  memos: LessonCalendarMemo[],
-  lessonKind: LessonMemoKind,
-) {
-  return new Set(
-    memos
-      .filter((memo) => memo.lessonKind === lessonKind && memo.content.trim())
-      .map((memo) => memo.date),
-  );
-}
-
-function filterMonthMemos(
-  memos: LessonCalendarMemo[],
-  lessonKind: LessonMemoKind,
-  month: string,
 ) {
   return memos
     .filter(
       (memo) =>
         memo.lessonKind === lessonKind &&
-        memo.date.startsWith(month) &&
+        memo.date === date &&
         Boolean(memo.content.trim()),
     )
-    .sort((left, right) => left.date.localeCompare(right.date));
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function upsertCalendarMemo(
+function toMemoCountMap(
   memos: LessonCalendarMemo[],
-  nextMemo: LessonCalendarMemo,
+  lessonKind: LessonMemoKind,
 ) {
-  const replaced = memos.some(
-    (memo) =>
-      memo.lessonKind === nextMemo.lessonKind && memo.date === nextMemo.date,
-  );
+  const countMap = new Map<string, number>();
 
-  if (!replaced) {
-    return [...memos, nextMemo];
+  for (const memo of memos) {
+    if (memo.lessonKind === lessonKind && memo.content.trim()) {
+      countMap.set(memo.date, (countMap.get(memo.date) ?? 0) + 1);
+    }
   }
 
-  return memos.map((memo) =>
-    memo.lessonKind === nextMemo.lessonKind && memo.date === nextMemo.date
-      ? nextMemo
-      : memo,
+  return countMap;
+}
+
+function toLocalLessonCalendarMemo(
+  input: LessonCalendarMemoPayload,
+): LessonCalendarMemo {
+  localMemoIdSequence += 1;
+
+  return {
+    id: `local-memo-${localMemoIdSequence}`,
+    academyId: input.academyId,
+    lessonKind: input.lessonKind,
+    date: input.date,
+    content: input.content,
+    unread: false,
+    studentId: input.studentId ?? null,
+    studentName: input.studentName ?? null,
+    teacherId: input.teacherId ?? null,
+    teacherName: input.teacherName ?? null,
+  };
+}
+
+function applyLessonCalendarMemoUpdate(
+  memo: LessonCalendarMemo,
+  input: UpdateLessonCalendarMemoInput,
+): LessonCalendarMemo {
+  return {
+    ...memo,
+    content: input.content,
+    unread: false,
+    studentId: input.studentId ?? null,
+    studentName: input.studentName ?? null,
+    teacherId: input.teacherId ?? null,
+    teacherName: input.teacherName ?? null,
+  };
+}
+
+function toAcademyMemoTargetOptions(
+  rows: DailyAcademyAttendanceRow[],
+): LessonMemoTargetOptions {
+  return {
+    students: uniqueMemoTargets(
+      rows.map((row) => ({ id: row.studentId, name: row.studentName })),
+    ),
+    teachers: uniqueMemoTargets(
+      rows.flatMap((row) =>
+        row.teacherId && row.teacherName
+          ? [{ id: row.teacherId, name: row.teacherName }]
+          : [],
+      ),
+    ),
+  };
+}
+
+function toPrivateMemoTargetOptions(
+  lessons: PrivateLesson[],
+): LessonMemoTargetOptions {
+  return {
+    students: uniqueMemoTargets(
+      lessons.map((lesson) => ({
+        id: lesson.studentId,
+        name: lesson.studentName,
+      })),
+    ),
+    teachers: uniqueMemoTargets(
+      lessons.map((lesson) => ({
+        id: lesson.teacherId,
+        name: lesson.teacherName,
+      })),
+    ),
+  };
+}
+
+function uniqueMemoTargets(targets: LessonMemoTargetOption[]) {
+  const targetMap = new Map<string, LessonMemoTargetOption>();
+
+  for (const target of targets) {
+    if (!targetMap.has(target.id)) {
+      targetMap.set(target.id, target);
+    }
+  }
+
+  return [...targetMap.values()].sort((left, right) =>
+    left.name.localeCompare(right.name, "ko-KR"),
   );
+}
+
+function createEmptyMemoDraft(): LessonMemoDraft {
+  return {
+    studentId: "",
+    teacherId: "",
+    content: "",
+  };
+}
+
+function toLessonMemoDraft(
+  memo: LessonCalendarMemo,
+): LessonMemoDraft {
+  return {
+    studentId: memo.studentId ?? "",
+    teacherId: memo.teacherId ?? "",
+    content: memo.content,
+  };
+}
+
+function canSubmitLessonMemo(
+  draft: LessonMemoDraft,
+  targets: LessonMemoTargetOptions,
+) {
+  return Boolean(draft.content.trim() && resolveLessonMemoTarget(draft, targets));
+}
+
+function resolveLessonMemoTarget(
+  draft: LessonMemoDraft,
+  targets: LessonMemoTargetOptions,
+) {
+  const student = targets.students.find((target) => target.id === draft.studentId);
+  const teacher = targets.teachers.find((target) => target.id === draft.teacherId);
+
+  if (draft.studentId && !student) {
+    return null;
+  }
+
+  if (draft.teacherId && !teacher) {
+    return null;
+  }
+
+  return {
+    studentId: student?.id ?? null,
+    studentName: student?.name ?? null,
+    teacherId: teacher?.id ?? null,
+    teacherName: teacher?.name ?? null,
+  };
+}
+
+function toLessonMemoTargetBadges(memo: LessonCalendarMemo) {
+  const labels: string[] = [];
+
+  if (memo.studentName) {
+    labels.push(memo.studentName);
+  }
+
+  if (memo.teacherName) {
+    labels.push(memo.teacherName);
+  }
+
+  return labels.length > 0 ? labels : ["일반"];
 }
 
 function toCalendarAriaLabel(selectedDate: string, label: string) {
@@ -3314,6 +3367,10 @@ function toCalendarAriaLabel(selectedDate: string, label: string) {
 
 function toDateInputValue(date: Date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function getTodayDate() {
+  return toSeoulDate(new Date().toISOString());
 }
 
 function toSeoulDate(value: string) {
@@ -3366,10 +3423,6 @@ function formatOriginLabel(origin: LessonEventOrigin) {
   };
 
   return labels[origin];
-}
-
-function toLessonTab(value: string | null): LessonTab {
-  return value === "private" ? "private" : "academy";
 }
 
 function toLessonView(value: string): LessonView {

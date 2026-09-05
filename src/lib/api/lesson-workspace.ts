@@ -5,7 +5,11 @@ import type {
 } from "@/domain/academy-lesson-attendance";
 import type { PrivateLesson } from "@/domain/private-lesson";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
-import type { LessonCalendarMemo, LessonMemoKind } from "@/lib/api/lesson-memos";
+import {
+  LESSON_CALENDAR_MEMO_SELECT,
+  toLessonCalendarMemo,
+  type LessonCalendarMemoRow,
+} from "@/lib/api/lesson-memos";
 
 import {
   fetchAcademyLessonRegistrationOptions,
@@ -48,14 +52,6 @@ type LessonTicketBalanceRow = {
   instrument_id: string;
   instrument_name: string;
   remaining_count: number;
-};
-
-type LessonCalendarMemoRow = {
-  academy_id: string;
-  lesson_kind: string;
-  memo_date: string;
-  content: string | null;
-  unread: boolean | null;
 };
 
 export type CreateAcademyLessonEventInput = {
@@ -188,6 +184,8 @@ export type FetchLessonWorkspaceInput = {
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
   "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
+const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
+  "id, academy_id, lesson_kind, memo_date, content, unread";
 
 export async function fetchLessonWorkspaceData(
   supabase: LessonWorkspaceSupabaseClient,
@@ -228,12 +226,7 @@ export async function fetchLessonWorkspaceData(
           "academy_id, student_id, instrument_id, instrument_name, remaining_count",
         )
         .eq("academy_id", input.academyId),
-      supabase
-        .from("lesson_calendar_memos")
-        .select("academy_id, lesson_kind, memo_date, content, unread")
-        .eq("academy_id", input.academyId)
-        .gte("memo_date", range.startDate)
-        .lt("memo_date", range.endDate),
+      fetchLessonCalendarMemoRows(supabase, input.academyId, range),
       fetchAcademyLessonRegistrationOptions(supabase, input.academyId),
       fetchPrivateLessonRegistrationOptions(supabase, input.academyId),
     ]);
@@ -271,7 +264,9 @@ export async function fetchLessonWorkspaceData(
     })),
     registrationOptions,
     privateRegistrationOptions,
-    calendarMemos: (memosResult.data ?? []).flatMap(toLessonCalendarMemo),
+    calendarMemos: (memosResult.data ?? [])
+      .filter(isSupportedLessonCalendarMemo)
+      .map(toLessonCalendarMemo),
     academyMemo: "",
     privateMemo: "",
   };
@@ -399,6 +394,72 @@ function groupAcademyRows(
   );
 }
 
+async function fetchLessonCalendarMemoRows(
+  supabase: LessonWorkspaceSupabaseClient,
+  academyId: string,
+  range: ReturnType<typeof toMonthRange>,
+): Promise<SupabaseResult<LessonCalendarMemoRow[]>> {
+  const result = await selectLessonCalendarMemos(
+    supabase,
+    academyId,
+    range,
+    LESSON_CALENDAR_MEMO_SELECT,
+  );
+
+  if (!result.error || !isMissingLessonMemoTargetColumnError(result.error)) {
+    return result;
+  }
+
+  const legacyResult = await selectLessonCalendarMemos(
+    supabase,
+    academyId,
+    range,
+    LEGACY_LESSON_CALENDAR_MEMO_SELECT,
+  );
+
+  return {
+    data: (legacyResult.data ?? []).map(toTargetlessLessonCalendarMemoRow),
+    error: legacyResult.error,
+  };
+}
+
+function selectLessonCalendarMemos(
+  supabase: LessonWorkspaceSupabaseClient,
+  academyId: string,
+  range: ReturnType<typeof toMonthRange>,
+  select: string,
+) {
+  return supabase
+    .from("lesson_calendar_memos")
+    .select(select)
+    .eq("academy_id", academyId)
+    .gte("memo_date", range.startDate)
+    .lt("memo_date", range.endDate);
+}
+
+function isMissingLessonMemoTargetColumnError(error: Error) {
+  return /lesson_calendar_memos\.(student_id|student_name|teacher_id|teacher_name)/.test(
+    error.message,
+  );
+}
+
+function toTargetlessLessonCalendarMemoRow(
+  row: Partial<LessonCalendarMemoRow>,
+): LessonCalendarMemoRow {
+  return {
+    id: row.id ?? "",
+    academy_id: row.academy_id ?? "",
+    lesson_kind: row.lesson_kind ?? "",
+    memo_date: row.memo_date ?? "",
+    content: row.content ?? null,
+    unread: row.unread ?? null,
+    student_id: null,
+    student_name: null,
+    teacher_id: null,
+    teacher_name: null,
+  };
+}
+
 function toSheet(
   academyId: string,
   date: string,
@@ -496,20 +557,12 @@ function toMonthRange(month: string) {
   };
 }
 
-function toLessonCalendarMemo(row: LessonCalendarMemoRow): LessonCalendarMemo[] {
+function isSupportedLessonCalendarMemo(row: LessonCalendarMemoRow) {
   if (row.lesson_kind !== "academy" && row.lesson_kind !== "private") {
-    return [];
+    return false;
   }
 
-  return [
-    {
-      academyId: row.academy_id,
-      lessonKind: row.lesson_kind as LessonMemoKind,
-      date: row.memo_date,
-      content: row.content ?? "",
-      unread: row.unread ?? false,
-    },
-  ];
+  return true;
 }
 
 function toSeoulDate(value: string) {

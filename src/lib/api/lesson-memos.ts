@@ -4,95 +4,176 @@ type SupabaseResult<TData> = {
 };
 
 export type LessonMemoKind = "academy" | "private";
-export type EntityMemoTargetType = "student" | "teacher";
 
-type LessonMemoSelectBuilder = {
+export type LessonCalendarMemoRow = {
+  id: string;
+  academy_id: string;
+  lesson_kind: string;
+  memo_date: string;
+  content: string | null;
+  unread: boolean | null;
+  student_id: string | null;
+  student_name: string | null;
+  teacher_id: string | null;
+  teacher_name: string | null;
+};
+
+type LessonCalendarMemoSelectBuilder = {
+  single(): PromiseLike<SupabaseResult<LessonCalendarMemoRow>>;
+};
+
+type LessonCalendarMemoFilterBuilder = {
+  eq(column: "academy_id" | "id", value: string): LessonCalendarMemoFilterBuilder;
   select(select: "id"): PromiseLike<SupabaseResult<Array<{ id: string }>>>;
+  select(select: typeof LESSON_CALENDAR_MEMO_SELECT): LessonCalendarMemoSelectBuilder;
 };
 
 type LessonCalendarMemoFromBuilder = {
-  upsert(
-    values: Record<string, unknown>,
-    options: { onConflict: string },
-  ): LessonMemoSelectBuilder;
-};
-
-type EntityMemoFromBuilder = {
-  insert(values: Record<string, unknown>): LessonMemoSelectBuilder;
+  insert(values: Record<string, unknown>): {
+    select(select: typeof LESSON_CALENDAR_MEMO_SELECT): LessonCalendarMemoSelectBuilder;
+  };
+  update(values: Record<string, unknown>): LessonCalendarMemoFilterBuilder;
+  delete(): LessonCalendarMemoFilterBuilder;
 };
 
 export type LessonMemoSupabaseClient = {
   from(table: "lesson_calendar_memos"): LessonCalendarMemoFromBuilder;
-  from(table: "entity_memos"): EntityMemoFromBuilder;
 };
 
 export type LessonCalendarMemo = {
+  id: string;
   academyId: string;
   lessonKind: LessonMemoKind;
   date: string;
   content: string;
   unread: boolean;
+  studentId: string | null;
+  studentName: string | null;
+  teacherId: string | null;
+  teacherName: string | null;
 };
 
-export type SaveLessonCalendarMemoInput = {
+export type LessonCalendarMemoPayload = {
   academyId: string;
   lessonKind: LessonMemoKind;
   date: string;
   content: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  teacherId?: string | null;
+  teacherName?: string | null;
 };
 
-export type SaveEntityMemoInput = {
+export type UpdateLessonCalendarMemoInput = {
   academyId: string;
-  targetType: EntityMemoTargetType;
-  targetId: string;
-  targetName: string;
+  memoId: string;
   content: string;
-  memoDate: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  teacherId?: string | null;
+  teacherName?: string | null;
 };
 
-export async function saveLessonCalendarMemo(
+export type DeleteLessonCalendarMemoInput = {
+  academyId: string;
+  memoId: string;
+};
+
+export const LESSON_CALENDAR_MEMO_SELECT =
+  "id, academy_id, lesson_kind, memo_date, content, unread, student_id, student_name, teacher_id, teacher_name";
+
+export async function createLessonCalendarMemo(
   supabase: LessonMemoSupabaseClient,
-  input: SaveLessonCalendarMemoInput,
+  input: LessonCalendarMemoPayload,
+) {
+  const { data, error } = await supabase
+    .from("lesson_calendar_memos")
+    .insert(toLessonCalendarMemoValues(input))
+    .select(LESSON_CALENDAR_MEMO_SELECT)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `일자 메모를 추가하지 못했습니다: ${error?.message ?? "응답이 비어 있습니다."}`,
+    );
+  }
+
+  return toLessonCalendarMemo(data);
+}
+
+export async function updateLessonCalendarMemo(
+  supabase: LessonMemoSupabaseClient,
+  input: UpdateLessonCalendarMemoInput,
+) {
+  const { data, error } = await supabase
+    .from("lesson_calendar_memos")
+    .update(toLessonCalendarMemoPatch(input))
+    .eq("academy_id", input.academyId)
+    .eq("id", input.memoId)
+    .select(LESSON_CALENDAR_MEMO_SELECT)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      `일자 메모를 수정하지 못했습니다: ${error?.message ?? "응답이 비어 있습니다."}`,
+    );
+  }
+
+  return toLessonCalendarMemo(data);
+}
+
+export async function deleteLessonCalendarMemo(
+  supabase: LessonMemoSupabaseClient,
+  input: DeleteLessonCalendarMemoInput,
 ) {
   const { error } = await supabase
     .from("lesson_calendar_memos")
-    .upsert(
-      {
-        academy_id: input.academyId,
-        lesson_kind: input.lessonKind,
-        memo_date: input.date,
-        content: input.content,
-        unread: false,
-      },
-      {
-        onConflict: "academy_id,lesson_kind,memo_date",
-      },
-    )
+    .delete()
+    .eq("academy_id", input.academyId)
+    .eq("id", input.memoId)
     .select("id");
 
   if (error) {
-    throw new Error(`일자 메모를 저장하지 못했습니다: ${error.message}`);
+    throw new Error(`일자 메모를 삭제하지 못했습니다: ${error.message}`);
   }
 }
 
-export async function saveEntityMemo(
-  supabase: LessonMemoSupabaseClient,
-  input: SaveEntityMemoInput,
-) {
-  const { error } = await supabase
-    .from("entity_memos")
-    .insert({
-      academy_id: input.academyId,
-      target_type: input.targetType,
-      student_id: input.targetType === "student" ? input.targetId : null,
-      teacher_id: input.targetType === "teacher" ? input.targetId : null,
-      target_name: input.targetName,
-      content: input.content,
-      memo_date: input.memoDate,
-    })
-    .select("id");
+export function toLessonCalendarMemo(row: LessonCalendarMemoRow): LessonCalendarMemo {
+  return {
+    id: row.id,
+    academyId: row.academy_id,
+    lessonKind: row.lesson_kind as LessonMemoKind,
+    date: row.memo_date,
+    content: row.content ?? "",
+    unread: row.unread ?? false,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    teacherId: row.teacher_id,
+    teacherName: row.teacher_name,
+  };
+}
 
-  if (error) {
-    throw new Error(`대상 메모를 저장하지 못했습니다: ${error.message}`);
-  }
+function toLessonCalendarMemoValues(input: LessonCalendarMemoPayload) {
+  return {
+    academy_id: input.academyId,
+    lesson_kind: input.lessonKind,
+    memo_date: input.date,
+    content: input.content,
+    student_id: input.studentId ?? null,
+    student_name: input.studentName ?? null,
+    teacher_id: input.teacherId ?? null,
+    teacher_name: input.teacherName ?? null,
+    unread: false,
+  };
+}
+
+function toLessonCalendarMemoPatch(input: UpdateLessonCalendarMemoInput) {
+  return {
+    content: input.content,
+    student_id: input.studentId ?? null,
+    student_name: input.studentName ?? null,
+    teacher_id: input.teacherId ?? null,
+    teacher_name: input.teacherName ?? null,
+    unread: false,
+  };
 }

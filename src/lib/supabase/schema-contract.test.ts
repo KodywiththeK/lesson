@@ -24,7 +24,6 @@ const domainTables = [
   "absence_resolutions",
   "monthly_memos",
   "lesson_calendar_memos",
-  "entity_memos",
   "lesson_ticket_grants",
   "lesson_ticket_adjustments",
   "lesson_ticket_usages",
@@ -50,7 +49,6 @@ const tenantScopedReferenceTables = [
   "lesson_events",
   "attendance_records",
   "lesson_calendar_memos",
-  "entity_memos",
   "lesson_ticket_grants",
   "books",
   "entity_status_transitions",
@@ -71,7 +69,6 @@ const updatedAtTables = [
   "lesson_events",
   "monthly_memos",
   "lesson_calendar_memos",
-  "entity_memos",
   "lesson_ticket_grants",
   "books",
   "book_releases",
@@ -324,23 +321,25 @@ describe("Supabase schema contract", () => {
     );
   });
 
-  it("레슨표 메모는 일자와 레슨표 종류별로 저장하고 원생/선생님 메모는 대상 FK로 연결한다", () => {
+  it("레슨표 메모는 다건 날짜 메모로 저장하고 선택 대상 FK를 가진다", () => {
     expect(migrationSql).toContain("create table public.lesson_calendar_memos");
     expect(migrationSql).toContain(
-      "unique (academy_id, lesson_kind, memo_date)",
+      "drop constraint if exists lesson_calendar_memos_academy_id_lesson_kind_memo_date_key",
     );
-    expect(migrationSql).toContain("create table public.entity_memos");
+    expect(migrationSql).toContain("add column if not exists student_id uuid");
+    expect(migrationSql).toContain("add column if not exists teacher_id uuid");
+    expect(migrationSql).toContain("add column if not exists student_name text");
+    expect(migrationSql).toContain("add column if not exists teacher_name text");
     expect(migrationSql).toContain(
-      "foreign key (academy_id, student_id) references public.students (academy_id, id)",
+      "constraint lesson_calendar_memos_academy_student_fk",
     );
     expect(migrationSql).toContain(
-      "foreign key (academy_id, teacher_id) references public.teachers (academy_id, id)",
+      "constraint lesson_calendar_memos_academy_teacher_fk",
     );
+    expect(migrationSql).toContain("grant select, insert, update, delete");
+    expect(migrationSql).toContain("drop table if exists public.entity_memos");
     expect(migrationSql).toContain(
       "alter table public.lesson_calendar_memos enable row level security",
-    );
-    expect(migrationSql).toContain(
-      "alter table public.entity_memos enable row level security",
     );
   });
 

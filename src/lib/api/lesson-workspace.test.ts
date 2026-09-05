@@ -36,17 +36,27 @@ describe("fetchLessonWorkspaceData", () => {
     });
     expect(result.calendarMemos).toEqual([
       {
+        id: "memo-1",
         academyId: "academy-1",
         lessonKind: "academy",
         date: "2026-08-21",
         content: "콩쿠르 보강 확인",
+        studentId: "student-1",
+        studentName: "김민지",
+        teacherId: "teacher-1",
+        teacherName: "김하늘",
         unread: false,
       },
       {
+        id: "memo-2",
         academyId: "academy-1",
         lessonKind: "private",
         date: "2026-08-22",
         content: "오유진 선생님 시간표 공유",
+        studentId: null,
+        studentName: null,
+        teacherId: "teacher-2",
+        teacherName: "오유진",
         unread: true,
       },
     ]);
@@ -94,6 +104,33 @@ describe("fetchLessonWorkspaceData", () => {
         month: "2026-08",
       }),
     ).rejects.toThrow("레슨관리표 정기 일정을 준비하지 못했습니다: permission denied");
+  });
+
+  it("대상 컬럼 migration 전 DB에서는 기존 날짜 메모를 일반 메모로 다시 조회한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls, {
+      lessonMemoMissingTargetColumns: true,
+    });
+
+    const result = await fetchLessonWorkspaceData(client, {
+      academyId: "academy-1",
+      month: "2026-08",
+    });
+
+    const memoSelects = calls
+      .filter((call) => call.table === "lesson_calendar_memos")
+      .map((call) => call.select);
+
+    expect(memoSelects).toEqual([
+      "id, academy_id, lesson_kind, memo_date, content, unread, student_id, student_name, teacher_id, teacher_name",
+      "id, academy_id, lesson_kind, memo_date, content, unread",
+    ]);
+    expect(result.calendarMemos[0]).toMatchObject({
+      id: "memo-1",
+      content: "콩쿠르 보강 확인",
+      studentId: null,
+      teacherId: null,
+    });
   });
 });
 
@@ -241,6 +278,7 @@ function createLessonWorkspaceClient(
   options: {
     rpcError?: Error;
     eventRows?: Array<Record<string, unknown>>;
+    lessonMemoMissingTargetColumns?: boolean;
   } = {},
 ): LessonWorkspaceSupabaseClient {
   return {
@@ -296,6 +334,7 @@ function createListBuilder(
   calls: Array<Record<string, unknown>>,
   options: {
     eventRows?: Array<Record<string, unknown>>;
+    lessonMemoMissingTargetColumns?: boolean;
   } = {},
 ) {
   return {
@@ -335,23 +374,61 @@ function createListBuilder(
       return this;
     },
     lt(column: string, value: string) {
-      calls[calls.length - 1].lt = [column, value];
+      const latestCall = calls[calls.length - 1];
+      latestCall.lt = [column, value];
 
       if (table === "lesson_calendar_memos") {
+        if (
+          options.lessonMemoMissingTargetColumns &&
+          latestCall.select ===
+            "id, academy_id, lesson_kind, memo_date, content, unread, student_id, student_name, teacher_id, teacher_name"
+        ) {
+          return Promise.resolve({
+            data: null,
+            error: new Error("column lesson_calendar_memos.student_id does not exist"),
+          });
+        }
+
         return Promise.resolve({
           data: [
             {
+              id: "memo-1",
               academy_id: "academy-1",
               lesson_kind: "academy",
               memo_date: "2026-08-21",
               content: "콩쿠르 보강 확인",
+              student_id:
+                latestCall.select ===
+                "id, academy_id, lesson_kind, memo_date, content, unread"
+                  ? undefined
+                  : "student-1",
+              student_name:
+                latestCall.select ===
+                "id, academy_id, lesson_kind, memo_date, content, unread"
+                  ? undefined
+                  : "김민지",
+              teacher_id:
+                latestCall.select ===
+                "id, academy_id, lesson_kind, memo_date, content, unread"
+                  ? undefined
+                  : "teacher-1",
+              teacher_name:
+                latestCall.select ===
+                "id, academy_id, lesson_kind, memo_date, content, unread"
+                  ? undefined
+                  : "김하늘",
               unread: false,
             },
             {
+              id: "memo-2",
               academy_id: "academy-1",
               lesson_kind: "private",
               memo_date: "2026-08-22",
               content: "오유진 선생님 시간표 공유",
+              student_id: null,
+              student_name: null,
+              teacher_id: "teacher-2",
+              teacher_name: "오유진",
               unread: true,
             },
           ],
