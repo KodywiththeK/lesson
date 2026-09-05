@@ -47,3 +47,11 @@ Critical은 완료 전 수정한다. Warning은 가능하면 수정하고, 남�
 ## 완료 규칙
 
 품질 정리가 완료되었거나 적용 불가 사유가 명시되지 않으면 작업은 완료가 아니다.
+
+완료 전 마지막으로 `docs/engineering/code-quality.md`의 기준을 다시 열어 다음 항목을 evidence에 남긴다.
+
+- 가독성: 읽어야 하는 맥락, 이름 붙인 조건/상수, 중복 heading/action 제거 결과
+- 예측 가능성: route, action slot, API/hook 이름과 side effect 경계
+- 응집도: navigation SSOT, page wrapper, feature-owned mutation/state 배치
+- 결합도: AppShell이 feature dialog/mutation을 직접 알지 않는지
+- simplify 결과: 제거한 중복, 남긴 중복의 이유, 재실행한 테스트

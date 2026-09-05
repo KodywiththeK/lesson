@@ -17,7 +17,8 @@
 - 제품 코드는 TDD를 따른다. 실패하는 테스트를 먼저 작성하고, 의도한 이유로 실패하는지 확인한 뒤 최소 구현, 리팩터링, 검증을 진행한다.
 - 모든 작업은 `발견 -> 계획 -> Red -> Green -> Refactor -> Verify -> Consolidate -> Evidence` 흐름을 통과한다.
 - 검증 증거와 코드/테스트 품질 정리까지 끝나야 완료로 본다.
-- 작업 단위가 완료되면 `main` 브랜치에 커밋한다. 커밋 전에는 관련 검증을 실행하고 결과를 증거에 남긴다.
+- 계획과 evidence에는 `가독성`, `예측 가능성`, `응집도`, `결합도`, `simplify 결과`를 반드시 명시한다.
+- 커밋과 push는 사용자가 명시적으로 요청할 때만 수행한다.
 
 ## 코드 품질 SSOT
 
@@ -25,7 +26,18 @@
 - `docs/engineering/code-quality.md`는 Frontend Fundamentals 기준을 이 프로젝트 맥락으로 옮겨 적은 내부 기준이며, 매 작업마다 옆 repo를 직접 참조하지 않는다.
 - 구현 전과 Consolidate 단계에서 `docs/engineering/code-quality.md`의 네 기준을 확인한다.
 - Refactor/Consolidate 때는 `readability`, `predictability`, `cohesion`, `coupling` 기준으로 변경 diff를 자체 리뷰한다.
+- 작업 마지막에는 테스트 통과 후에도 변경 파일을 다시 읽고 simplify할 부분을 찾는다.
 - 발견한 Critical 품질 문제는 완료 전 수정한다. Warning을 남기면 evidence에 사유를 기록한다.
+
+## Supabase DB 마이그레이션
+
+- DB migration 적용은 사용자가 명시적으로 요청했을 때만 수행한다.
+- 절차 SSOT는 `docs/engineering/supabase-migration-runbook.md`다.
+- Supabase MCP가 사용 가능하면 원격 DDL 적용은 MCP `apply_migration`을 우선 사용한다.
+- CLI를 사용할 때는 `pnpm supabase <command> --help`로 현재 옵션을 확인한 뒤 dry-run을 먼저 실행한다.
+- `.env.local`의 `NEXT_PUBLIC_*` 키는 앱 실행용이며 migration 권한으로 사용하지 않는다.
+- migration 적용 후에는 원격 migration history, 실제 schema SQL, 관련 테스트 결과를 evidence에 기록한다.
+- MCP 적용으로 원격 history timestamp와 로컬 migration 파일명이 달라지면 로컬 파일명을 원격 version에 맞춰 drift를 막는다.
 
 ## 기본 스택
 

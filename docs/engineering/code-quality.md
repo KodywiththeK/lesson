@@ -89,6 +89,18 @@
 - 메뉴 숨김은 보안 경계가 아니다. 민감 데이터는 Supabase RLS, server boundary, API adapter에서 다시 보호한다.
 - legacy route는 얇은 redirect로 유지하고, 실제 화면 로직을 중복하지 않는다.
 
+### 레이아웃, 페이지, action
+
+- 전역 레이아웃은 정보 구조, 현재 route 해석, 공통 shell 배치, header action slot만 책임진다.
+- 페이지별 등록/저장/조회 action의 open state와 mutation은 해당 feature screen이 소유한다.
+- feature screen이 AppShell 안에서 렌더되면 header action slot에 primary action을 등록하고, 단독 렌더 테스트나 임베드 화면에서는 local fallback action row를 사용한다.
+- 같은 페이지명을 AppShell H1과 feature 내부 heading에 중복 표시하지 않는다. 자식 route는 상위 메뉴명을 H1로, 자식 구분은 header 하위 탭 링크로 표현한다.
+- 하위 메뉴 route는 query string 탭보다 명시적 nested route를 우선한다. 이전 route가 필요하면 실제 화면을 중복하지 말고 redirect만 둔다.
+- 데스크톱 navigation은 sticky sidebar로, lg 미만 navigation은 header의 메뉴 버튼이 여는 drawer로 제공한다. 두 레이아웃은 같은 navigation SSOT와 권한 필터 결과를 재사용한다.
+- 현재 학원처럼 전역 문맥을 설명하는 정보는 navigation shell/sidebar/drawer에 두고, 페이지 header에는 현재 페이지 제목과 action만 둔다.
+- md 이하에서 페이지 action이 하나 이상이면 header에 모두 펼치지 않고, `작업` 메뉴나 drawer 안에 모아 좁은 화면의 제목 영역을 보존한다.
+- sticky header/sidebar는 콘텐츠를 가리지 않도록 배경, z-index, 스크롤 컨테이너를 함께 설계한다.
+
 ### Supabase와 API adapter
 
 - service-role key와 민감 권한 판단은 브라우저 코드에 두지 않는다.
@@ -119,3 +131,10 @@
 - Suggestion: 더 읽기 쉬운 이름, 더 가까운 파일 배치, 작은 helper 추출 같은 개선 후보
 
 Critical은 완료 전 수정한다. Warning은 가능하면 수정하고, 남기면 evidence에 이유를 기록한다. Suggestion은 현재 작업 범위 안에서 효과가 분명할 때만 반영한다.
+
+## 마지막 simplify 필수 규칙
+
+- 테스트가 통과한 뒤 바로 완료하지 말고 변경 파일을 다시 읽어 중복, 불명확한 이름, 숨은 side effect, 불필요한 props, UI/비즈니스 로직 혼재를 줄인다.
+- 계획과 evidence에는 `가독성`, `예측 가능성`, `응집도`, `결합도`, `simplify 결과`를 반드시 남긴다.
+- 공통화는 반복 횟수만 보지 않는다. 같은 책임과 변경 주기가 확인될 때만 추출한다.
+- simplify 후 영향 받은 테스트를 다시 실행하고, 실행하지 못한 검증은 이유를 evidence와 최종 응답에 적는다.

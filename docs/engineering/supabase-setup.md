@@ -19,23 +19,29 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 
 ## 원격 DB 마이그레이션 절차
 
-원격 DB migration 적용에는 공개 API key가 아니라 DB 변경 권한이 필요하다. 다음 중 하나를 준비한다.
+원격 DB migration 적용에는 공개 API key가 아니라 DB 변경 권한이 필요하다. 상세 실행 절차의 SSOT는 `docs/engineering/supabase-migration-runbook.md`다.
 
-1. Supabase CLI 로그인과 프로젝트 링크
+우선순위는 다음과 같다.
+
+1. Supabase MCP `apply_migration`
+   - 현재 이 프로젝트에서 권장하는 기본 경로다.
+   - `supabase/.temp/project-ref`의 project ref를 `project_id`로 사용한다.
+   - 적용 후 MCP `list_migrations`로 원격 history version을 확인한다.
+   - MCP가 기록한 version과 로컬 migration 파일명이 다르면 로컬 파일명을 원격 version에 맞춘다.
+
+2. Supabase CLI 로그인과 프로젝트 링크
    - `supabase login`
    - `supabase link --project-ref <project-ref>`
    - 검증: `supabase db push --dry-run`
    - 적용: `supabase db push`
 
-2. Non-pooling Postgres connection string
+3. Non-pooling Postgres connection string
    - Dashboard의 Database connection string에서 non-pooling URL을 확인한다.
    - 로컬 비공개 환경변수 예: `POSTGRES_URL_NON_POOLING=...`
    - 검증: `supabase db push --dry-run --db-url "$POSTGRES_URL_NON_POOLING"`
    - 적용: `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"`
 
-마이그레이션 적용 명령은 실제 원격 DB를 변경할 수 있으므로 실행 전 사용자에게 확인한다.
-
-현재 프로젝트는 Supabase CLI 로그인과 프로젝트 링크를 사용한다.
+마이그레이션 적용 명령은 실제 원격 DB를 변경할 수 있으므로 사용자 요청이나 명시 승인이 있을 때만 실행한다.
 
 ## 원격 DB 타입 생성
 
@@ -79,14 +85,8 @@ Docker daemon이 꺼져 있으면 로컬 DB reset/lint는 실패한다.
 
 - 앱 실행용 공개 Supabase URL과 publishable key는 로컬 `.env.local`에 설정했다.
 - `.env.local`은 `.gitignore` 대상이므로 커밋하지 않는다.
-- Supabase CLI는 사용자가 로그인했고, 원격 `lesson` 프로젝트에 link된 상태로 사용한다.
-- 원격 migration 적용 완료:
-  - `20260820142318_tenant_core_schema.sql`
-  - `20260820151645_pdf_domain_persistence.sql`
-  - `20260821110548_academy_creator_bootstrap_select.sql`
-- 원격 검증 완료:
-  - `supabase db push --linked`
-  - `supabase migration list --linked`
-  - `supabase db lint --linked --fail-on error`
-  - `supabase gen types typescript --linked --schema public --schema private`
+- Supabase project ref는 `supabase/.temp/project-ref`에서 확인한다.
+- 2026-09-05 기준 CLI linked 경로는 access token 부재로 바로 사용할 수 없었다.
+- 2026-09-05 기준 `supabase/.temp/pooler-url`은 password 인증 실패가 발생했으므로 우선 경로로 쓰지 않는다.
+- 2026-09-05 기준 원격 migration 적용은 Supabase MCP `apply_migration`으로 수행했고, 적용 후 SQL로 schema를 검증했다.
 - 로컬 Docker daemon이 꺼져 있어 `supabase db reset --local`과 `supabase db dump --linked`는 실행 검증하지 못했다.

@@ -25,11 +25,17 @@
 - `supabase login`: 원격 프로젝트에 CLI로 접근해야 할 때 로그인한다.
 - `supabase link --project-ref <project-ref>`: 로컬 repo와 원격 Supabase 프로젝트를 연결한다.
 - `supabase migration new <name>`: migration 파일을 만든다.
-- `supabase db push --dry-run`: 적용 전 migration 영향을 확인한다.
-- `supabase db push`: 사용자 승인 후 원격 DB에 migration을 적용한다.
+- Supabase MCP `apply_migration`: MCP가 사용 가능할 때 원격 DB DDL migration을 적용하는 기본 경로다.
+- Supabase MCP `list_migrations`: 원격 migration history와 로컬 파일명 정렬 여부를 확인한다.
+- Supabase MCP `execute_sql`: migration 적용 후 실제 schema를 검증한다.
+- `supabase db push --dry-run`: MCP가 없고 CLI 로그인이 되어 있을 때 적용 전 migration 영향을 확인한다.
+- `supabase db push`: MCP가 없고 CLI 로그인이 되어 있을 때 사용자 승인 후 원격 DB에 migration을 적용한다.
+- `supabase db push --dry-run --db-url "$POSTGRES_URL_NON_POOLING"`: CLI 로그인 대신 direct DB URL이 있을 때 적용 전 영향을 확인한다.
+- `supabase db push --db-url "$POSTGRES_URL_NON_POOLING"`: CLI 로그인 대신 direct DB URL이 있을 때 사용자 승인 후 적용한다.
 - `supabase db reset --local --no-seed`: Docker 기반 로컬 DB에 migration을 처음부터 적용해 검증한다.
 - `supabase db lint --local --fail-on error`: 로컬 DB schema lint를 실행한다.
 - `supabase db advisors`: 사용 가능할 때 데이터베이스 advisor를 실행한다.
+- `docs/engineering/supabase-migration-runbook.md`: 실제 원격 migration 적용 순서의 SSOT다.
 
 ## PDF
 
