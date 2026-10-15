@@ -30,6 +30,12 @@
 - UPDATE policy는 `USING`과 `WITH CHECK`를 모두 가져야 한다.
 - API에 노출되는 view는 지원되는 경우 security-invoker 동작을 사용한다.
 
+## 화면 접근 안내 (UX, 보안 경계 아님)
+
+- 현재 역할에게 숨겨진 메뉴 주소로 직접 들어오면 `AppShell`이 내용을 마운트하지 않고 "이 화면을 볼 권한이 없습니다" 안내와 홈 링크를 보여준다(`src/app/app-shell.tsx`의 `isForbiddenRoute`). 원문 RLS 오류를 노출하지 않기 위한 화면 편의다.
+- 이 안내는 권한 검증이 아니다. 민감 데이터 보호는 계속 Supabase RLS와 서버 경계가 책임지고, 메뉴 숨김·안내 화면에 의존하지 않는다.
+- teacher의 "내 급여" 링크는 화면(`/my/payroll`)과 teacher용 select 정책이 생길 때까지 숨긴다. `allowDeskFinance`·`allowDeskTicketAdjustment` 플래그는 세션에서 채워지지 않아 실제로는 꺼져 있다(정책 확정 후 연결, `docs/product/open-questions.md`).
+
 ## 민감 데이터
 
 - 주민등록번호는 구현 전 사용자 확인이 필요하다.

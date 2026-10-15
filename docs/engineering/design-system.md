@@ -81,6 +81,14 @@
 - 레이어: Popover(`z-50`)는 Dialog 내용(`z-[60]`)과 Sheet(`z-50`) 위에서도 쓰이므로 선택기는 `z-[70]`을 쓰고, AlertDialog(`z-[70]`/`z-[80]`)는 선택기를 열지 않는다.
 - 금액: 원 단위는 `min={1} step={1}` 정수 입력이다.
 
+## 목록 공통 UI
+
+- 관리 표는 표 아래에 `ListPagination`(총 건수, 번호 이동, 페이지당 10·20·30)을 항상 둔다. 데이터가 적어도 숨기지 않아 규칙이 화면마다 달라 보이지 않게 한다.
+- 이름 검색은 `ListSearchField`, 필터는 `ListFilterSelect`를 쓰고, 검색·필터가 바뀌면 1페이지로 돌아간다.
+- 빈 결과는 "조건에 맞는 ○○이 없습니다." 한 줄, 로딩 중에는 목록과 페이지 컨트롤이 번쩍이며 사라지지 않도록 이전 데이터를 유지한다(`placeholderData: keepPreviousData`).
+- 같은 일을 하는 버튼은 한 번만 둔다(예: 별도 "새로고침"은 자동 재조회가 있으면 두지 않는다). 일괄 처리 버튼 라벨에는 대상 건수를 드러낸다(`현재 목록 3건 출석`).
+- 비활성 버튼은 이유를 가까이에 문장으로 안내하고 `aria-describedby`로 연결한다.
+
 ## 토큰
 
 - 기본 semantic token: `background`, `foreground`, `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`, `ring`

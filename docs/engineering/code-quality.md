@@ -68,6 +68,12 @@
 - 버튼, 링크, 입력 필드는 접근 가능한 이름을 가져야 하며 테스트도 role/label/text 기준으로 작성한다.
 - 모바일/데스크톱 반응형 차이는 class와 레이아웃 책임으로 제한하고, 데이터 구조를 화면 폭마다 다르게 만들지 않는다.
 
+### 사용자 메시지
+
+- 사용자 화면에 보이는 오류는 `toUserMessage`(`src/lib/errors/user-message.ts`)를 거친다. `error.message`나 `String(error)`를 그대로 보여주지 않는다. 영문 RPC 예외·PostgREST 원문·내부 용어(`Supabase client`, `환경변수`)는 "무엇이 문제이고 어떻게 하면 되는지"를 말하는 한국어로 바꾼다. 새 영문 예외가 생기면 변환 규칙과 테스트를 함께 추가한다.
+- 삭제처럼 되돌리기 어려운 동작은 `AlertDialog` 확인을 거치고 처리 중에는 중복 클릭을 막는다. 브라우저 `window.confirm`은 쓰지 않는다.
+- 성공 문구는 실제 결과를 말한다(예: 이미 출석 처리된 수업은 "차감했습니다"라고 하지 않는다, 복사에 실패하면 성공이라고 하지 않는다).
+
 ### 폼과 다이얼로그
 
 - UI 기본 부품(input, select, popover, calendar, dialog 등)은 설치된 shadcn/ui(`src/components/ui/`)를 먼저 쓰고, 도메인에 맞춘 조합만 `src/components/operations/`·`management/`나 feature 안에 둔다. 기본 HTML 요소나 브라우저 기본 입력(`type="date|time|datetime-local|month"`)을 쓰는 예외는 이유를 evidence에 기록한다.
@@ -83,7 +89,11 @@
 - 검색/필터/정렬 규칙은 UI state가 아니라 테스트 가능한 pure function 또는 query adapter에서 표현한다.
 - query key는 학원 scope와 필터 값을 포함하고, 같은 종류의 query key 형태를 통일한다.
 - 페이지마다 다르게 발전할 가능성이 큰 목록 UI는 성급하게 공통화하지 않는다.
-- 공통 list control은 실제로 같은 상호작용, 같은 접근성 요구, 같은 변경 주기를 가질 때만 확장한다.
+- 공통 list control은 실제로 같은 상호작용, 같은 접근성 요구, 같은 변경 주기를 가질 때만 확장한다. 페이지 상태·총 건수·번호 이동·페이지 크기는 `useListPaging`과 `ListPagination`(`src/components/management/`)을 쓰고, 이미 정렬된 목록을 자를 때는 `paginateItems`(`src/domain/common-list.ts`)를 쓴다. 화면마다 자체 페이지 UI나 자르기 로직을 만들지 않는다.
+- 이름 정렬은 `compareKoreanNames`/`buildListView`로 통일하고, 동명이인은 `getTieBreaker`(id)로 순서를 고정한다. `localeCompare("ko…")`를 화면마다 쓰지 않는다. 이름 없는 시간순 표만 예외다.
+- **드롭다운 후보와 급여 계산처럼 대상 전체가 필요한 조회는 페이지 목록 조회를 재사용하지 않는다.** 전용 조회(`fetchTeacherOptions`, `fetchStudentOptions`, `fetchAllLessonTickets`)와 별도 query key(`queryKeys.*.options`)를 쓴다. 페이지로 잘린 데이터로 합계·계산을 만들지 않는다.
+- 필터 선택지는 현재 페이지·현재 필터 결과가 아니라 전체 데이터나 고정 목록에서 계산한다.
+- 목록 화면은 검색어·필터·페이지 크기가 바뀌는 모든 핸들러에서 1페이지로 되돌린다.
 
 ### 권한, 메뉴, route
 
