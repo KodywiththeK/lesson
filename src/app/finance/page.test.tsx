@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "../providers";
+import { expectWholeWonInput } from "@/test/expect-whole-won-input";
 import { nextRedirectMock } from "@/test/setup";
 import FinancePage from "./page";
 import FinanceBooksPage from "./books/page";
@@ -94,6 +95,22 @@ describe("Finance routes", () => {
       screen.getByRole("button", { name: "피아노 조율비 수정 삭제" }),
     );
     expect(screen.queryByText("피아노 조율비 수정")).not.toBeInTheDocument();
+  });
+
+  it("수동 입출금 금액은 1원 단위 양의 정수를 제출 검증으로 허용한다", async () => {
+    const user = userEvent.setup();
+    window.history.pushState(null, "", "/finance/ledger");
+
+    render(
+      <AppProviders>
+        <FinanceLedgerPage />
+      </AppProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "수동 입출금 등록" }));
+    const dialog = await screen.findByRole("dialog", { name: "수동 입출금 등록" });
+
+    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "금액" }));
   });
 
   it("학원 레슨수입은 통합 표와 수납 dialog를 제공한다", async () => {

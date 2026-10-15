@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it } from "vitest";
 
+import { expectWholeWonInput } from "@/test/expect-whole-won-input";
+
 import {
   buildLessonTicketList,
   type LessonTicketListItem,
@@ -145,6 +147,20 @@ describe("LessonTicketListScreen", () => {
       "회차권 목록을 불러오지 못했습니다.",
     );
     expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
+  });
+
+  it("회차권 결제 금액은 1원 단위 양의 정수를 제출 검증으로 허용한다", async () => {
+    const user = userEvent.setup();
+
+    renderLessonTicketListScreen((options) => ({
+      queryKey: ["lesson-tickets", options.academyId],
+      queryFn: async () => buildLessonTicketList(lessonTickets, options),
+    }));
+
+    await user.click(screen.getByRole("button", { name: "회차권 등록" }));
+    const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
+
+    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "결제 금액" }));
   });
 
   it("회차권 등록 다이얼로그에서 원생과 악기를 선택해 등록 mutation을 실행한다", async () => {

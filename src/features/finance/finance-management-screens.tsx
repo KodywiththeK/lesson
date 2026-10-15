@@ -1226,7 +1226,7 @@ function LedgerEntryForm({
           aria-label="금액"
           type="number"
           min={1}
-          step={1000}
+          step={1}
           value={draft.amount}
           onChange={(event) =>
             setDraft((current) => ({

@@ -380,7 +380,7 @@ function BookReleaseForm({
             aria-label="가격"
             type="number"
             min={1}
-            step={1000}
+            step={1}
             value={price}
             onChange={(event) => setPrice(Number(event.target.value))}
           />

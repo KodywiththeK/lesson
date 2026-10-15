@@ -543,7 +543,7 @@ function LessonTicketRegistrationForm({
           aria-label="결제 금액"
           type="number"
           min={1}
-          step={1000}
+          step={1}
           value={paidAmount}
           onChange={(event) => setPaidAmount(Number(event.target.value))}
         />

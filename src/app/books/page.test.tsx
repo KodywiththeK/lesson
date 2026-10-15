@@ -2,6 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
+import { expectWholeWonInput } from "@/test/expect-whole-won-input";
+
 import { AppProviders } from "../providers";
 import BooksPage from "./page";
 
@@ -52,5 +54,44 @@ describe("BooksPage", () => {
 
     expect(await screen.findByText("체르니 100")).toBeInTheDocument();
     expect(screen.getByText("13,000원")).toBeInTheDocument();
+  });
+
+  it("교재 가격은 1원 단위 양의 정수를 제출 검증으로 허용한다", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppProviders>
+        <BooksPage />
+      </AppProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "교재 출고" }));
+    const dialog = await screen.findByRole("dialog", { name: "교재 출고" });
+
+    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "가격" }));
+  });
+
+  it("교재 가격 140000원도 저장 버튼으로 출고할 수 있다", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppProviders>
+        <BooksPage />
+      </AppProviders>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "교재 출고" }));
+    const dialog = await screen.findByRole("dialog", { name: "교재 출고" });
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await user.type(within(dialog).getByLabelText("교재명"), "체르니 40");
+    fireEvent.change(within(dialog).getByLabelText("가격"), {
+      target: { value: "140000" },
+    });
+    await user.selectOptions(within(dialog).getByLabelText("결제 상태"), "paid");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    expect(await screen.findByText("체르니 40")).toBeInTheDocument();
+    expect(screen.getByText("140,000원")).toBeInTheDocument();
   });
 });
