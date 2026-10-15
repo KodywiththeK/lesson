@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -15,6 +16,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   PageHeaderActionFallback,
   usePageHeaderActions,
@@ -45,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { ListView } from "@/domain/common-list";
 import {
   formatBookSaleStatus,
   type BookPurchaseListRow,
@@ -52,7 +56,9 @@ import {
   type BuildBookPurchaseListOptions,
 } from "@/domain/book-sale";
 import type { StudentListRow } from "@/domain/student-list";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
+  createBookPurchaseListQueryKey,
   createBookPurchaseListQueryOptions,
   registerBookRelease as registerBookReleaseApi,
   type BookReleaseMutationSupabaseClient,
@@ -61,7 +67,7 @@ import {
 } from "@/lib/api/books";
 import { queryKeys } from "@/lib/api/query-keys";
 import {
-  createStudentListQueryOptions,
+  createStudentOptionsQueryOptions,
   type StudentListSupabaseClient,
 } from "@/lib/api/students";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -69,7 +75,7 @@ import { getFinanceToday } from "@/domain/finance-date";
 
 type BookPurchaseListQueryOptions = {
   queryKey: QueryKey;
-  queryFn: () => Promise<BookPurchaseListRow[]>;
+  queryFn: () => Promise<ListView<BookPurchaseListRow>>;
 };
 
 export type BookPurchaseListQueryOptionsFactory = (
@@ -125,6 +131,7 @@ export function BookPurchaseListScreen({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<BookSaleStatus | "">("");
   const [isReleaseOpen, setIsReleaseOpen] = useState(false);
+  const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () =>
@@ -138,6 +145,8 @@ export function BookPurchaseListScreen({
     filters: {
       status: status || undefined,
     },
+    page,
+    pageSize,
   };
   const queryOptions = queryOptionsFactory
     ? queryOptionsFactory(currentOptions)
@@ -149,6 +158,7 @@ export function BookPurchaseListScreen({
     queryKey: queryOptions.queryKey,
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
+    placeholderData: keepPreviousData,
   });
   const studentOptionsQuery = useQuery({
     ...createDefaultStudentOptionsQueryOptions(
@@ -158,8 +168,8 @@ export function BookPurchaseListScreen({
     enabled: !students.length && !supabaseClientState?.error,
   });
   const studentOptions = useMemo(
-    () => (students.length ? students : studentOptionsQuery.data?.items ?? []),
-    [studentOptionsQuery.data?.items, students],
+    () => (students.length ? students : studentOptionsQuery.data ?? []),
+    [studentOptionsQuery.data, students],
   );
   const registerMutation = useMutation({
     mutationFn: async (input: {
@@ -201,11 +211,11 @@ export function BookPurchaseListScreen({
     },
     onError: (error) => {
       toast.error("교재 출고 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
-  const purchases = bookPurchaseListQuery.data ?? [];
+  const purchaseListView = bookPurchaseListQuery.data;
   const releaseAction = useMemo(
     () => (
       <Dialog open={isReleaseOpen} onOpenChange={setIsReleaseOpen}>
@@ -236,6 +246,22 @@ export function BookPurchaseListScreen({
   );
   const isHeaderActionMounted = usePageHeaderActions(releaseAction);
 
+  function changeSearch(nextSearch: string) {
+    setSearch(nextSearch);
+    resetPage();
+  }
+
+  function changeStatus(nextStatus: BookSaleStatus | "") {
+    setStatus(nextStatus);
+    resetPage();
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setStatus("");
+    resetPage();
+  }
+
   return (
     <section className="grid gap-4" aria-label="교재 구매 목록">
       <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
@@ -247,7 +273,7 @@ export function BookPurchaseListScreen({
           <ListSearchField
             label="교재 구매 검색"
             value={search}
-            onChange={setSearch}
+            onChange={changeSearch}
             placeholder="원생명, 교재명, 출고일"
           />
           <ListFilterSelect
@@ -255,17 +281,14 @@ export function BookPurchaseListScreen({
             value={status}
             options={statusFilterOptions}
             onChange={(nextStatus) =>
-              setStatus(nextStatus as BookSaleStatus | "")
+              changeStatus(nextStatus as BookSaleStatus | "")
             }
           />
           <Button
             type="button"
             variant="outline"
             className="self-end"
-            onClick={() => {
-              setSearch("");
-              setStatus("");
-            }}
+            onClick={resetFilters}
           >
             <RotateCcw aria-hidden="true" />
             초기화
@@ -274,15 +297,15 @@ export function BookPurchaseListScreen({
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
           <ListStatusAlert
-            message="Supabase 환경변수가 설정되면 교재 구매 목록을 불러올 수 있습니다."
-            detail={supabaseClientState.error.message}
+            message="교재 구매 목록을 불러오지 못했습니다."
+            detail={toUserMessage(supabaseClientState.error)}
           />
         ) : null}
 
         {bookPurchaseListQuery.isError ? (
           <ListStatusAlert
             message="교재 구매 목록을 불러오지 못했습니다."
-            detail={bookPurchaseListQuery.error.message}
+            detail={toUserMessage(bookPurchaseListQuery.error)}
           />
         ) : null}
 
@@ -292,10 +315,17 @@ export function BookPurchaseListScreen({
           </p>
         ) : null}
 
-        {!bookPurchaseListQuery.isLoading &&
-        !bookPurchaseListQuery.isError &&
-        (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
-          <BookPurchaseListTable purchases={purchases} />
+        {purchaseListView && !bookPurchaseListQuery.isError ? (
+          <>
+            <BookPurchaseListTable purchases={purchaseListView.items} />
+            <ListPagination
+              itemLabel="교재 구매"
+              countUnit="건"
+              view={purchaseListView}
+              onPageChange={goToPage}
+              onPageSizeChange={changePageSize}
+            />
+          </>
         ) : null}
       </div>
     </section>
@@ -423,10 +453,7 @@ function createDefaultQueryOptions(
 ): BookPurchaseListQueryOptions {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.books.purchaseList(options.academyId, {
-        q: options.search,
-        status: options.filters?.status,
-      }),
+      queryKey: createBookPurchaseListQueryKey(options),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
@@ -442,16 +469,14 @@ function createDefaultStudentOptionsQueryOptions(
 ) {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.students.list(academyId),
+      queryKey: queryKeys.students.options(academyId),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
     };
   }
 
-  return createStudentListQueryOptions(supabaseClientState.client, {
-    academyId,
-  });
+  return createStudentOptionsQueryOptions(supabaseClientState.client, academyId);
 }
 
 function createBookPurchaseListSupabaseClient(): SupabaseClientState {

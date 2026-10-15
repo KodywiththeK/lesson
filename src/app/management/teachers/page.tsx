@@ -31,7 +31,6 @@ export default function TeachersPage() {
             updateTeacherStatus={
               useTestDemo ? demo.updateTeacherStatus : undefined
             }
-            deleteTeacher={useTestDemo ? demo.deleteTeacher : undefined}
           />
         </AppShell>
       )}

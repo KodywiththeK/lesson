@@ -1,12 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createBookPurchaseListQueryKey,
   createBookPurchaseListQueryOptions,
   fetchBookPurchaseList,
   registerBookRelease,
   type BookPurchaseListSupabaseClient,
   type BookReleaseSupabaseRow,
 } from "./books";
+
+function createReleaseRows(count: number): BookReleaseSupabaseRow[] {
+  return Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+
+    return {
+      id: `sale-${number}`,
+      academy_id: "academy-1",
+      book_id: `book-${number}`,
+      student_id: `student-${number}`,
+      student_name: `원생${number}`,
+      book_title: `교재${number}`,
+      price: 12000,
+      shipped_at: "2026-08-21",
+      status: "payment-pending",
+      paid_at: null,
+    };
+  });
+}
 
 function createSupabaseStub(
   rows: BookReleaseSupabaseRow[],
@@ -70,7 +90,7 @@ describe("fetchBookPurchaseList", () => {
         eq: ["academy_id", "academy-1"],
       },
     ]);
-    expect(result).toEqual([
+    expect(result.items).toEqual([
       {
         saleId: "sale-1",
         studentName: "김민지",
@@ -80,6 +100,26 @@ describe("fetchBookPurchaseList", () => {
         status: "payment-pending",
       },
     ]);
+    expect(result.totalItems).toBe(1);
+  });
+
+  it("조회한 교재 구매를 페이지로 나눠 총 건수와 함께 돌려준다", async () => {
+    const { client } = createSupabaseStub(createReleaseRows(25));
+
+    const result = await fetchBookPurchaseList(client, {
+      academyId: "academy-1",
+      page: 3,
+      pageSize: 10,
+    });
+
+    expect(result.items.map((row) => row.studentName)).toEqual([
+      "원생21",
+      "원생22",
+      "원생23",
+      "원생24",
+      "원생25",
+    ]);
+    expect(result).toMatchObject({ page: 3, pageSize: 10, totalItems: 25, totalPages: 3 });
   });
 
   it("Supabase 오류는 사용자에게 전달 가능한 오류로 변환한다", async () => {
@@ -134,7 +174,30 @@ describe("createBookPurchaseListQueryOptions", () => {
       "purchase-list",
       "바이엘",
       "payment-pending",
+      "",
+      "",
     ]);
-    await expect(options.queryFn()).resolves.toEqual([]);
+    await expect(options.queryFn()).resolves.toMatchObject({ items: [], totalItems: 0 });
+  });
+
+  it("페이지와 페이지당 개수가 바뀌면 다른 queryKey를 만든다", () => {
+    const { client } = createSupabaseStub([]);
+
+    const secondPage = createBookPurchaseListQueryOptions(client, {
+      academyId: "academy-1",
+      page: 2,
+      pageSize: 20,
+    });
+    const firstPage = createBookPurchaseListQueryOptions(client, {
+      academyId: "academy-1",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(secondPage.queryKey.slice(-2)).toEqual(["2", "20"]);
+    expect(secondPage.queryKey).not.toEqual(firstPage.queryKey);
+    expect(
+      createBookPurchaseListQueryKey({ academyId: "academy-1", page: 2, pageSize: 20 }),
+    ).toEqual(secondPage.queryKey);
   });
 });

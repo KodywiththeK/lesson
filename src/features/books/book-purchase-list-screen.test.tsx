@@ -37,6 +37,38 @@ const bookSales: BookSale[] = [
   },
 ];
 
+// 원생01~원생25. 앞 15건은 바이엘, 나머지는 체르니. 짝수 번호는 결제 완료, 홀수 번호는 결제 대기다.
+const manyBookSales: BookSale[] = Array.from({ length: 25 }, (_, index) => {
+  const number = String(index + 1).padStart(2, "0");
+  const isPaid = (index + 1) % 2 === 0;
+  const sale = {
+    academyId: "academy-1",
+    saleId: `sale-${number}`,
+    bookId: `book-${number}`,
+    bookTitle: `${index < 15 ? "바이엘" : "체르니"} ${number}`,
+    studentId: `student-${number}`,
+    studentName: `원생${number}`,
+    price: 12000,
+    shippedAt: "2026-08-21",
+  };
+
+  return isPaid
+    ? { ...sale, status: "paid" as const, paidAt: "2026-08-23", permanent: true as const }
+    : { ...sale, status: "payment-pending" as const };
+});
+
+const pagedQueryOptionsFactory: BookPurchaseListQueryOptionsFactory = (options) => ({
+  queryKey: [
+    "books",
+    options.academyId,
+    options.search ?? "",
+    options.filters?.status ?? "",
+    options.page ?? "",
+    options.pageSize ?? "",
+  ],
+  queryFn: async () => buildBookPurchaseList(manyBookSales, options),
+});
+
 function renderBookPurchaseListScreen(
   queryOptionsFactory: BookPurchaseListQueryOptionsFactory,
   canRecordPayment = true,
@@ -152,6 +184,116 @@ describe("BookPurchaseListScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "교재 구매 목록을 불러오지 못했습니다.",
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "이 작업을 할 권한이 없습니다. 원장에게 문의해 주세요.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("permission denied");
+  });
+});
+
+describe("BookPurchaseListScreen 페이지 이동", () => {
+  it("총 교재 구매 건수와 페이지당 개수 선택을 항상 보여주고 10건씩 표시한다", async () => {
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    const table = await screen.findByRole("table", { name: "교재 구매 목록" });
+
+    expect(screen.getByText("총 25건")).toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(11);
+    expect(within(table).getByRole("cell", { name: "원생10" })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: "원생11" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "페이지당 교재 구매 수" })).toHaveValue("10");
+    expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("교재 구매가 10건 이하여도 총 건수와 페이지 이동을 보여준다", async () => {
+    renderBookPurchaseListScreen((options) => ({
+      queryKey: ["books", options.academyId, options.page ?? ""],
+      queryFn: async () => buildBookPurchaseList(bookSales, options),
+    }));
+
+    await screen.findByRole("table", { name: "교재 구매 목록" });
+
+    expect(screen.getByText("총 2건")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "다음 페이지" })).toBeDisabled();
+  });
+
+  it("다음 페이지로 이동하면 11번째 교재 구매부터 보여준다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.click(screen.getByRole("button", { name: "다음 페이지" }));
+
+    expect(await screen.findByRole("cell", { name: "원생11" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "원생01" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("페이지당 20개를 고르면 1페이지로 돌아가 20건을 보여준다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.click(screen.getByRole("button", { name: "3페이지" }));
+    await screen.findByRole("cell", { name: "원생21" });
+    await user.selectOptions(screen.getByRole("combobox", { name: "페이지당 교재 구매 수" }), "20");
+
+    expect(await screen.findByRole("cell", { name: "원생01" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "원생20" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "원생21" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("검색하면 1페이지로 돌아가 검색 결과의 첫 교재 구매부터 보여준다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.click(screen.getByRole("button", { name: "다음 페이지" }));
+    await screen.findByRole("cell", { name: "원생11" });
+    await user.type(screen.getByRole("searchbox", { name: "교재 구매 검색" }), "바이엘");
+
+    expect(await screen.findByText("총 15건")).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "원생01" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("결제 상태 필터를 바꾸면 1페이지로 돌아간다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.click(screen.getByRole("button", { name: "3페이지" }));
+    await screen.findByRole("cell", { name: "원생21" });
+    await user.selectOptions(screen.getByLabelText("결제 상태 필터"), "payment-pending");
+
+    expect(await screen.findByText("총 13건")).toBeInTheDocument();
+    expect(await screen.findByRole("cell", { name: "원생01" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("초기화하면 1페이지로 돌아가 전체 교재 구매를 보여준다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.click(screen.getByRole("button", { name: "다음 페이지" }));
+    await screen.findByRole("cell", { name: "원생11" });
+    await user.click(screen.getByRole("button", { name: "초기화" }));
+
+    expect(await screen.findByRole("cell", { name: "원생01" })).toBeInTheDocument();
+    expect(screen.getByText("총 25건")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("조건에 맞는 교재 구매가 없어도 총 0건을 보여준다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pagedQueryOptionsFactory);
+
+    await screen.findByRole("cell", { name: "원생01" });
+    await user.type(screen.getByRole("searchbox", { name: "교재 구매 검색" }), "없는교재");
+
+    expect(await screen.findByText("조건에 맞는 교재 구매 내역이 없습니다.")).toBeInTheDocument();
+    expect(screen.getByText("총 0건")).toBeInTheDocument();
   });
 });

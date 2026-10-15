@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createLessonTicketListQueryKey,
   createLessonTicketListQueryOptions,
+  fetchAllLessonTickets,
   fetchLessonTicketRegistrationOptions,
   fetchLessonTicketList,
   registerLessonTicketGrant,
@@ -9,6 +11,37 @@ import {
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
+
+function createGrantRow(
+  overrides: Partial<LessonTicketGrantSupabaseRow> = {},
+): LessonTicketGrantSupabaseRow {
+  return {
+    id: "ticket-1",
+    academy_id: "academy-1",
+    student_id: "student-1",
+    instrument_id: "piano",
+    instrument_name: "피아노",
+    total_granted_count: 12,
+    remaining_count: 8,
+    valid_from: "2026-08-01",
+    valid_until: "2026-12-31",
+    registered_at: "2026-08-01",
+    students: { name: "김민지" },
+    ...overrides,
+  };
+}
+
+function createGrantRows(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+
+    return createGrantRow({
+      id: `ticket-${number}`,
+      student_id: `student-${number}`,
+      students: { name: `원생${number}` },
+    });
+  });
+}
 
 function createSupabaseStub(
   rows: LessonTicketGrantSupabaseRow[],
@@ -78,13 +111,35 @@ describe("fetchLessonTicketList", () => {
         eq: ["academy_id", "academy-1"],
       },
     ]);
-    expect(result[0]).toMatchObject({
+    expect(result.items[0]).toMatchObject({
       academyId: "academy-1",
       ticketId: "ticket-1",
       studentName: "김민지",
       instrumentName: "피아노",
       statuses: ["low-remaining", "expiring-soon"],
     });
+  });
+
+  it("조회한 회차권을 페이지로 나눠 총 건수와 함께 돌려준다", async () => {
+    const { client } = createSupabaseStub(createGrantRows(25));
+
+    const result = await fetchLessonTicketList(client, {
+      academyId: "academy-1",
+      today: "2026-09-01",
+      lowRemainingThreshold: 2,
+      expiringWithinDays: 7,
+      page: 3,
+      pageSize: 10,
+    });
+
+    expect(result.items.map((row) => row.studentName)).toEqual([
+      "원생21",
+      "원생22",
+      "원생23",
+      "원생24",
+      "원생25",
+    ]);
+    expect(result).toMatchObject({ page: 3, pageSize: 10, totalItems: 25, totalPages: 3 });
   });
 
   it("Supabase 오류는 사용자에게 전달 가능한 오류로 변환한다", async () => {
@@ -122,8 +177,49 @@ describe("createLessonTicketListQueryOptions", () => {
       "list",
       "피아노",
       "low-remaining",
+      "",
+      "",
     ]);
-    await expect(options.queryFn()).resolves.toEqual([]);
+    await expect(options.queryFn()).resolves.toMatchObject({ items: [], totalItems: 0 });
+  });
+
+  it("페이지와 페이지당 개수가 바뀌면 다른 queryKey를 만든다", () => {
+    const { client } = createSupabaseStub([]);
+    const baseOptions = {
+      academyId: "academy-1",
+      today: "2026-09-01",
+      lowRemainingThreshold: 2,
+      expiringWithinDays: 7,
+    };
+
+    const secondPage = createLessonTicketListQueryOptions(client, { ...baseOptions, page: 2, pageSize: 20 });
+    const firstPage = createLessonTicketListQueryOptions(client, { ...baseOptions, page: 1, pageSize: 20 });
+
+    expect(secondPage.queryKey.slice(-2)).toEqual(["2", "20"]);
+    expect(secondPage.queryKey).not.toEqual(firstPage.queryKey);
+    expect(createLessonTicketListQueryKey({ ...baseOptions, page: 2, pageSize: 20 })).toEqual(
+      secondPage.queryKey,
+    );
+  });
+});
+
+describe("fetchAllLessonTickets", () => {
+  it("재무 집계처럼 페이지로 자르면 안 되는 곳을 위해 학원의 회차권 전체를 돌려준다", async () => {
+    const { client, calls } = createSupabaseStub(createGrantRows(25));
+
+    const tickets = await fetchAllLessonTickets(client, "academy-1");
+
+    expect(tickets).toHaveLength(25);
+    expect(tickets[0]).toMatchObject({ ticketId: "ticket-01", studentName: "원생01" });
+    expect(calls[0].eq).toEqual(["academy_id", "academy-1"]);
+  });
+
+  it("조회 오류는 회차권 목록을 불러오지 못했다는 오류로 바꾼다", async () => {
+    const { client } = createSupabaseStub([], new Error("permission denied"));
+
+    await expect(fetchAllLessonTickets(client, "academy-1")).rejects.toThrow(
+      "회차권 목록을 불러오지 못했습니다: permission denied",
+    );
   });
 });
 
@@ -205,6 +301,36 @@ describe("fetchLessonTicketRegistrationOptions", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("fetchLessonTicketRegistrationOptions 정렬", () => {
+  it("등록할 원생 선택지를 이름 가나다순으로 준다", async () => {
+    const client = {
+      from() {
+        return {
+          select() {
+            return {
+              async eq() {
+                return {
+                  data: ["한서아", "원생10", "김민지", "원생2"].map((name, index) => ({
+                    id: `student-${index}`,
+                    academy_id: "academy-1",
+                    name,
+                    student_instruments: [],
+                  })),
+                  error: null,
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const result = await fetchLessonTicketRegistrationOptions(client, "academy-1");
+
+    expect(result.map((option) => option.studentName)).toEqual(["김민지", "원생2", "원생10", "한서아"]);
   });
 });
 

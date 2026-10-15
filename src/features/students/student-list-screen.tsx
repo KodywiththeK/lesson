@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -15,6 +15,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   PageHeaderActionFallback,
   usePageHeaderActions,
@@ -56,15 +58,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import type { ListView } from "@/domain/common-list";
+import { compareKoreanNames, type ListView } from "@/domain/common-list";
+import { getFinanceToday } from "@/domain/finance-date";
 import { getAcademyScheduleValidationError } from "@/domain/student-registration";
-import type {
-  BuildStudentListOptions,
-  StudentListRow,
+import {
+  buildStudentFilterOptions,
+  type BuildStudentListOptions,
+  type StudentListRow,
 } from "@/domain/student-list";
+import { invalidateAfterPeopleChange } from "@/lib/api/query-invalidation";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createStudentListQueryOptions,
-  deleteWithdrawnStudent,
+  createStudentOptionsQueryOptions,
   registerStudentEnrollment,
   updateStudentProfile,
   updateStudentStatus,
@@ -75,7 +81,7 @@ import {
   type UpdateStudentProfileInput,
 } from "@/lib/api/students";
 import {
-  createTeacherListQueryOptions,
+  createTeacherOptionsQueryOptions,
   type TeacherListSupabaseClient,
 } from "@/lib/api/teachers";
 import { queryKeys } from "@/lib/api/query-keys";
@@ -107,7 +113,6 @@ type StudentListScreenProps = {
       reason?: string;
     },
   ) => void | Promise<void>;
-  deleteStudent?: (input: { academyId: string; studentId: string }) => void | Promise<void>;
 };
 
 type StudentStatusChangeRequest = {
@@ -137,15 +142,13 @@ export function StudentListScreen({
   registerStudent,
   updateStudent,
   updateStudentStatus: updateStudentStatusProp,
-  deleteStudent,
 }: StudentListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [instrumentName, setInstrumentName] = useState("");
   const [weekdayLabel, setWeekdayLabel] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<10 | 20 | 30>(10);
+  const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentListRow | null>(
     null,
@@ -188,12 +191,19 @@ export function StudentListScreen({
       academyId,
       supabaseClientState ?? createMissingSupabaseClientState(),
     ),
-    enabled: !teachers.length && !supabaseClientState?.error,
+    enabled: !teachers.length && !hasInjectedQueryOptions && !supabaseClientState?.error,
   });
   const teacherOptions = useMemo(
-    () => (teachers.length ? teachers : teacherOptionsQuery.data?.items ?? []),
-    [teacherOptionsQuery.data?.items, teachers],
+    () => (teachers.length ? teachers : teacherOptionsQuery.data ?? []),
+    [teacherOptionsQuery.data, teachers],
   );
+  const studentOptionsQuery = useQuery({
+    ...createDefaultStudentOptionsQueryOptions(
+      academyId,
+      supabaseClientState ?? createMissingSupabaseClientState(),
+    ),
+    enabled: !hasInjectedQueryOptions && !supabaseClientState?.error,
+  });
   const registerMutation = useMutation({
     mutationFn: async (input: DemoStudentRegistrationInput) => {
       if (registerStudent) {
@@ -220,20 +230,11 @@ export function StudentListScreen({
     onSuccess: () => {
       setIsRegistrationOpen(false);
       toast.success("원생을 등록했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "students"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "status-management"],
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
+      invalidateAfterPeopleChange(queryClient, academyId);
     },
     onError: (error) => {
       toast.error("원생 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -281,48 +282,11 @@ export function StudentListScreen({
           : current,
       );
       toast.success("원생 상태를 변경했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "students"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
-      });
+      invalidateAfterPeopleChange(queryClient, academyId);
     },
     onError: (error) => {
       toast.error("원생 상태 변경에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
-      });
-    },
-  });
-  const deleteMutation = useMutation({
-    mutationFn: async (input: { academyId: string; studentId: string }) => {
-      if (deleteStudent) {
-        await deleteStudent(input);
-        return input;
-      }
-
-      if (!supabaseClientState?.client) {
-        throw new Error("Supabase client 상태를 만들지 못했습니다.");
-      }
-
-      await deleteWithdrawnStudent(supabaseClientState.client, input);
-      return input;
-    },
-    onSuccess: (input) => {
-      setStudentOverrides((current) => {
-        const next = { ...current };
-        delete next[input.studentId];
-        return next;
-      });
-      setSelectedStudent(null);
-      toast.success("퇴원 원생을 삭제했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "students"],
-      });
-    },
-    onError: (error) => {
-      toast.error("원생 삭제에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -351,24 +315,22 @@ export function StudentListScreen({
       }));
       setSelectedStudent(mergedStudent);
       toast.success("원생 정보를 수정했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "students"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
-      });
+      invalidateAfterPeopleChange(queryClient, academyId);
     },
     onError: (error) => {
       toast.error("원생 정보 수정에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
-  const queriedStudents = studentListQuery.data?.items ?? [];
-  const students = queriedStudents.map(
+  const studentListView = studentListQuery.data;
+  const students = (studentListView?.items ?? []).map(
     (student) => studentOverrides[student.studentId] ?? student,
   );
-  const filterOptions = buildFilterOptions(students);
+  const filterOptions = buildStudentFilterOptions(studentOptionsQuery.data ?? [], {
+    teacherNames: teacherOptions.map((teacher) => teacher.name),
+    instrumentNames: instrumentOptions.map((instrument) => instrument.name),
+  });
   const registrationAction = useMemo(
     () => (
       <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
@@ -411,7 +373,7 @@ export function StudentListScreen({
             value={search}
             onChange={(value) => {
               setSearch(value);
-              setPage(1);
+              resetPage();
             }}
             placeholder="이름, 선생님, 악기, 요일"
           />
@@ -422,7 +384,7 @@ export function StudentListScreen({
             options={filterOptions.teacherNames}
             onChange={(value) => {
               setTeacherName(value);
-              setPage(1);
+              resetPage();
             }}
           />
           <ListFilterSelect
@@ -431,7 +393,7 @@ export function StudentListScreen({
             options={filterOptions.instrumentNames}
             onChange={(value) => {
               setInstrumentName(value);
-              setPage(1);
+              resetPage();
             }}
           />
           <ListFilterSelect
@@ -440,7 +402,7 @@ export function StudentListScreen({
             options={filterOptions.weekdayLabels}
             onChange={(value) => {
               setWeekdayLabel(value);
-              setPage(1);
+              resetPage();
             }}
           />
 
@@ -453,7 +415,7 @@ export function StudentListScreen({
               setTeacherName("");
               setInstrumentName("");
               setWeekdayLabel("");
-              setPage(1);
+              resetPage();
             }}
           >
             <RotateCcw aria-hidden="true" />
@@ -463,15 +425,15 @@ export function StudentListScreen({
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
           <ListStatusAlert
-            message="Supabase 환경변수가 설정되면 원생 목록을 불러올 수 있습니다."
-            detail={supabaseClientState.error.message}
+            message="원생 목록을 불러오지 못했습니다."
+            detail={toUserMessage(supabaseClientState.error)}
           />
         ) : null}
 
         {studentListQuery.isError ? (
           <ListStatusAlert
             message="원생 목록을 불러오지 못했습니다."
-            detail={studentListQuery.error.message}
+            detail={toUserMessage(studentListQuery.error)}
           />
         ) : null}
 
@@ -481,22 +443,18 @@ export function StudentListScreen({
           </p>
         ) : null}
 
-        {!studentListQuery.isLoading &&
-        !studentListQuery.isError &&
-        (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
+        {studentListView && !studentListQuery.isError ? (
           <>
             <StudentListTable
               students={students}
               onOpenStudent={setSelectedStudent}
             />
-            <StudentPagination
-              view={studentListQuery.data}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={(value) => {
-                setPageSize(value);
-                setPage(1);
-              }}
+            <ListPagination
+              itemLabel="원생"
+              countUnit="명"
+              view={studentListView}
+              onPageChange={goToPage}
+              onPageSizeChange={changePageSize}
             />
           </>
         ) : null}
@@ -507,7 +465,6 @@ export function StudentListScreen({
         teachers={teacherOptions}
         isSaving={updateMutation.isPending}
         isStatusSaving={statusMutation.isPending}
-        isDeleting={deleteMutation.isPending}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedStudent(null);
@@ -515,7 +472,6 @@ export function StudentListScreen({
         }}
         onSubmit={(input) => updateMutation.mutateAsync(input)}
         onRequestStatusChange={setPendingStatusChange}
-        onDelete={(input) => deleteMutation.mutateAsync(input)}
       />
       <StudentStatusConfirmationDialog
         request={pendingStatusChange}
@@ -535,7 +491,7 @@ function StudentRegistrationForm({
   onSubmit: (input: DemoStudentRegistrationInput) => void;
 }) {
   const [name, setName] = useState("");
-  const [registeredAt, setRegisteredAt] = useState(toSeoulDate(new Date()));
+  const [registeredAt, setRegisteredAt] = useState(getFinanceToday());
   const [age, setAge] = useState("");
   const [grade, setGrade] = useState("");
   const [school, setSchool] = useState("");
@@ -987,23 +943,21 @@ function StudentDetailDialog({
   teachers,
   isSaving,
   isStatusSaving,
-  isDeleting,
   onOpenChange,
   onSubmit,
   onRequestStatusChange,
-  onDelete,
 }: {
   student: StudentListRow | null;
   teachers: TeacherListRow[];
   isSaving: boolean;
   isStatusSaving: boolean;
-  isDeleting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (input: UpdateStudentProfileInput) => Promise<StudentListRow>;
   onRequestStatusChange: (request: StudentStatusChangeRequest) => void;
-  onDelete: (input: { academyId: string; studentId: string }) => Promise<unknown>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const deleteUnavailableNoticeId = useId();
+  const isWithdrawnStudent = student?.status === "withdrawn";
 
   return (
     <Dialog
@@ -1118,6 +1072,15 @@ function StudentDetailDialog({
               )}
             </div>
 
+            {isWithdrawnStudent ? (
+              <p
+                id={deleteUnavailableNoticeId}
+                className="text-sm text-muted-foreground"
+              >
+                결제·회차권·급여 기록을 보존하기 위해 삭제할 수 없습니다. 보관 상태로 유지됩니다.
+              </p>
+            ) : null}
+
             <DialogFooter>
               <Button
                 type="button"
@@ -1145,26 +1108,16 @@ function StudentDetailDialog({
               >
                 퇴원
               </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={
-                  isDeleting ||
-                  student.status !== "withdrawn"
-                }
-                onClick={() => {
-                  if (!window.confirm(`${student.name} 원생을 완전히 삭제할까요?`)) {
-                    return;
-                  }
-
-                  void onDelete({
-                    academyId: student.academyId,
-                    studentId: student.studentId,
-                  });
-                }}
-              >
-                삭제
-              </Button>
+              {isWithdrawnStudent ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled
+                  aria-describedby={deleteUnavailableNoticeId}
+                >
+                  삭제
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -1237,7 +1190,7 @@ function StudentStatusConfirmationDialog({
             {student
               ? `${student.name} 원생 상태를 ${formatStudentStatus(
                   student.status,
-                )}에서 ${nextLabel}으로 변경합니다. 퇴원은 30일 보관 후 자동 archive 처리됩니다.`
+                )}에서 ${nextLabel}으로 변경합니다. 퇴원은 30일 보관 후 자동으로 보관 처리됩니다.`
               : "원생 상태를 변경합니다."}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -1298,14 +1251,12 @@ function StudentEditForm({
     student.instruments?.[0];
   const firstTeacher = teachers[0];
   const initialTeacherId = primaryInstrument?.teacherId ?? firstTeacher?.teacherId ?? "";
+  const instrumentId =
+    primaryInstrument?.instrumentId || toInstrumentId(student.instrumentNames[0]);
+  const instrumentName =
+    primaryInstrument?.instrumentName ?? student.instrumentNames[0] ?? "";
   const [name, setName] = useState(student.name);
   const [teacherId, setTeacherId] = useState(initialTeacherId);
-  const [instrumentId, setInstrumentId] = useState(
-    primaryInstrument?.instrumentId || toInstrumentId(student.instrumentNames[0]),
-  );
-  const [instrumentName, setInstrumentName] = useState(
-    primaryInstrument?.instrumentName ?? student.instrumentNames[0] ?? "",
-  );
   const [lessonType, setLessonType] = useState(
     primaryInstrument?.lessonType === "private" ? "private" : "academy",
   );
@@ -1324,7 +1275,7 @@ function StudentEditForm({
   const finalMonthlyFee = Math.max(0, lessonFee - discountTotal);
   const selectedTeacher =
     teachers.find((teacher) => teacher.teacherId === teacherId) ?? firstTeacher;
-  const canSubmit = Boolean(name.trim() && instrumentName.trim());
+  const canSubmit = Boolean(name.trim());
 
   return (
     <form
@@ -1381,21 +1332,13 @@ function StudentEditForm({
         </Label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1">
-          <span>악기 ID</span>
+          <span>악기</span>
           <Input
-            aria-label="악기 ID"
-            value={instrumentId}
-            onChange={(event) => setInstrumentId(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>악기명</span>
-          <Input
-            aria-label="악기명"
-            value={instrumentName}
-            onChange={(event) => setInstrumentName(event.target.value)}
+            aria-label="악기"
+            readOnly
+            value={instrumentName || "등록된 악기 없음"}
           />
         </Label>
         <Label className="grid gap-1">
@@ -1537,16 +1480,30 @@ function createDefaultTeacherOptionsQueryOptions(
 ) {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.teachers.list(academyId),
+      queryKey: queryKeys.teachers.options(academyId),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
     };
   }
 
-  return createTeacherListQueryOptions(supabaseClientState.client, {
-    academyId,
-  });
+  return createTeacherOptionsQueryOptions(supabaseClientState.client, academyId);
+}
+
+function createDefaultStudentOptionsQueryOptions(
+  academyId: string,
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return {
+      queryKey: queryKeys.students.options(academyId),
+      queryFn: async (): Promise<StudentListRow[]> => {
+        throw supabaseClientState.error;
+      },
+    };
+  }
+
+  return createStudentOptionsQueryOptions(supabaseClientState.client, academyId);
 }
 
 function createStudentListSupabaseClient(): SupabaseClientState {
@@ -1634,84 +1591,6 @@ function StudentListTable({
   );
 }
 
-function StudentPagination({
-  view,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  view: ListView<StudentListRow> | undefined;
-  pageSize: 10 | 20 | 30;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: 10 | 20 | 30) => void;
-}) {
-  if (!view || view.totalItems <= 10) {
-    return null;
-  }
-
-  return (
-    <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm text-muted-foreground">
-        총 {view.totalItems}명 · {view.page}/{view.totalPages}페이지
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Label className="flex items-center gap-2 text-sm">
-          <span>페이지당</span>
-          <NativeSelect
-            aria-label="페이지당 원생 수"
-            value={String(pageSize)}
-            onChange={(event) =>
-              onPageSizeChange(Number(event.target.value) as 10 | 20 | 30)
-            }
-          >
-            <NativeSelectOption value="10">10명</NativeSelectOption>
-            <NativeSelectOption value="20">20명</NativeSelectOption>
-            <NativeSelectOption value="30">30명</NativeSelectOption>
-          </NativeSelect>
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!view.hasPreviousPage}
-          onClick={() => onPageChange(view.page - 1)}
-        >
-          이전
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!view.hasNextPage}
-          onClick={() => onPageChange(view.page + 1)}
-        >
-          다음
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function buildFilterOptions(students: StudentListRow[]) {
-  return {
-    teacherNames: uniqueSorted(
-      students.flatMap((student) => student.teacherNames),
-    ),
-    instrumentNames: uniqueSorted(
-      students.flatMap((student) => student.instrumentNames),
-    ),
-    weekdayLabels: uniqueSorted(
-      students.flatMap((student) => student.weekdayLabels),
-    ),
-  };
-}
-
-function uniqueSorted(values: string[]) {
-  return [...new Set(values)].sort((left, right) =>
-    left.localeCompare(right, "ko"),
-  );
-}
-
 type StudentRegistrationInstrumentDraft = {
   instrumentId: string;
   instrumentName: string;
@@ -1771,7 +1650,7 @@ function getDefaultTeacherId(instrumentName: string, teachers: TeacherListRow[])
 function getTeacherCandidates(instrumentName: string, teachers: TeacherListRow[]) {
   return teachers
     .filter((teacher) => teacher.part === instrumentName)
-    .sort((left, right) => left.name.localeCompare(right.name, "ko"));
+    .sort((left, right) => compareKoreanNames(left.name, right.name));
 }
 
 function formatJoinedValue(values: string[]) {
@@ -1905,13 +1784,4 @@ function formatWon(value: number) {
 
 function toInstrumentId(value: string | undefined) {
   return value?.trim().toLocaleLowerCase("en-US").replace(/\s+/g, "-") ?? "";
-}
-
-function toSeoulDate(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
 }

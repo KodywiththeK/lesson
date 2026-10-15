@@ -13,6 +13,7 @@ import {
   FinancePayrollScreen,
   type FinanceManagementData,
 } from "@/features/finance/finance-management-screens";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   fetchFinanceManagementData,
   createMonthlyTuitionSnapshotsQueryOptions,
@@ -228,7 +229,7 @@ function FinanceDataScreen({
     return (
       <ListStatusAlert
         message="수입 관리 데이터를 불러올 수 없습니다."
-        detail={supabaseClientState.error.message}
+        detail={toUserMessage(supabaseClientState.error)}
       />
     );
   }
@@ -245,7 +246,7 @@ function FinanceDataScreen({
     return (
       <ListStatusAlert
         message="수입 관리 데이터를 불러오지 못했습니다."
-        detail={dataQuery.error.message}
+        detail={toUserMessage(dataQuery.error)}
       />
     );
   }

@@ -28,6 +28,8 @@ describe("BooksPage", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("바이엘 상")).toBeInTheDocument();
     expect(screen.getByText("스즈키 바이올린 1")).toBeInTheDocument();
+    expect(screen.getByText(/^총 \d+건$/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "페이지당 교재 구매 수" })).toHaveValue("10");
   });
 
   it("교재 출고 다이얼로그에서 입력한 교재를 구매 목록에 반영한다", async () => {

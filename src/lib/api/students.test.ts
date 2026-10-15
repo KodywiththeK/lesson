@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createStudentListQueryOptions,
+  createStudentStatusManagementQueryOptions,
   deleteWithdrawnStudent,
+  fetchStudentOptions,
   fetchStudentStatusManagementList,
   fetchStudentList,
   registerStudentEnrollment,
@@ -90,6 +92,26 @@ function createSupabaseStub(
 
   return { client, calls };
 }
+
+describe("fetchStudentOptions", () => {
+  it("드롭다운용 원생은 10명을 넘어도 전부 가나다순으로 가져온다", async () => {
+    const names = ["하", "가", "나", "다", "라", "마", "바", "사", "아", "자", "차"];
+    const { client } = createSupabaseStub(
+      names.map((name, index) => ({
+        id: `student-${index}`,
+        academy_id: "academy-1",
+        name: `${name}원생`,
+        student_instruments: [],
+      })),
+    );
+
+    const options = await fetchStudentOptions(client, "academy-1");
+
+    expect(options.map((student) => student.name)).toEqual([
+      "가원생", "나원생", "다원생", "라원생", "마원생", "바원생", "사원생", "아원생", "자원생", "차원생", "하원생",
+    ]);
+  });
+});
 
 describe("fetchStudentList", () => {
   it("Supabase 원생 row를 도메인 원생 목록으로 변환한다", async () => {
@@ -490,6 +512,63 @@ describe("student status mutations", () => {
           p_student_id: "student-1",
         },
       },
+    ]);
+  });
+});
+
+describe("휴원/퇴원 관리 원생 목록 검색과 페이지", () => {
+  const manyStudentRows = Array.from({ length: 12 }, (_, index) => ({
+    id: `student-${String(index).padStart(2, "0")}`,
+    academy_id: "academy-1",
+    name: index === 11 ? "하민지" : `가민지${String(index).padStart(2, "0")}`,
+    status: "suspended" as const,
+    suspended_at: "2026-08-20T00:00:00+09:00",
+    archived_at: null,
+    student_instruments: [],
+  }));
+
+  it("검색어와 페이지를 받아 해당 페이지의 원생만 돌려준다", async () => {
+    const { client } = createSupabaseStub({ students: manyStudentRows });
+
+    const secondPage = await fetchStudentStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "suspended",
+      today: "2026-08-25",
+      page: 2,
+      pageSize: 10,
+    });
+    const searched = await fetchStudentStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "suspended",
+      today: "2026-08-25",
+      search: "하민",
+    });
+
+    expect(secondPage.totalItems).toBe(12);
+    expect(secondPage.items.map((item) => item.name)).toEqual(["가민지10", "하민지"]);
+    expect(searched.items.map((item) => item.name)).toEqual(["하민지"]);
+  });
+
+  it("검색어, 페이지, 페이지 크기를 queryKey에 포함한다", () => {
+    const { client } = createSupabaseStub([]);
+
+    const options = createStudentStatusManagementQueryOptions(client, {
+      academyId: "academy-1",
+      status: "withdrawn",
+      search: "김",
+      page: 2,
+      pageSize: 20,
+    });
+
+    expect(options.queryKey).toEqual([
+      "academy",
+      "academy-1",
+      "status-management",
+      "student",
+      "withdrawn",
+      "김",
+      "2",
+      "20",
     ]);
   });
 });

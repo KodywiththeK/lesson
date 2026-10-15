@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppProviders } from "../providers";
 import { expectWholeWonInput } from "@/test/expect-whole-won-input";
@@ -13,6 +13,11 @@ import FinanceOverviewPage from "./overview/page";
 import FinancePayrollPage from "./payroll/page";
 
 describe("Finance routes", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+
   it("/finance는 입출금 내역으로 redirect한다", () => {
     expect(() => FinancePage()).toThrow("NEXT_REDIRECT");
     expect(nextRedirectMock).toHaveBeenCalledWith("/finance/ledger");
@@ -94,7 +99,14 @@ describe("Finance routes", () => {
     await user.click(
       screen.getByRole("button", { name: "피아노 조율비 수정 삭제" }),
     );
-    expect(screen.queryByText("피아노 조율비 수정")).not.toBeInTheDocument();
+    const confirmDialog = await screen.findByRole("alertdialog", {
+      name: "이 입출금 내역을 삭제할까요?",
+    });
+    expect(screen.getAllByText("피아노 조율비 수정").length).toBeGreaterThan(0);
+    await user.click(within(confirmDialog).getByRole("button", { name: "삭제" }));
+    await waitFor(() =>
+      expect(screen.queryByText("피아노 조율비 수정")).not.toBeInTheDocument(),
+    );
   });
 
   it("수동 입출금 금액은 1원 단위 양의 정수를 제출 검증으로 허용한다", async () => {
@@ -111,6 +123,41 @@ describe("Finance routes", () => {
     const dialog = await screen.findByRole("dialog", { name: "수동 입출금 등록" });
 
     expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "금액" }));
+  });
+
+  it("수납 다이얼로그의 수납일은 열 때마다 학원 기준 오늘 날짜로 시작한다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T01:00:00Z"));
+    const user = userEvent.setup();
+    window.history.pushState(null, "", "/finance/lesson-income");
+
+    render(
+      <AppProviders>
+        <FinanceLessonIncomePage />
+      </AppProviders>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("월별 전체 레슨수입 월 선택"), {
+      target: { value: "2026-08" },
+    });
+    const openPaymentDialog = async () => {
+      await user.click(
+        within(await screen.findByRole("table", { name: "학원 레슨수입" })).getByRole("button", {
+          name: /김민지 수납 처리/,
+        }),
+      );
+      return screen.findByRole("dialog", { name: "수납 처리" });
+    };
+
+    const firstDialog = await openPaymentDialog();
+    expect(within(firstDialog).getByLabelText("수납일")).toHaveValue("2026-10-15");
+
+    await user.clear(within(firstDialog).getByLabelText("수납일"));
+    await user.type(within(firstDialog).getByLabelText("수납일"), "2026-09-01");
+    await user.click(within(firstDialog).getByRole("button", { name: "취소" }));
+
+    const secondDialog = await openPaymentDialog();
+    expect(within(secondDialog).getByLabelText("수납일")).toHaveValue("2026-10-15");
   });
 
   it("학원 레슨수입은 통합 표와 수납 dialog를 제공한다", async () => {
@@ -173,7 +220,7 @@ describe("Finance routes", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("전체수입은 수입만 월별 그래프와 분류별 합계로 보여준다", async () => {
+  it("전체수입은 월별 수입·지출 그래프와 수입 분류별 합계를 보여준다", async () => {
     window.history.pushState(null, "", "/finance/overview");
 
     render(
@@ -182,7 +229,7 @@ describe("Finance routes", () => {
       </AppProviders>,
     );
 
-    expect(await screen.findByRole("figure", { name: "월별 수입 그래프" })).toBeInTheDocument();
+    expect(await screen.findByRole("figure", { name: "월별 수입·지출 그래프" })).toBeInTheDocument();
     expect(screen.getByText("분류별 수입")).toBeInTheDocument();
     expect(screen.queryByText("피아노 조율비")).not.toBeInTheDocument();
   });

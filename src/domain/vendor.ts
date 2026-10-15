@@ -1,11 +1,14 @@
-export type RegisterVendorInput = {
-  academyId: string;
-  vendorId: string;
+/** 거래처 등록·수정 폼이 다루는 입력값. */
+export type VendorProfile = {
   name: string;
   contact: string;
   kind: string;
   memo: string;
-  registeredAt: string;
+};
+
+export type RegisterVendorInput = VendorProfile & {
+  academyId: string;
+  vendorId: string;
 };
 
 export type VendorRecord = RegisterVendorInput & {
@@ -31,7 +34,6 @@ export function registerVendor(input: RegisterVendorInput): VendorRecord {
     contact: input.contact.trim(),
     kind,
     memo: input.memo.trim(),
-    registeredAt: input.registeredAt,
     active: true,
   };
 }

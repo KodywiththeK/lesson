@@ -1,3 +1,9 @@
+import {
+  buildListView,
+  type ListView,
+  type PageSizeOption,
+} from "./common-list";
+
 export type BookStockInput = {
   academyId: string;
   bookId: string;
@@ -89,6 +95,8 @@ export type BuildBookPurchaseListOptions = {
   filters?: {
     status?: BookSaleStatus;
   };
+  page?: number;
+  pageSize?: PageSizeOption;
 };
 
 export type BookPurchaseListRow = {
@@ -176,25 +184,26 @@ export function completeBookSalePayment(
 export function buildBookPurchaseList(
   sales: BookSale[],
   options: BuildBookPurchaseListOptions,
-): BookPurchaseListRow[] {
-  return sales
+): ListView<BookPurchaseListRow> {
+  const rows = sales
     .filter((sale) => sale.academyId === options.academyId)
     .filter((sale) => matchesBookPurchaseFilters(sale, options.filters))
-    .filter((sale) => matchesBookPurchaseSearch(sale, options.search))
-    .sort(
-      (left, right) =>
-        left.shippedAt.localeCompare(right.shippedAt) ||
-        left.studentName.localeCompare(right.studentName, "ko-KR") ||
-        left.bookTitle.localeCompare(right.bookTitle, "ko-KR"),
-    )
-    .map((sale) => ({
-      saleId: sale.saleId,
-      studentName: sale.studentName,
-      bookTitle: sale.bookTitle,
-      autoFilledPrice: sale.price,
-      shippedAt: sale.shippedAt,
-      status: sale.status,
-    }));
+    .map(toBookPurchaseListRow);
+
+  return buildListView(rows, {
+    getName: (row) => row.studentName,
+    getTieBreaker: toBookPurchaseTieBreaker,
+    search: options.search,
+    searchFields: [
+      (row) => row.studentName,
+      (row) => row.bookTitle,
+      (row) => row.shippedAt,
+      (row) => row.status,
+      (row) => formatBookSaleStatus(row.status),
+    ],
+    page: options.page,
+    pageSize: options.pageSize,
+  });
 }
 
 export function formatBookSaleStatus(status: BookSaleStatus) {
@@ -208,20 +217,20 @@ function matchesBookPurchaseFilters(
   return !filters?.status || sale.status === filters.status;
 }
 
-function matchesBookPurchaseSearch(sale: BookSale, search: string | undefined) {
-  const trimmedSearch = search?.trim().toLocaleLowerCase("ko-KR");
+function toBookPurchaseListRow(sale: BookSale): BookPurchaseListRow {
+  return {
+    saleId: sale.saleId,
+    studentName: sale.studentName,
+    bookTitle: sale.bookTitle,
+    autoFilledPrice: sale.price,
+    shippedAt: sale.shippedAt,
+    status: sale.status,
+  };
+}
 
-  if (!trimmedSearch) {
-    return true;
-  }
-
-  return [
-    sale.studentName,
-    sale.bookTitle,
-    sale.shippedAt,
-    sale.status,
-    formatBookSaleStatus(sale.status),
-  ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
+/** 원생명이 같으면 출고일 → 교재명 → 판매 id 순. 탭 구분자는 글자보다 앞서 정렬되어 항목별 순서를 유지한다. */
+function toBookPurchaseTieBreaker(row: BookPurchaseListRow) {
+  return [row.shippedAt, row.bookTitle, row.saleId].join("\t");
 }
 
 function assertSameAcademy(leftAcademyId: string, rightAcademyId: string) {

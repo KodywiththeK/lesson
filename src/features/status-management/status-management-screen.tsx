@@ -7,10 +7,15 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { Eye, RotateCcw, UserRoundCheck } from "lucide-react";
+import { Eye, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 
-import { ListStatusAlert } from "@/components/management/list-controls";
+import {
+  ListSearchField,
+  ListStatusAlert,
+} from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,12 +51,15 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { ListView } from "@/domain/common-list";
+import type { ListView, PageSizeOption } from "@/domain/common-list";
 import type {
   ManagedStatus,
   StatusManagementEntityType,
+  StatusManagementFetchOptions,
   StatusManagementListItem,
 } from "@/domain/status-management";
+import { invalidateAfterPeopleChange } from "@/lib/api/query-invalidation";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createStudentStatusManagementQueryOptions,
   updateStudentStatus as updateStudentStatusApi,
@@ -78,20 +86,18 @@ type StatusManagementQueryOptions = {
 
 type StudentStatus = "suspended" | "withdrawn";
 type TeacherStatus = "on_leave" | "resigned";
+type StudentStatusOptions = StatusManagementFetchOptions<StudentStatus>;
+type TeacherStatusOptions = StatusManagementFetchOptions<TeacherStatus>;
 
 export type StatusManagementScreenProps = {
   academyId: string;
   academyName: string;
-  studentQueryOptionsFactory?: (options: {
-    academyId: string;
-    status: StudentStatus;
-    today?: string;
-  }) => StatusManagementQueryOptions;
-  teacherQueryOptionsFactory?: (options: {
-    academyId: string;
-    status: TeacherStatus;
-    today?: string;
-  }) => StatusManagementQueryOptions;
+  studentQueryOptionsFactory?: (
+    options: StudentStatusOptions,
+  ) => StatusManagementQueryOptions;
+  teacherQueryOptionsFactory?: (
+    options: TeacherStatusOptions,
+  ) => StatusManagementQueryOptions;
   updateStudentStatus?: (input: DemoStudentStatusInput) => void | Promise<void>;
   updateTeacherStatus?: (input: DemoTeacherStatusInput) => void | Promise<void>;
 };
@@ -139,6 +145,9 @@ export function StatusManagementScreen({
   updateTeacherStatus,
 }: StatusManagementScreenProps) {
   const queryClient = useQueryClient();
+  const { page, pageSize, goToPage, changePageSize, resetPage } =
+    useListPaging();
+  const [search, setSearch] = useState("");
   const [entityType, setEntityType] =
     useState<StatusManagementEntityType>("student");
   const [studentStatus, setStudentStatus] =
@@ -157,28 +166,38 @@ export function StatusManagementScreen({
     [hasInjectedFactories],
   );
 
+  const listConditions = { academyId, search, page, pageSize };
+  const studentOptions: StudentStatusOptions = {
+    ...listConditions,
+    status: studentStatus,
+  };
+  const teacherOptions: TeacherStatusOptions = {
+    ...listConditions,
+    status: teacherStatus,
+  };
   const activeOptions =
     entityType === "student"
-      ? studentQueryOptionsFactory?.({
-          academyId,
-          status: studentStatus,
-        }) ??
+      ? studentQueryOptionsFactory?.(studentOptions) ??
         createDefaultStudentQueryOptions(
-          { academyId, status: studentStatus },
+          studentOptions,
           supabaseClientState ?? createMissingSupabaseClientState(),
         )
-      : teacherQueryOptionsFactory?.({
-          academyId,
-          status: teacherStatus,
-        }) ??
+      : teacherQueryOptionsFactory?.(teacherOptions) ??
         createDefaultTeacherQueryOptions(
-          { academyId, status: teacherStatus },
+          teacherOptions,
           supabaseClientState ?? createMissingSupabaseClientState(),
         );
+  const activeListKind = `${entityType}:${
+    entityType === "student" ? studentStatus : teacherStatus
+  }`;
   const statusQuery = useQuery({
     queryKey: activeOptions.queryKey,
     queryFn: activeOptions.queryFn,
     enabled: hasInjectedFactories || !supabaseClientState?.error,
+    meta: { listKind: activeListKind },
+    // 같은 목록의 페이지·검색 이동 중에는 이전 결과를 유지하고, 다른 탭의 목록은 보여주지 않는다.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.meta?.listKind === activeListKind ? previousData : undefined,
   });
 
   const statusMutation = useMutation({
@@ -230,71 +249,77 @@ export function StatusManagementScreen({
       setPendingTransition(null);
       setReason("");
       toast.success("상태를 변경했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "students"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "teachers"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "status-management"],
-      });
+      invalidateAfterPeopleChange(queryClient, academyId);
     },
     onError: (error) => {
       toast.error("상태 변경에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
 
-  const items = statusQuery.data?.items ?? [];
+  const hasSearch = search.trim() !== "";
+  const sharedPanelProps = {
+    search,
+    onSearchChange: (nextSearch: string) => {
+      setSearch(nextSearch);
+      resetPage();
+    },
+    view: statusQuery.data,
+    isLoading: statusQuery.isLoading,
+    error: statusQuery.error,
+    onPageChange: goToPage,
+    onPageSizeChange: changePageSize,
+    onTransition: setPendingTransition,
+  };
 
   return (
     <section className="grid gap-4" aria-label="휴원/퇴원 관리">
       <Tabs
         value={entityType}
-        onValueChange={(value) =>
-          setEntityType(value as StatusManagementEntityType)
-        }
+        onValueChange={(value) => {
+          setEntityType(value as StatusManagementEntityType);
+          resetPage();
+        }}
       >
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <TabsList aria-label="관리 대상">
-            <TabsTrigger value="student">원생</TabsTrigger>
-            <TabsTrigger value="teacher">선생님</TabsTrigger>
-          </TabsList>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void statusQuery.refetch()}
-          >
-            <RotateCcw aria-hidden="true" />
-            새로고침
-          </Button>
-        </div>
+        <TabsList aria-label="관리 대상">
+          <TabsTrigger value="student">원생</TabsTrigger>
+          <TabsTrigger value="teacher">선생님</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="student" className="mt-4">
           <ManagedStatusPanel
+            {...sharedPanelProps}
             tabs={studentStatusTabs}
             value={studentStatus}
-            onValueChange={setStudentStatus}
-            items={items}
-            isLoading={statusQuery.isLoading}
-            error={statusQuery.error}
-            emptyMessage="휴원/퇴원 관리 대상 원생이 없습니다."
-            onTransition={setPendingTransition}
+            onValueChange={(nextStatus) => {
+              setStudentStatus(nextStatus);
+              resetPage();
+            }}
+            itemLabel="원생"
+            emptyMessage={
+              hasSearch
+                ? "조건에 맞는 원생이 없습니다."
+                : "휴원/퇴원 관리 대상 원생이 없습니다."
+            }
           />
         </TabsContent>
 
         <TabsContent value="teacher" className="mt-4">
           <ManagedStatusPanel
+            {...sharedPanelProps}
             tabs={teacherStatusTabs}
             value={teacherStatus}
-            onValueChange={setTeacherStatus}
-            items={items}
-            isLoading={statusQuery.isLoading}
-            error={statusQuery.error}
-            emptyMessage="휴직/퇴사 관리 대상 선생님이 없습니다."
-            onTransition={setPendingTransition}
+            onValueChange={(nextStatus) => {
+              setTeacherStatus(nextStatus);
+              resetPage();
+            }}
+            itemLabel="선생님"
+            emptyMessage={
+              hasSearch
+                ? "조건에 맞는 선생님이 없습니다."
+                : "휴직/퇴사 관리 대상 선생님이 없습니다."
+            }
           />
         </TabsContent>
       </Tabs>
@@ -326,8 +351,8 @@ export function StatusManagementScreen({
 
       {!hasInjectedFactories && supabaseClientState?.error ? (
         <ListStatusAlert
-          message="Supabase 환경변수가 설정되면 휴원/퇴원 목록을 불러올 수 있습니다."
-          detail={supabaseClientState.error.message}
+          message="휴원/퇴원 목록을 불러오지 못했습니다."
+          detail={toUserMessage(supabaseClientState.error)}
         />
       ) : null}
     </section>
@@ -338,24 +363,34 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
   tabs,
   value,
   onValueChange,
-  items,
+  search,
+  onSearchChange,
+  view,
   isLoading,
   error,
+  itemLabel,
   emptyMessage,
+  onPageChange,
+  onPageSizeChange,
   onTransition,
 }: {
   tabs: Array<{ value: TStatus; label: string }>;
   value: TStatus;
   onValueChange: (value: TStatus) => void;
-  items: StatusManagementListItem[];
+  search: string;
+  onSearchChange: (search: string) => void;
+  view: ListView<StatusManagementListItem> | undefined;
   isLoading: boolean;
   error: Error | null;
+  itemLabel: string;
   emptyMessage: string;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: PageSizeOption) => void;
   onTransition: (transition: PendingTransition) => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className="border-b border-border p-4">
+      <div className="grid gap-3 border-b border-border p-4 md:grid-cols-[auto_minmax(12rem,20rem)] md:items-end md:justify-between">
         <Tabs value={value} onValueChange={(next) => onValueChange(next as TStatus)}>
           <TabsList aria-label="상태">
             {tabs.map((tab) => (
@@ -365,12 +400,18 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
             ))}
           </TabsList>
         </Tabs>
+        <ListSearchField
+          label="이름 검색"
+          value={search}
+          onChange={onSearchChange}
+          placeholder="이름, 처리 메모"
+        />
       </div>
 
       {error ? (
         <ListStatusAlert
           message="상태 관리 목록을 불러오지 못했습니다."
-          detail={error.message}
+          detail={toUserMessage(error)}
         />
       ) : null}
       {isLoading ? (
@@ -378,12 +419,21 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
           관리 목록을 불러오는 중입니다.
         </p>
       ) : null}
-      {!isLoading && !error ? (
-        <StatusManagementTable
-          items={items}
-          emptyMessage={emptyMessage}
-          onTransition={onTransition}
-        />
+      {view && !error ? (
+        <>
+          <StatusManagementTable
+            items={view.items}
+            emptyMessage={emptyMessage}
+            onTransition={onTransition}
+          />
+          <ListPagination
+            itemLabel={itemLabel}
+            countUnit="명"
+            view={view}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+          />
+        </>
       ) : null}
     </div>
   );
@@ -611,8 +661,8 @@ function StatusTransitionDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>상태 변경 확인</AlertDialogTitle>
           <AlertDialogDescription>
-            상태 변경은 감사 로그에 남고, 퇴원/퇴사는 30일 보관 후 자동
-            archive 처리됩니다.
+            상태 변경은 감사 로그에 남고, 퇴원/퇴사는 30일 보관 후 자동으로
+            보관 처리됩니다.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {transition ? (
@@ -682,11 +732,7 @@ function getTransitions(item: StatusManagementListItem) {
 }
 
 function createDefaultStudentQueryOptions(
-  options: {
-    academyId: string;
-    status: StudentStatus;
-    today?: string;
-  },
+  options: StudentStatusOptions,
   supabaseClientState: SupabaseClientState,
 ): StatusManagementQueryOptions {
   if (supabaseClientState.error) {
@@ -694,6 +740,9 @@ function createDefaultStudentQueryOptions(
       queryKey: queryKeys.statusManagement.list(options.academyId, {
         entityType: "student",
         status: options.status,
+        q: options.search,
+        page: String(options.page ?? 1),
+        pageSize: String(options.pageSize ?? ""),
       }),
       queryFn: async () => {
         throw supabaseClientState.error;
@@ -708,11 +757,7 @@ function createDefaultStudentQueryOptions(
 }
 
 function createDefaultTeacherQueryOptions(
-  options: {
-    academyId: string;
-    status: TeacherStatus;
-    today?: string;
-  },
+  options: TeacherStatusOptions,
   supabaseClientState: SupabaseClientState,
 ): StatusManagementQueryOptions {
   if (supabaseClientState.error) {
@@ -720,6 +765,9 @@ function createDefaultTeacherQueryOptions(
       queryKey: queryKeys.statusManagement.list(options.academyId, {
         entityType: "teacher",
         status: options.status,
+        q: options.search,
+        page: String(options.page ?? 1),
+        pageSize: String(options.pageSize ?? ""),
       }),
       queryFn: async () => {
         throw supabaseClientState.error;

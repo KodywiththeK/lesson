@@ -27,6 +27,7 @@ export default function VendorsPage() {
               useTestDemo ? demo.createVendorListQueryOptions : undefined
             }
             registerVendor={useTestDemo ? demo.registerVendor : undefined}
+            updateVendor={useTestDemo ? demo.updateVendor : undefined}
           />
         </AppShell>
       )}

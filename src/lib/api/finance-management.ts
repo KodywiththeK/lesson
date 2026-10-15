@@ -4,17 +4,16 @@ import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { TuitionRecord } from "@/domain/tuition-income";
-import { getFinanceToday } from "@/domain/finance-date";
 
 import {
   fetchFinanceLedgerList,
   type FinanceLedgerListSupabaseClient,
 } from "./finance";
 import {
-  fetchLessonTicketList,
+  fetchAllLessonTickets,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
-import { fetchTeacherList, type TeacherListSupabaseClient } from "./teachers";
+import { fetchTeacherOptions, type TeacherListSupabaseClient } from "./teachers";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -195,14 +194,9 @@ export async function fetchFinanceManagementData(
     await Promise.all([
       fetchFinanceLedgerList(supabase, { academyId }),
       fetchFinanceEnrollments(supabase, academyId),
-      fetchLessonTicketList(supabase, {
-        academyId,
-        today: getFinanceToday(),
-        lowRemainingThreshold: 2,
-        expiringWithinDays: 7,
-      }),
+      fetchAllLessonTickets(supabase, academyId),
       fetchFinanceBookSales(supabase, academyId),
-      fetchTeacherList(supabase, { academyId }).then((list) => list.items),
+      fetchTeacherOptions(supabase, academyId),
       fetchPayrollLessonSources(supabase, academyId),
       fetchSalarySettlements(supabase, academyId),
     ]);

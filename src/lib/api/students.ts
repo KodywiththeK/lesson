@@ -1,4 +1,4 @@
-import type { ListView } from "@/domain/common-list";
+import { compareKoreanNames, type ListView } from "@/domain/common-list";
 import {
   buildStudentList,
   type BuildStudentListOptions,
@@ -7,6 +7,7 @@ import {
 } from "@/domain/student-list";
 import {
   buildStatusManagementList,
+  type StatusManagementFetchOptions,
   type StatusManagementListItem,
 } from "@/domain/status-management";
 import { getAcademyScheduleValidationError } from "@/domain/student-registration";
@@ -255,14 +256,14 @@ const STUDENT_LIST_SELECT =
 const STATUS_TRANSITION_SELECT =
   "entity_type, entity_id, to_status, reason, changed_at";
 
-export async function fetchStudentList(
+async function fetchEnrolledStudentRows(
   supabase: StudentListSupabaseClient,
-  options: FetchStudentListOptions,
-): Promise<ListView<StudentListRow>> {
+  academyId: string,
+): Promise<StudentListRow[]> {
   const { data, error } = await supabase
     .from("students")
     .select(STUDENT_LIST_SELECT)
-    .eq("academy_id", options.academyId)
+    .eq("academy_id", academyId)
     .eq("status", "enrolled")
     .is("archived_at", null);
 
@@ -270,16 +271,46 @@ export async function fetchStudentList(
     throw new Error(`원생 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
-  return buildStudentList((data ?? []).map(toStudentListRow), options);
+  return (data ?? []).map(toStudentListRow);
 }
+
+export async function fetchStudentList(
+  supabase: StudentListSupabaseClient,
+  options: FetchStudentListOptions,
+): Promise<ListView<StudentListRow>> {
+  return buildStudentList(await fetchEnrolledStudentRows(supabase, options.academyId), options);
+}
+
+/** 드롭다운용. 페이지로 자르지 않고 재원 원생 전체를 가나다순으로 준다. */
+export async function fetchStudentOptions(
+  supabase: StudentListSupabaseClient,
+  academyId: string,
+): Promise<StudentListRow[]> {
+  const rows = await fetchEnrolledStudentRows(supabase, academyId);
+
+  return rows.sort(
+    (left, right) =>
+      compareKoreanNames(left.name, right.name) || compareKoreanNames(left.studentId, right.studentId),
+  );
+}
+
+export function createStudentOptionsQueryOptions(
+  supabase: StudentListSupabaseClient,
+  academyId: string,
+) {
+  return {
+    queryKey: queryKeys.students.options(academyId),
+    queryFn: () => fetchStudentOptions(supabase, academyId),
+  };
+}
+
+type StudentStatusManagementOptions = StatusManagementFetchOptions<
+  "suspended" | "withdrawn"
+>;
 
 export async function fetchStudentStatusManagementList(
   supabase: StudentListSupabaseClient,
-  options: {
-    academyId: string;
-    status: "suspended" | "withdrawn";
-    today?: string;
-  },
+  options: StudentStatusManagementOptions,
 ): Promise<ListView<StatusManagementListItem>> {
   const { data, error } = await supabase
     .from("students")
@@ -321,10 +352,8 @@ export async function fetchStudentStatusManagementList(
       };
     }),
     {
-      academyId: options.academyId,
+      ...options,
       entityType: "student",
-      status: options.status,
-      today: options.today,
     },
   );
 }
@@ -438,16 +467,15 @@ export function createStudentListQueryOptions(
 
 export function createStudentStatusManagementQueryOptions(
   supabase: StudentListSupabaseClient,
-  options: {
-    academyId: string;
-    status: "suspended" | "withdrawn";
-    today?: string;
-  },
+  options: StudentStatusManagementOptions,
 ) {
   return {
     queryKey: queryKeys.statusManagement.list(options.academyId, {
       entityType: "student",
       status: options.status,
+      q: options.search,
+      page: String(options.page ?? 1),
+      pageSize: String(options.pageSize ?? ""),
     }),
     queryFn: () => fetchStudentStatusManagementList(supabase, options),
   };

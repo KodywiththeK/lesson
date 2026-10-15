@@ -1,3 +1,4 @@
+import { compareKoreanNames, type ListView } from "@/domain/common-list";
 import {
   buildLessonTicketList,
   registerLessonTicket,
@@ -143,20 +144,31 @@ export type LessonTicketGrantRegistrationSupabaseClient = {
 const LESSON_TICKET_LIST_SELECT =
   "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)";
 
-export async function fetchLessonTicketList(
+/** 재무 집계처럼 페이지로 자르면 안 되는 용도. 학원의 회차권 전체를 준다. */
+export async function fetchAllLessonTickets(
   supabase: LessonTicketListSupabaseClient,
-  options: FetchLessonTicketListOptions,
-): Promise<LessonTicketListRow[]> {
+  academyId: string,
+): Promise<LessonTicketListItem[]> {
   const { data, error } = await supabase
     .from("lesson_ticket_grants")
     .select(LESSON_TICKET_LIST_SELECT)
-    .eq("academy_id", options.academyId);
+    .eq("academy_id", academyId);
 
   if (error) {
     throw new Error(`회차권 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
-  return buildLessonTicketList((data ?? []).map(toLessonTicketListItem), options);
+  return (data ?? []).map(toLessonTicketListItem);
+}
+
+export async function fetchLessonTicketList(
+  supabase: LessonTicketListSupabaseClient,
+  options: FetchLessonTicketListOptions,
+): Promise<ListView<LessonTicketListRow>> {
+  return buildLessonTicketList(
+    await fetchAllLessonTickets(supabase, options.academyId),
+    options,
+  );
 }
 
 export async function fetchLessonTicketRegistrationOptions(
@@ -174,7 +186,13 @@ export async function fetchLessonTicketRegistrationOptions(
     throw new Error(`회차권 등록 선택지를 불러오지 못했습니다: ${error.message}`);
   }
 
-  return (data ?? []).map(toLessonTicketRegistrationStudentOption);
+  return (data ?? [])
+    .map(toLessonTicketRegistrationStudentOption)
+    .sort(
+      (left, right) =>
+        compareKoreanNames(left.studentName, right.studentName) ||
+        compareKoreanNames(left.studentId, right.studentId),
+    );
 }
 
 export function createLessonTicketRegistrationOptionsQueryOptions(
@@ -222,15 +240,23 @@ export async function registerLessonTicketGrant(
   };
 }
 
+export function createLessonTicketListQueryKey(
+  options: FetchLessonTicketListOptions,
+) {
+  return queryKeys.lessonTickets.list(options.academyId, {
+    q: options.search,
+    status: options.filters?.status,
+    page: options.page?.toString(),
+    pageSize: options.pageSize?.toString(),
+  });
+}
+
 export function createLessonTicketListQueryOptions(
   supabase: LessonTicketListSupabaseClient,
   options: FetchLessonTicketListOptions,
 ) {
   return {
-    queryKey: queryKeys.lessonTickets.list(options.academyId, {
-      q: options.search,
-      status: options.filters?.status,
-    }),
+    queryKey: createLessonTicketListQueryKey(options),
     queryFn: () => fetchLessonTicketList(supabase, options),
   };
 }

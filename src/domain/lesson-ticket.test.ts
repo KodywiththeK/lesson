@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
   applyAttendanceToTicket,
   adjustLessonTicketManually,
   buildLessonTicketList,
   formatLessonTicketStatus,
   registerLessonTicket,
   summarizeLessonTicketStatus,
+  type LessonTicketListItem,
 } from "./lesson-ticket";
 
 const baseTicket = {
@@ -296,13 +298,13 @@ describe("buildLessonTicketList", () => {
       },
     );
 
-    expect(list.map((row) => row.studentName)).toEqual(["김민지", "이서윤"]);
-    expect(list[0]).toMatchObject({
+    expect(list.items.map((row) => row.studentName)).toEqual(["김민지", "이서윤"]);
+    expect(list.items[0]).toMatchObject({
       ticketId: "ticket-1",
       statuses: ["low-remaining", "expiring-soon"],
       daysUntilExpiration: 6,
     });
-    expect(list[1]).toMatchObject({
+    expect(list.items[1]).toMatchObject({
       ticketId: "ticket-2",
       statuses: ["exhausted", "expired"],
     });
@@ -350,8 +352,183 @@ describe("buildLessonTicketList", () => {
       },
     );
 
-    expect(list).toHaveLength(1);
-    expect(list[0].studentName).toBe("김민지");
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0].studentName).toBe("김민지");
+    expect(list.totalItems).toBe(1);
+  });
+
+  describe("페이지 나누기와 정렬", () => {
+    const listOptions = {
+      academyId: "academy-1",
+      today: "2026-09-01",
+      ...DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
+    };
+
+    function createTicket(
+      overrides: Partial<LessonTicketListItem> = {},
+    ): LessonTicketListItem {
+      return {
+        academyId: "academy-1",
+        ticketId: "ticket-1",
+        studentId: "student-1",
+        studentName: "김민지",
+        instrumentId: "piano",
+        instrumentName: "피아노",
+        totalGrantedCount: 12,
+        remainingCount: 8,
+        validFrom: "2026-08-01",
+        validUntil: "2026-12-31",
+        registeredAt: "2026-08-01",
+        ...overrides,
+      };
+    }
+
+    function createNumberedTickets(count: number) {
+      return Array.from({ length: count }, (_, index) => {
+        const number = String(index + 1).padStart(2, "0");
+
+        return createTicket({
+          ticketId: `ticket-${number}`,
+          studentId: `student-${number}`,
+          studentName: `원생${number}`,
+        });
+      });
+    }
+
+    it("기본은 10개씩 나누고 총 건수와 페이지 정보를 함께 준다", () => {
+      const tickets = createNumberedTickets(25);
+
+      const firstPage = buildLessonTicketList(tickets, listOptions);
+      const lastPage = buildLessonTicketList(tickets, { ...listOptions, page: 3 });
+
+      expect(firstPage.items.map((row) => row.studentName)).toEqual(
+        Array.from({ length: 10 }, (_, index) => `원생${String(index + 1).padStart(2, "0")}`),
+      );
+      expect(firstPage).toMatchObject({
+        page: 1,
+        pageSize: 10,
+        totalItems: 25,
+        totalPages: 3,
+        hasPreviousPage: false,
+        hasNextPage: true,
+      });
+      expect(lastPage.items).toHaveLength(5);
+      expect(lastPage).toMatchObject({ page: 3, hasPreviousPage: true, hasNextPage: false });
+    });
+
+    it("페이지당 20개를 고르면 20개씩 나눈다", () => {
+      const view = buildLessonTicketList(createNumberedTickets(25), {
+        ...listOptions,
+        page: 2,
+        pageSize: 20,
+      });
+
+      expect(view.items).toHaveLength(5);
+      expect(view).toMatchObject({ page: 2, pageSize: 20, totalPages: 2 });
+    });
+
+    it("검색과 상태 필터를 적용한 결과를 기준으로 총 건수를 센다", () => {
+      const tickets = [
+        ...createNumberedTickets(12),
+        createTicket({
+          ticketId: "ticket-violin",
+          studentId: "student-violin",
+          studentName: "한서아",
+          instrumentName: "바이올린",
+          remainingCount: 1,
+        }),
+      ];
+
+      const searched = buildLessonTicketList(tickets, { ...listOptions, search: "피아노" });
+      const filtered = buildLessonTicketList(tickets, {
+        ...listOptions,
+        filters: { status: "low-remaining" },
+      });
+
+      expect(searched.totalItems).toBe(12);
+      expect(filtered.totalItems).toBe(1);
+      expect(filtered.items[0].studentName).toBe("한서아");
+    });
+
+    it("원생명, 악기, 유효기간, 상태 이름으로 검색한다", () => {
+      const tickets = [
+        createTicket({ ticketId: "ticket-1", studentName: "김민지", validUntil: "2026-09-05" }),
+        createTicket({
+          ticketId: "ticket-2",
+          studentName: "이서윤",
+          instrumentName: "바이올린",
+          validUntil: "2026-12-31",
+        }),
+      ];
+      const search = (keyword: string) =>
+        buildLessonTicketList(tickets, { ...listOptions, search: keyword }).items.map((row) => row.ticketId);
+
+      expect(search("이서")).toEqual(["ticket-2"]);
+      expect(search("바이올")).toEqual(["ticket-2"]);
+      expect(search("2026-09")).toEqual(["ticket-1"]);
+      expect(search("임박")).toEqual(["ticket-1"]);
+      expect(search("  김민지  ")).toEqual(["ticket-1"]);
+    });
+
+    it("원생명은 숫자 크기와 가나다 기준으로 정렬한다", () => {
+      const view = buildLessonTicketList(
+        ["원생10", "원생2", "하늘", "가은"].map((studentName, index) =>
+          createTicket({
+            ticketId: `ticket-${index}`,
+            studentId: `student-${index}`,
+            studentName,
+          }),
+        ),
+        listOptions,
+      );
+
+      expect(view.items.map((row) => row.studentName)).toEqual(["가은", "원생2", "원생10", "하늘"]);
+    });
+
+    it("같은 원생이면 악기명, 만료일 순으로 정렬한다", () => {
+      const view = buildLessonTicketList(
+        [
+          createTicket({ ticketId: "ticket-1", instrumentName: "피아노", validUntil: "2026-12-31" }),
+          createTicket({ ticketId: "ticket-2", instrumentName: "피아노", validUntil: "2026-10-31" }),
+          createTicket({ ticketId: "ticket-3", instrumentName: "바이올린", validUntil: "2027-01-31" }),
+          createTicket({ ticketId: "ticket-4", studentName: "가은", studentId: "student-2" }),
+          createTicket({ ticketId: "ticket-5", instrumentName: "피아노 심화", validUntil: "2026-10-01" }),
+        ],
+        listOptions,
+      );
+
+      expect(view.items.map((row) => row.ticketId)).toEqual([
+        "ticket-4",
+        "ticket-3",
+        "ticket-2",
+        "ticket-1",
+        "ticket-5",
+      ]);
+    });
+
+    it("이름·악기·만료일이 모두 같아도 페이지를 넘길 때 중복이나 누락이 없다", () => {
+      const sameTickets = Array.from({ length: 12 }, (_, index) =>
+        createTicket({ ticketId: `ticket-${index + 1}` }),
+      );
+
+      const firstPage = buildLessonTicketList(sameTickets, listOptions);
+      const secondPage = buildLessonTicketList(sameTickets, { ...listOptions, page: 2 });
+      const pagedIds = [...firstPage.items, ...secondPage.items].map((row) => row.ticketId);
+
+      expect(pagedIds).toEqual(Array.from({ length: 12 }, (_, index) => `ticket-${index + 1}`));
+    });
+  });
+
+  it("잔여 2회 이하는 잔여 부족, 만료 7일 전부터는 만료 임박으로 본다", () => {
+    const ticket = { ...baseTicket, totalGrantedCount: 12, validFrom: "2026-08-01", registeredAt: "2026-08-01" };
+    const statusOptions = { today: "2026-09-01", ...DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS };
+
+    expect(
+      summarizeLessonTicketStatus({ ...ticket, remainingCount: 2, validUntil: "2026-09-08" }, statusOptions).statuses,
+    ).toEqual(["low-remaining", "expiring-soon"]);
+    expect(
+      summarizeLessonTicketStatus({ ...ticket, remainingCount: 3, validUntil: "2026-09-09" }, statusOptions).statuses,
+    ).toEqual([]);
   });
 
   it("회차권 상태를 운영자가 읽는 한국어로 표시한다", () => {

@@ -1,4 +1,5 @@
 import type { LedgerCategory, LedgerEntry } from "./book-sale";
+import { paginateItems, type ListView, compareKoreanNames } from "./common-list";
 
 export type { LedgerCategory };
 
@@ -77,6 +78,11 @@ export type BuildFinanceLedgerListOptions = {
   sort?: FinanceLedgerSort;
 };
 
+export type FinanceLedgerPageOptions = {
+  page: number;
+  pageSize: number;
+};
+
 export type LedgerCategoryOption = {
   value: LedgerCategory;
   label: string;
@@ -144,6 +150,17 @@ export function buildFinanceLedgerList(
     .filter((entry) => matchesFinanceLedgerFilters(entry, options.filters))
     .filter((entry) => matchesFinanceLedgerSearch(entry, options.search))
     .sort((left, right) => compareFinanceLedgerEntries(left, right, options.sort));
+}
+
+/**
+ * 이미 검색·필터·정렬이 끝난 입출금 내역을 받은 순서 그대로 한 페이지만큼 자른다.
+ * 캘린더와 CSV는 전체 결과가 필요해서 `buildFinanceLedgerList`와 자르는 단계를 나눴다.
+ */
+export function buildFinanceLedgerPage(
+  entries: LedgerEntry[],
+  options: FinanceLedgerPageOptions,
+): ListView<LedgerEntry> {
+  return paginateItems(entries, options);
 }
 
 export function formatLedgerEntryType(type: LedgerEntry["type"]) {
@@ -311,16 +328,31 @@ function compareFinanceLedgerEntries(
   sort: FinanceLedgerSort | undefined,
 ) {
   if (sort?.field === "amount") {
-    return compareNumber(left.amount, right.amount, sort.direction);
+    return (
+      compareNumber(left.amount, right.amount, sort.direction) ||
+      compareOccurredOnThenDescription(left, right, "desc")
+    );
   }
 
-  const direction = sort?.direction ?? "desc";
+  return compareOccurredOnThenDescription(left, right, sort?.direction ?? "desc");
+}
+
+/** 마지막에 ledgerId까지 비교해, 다시 조회해도 같은 순서가 나와 페이지 경계에서 중복·누락이 없게 한다. */
+function compareOccurredOnThenDescription(
+  left: LedgerEntry,
+  right: LedgerEntry,
+  direction: "asc" | "desc",
+) {
   const dateCompare =
     direction === "asc"
-      ? left.occurredOn.localeCompare(right.occurredOn)
-      : right.occurredOn.localeCompare(left.occurredOn);
+      ? compareKoreanNames(left.occurredOn, right.occurredOn)
+      : compareKoreanNames(right.occurredOn, left.occurredOn);
 
-  return dateCompare || left.description.localeCompare(right.description, "ko-KR");
+  return (
+    dateCompare ||
+    compareKoreanNames(left.description, right.description) ||
+    compareKoreanNames(left.ledgerId, right.ledgerId)
+  );
 }
 
 function buildMonthlyGraphPoint(
@@ -364,7 +396,7 @@ function buildInstrumentBreakdown(entries: FinanceGraphLedgerEntry[]) {
   }
 
   return [...totals.values()].sort((left, right) =>
-    left.instrumentName.localeCompare(right.instrumentName, "ko-KR"),
+    compareKoreanNames(left.instrumentName, right.instrumentName),
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -15,6 +16,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   PageHeaderActionFallback,
   usePageHeaderActions,
@@ -45,13 +48,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { ListView } from "@/domain/common-list";
 import {
+  DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
   formatLessonTicketStatus,
   type BuildLessonTicketListOptions,
   type LessonTicketListRow,
   type LessonTicketStatus,
 } from "@/domain/lesson-ticket";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
+  createLessonTicketListQueryKey,
   createLessonTicketListQueryOptions,
   createLessonTicketRegistrationOptionsQueryOptions,
   registerLessonTicketGrant,
@@ -67,7 +74,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type LessonTicketListQueryOptions = {
   queryKey: QueryKey;
-  queryFn: () => Promise<LessonTicketListRow[]>;
+  queryFn: () => Promise<ListView<LessonTicketListRow>>;
 };
 
 export type LessonTicketListQueryOptionsFactory = (
@@ -121,11 +128,6 @@ const statusFilterOptions: Array<{
   { value: "exhausted", label: formatLessonTicketStatus("exhausted") },
 ];
 
-const defaultThresholds = {
-  lowRemainingThreshold: 2,
-  expiringWithinDays: 7,
-};
-
 export function LessonTicketListScreen({
   academyId,
   today,
@@ -138,6 +140,7 @@ export function LessonTicketListScreen({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<LessonTicketStatus | "">("");
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
+  const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const hasInjectedRegistrationOptions = Boolean(registrationOptionsQueryFactory);
   const hasInjectedRegistrationMutation = Boolean(registerLessonTicket);
@@ -160,11 +163,13 @@ export function LessonTicketListScreen({
   const currentOptions: BuildLessonTicketListOptions = {
     academyId,
     today,
-    ...defaultThresholds,
+    ...DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
     search,
     filters: {
       status: status || undefined,
     },
+    page,
+    pageSize,
   };
   const queryOptions = queryOptionsFactory
     ? queryOptionsFactory(currentOptions)
@@ -176,8 +181,9 @@ export function LessonTicketListScreen({
     queryKey: queryOptions.queryKey,
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
+    placeholderData: keepPreviousData,
   });
-  const tickets = lessonTicketListQuery.data ?? [];
+  const ticketListView = lessonTicketListQuery.data;
   const registrationOptionsQueryOptions = registrationOptionsQueryFactory
     ? registrationOptionsQueryFactory(academyId)
     : createDefaultRegistrationOptionsQueryOptions(
@@ -222,10 +228,13 @@ export function LessonTicketListScreen({
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "finance"],
       });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
+      });
     },
     onError: (error) => {
       toast.error("회차권 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -248,6 +257,7 @@ export function LessonTicketListScreen({
           </DialogHeader>
           <LessonTicketRegistrationForm
             academyId={academyId}
+            today={today}
             options={registrationOptionsQuery.data ?? []}
             isLoading={registrationOptionsQuery.isLoading}
             error={
@@ -269,9 +279,26 @@ export function LessonTicketListScreen({
       registrationOptionsQuery.error,
       registrationOptionsQuery.isError,
       registrationOptionsQuery.isLoading,
+      today,
     ],
   );
   const isHeaderActionMounted = usePageHeaderActions(registrationAction);
+
+  function changeSearch(nextSearch: string) {
+    setSearch(nextSearch);
+    resetPage();
+  }
+
+  function changeStatus(nextStatus: LessonTicketStatus | "") {
+    setStatus(nextStatus);
+    resetPage();
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setStatus("");
+    resetPage();
+  }
 
   return (
     <section className="grid gap-4" aria-label="회차권 목록">
@@ -284,7 +311,7 @@ export function LessonTicketListScreen({
           <ListSearchField
             label="회차권 검색"
             value={search}
-            onChange={setSearch}
+            onChange={changeSearch}
             placeholder="원생명, 악기, 유효기간, 상태"
           />
           <ListFilterSelect
@@ -292,17 +319,14 @@ export function LessonTicketListScreen({
             value={status}
             options={statusFilterOptions}
             onChange={(nextStatus) =>
-              setStatus(nextStatus as LessonTicketStatus | "")
+              changeStatus(nextStatus as LessonTicketStatus | "")
             }
           />
           <Button
             type="button"
             variant="outline"
             className="self-end"
-            onClick={() => {
-              setSearch("");
-              setStatus("");
-            }}
+            onClick={resetFilters}
           >
             <RotateCcw aria-hidden="true" />
             초기화
@@ -311,15 +335,15 @@ export function LessonTicketListScreen({
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
           <ListStatusAlert
-            message="Supabase 환경변수가 설정되면 회차권 목록을 불러올 수 있습니다."
-            detail={supabaseClientState.error.message}
+            message="회차권 목록을 불러오지 못했습니다."
+            detail={toUserMessage(supabaseClientState.error)}
           />
         ) : null}
 
         {lessonTicketListQuery.isError ? (
           <ListStatusAlert
             message="회차권 목록을 불러오지 못했습니다."
-            detail={lessonTicketListQuery.error.message}
+            detail={toUserMessage(lessonTicketListQuery.error)}
           />
         ) : null}
 
@@ -329,10 +353,17 @@ export function LessonTicketListScreen({
           </p>
         ) : null}
 
-        {!lessonTicketListQuery.isLoading &&
-        !lessonTicketListQuery.isError &&
-        (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
-          <LessonTicketTable tickets={tickets} />
+        {ticketListView && !lessonTicketListQuery.isError ? (
+          <>
+            <LessonTicketTable tickets={ticketListView.items} />
+            <ListPagination
+              itemLabel="회차권"
+              countUnit="개"
+              view={ticketListView}
+              onPageChange={goToPage}
+              onPageSizeChange={changePageSize}
+            />
+          </>
         ) : null}
       </div>
     </section>
@@ -345,10 +376,7 @@ function createDefaultQueryOptions(
 ): LessonTicketListQueryOptions {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.lessonTickets.list(options.academyId, {
-        q: options.search,
-        status: options.filters?.status,
-      }),
+      queryKey: createLessonTicketListQueryKey(options),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
@@ -415,6 +443,7 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 
 function LessonTicketRegistrationForm({
   academyId,
+  today,
   options,
   isLoading,
   error,
@@ -422,6 +451,7 @@ function LessonTicketRegistrationForm({
   onSubmit,
 }: {
   academyId: string;
+  today: string;
   options: LessonTicketRegistrationStudentOption[];
   isLoading: boolean;
   error: Error | null;
@@ -431,9 +461,9 @@ function LessonTicketRegistrationForm({
   const [studentId, setStudentId] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
   const [grantedCount, setGrantedCount] = useState(1);
-  const [validFrom, setValidFrom] = useState("");
+  const [validFrom, setValidFrom] = useState(today);
   const [validUntil, setValidUntil] = useState("");
-  const [registeredAt, setRegisteredAt] = useState("");
+  const [registeredAt, setRegisteredAt] = useState(today);
   const [paidAmount, setPaidAmount] = useState(0);
   const selectedStudent = options.find((option) => option.studentId === studentId);
   const selectedInstrument = selectedStudent?.instruments.find(
@@ -477,7 +507,7 @@ function LessonTicketRegistrationForm({
       {error ? (
         <ListStatusAlert
           message="회차권 등록 선택지를 불러오지 못했습니다."
-          detail={error.message}
+          detail={toUserMessage(error)}
         />
       ) : null}
 
@@ -493,8 +523,13 @@ function LessonTicketRegistrationForm({
           aria-label="원생"
           value={studentId}
           onChange={(event) => {
+            const nextStudent = options.find((option) => option.studentId === event.target.value);
+
             setStudentId(event.target.value);
-            setInstrumentId("");
+            // 악기가 하나뿐이면 선택 단계를 줄인다.
+            setInstrumentId(
+              nextStudent?.instruments.length === 1 ? nextStudent.instruments[0].instrumentId : "",
+            );
           }}
         >
           <NativeSelectOption value="">원생 선택</NativeSelectOption>

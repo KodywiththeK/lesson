@@ -1,8 +1,9 @@
-import type { ListView } from "@/domain/common-list";
+import type { VendorProfile } from "@/domain/vendor";
 import {
   buildVendorList,
   type BuildVendorListOptions,
   type VendorListRow,
+  type VendorListView,
 } from "@/domain/vendor-list";
 
 import { queryKeys } from "./query-keys";
@@ -38,19 +39,29 @@ export type VendorListSupabaseClient = {
 
 export type FetchVendorListOptions = BuildVendorListOptions;
 
-export type RegisterVendorInput = {
+export type RegisterVendorInput = VendorProfile & {
   academyId: string;
-  name: string;
-  contact: string;
-  kind: string;
-  memo: string;
+};
+
+export type UpdateVendorInput = RegisterVendorInput & {
+  vendorId: string;
+};
+
+type VendorSelectBuilder = {
+  select(select: string): {
+    single(): PromiseLike<SupabaseQueryResult<VendorSupabaseRow>>;
+  };
 };
 
 export type VendorMutationSupabaseClient = {
   from(table: "vendors"): {
-    insert(values: Record<string, unknown>): {
-      select(select: string): {
-        single(): PromiseLike<SupabaseQueryResult<VendorSupabaseRow>>;
+    insert(values: Record<string, unknown>): VendorSelectBuilder;
+    update(values: Record<string, unknown>): {
+      eq(
+        column: "academy_id",
+        value: string,
+      ): {
+        eq(column: "id", value: string): VendorSelectBuilder;
       };
     };
   };
@@ -61,7 +72,7 @@ const VENDOR_LIST_SELECT = "id, academy_id, name, phone, vendor_type, note";
 export async function fetchVendorList(
   supabase: VendorListSupabaseClient,
   options: FetchVendorListOptions,
-): Promise<ListView<VendorListRow>> {
+): Promise<VendorListView> {
   const { data, error } = await supabase
     .from("vendors")
     .select(VENDOR_LIST_SELECT)
@@ -74,15 +85,21 @@ export async function fetchVendorList(
   return buildVendorList((data ?? []).map(toVendorListRow), options);
 }
 
+export function createVendorListQueryKey(options: FetchVendorListOptions) {
+  return queryKeys.vendors.list(options.academyId, {
+    q: options.search,
+    kind: options.filters?.kind,
+    page: options.page?.toString(),
+    pageSize: options.pageSize?.toString(),
+  });
+}
+
 export function createVendorListQueryOptions(
   supabase: VendorListSupabaseClient,
   options: FetchVendorListOptions,
 ) {
   return {
-    queryKey: queryKeys.vendors.list(options.academyId, {
-      q: options.search,
-      kind: options.filters?.kind,
-    }),
+    queryKey: createVendorListQueryKey(options),
     queryFn: () => fetchVendorList(supabase, options),
   };
 }
@@ -93,13 +110,7 @@ export async function registerVendor(
 ): Promise<VendorListRow> {
   const { data, error } = await supabase
     .from("vendors")
-    .insert({
-      academy_id: input.academyId,
-      name: input.name,
-      phone: input.contact || null,
-      vendor_type: input.kind || null,
-      note: input.memo || null,
-    })
+    .insert({ academy_id: input.academyId, ...toVendorWriteValues(input) })
     .select(VENDOR_LIST_SELECT)
     .single();
 
@@ -112,6 +123,38 @@ export async function registerVendor(
   }
 
   return toVendorListRow(data);
+}
+
+export async function updateVendor(
+  supabase: VendorMutationSupabaseClient,
+  input: UpdateVendorInput,
+): Promise<VendorListRow> {
+  const { data, error } = await supabase
+    .from("vendors")
+    .update(toVendorWriteValues(input))
+    .eq("academy_id", input.academyId)
+    .eq("id", input.vendorId)
+    .select(VENDOR_LIST_SELECT)
+    .single();
+
+  if (error) {
+    throw new Error(`거래처를 수정하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("거래처를 수정했지만 반환된 데이터가 없습니다.");
+  }
+
+  return toVendorListRow(data);
+}
+
+function toVendorWriteValues(profile: VendorProfile) {
+  return {
+    name: profile.name,
+    phone: profile.contact || null,
+    vendor_type: profile.kind || null,
+    note: profile.memo || null,
+  };
 }
 
 function toVendorListRow(row: VendorSupabaseRow): VendorListRow {

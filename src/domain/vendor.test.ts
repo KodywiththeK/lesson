@@ -11,17 +11,15 @@ describe("registerVendor", () => {
       contact: "02-123-4567",
       kind: "교재",
       memo: "바이엘 재고 월 1회 확인",
-      registeredAt: "2026-08-21",
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       academyId: "academy-1",
       vendorId: "vendor-1",
       name: "예음문구",
       contact: "02-123-4567",
       kind: "교재",
       memo: "바이엘 재고 월 1회 확인",
-      registeredAt: "2026-08-21",
       active: true,
     });
   });
@@ -35,7 +33,6 @@ describe("registerVendor", () => {
         contact: "02-123-4567",
         kind: "교재",
         memo: "",
-        registeredAt: "2026-08-21",
       }),
     ).toThrow("거래처명은 필수입니다.");
 
@@ -47,7 +44,6 @@ describe("registerVendor", () => {
         contact: "02-123-4567",
         kind: " ",
         memo: "",
-        registeredAt: "2026-08-21",
       }),
     ).toThrow("거래처 종류는 필수입니다.");
   });

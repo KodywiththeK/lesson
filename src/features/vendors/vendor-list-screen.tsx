@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { RotateCcw, UserPlus } from "lucide-react";
+import { Pencil, RotateCcw, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,11 +16,12 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
-import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,15 +42,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ListView } from "@/domain/common-list";
+import type { VendorProfile } from "@/domain/vendor";
 import type {
   BuildVendorListOptions,
   VendorListRow,
+  VendorListView,
 } from "@/domain/vendor-list";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
+  createVendorListQueryKey,
   createVendorListQueryOptions,
   registerVendor as registerVendorApi,
-  type RegisterVendorInput,
+  updateVendor as updateVendorApi,
   type VendorMutationSupabaseClient,
   type VendorListSupabaseClient,
 } from "@/lib/api/vendors";
@@ -57,24 +62,21 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type VendorListQueryOptions = {
   queryKey: QueryKey;
-  queryFn: () => Promise<ListView<VendorListRow>>;
+  queryFn: () => Promise<VendorListView>;
 };
 
 export type VendorListQueryOptionsFactory = (
   options: BuildVendorListOptions,
 ) => VendorListQueryOptions;
 
+export type VendorUpdateInput = VendorProfile & { vendorId: string };
+
 type VendorListScreenProps = {
   academyId: string;
   academyName: string;
   queryOptionsFactory?: VendorListQueryOptionsFactory;
-  registerVendor?: (input: {
-    name: string;
-    contact: string;
-    kind: string;
-    memo: string;
-    registeredAt: string;
-  }) => void | Promise<void>;
+  registerVendor?: (input: VendorProfile) => void | Promise<void>;
+  updateVendor?: (input: VendorUpdateInput) => void | Promise<void>;
 };
 
 type VendorSupabaseClient = VendorListSupabaseClient & VendorMutationSupabaseClient;
@@ -93,11 +95,17 @@ export function VendorListScreen({
   academyId,
   queryOptionsFactory,
   registerVendor,
+  updateVendor,
 }: VendorListScreenProps) {
   const queryClient = useQueryClient();
+  const { page, pageSize, goToPage, changePageSize, resetPage } =
+    useListPaging();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState("");
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<VendorListRow | null>(
+    null,
+  );
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createVendorListSupabaseClient()),
@@ -110,6 +118,8 @@ export function VendorListScreen({
     filters: {
       kind: kind || undefined,
     },
+    page,
+    pageSize,
   };
   const queryOptions = queryOptionsFactory
     ? queryOptionsFactory(currentOptions)
@@ -121,47 +131,59 @@ export function VendorListScreen({
     queryKey: queryOptions.queryKey,
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
+    placeholderData: keepPreviousData,
   });
+  const invalidateVendors = () =>
+    queryClient.invalidateQueries({
+      queryKey: [...queryKeys.academy(academyId), "vendors"],
+    });
   const registerMutation = useMutation({
-    mutationFn: async (input: {
-      name: string;
-      contact: string;
-      kind: string;
-      memo: string;
-      registeredAt: string;
-    }) => {
+    mutationFn: async (input: VendorProfile) => {
       if (registerVendor) {
         await registerVendor(input);
         return;
       }
 
-      if (!supabaseClientState?.client) {
-        throw new Error("Supabase client 상태를 만들지 못했습니다.");
-      }
-
-      await registerVendorApi(supabaseClientState.client, {
+      await registerVendorApi(requireSupabaseClient(supabaseClientState), {
         academyId,
-        name: input.name,
-        contact: input.contact,
-        kind: input.kind,
-        memo: input.memo,
-      } satisfies RegisterVendorInput);
+        ...input,
+      });
     },
     onSuccess: () => {
       setIsRegistrationOpen(false);
       toast.success("거래처를 등록했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "vendors"],
-      });
+      void invalidateVendors();
     },
     onError: (error) => {
       toast.error("거래처 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
-  const vendors = vendorListQuery.data?.items ?? [];
-  const filterOptions = buildFilterOptions(vendorListQuery.data?.items ?? []);
+  const updateMutation = useMutation({
+    mutationFn: async (input: VendorUpdateInput) => {
+      if (updateVendor) {
+        await updateVendor(input);
+        return;
+      }
+
+      await updateVendorApi(requireSupabaseClient(supabaseClientState), {
+        academyId,
+        ...input,
+      });
+    },
+    onSuccess: () => {
+      setEditingVendor(null);
+      toast.success("거래처를 수정했습니다.");
+      void invalidateVendors();
+    },
+    onError: (error) => {
+      toast.error("거래처 수정에 실패했습니다.", {
+        description: toUserMessage(error),
+      });
+    },
+  });
+  const listView = vendorListQuery.data;
   const registrationAction = useMemo(
     () => (
       <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
@@ -178,7 +200,9 @@ export function VendorListScreen({
               악기, 교재, 수리 등 운영 거래처를 추가합니다.
             </DialogDescription>
           </DialogHeader>
-          <VendorRegistrationForm
+          <VendorForm
+            formLabel="거래처 등록 입력"
+            isSubmitting={registerMutation.isPending}
             onSubmit={(input) => {
               registerMutation.mutate(input);
             }}
@@ -189,6 +213,16 @@ export function VendorListScreen({
     [isRegistrationOpen, registerMutation],
   );
   const isHeaderActionMounted = usePageHeaderActions(registrationAction);
+
+  function changeSearch(nextSearch: string) {
+    setSearch(nextSearch);
+    resetPage();
+  }
+
+  function changeKind(nextKind: string) {
+    setKind(nextKind);
+    resetPage();
+  }
 
   return (
     <section className="grid gap-4" aria-label="거래처 목록">
@@ -201,15 +235,15 @@ export function VendorListScreen({
           <ListSearchField
             label="거래처 검색"
             value={search}
-            onChange={setSearch}
+            onChange={changeSearch}
             placeholder="거래처명, 연락처, 종류, 비고"
           />
 
           <ListFilterSelect
             label="거래처 종류 필터"
             value={kind}
-            options={filterOptions.kinds}
-            onChange={setKind}
+            options={listView?.kindOptions ?? []}
+            onChange={changeKind}
           />
 
           <Button
@@ -217,8 +251,8 @@ export function VendorListScreen({
             variant="outline"
             className="self-end"
             onClick={() => {
-              setSearch("");
-              setKind("");
+              changeSearch("");
+              changeKind("");
             }}
           >
             <RotateCcw aria-hidden="true" />
@@ -228,15 +262,15 @@ export function VendorListScreen({
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
           <ListStatusAlert
-            message="Supabase 환경변수가 설정되면 거래처 목록을 불러올 수 있습니다."
-            detail={supabaseClientState.error.message}
+            message="거래처 목록을 불러오지 못했습니다."
+            detail={toUserMessage(supabaseClientState.error)}
           />
         ) : null}
 
         {vendorListQuery.isError ? (
           <ListStatusAlert
             message="거래처 목록을 불러오지 못했습니다."
-            detail={vendorListQuery.error.message}
+            detail={toUserMessage(vendorListQuery.error)}
           />
         ) : null}
 
@@ -246,37 +280,78 @@ export function VendorListScreen({
           </p>
         ) : null}
 
-        {!vendorListQuery.isLoading &&
-        !vendorListQuery.isError &&
-        (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
-          <VendorListTable vendors={vendors} />
+        {listView && !vendorListQuery.isError ? (
+          <>
+            <VendorListTable
+              vendors={listView.items}
+              onEdit={setEditingVendor}
+            />
+            <ListPagination
+              itemLabel="거래처"
+              countUnit="곳"
+              view={listView}
+              onPageChange={goToPage}
+              onPageSizeChange={changePageSize}
+            />
+          </>
         ) : null}
       </div>
+
+      <Dialog
+        open={editingVendor !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingVendor(null);
+          }
+        }}
+      >
+        {editingVendor ? (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>거래처 수정</DialogTitle>
+              <DialogDescription>
+                {editingVendor.name}의 정보를 수정합니다.
+              </DialogDescription>
+            </DialogHeader>
+            <VendorForm
+              formLabel="거래처 수정 입력"
+              initialVendor={editingVendor}
+              isSubmitting={updateMutation.isPending}
+              onSubmit={(input) => {
+                updateMutation.mutate({
+                  vendorId: editingVendor.vendorId,
+                  ...input,
+                });
+              }}
+            />
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </section>
   );
 }
 
-function VendorRegistrationForm({
+function VendorForm({
+  formLabel,
+  initialVendor,
+  isSubmitting,
   onSubmit,
 }: {
-  onSubmit: (input: {
-    name: string;
-    contact: string;
-    kind: string;
-    memo: string;
-    registeredAt: string;
-  }) => void;
+  formLabel: string;
+  initialVendor?: VendorProfile;
+  isSubmitting: boolean;
+  onSubmit: (input: VendorProfile) => void;
 }) {
-  const [name, setName] = useState("");
-  const [contact, setContact] = useState("");
-  const [kind, setKind] = useState("");
-  const [memo, setMemo] = useState("");
-  const [registeredAt, setRegisteredAt] = useState("2026-08-21");
-  const canSubmit = Boolean(name.trim()) && Boolean(kind.trim());
+  const [name, setName] = useState(initialVendor?.name ?? "");
+  const [contact, setContact] = useState(initialVendor?.contact ?? "");
+  const [kind, setKind] = useState(initialVendor?.kind ?? "");
+  const [memo, setMemo] = useState(initialVendor?.memo ?? "");
+  const canSubmit =
+    Boolean(name.trim()) && Boolean(kind.trim()) && !isSubmitting;
 
   return (
     <form
-      aria-label="거래처 등록 입력"
+      aria-label={formLabel}
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
@@ -285,51 +360,20 @@ function VendorRegistrationForm({
           return;
         }
 
-        onSubmit({ name, contact, kind, memo, registeredAt });
+        onSubmit({
+          name: name.trim(),
+          contact: contact.trim(),
+          kind: kind.trim(),
+          memo: memo.trim(),
+        });
       }}
     >
-      <Label className="grid gap-1">
-        <span>거래처명</span>
-        <Input
-          aria-label="거래처명"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </Label>
+      <VendorFormField label="거래처명" value={name} onChange={setName} required />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>연락처</span>
-          <Input
-            aria-label="연락처"
-            value={contact}
-            onChange={(event) => setContact(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>종류</span>
-          <Input
-            aria-label="종류"
-            value={kind}
-            onChange={(event) => setKind(event.target.value)}
-          />
-        </Label>
+        <VendorFormField label="연락처" value={contact} onChange={setContact} />
+        <VendorFormField label="종류" value={kind} onChange={setKind} required />
       </div>
-      <Label className="grid gap-1">
-        <span>등록일</span>
-        <DateField
-          aria-label="등록일"
-          value={registeredAt}
-          onValueChange={setRegisteredAt}
-        />
-      </Label>
-      <Label className="grid gap-1">
-        <span>비고</span>
-        <Input
-          aria-label="비고"
-          value={memo}
-          onChange={(event) => setMemo(event.target.value)}
-        />
-      </Label>
+      <VendorFormField label="비고" value={memo} onChange={setMemo} />
       <DialogFooter>
         <Button type="submit" disabled={!canSubmit}>
           저장
@@ -339,16 +383,45 @@ function VendorRegistrationForm({
   );
 }
 
+function VendorFormField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <Label className="grid gap-1">
+      <span>{required ? `${label} (필수)` : label}</span>
+      <Input
+        aria-label={label}
+        aria-required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Label>
+  );
+}
+
+function requireSupabaseClient(supabaseClientState: SupabaseClientState | null) {
+  if (!supabaseClientState?.client) {
+    throw new Error("Supabase client 상태를 만들지 못했습니다.");
+  }
+
+  return supabaseClientState.client;
+}
+
 function createDefaultQueryOptions(
   options: BuildVendorListOptions,
   supabaseClientState: SupabaseClientState,
 ): VendorListQueryOptions {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.vendors.list(options.academyId, {
-        q: options.search,
-        kind: options.filters?.kind,
-      }),
+      queryKey: createVendorListQueryKey(options),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
@@ -381,7 +454,13 @@ function createMissingSupabaseClientState(): SupabaseClientState {
   };
 }
 
-function VendorListTable({ vendors }: { vendors: VendorListRow[] }) {
+function VendorListTable({
+  vendors,
+  onEdit,
+}: {
+  vendors: VendorListRow[];
+  onEdit: (vendor: VendorListRow) => void;
+}) {
   if (vendors.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
@@ -393,39 +472,40 @@ function VendorListTable({ vendors }: { vendors: VendorListRow[] }) {
   return (
     <div className="overflow-x-auto">
       <Table aria-label="거래처 목록" className="min-w-[44rem]">
-      <TableHeader className="bg-muted text-muted-foreground">
-        <TableRow>
-          <TableHead className="px-4 py-3">거래처</TableHead>
-          <TableHead className="px-4 py-3">연락처</TableHead>
-          <TableHead className="px-4 py-3">종류</TableHead>
-          <TableHead className="px-4 py-3">비고</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {vendors.map((vendor) => (
-          <TableRow key={vendor.vendorId}>
-            <TableCell className="px-4 py-3 font-medium">
-              {vendor.name}
-            </TableCell>
-            <TableCell className="px-4 py-3">{vendor.contact || "-"}</TableCell>
-            <TableCell className="px-4 py-3">{vendor.kind || "-"}</TableCell>
-            <TableCell className="px-4 py-3">{vendor.memo || "-"}</TableCell>
+        <TableHeader className="bg-muted text-muted-foreground">
+          <TableRow>
+            <TableHead className="px-4 py-3">거래처</TableHead>
+            <TableHead className="px-4 py-3">연락처</TableHead>
+            <TableHead className="px-4 py-3">종류</TableHead>
+            <TableHead className="px-4 py-3">비고</TableHead>
+            <TableHead className="px-4 py-3">관리</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
+        </TableHeader>
+        <TableBody>
+          {vendors.map((vendor) => (
+            <TableRow key={vendor.vendorId}>
+              <TableCell className="px-4 py-3 font-medium">
+                {vendor.name}
+              </TableCell>
+              <TableCell className="px-4 py-3">{vendor.contact || "-"}</TableCell>
+              <TableCell className="px-4 py-3">{vendor.kind || "-"}</TableCell>
+              <TableCell className="px-4 py-3">{vendor.memo || "-"}</TableCell>
+              <TableCell className="px-4 py-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${vendor.name} 수정`}
+                  onClick={() => onEdit(vendor)}
+                >
+                  <Pencil aria-hidden="true" />
+                  수정
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
       </Table>
     </div>
-  );
-}
-
-function buildFilterOptions(vendors: VendorListRow[]) {
-  return {
-    kinds: uniqueSorted(vendors.map((vendor) => vendor.kind)),
-  };
-}
-
-function uniqueSorted(values: string[]) {
-  return [...new Set(values.filter(Boolean))].sort((left, right) =>
-    left.localeCompare(right, "ko"),
   );
 }

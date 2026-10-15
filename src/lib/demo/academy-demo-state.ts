@@ -167,7 +167,10 @@ export type DemoVendorRegistrationInput = {
   contact: string;
   kind: string;
   memo: string;
-  registeredAt: string;
+};
+
+export type DemoVendorUpdateInput = DemoVendorRegistrationInput & {
+  vendorId: string;
 };
 
 export type DemoBookReleaseInput = {
@@ -602,34 +605,6 @@ export function updateDemoStudentStatus(
   };
 }
 
-export function deleteDemoWithdrawnStudent(
-  state: DemoAcademyState,
-  input: { academyId: string; studentId: string },
-): DemoAcademyState {
-  const student = state.students.find(
-    (item) =>
-      item.academyId === input.academyId && item.studentId === input.studentId,
-  );
-
-  if (student?.status !== "withdrawn") {
-    throw new Error("퇴원 상태의 원생만 삭제할 수 있습니다.");
-  }
-
-  return {
-    ...state,
-    students: state.students.filter(
-      (item) => item.studentId !== input.studentId,
-    ),
-    enrollments: state.enrollments.filter(
-      (item) => item.studentId !== input.studentId,
-    ),
-    tickets: state.tickets.filter((item) => item.studentId !== input.studentId),
-    privateLessons: state.privateLessons.filter(
-      (item) => item.studentId !== input.studentId,
-    ),
-  };
-}
-
 export function registerDemoAcademyTeacher(
   state: DemoAcademyState,
   input: DemoTeacherRegistrationInput,
@@ -695,28 +670,6 @@ function calculateRetentionUntil(changedAt: string) {
   date.setUTCDate(date.getUTCDate() + 30);
 
   return date.toISOString().slice(0, 10);
-}
-
-export function deleteDemoResignedTeacher(
-  state: DemoAcademyState,
-  input: { academyId: string; teacherId: string },
-): DemoAcademyState {
-  const teacher = state.teachers.find(
-    (item) =>
-      item.academyId === input.academyId &&
-      item.teacherId === input.teacherId,
-  );
-
-  if (teacher?.status !== "resigned") {
-    throw new Error("퇴사 상태의 선생님만 삭제할 수 있습니다.");
-  }
-
-  return {
-    ...state,
-    teachers: state.teachers.filter(
-      (item) => item.teacherId !== input.teacherId,
-    ),
-  };
 }
 
 export function registerDemoLessonTicketPurchase(
@@ -897,6 +850,18 @@ export function registerDemoVendor(
         memo: vendor.memo,
       },
     ],
+  };
+}
+
+export function updateDemoVendor(
+  state: DemoAcademyState,
+  { vendorId, ...profile }: DemoVendorUpdateInput,
+): DemoAcademyState {
+  return {
+    ...state,
+    vendors: state.vendors.map((vendor) =>
+      vendor.vendorId === vendorId ? { ...vendor, ...profile } : vendor,
+    ),
   };
 }
 

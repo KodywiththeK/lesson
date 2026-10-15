@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createTeacherListQueryOptions,
+  createTeacherStatusManagementQueryOptions,
   deleteResignedTeacher,
+  fetchTeacherOptions,
   fetchTeacherStatusManagementList,
   fetchTeacherList,
   registerTeacher,
@@ -167,6 +169,37 @@ describe("fetchTeacherList", () => {
         academyId: "academy-1",
       }),
     ).rejects.toThrow("선생님 목록을 불러오지 못했습니다: permission denied");
+  });
+});
+
+describe("fetchTeacherOptions", () => {
+  it("드롭다운·급여 계산용 선생님은 10명을 넘어도 전부 가나다순으로 가져온다", async () => {
+    const names = ["하", "가", "나", "다", "라", "마", "바", "사", "아", "자", "차", "카"];
+    const { client, calls } = createSupabaseStub(
+      names.map((name, index) => ({
+        id: `teacher-${index}`,
+        academy_id: "academy-1",
+        name: `${name}선생`,
+        part: "피아노",
+        phone: "010-0000-0000",
+        registered_on: "2026-08-01",
+        salary_type: "monthly",
+        status: "employed",
+        teacher_work_schedules: [],
+        teacher_salary_settings: [],
+      })),
+    );
+
+    const options = await fetchTeacherOptions(client, "academy-1");
+
+    expect(options).toHaveLength(12);
+    expect(options.map((teacher) => teacher.name)).toEqual([
+      "가선생", "나선생", "다선생", "라선생", "마선생", "바선생", "사선생", "아선생", "자선생", "차선생", "카선생", "하선생",
+    ]);
+    expect(calls[0].eq).toEqual([
+      ["academy_id", "academy-1"],
+      ["status", "employed"],
+    ]);
   });
 });
 
@@ -401,10 +434,94 @@ describe("createTeacherListQueryOptions", () => {
       "피아노",
       "ratio",
       "employed",
+      "1",
+      "",
     ]);
     await expect(options.queryFn()).resolves.toMatchObject({
       items: [],
       totalItems: 0,
     });
+  });
+
+  it("페이지와 페이지 크기가 바뀌면 queryKey도 달라진다", () => {
+    const { client } = createSupabaseStub([]);
+    const secondPage = createTeacherListQueryOptions(client, {
+      academyId: "academy-1",
+      page: 2,
+      pageSize: 20,
+    });
+    const firstPage = createTeacherListQueryOptions(client, {
+      academyId: "academy-1",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(secondPage.queryKey.slice(-2)).toEqual(["2", "20"]);
+    expect(secondPage.queryKey).not.toEqual(firstPage.queryKey);
+  });
+});
+
+describe("휴직/퇴사 관리 목록 검색과 페이지", () => {
+  const manyTeacherRows = Array.from({ length: 12 }, (_, index) => ({
+    id: `teacher-${String(index).padStart(2, "0")}`,
+    academy_id: "academy-1",
+    name: index === 11 ? "하선생" : `가선생${String(index).padStart(2, "0")}`,
+    part: "피아노",
+    phone: "010-0000-0000",
+    registered_on: "2026-08-01",
+    salary_type: "monthly" as const,
+    status: "on_leave" as const,
+    on_leave_at: "2026-08-20T00:00:00+09:00",
+    archived_at: null,
+    teacher_work_schedules: [],
+    teacher_salary_settings: [],
+  }));
+
+  it("검색어와 페이지를 받아 해당 페이지의 선생님만 돌려준다", async () => {
+    const { client } = createSupabaseStub({ teachers: manyTeacherRows });
+
+    const secondPage = await fetchTeacherStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "on_leave",
+      today: "2026-08-25",
+      page: 2,
+      pageSize: 10,
+    });
+    const searched = await fetchTeacherStatusManagementList(client, {
+      academyId: "academy-1",
+      status: "on_leave",
+      today: "2026-08-25",
+      search: "하선",
+    });
+
+    expect(secondPage.totalItems).toBe(12);
+    expect(secondPage.items.map((item) => item.name)).toEqual([
+      "가선생10",
+      "하선생",
+    ]);
+    expect(searched.items.map((item) => item.name)).toEqual(["하선생"]);
+  });
+
+  it("검색어, 페이지, 페이지 크기를 queryKey에 포함한다", () => {
+    const { client } = createSupabaseStub([]);
+
+    const options = createTeacherStatusManagementQueryOptions(client, {
+      academyId: "academy-1",
+      status: "resigned",
+      search: "박",
+      page: 3,
+      pageSize: 30,
+    });
+
+    expect(options.queryKey).toEqual([
+      "academy",
+      "academy-1",
+      "status-management",
+      "teacher",
+      "resigned",
+      "박",
+      "3",
+      "30",
+    ]);
   });
 });

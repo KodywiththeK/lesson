@@ -1,4 +1,4 @@
-import type { ListView } from "@/domain/common-list";
+import { compareKoreanNames, type ListView } from "@/domain/common-list";
 import {
   buildTeacherList,
   formatTeacherSalarySummary,
@@ -16,6 +16,7 @@ import {
 } from "@/domain/teacher";
 import {
   buildStatusManagementList,
+  type StatusManagementFetchOptions,
   type StatusManagementListItem,
 } from "@/domain/status-management";
 
@@ -170,14 +171,14 @@ const WEEKDAY_LABELS: Record<string, string> = {
   일: "일",
 };
 
-export async function fetchTeacherList(
+async function fetchEmployedTeacherRows(
   supabase: TeacherListSupabaseClient,
-  options: FetchTeacherListOptions,
-): Promise<ListView<TeacherListRow>> {
+  academyId: string,
+): Promise<TeacherListRow[]> {
   const { data, error } = await supabase
     .from("teachers")
     .select(TEACHER_LIST_SELECT)
-    .eq("academy_id", options.academyId)
+    .eq("academy_id", academyId)
     .eq("status", "employed")
     .is("archived_at", null);
 
@@ -185,16 +186,46 @@ export async function fetchTeacherList(
     throw new Error(`선생님 목록을 불러오지 못했습니다: ${error.message}`);
   }
 
-  return buildTeacherList((data ?? []).map(toTeacherListRow), options);
+  return (data ?? []).map(toTeacherListRow);
 }
+
+export async function fetchTeacherList(
+  supabase: TeacherListSupabaseClient,
+  options: FetchTeacherListOptions,
+): Promise<ListView<TeacherListRow>> {
+  return buildTeacherList(await fetchEmployedTeacherRows(supabase, options.academyId), options);
+}
+
+/** 드롭다운·급여 계산처럼 페이지로 자르면 안 되는 용도. 재직 선생님 전체를 가나다순으로 준다. */
+export async function fetchTeacherOptions(
+  supabase: TeacherListSupabaseClient,
+  academyId: string,
+): Promise<TeacherListRow[]> {
+  const rows = await fetchEmployedTeacherRows(supabase, academyId);
+
+  return rows.sort(
+    (left, right) =>
+      compareKoreanNames(left.name, right.name) || compareKoreanNames(left.teacherId, right.teacherId),
+  );
+}
+
+export function createTeacherOptionsQueryOptions(
+  supabase: TeacherListSupabaseClient,
+  academyId: string,
+) {
+  return {
+    queryKey: queryKeys.teachers.options(academyId),
+    queryFn: () => fetchTeacherOptions(supabase, academyId),
+  };
+}
+
+type TeacherStatusManagementOptions = StatusManagementFetchOptions<
+  "on_leave" | "resigned"
+>;
 
 export async function fetchTeacherStatusManagementList(
   supabase: TeacherListSupabaseClient,
-  options: {
-    academyId: string;
-    status: "on_leave" | "resigned";
-    today?: string;
-  },
+  options: TeacherStatusManagementOptions,
 ): Promise<ListView<StatusManagementListItem>> {
   const { data, error } = await supabase
     .from("teachers")
@@ -236,10 +267,8 @@ export async function fetchTeacherStatusManagementList(
       };
     }),
     {
-      academyId: options.academyId,
+      ...options,
       entityType: "teacher",
-      status: options.status,
-      today: options.today,
     },
   );
 }
@@ -277,6 +306,8 @@ export function createTeacherListQueryOptions(
       part: options.filters?.part,
       payType: options.filters?.payType,
       status: options.filters?.status,
+      page: String(options.page ?? 1),
+      pageSize: String(options.pageSize ?? ""),
     }),
     queryFn: () => fetchTeacherList(supabase, options),
   };
@@ -284,16 +315,15 @@ export function createTeacherListQueryOptions(
 
 export function createTeacherStatusManagementQueryOptions(
   supabase: TeacherListSupabaseClient,
-  options: {
-    academyId: string;
-    status: "on_leave" | "resigned";
-    today?: string;
-  },
+  options: TeacherStatusManagementOptions,
 ) {
   return {
     queryKey: queryKeys.statusManagement.list(options.academyId, {
       entityType: "teacher",
       status: options.status,
+      q: options.search,
+      page: String(options.page ?? 1),
+      pageSize: String(options.pageSize ?? ""),
     }),
     queryFn: () => fetchTeacherStatusManagementList(supabase, options),
   };

@@ -1,5 +1,6 @@
 import {
   buildListView,
+  compareKoreanNames,
   type ListView,
   type PageSizeOption,
 } from "./common-list";
@@ -25,26 +26,44 @@ export type BuildVendorListOptions = {
   pageSize?: PageSizeOption;
 };
 
+export type VendorListView = ListView<VendorListRow> & {
+  /** 종류 필터 선택지. 검색·필터·페이지와 상관없이 같은 학원 전체 거래처의 종류다. */
+  kindOptions: string[];
+};
+
 export function buildVendorList(
   vendors: VendorListRow[],
   options: BuildVendorListOptions,
-): ListView<VendorListRow> {
-  const scopedVendors = vendors
-    .filter((vendor) => vendor.academyId === options.academyId)
-    .filter((vendor) => matchesVendorFilters(vendor, options.filters));
+): VendorListView {
+  const academyVendors = vendors.filter(
+    (vendor) => vendor.academyId === options.academyId,
+  );
+  const listView = buildListView(
+    academyVendors.filter((vendor) =>
+      matchesVendorFilters(vendor, options.filters),
+    ),
+    {
+      getName: (vendor) => vendor.name,
+      getTieBreaker: (vendor) => vendor.vendorId,
+      search: options.search,
+      searchFields: [
+        (vendor) => vendor.name,
+        (vendor) => vendor.contact,
+        (vendor) => vendor.kind,
+        (vendor) => vendor.memo,
+      ],
+      page: options.page,
+      pageSize: options.pageSize,
+    },
+  );
 
-  return buildListView(scopedVendors, {
-    getName: (vendor) => vendor.name,
-    search: options.search,
-    searchFields: [
-      (vendor) => vendor.name,
-      (vendor) => vendor.contact,
-      (vendor) => vendor.kind,
-      (vendor) => vendor.memo,
-    ],
-    page: options.page,
-    pageSize: options.pageSize,
-  });
+  return { ...listView, kindOptions: buildKindOptions(academyVendors) };
+}
+
+function buildKindOptions(vendors: VendorListRow[]) {
+  return [...new Set(vendors.map((vendor) => vendor.kind).filter(Boolean))].sort(
+    compareKoreanNames,
+  );
 }
 
 function matchesVendorFilters(

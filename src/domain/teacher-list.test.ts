@@ -81,6 +81,53 @@ describe("buildTeacherList", () => {
 
     expect(result.items.map((teacher) => teacher.name)).toEqual(["박선생"]);
   });
+
+  it("동명이인은 teacherId 순으로 고정해 입력 순서가 달라도 같은 목록을 만든다", () => {
+    const [firstTeacher] = teachers;
+    const sameNameTeachers = [
+      { ...firstTeacher, teacherId: "teacher-b", contact: "010-0000-0002" },
+      { ...firstTeacher, teacherId: "teacher-a", contact: "010-0000-0001" },
+    ];
+
+    const result = buildTeacherList(sameNameTeachers, { academyId: "academy-1" });
+    const reversedResult = buildTeacherList([...sameNameTeachers].reverse(), {
+      academyId: "academy-1",
+    });
+
+    expect(result.items.map((teacher) => teacher.teacherId)).toEqual([
+      "teacher-a",
+      "teacher-b",
+    ]);
+    expect(reversedResult.items.map((teacher) => teacher.teacherId)).toEqual([
+      "teacher-a",
+      "teacher-b",
+    ]);
+  });
+
+  it("동명이인이 페이지 경계에 걸려도 중복이나 누락 없이 나눈다", () => {
+    const [firstTeacher] = teachers;
+    const sameNameTeachers = Array.from({ length: 11 }, (_, index) => ({
+      ...firstTeacher,
+      teacherId: `teacher-${String(index).padStart(2, "0")}`,
+    })).reverse();
+
+    const firstPage = buildTeacherList(sameNameTeachers, {
+      academyId: "academy-1",
+      page: 1,
+      pageSize: 10,
+    });
+    const secondPage = buildTeacherList(sameNameTeachers, {
+      academyId: "academy-1",
+      page: 2,
+      pageSize: 10,
+    });
+
+    expect(firstPage.totalItems).toBe(11);
+    expect(secondPage.items.map((teacher) => teacher.teacherId)).toEqual([
+      "teacher-10",
+    ]);
+    expect(firstPage.items.at(-1)?.teacherId).toBe("teacher-09");
+  });
 });
 
 describe("formatTeacherPayType", () => {

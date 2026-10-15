@@ -1,10 +1,14 @@
 "use client";
 
+import { getFinanceToday } from "@/domain/finance-date";
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { LessonTicketListScreen } from "@/features/lesson-tickets/lesson-ticket-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
+
+// 데모 회차권 데이터가 이 날짜 기준으로 만들어져 있다. 실서비스는 오늘 날짜를 쓴다.
+const DEMO_TODAY = "2026-08-21";
 
 export default function PassesPage() {
   const demo = useDemoAcademy();
@@ -23,7 +27,7 @@ export default function PassesPage() {
           <LessonTicketListScreen
             academyId={academy.academyId}
             academyName={academy.academyName}
-            today="2026-08-21"
+            today={useTestDemo ? DEMO_TODAY : getFinanceToday()}
             queryOptionsFactory={
               useTestDemo ? demo.createLessonTicketListQueryOptions : undefined
             }

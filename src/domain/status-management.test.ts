@@ -85,6 +85,68 @@ describe("status-management", () => {
     });
   });
 
+  it("검색어로 이름과 처리 메모를 찾는다", () => {
+    const rows = [
+      {
+        entityType: "student" as const,
+        entityId: "student-1",
+        academyId: "academy-1",
+        name: "김민지",
+        status: "suspended" as const,
+        statusReason: "방학 기간 휴원",
+      },
+      {
+        entityType: "student" as const,
+        entityId: "student-2",
+        academyId: "academy-1",
+        name: "박지호",
+        status: "suspended" as const,
+        statusReason: "유학 준비",
+      },
+    ];
+    const baseOptions = {
+      academyId: "academy-1",
+      entityType: "student" as const,
+      status: "suspended" as const,
+      today: "2026-08-25",
+    };
+
+    const byName = buildStatusManagementList(rows, { ...baseOptions, search: "박지" });
+    const byReason = buildStatusManagementList(rows, { ...baseOptions, search: "방학" });
+
+    expect(byName.items.map((item) => item.name)).toEqual(["박지호"]);
+    expect(byName.totalItems).toBe(1);
+    expect(byReason.items.map((item) => item.name)).toEqual(["김민지"]);
+  });
+
+  it("페이지 크기만큼 나누고 동명이인은 entityId 순으로 고정한다", () => {
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      entityType: "teacher" as const,
+      entityId: `teacher-${String(index).padStart(2, "0")}`,
+      academyId: "academy-1",
+      name: "김선생",
+      status: "on_leave" as const,
+    })).reverse();
+    const baseOptions = {
+      academyId: "academy-1",
+      entityType: "teacher" as const,
+      status: "on_leave" as const,
+      today: "2026-08-25",
+    };
+
+    const firstPage = buildStatusManagementList(rows, { ...baseOptions, page: 1, pageSize: 10 });
+    const secondPage = buildStatusManagementList(rows, { ...baseOptions, page: 2, pageSize: 10 });
+
+    expect(firstPage.totalItems).toBe(12);
+    expect(firstPage.totalPages).toBe(2);
+    expect(firstPage.items.map((item) => item.entityId)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `teacher-${String(index).padStart(2, "0")}`),
+    );
+    expect(secondPage.items.map((item) => item.entityId)).toEqual(["teacher-10", "teacher-11"]);
+    expect(secondPage.hasPreviousPage).toBe(true);
+    expect(secondPage.hasNextPage).toBe(false);
+  });
+
   it("상태 표시명을 원생과 선생님 문맥에 맞게 바꾼다", () => {
     expect(formatManagedStatusLabel("student", "suspended")).toBe("휴원");
     expect(formatManagedStatusLabel("student", "withdrawn")).toBe("퇴원");

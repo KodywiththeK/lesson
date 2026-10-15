@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,12 +41,14 @@ const ledgerEntries: LedgerEntry[] = [
 
 function renderFinanceLedgerListScreen(
   queryOptionsFactory: FinanceLedgerListQueryOptionsFactory,
+  props: Partial<ComponentProps<typeof FinanceLedgerListScreen>> = {},
 ) {
   return renderWithQueryClient(
     <FinanceLedgerListScreen
       academyId="academy-1"
       academyName="더 클래식"
       queryOptionsFactory={queryOptionsFactory}
+      {...props}
     />,
   );
 }
@@ -164,6 +166,98 @@ describe("FinanceLedgerListScreen", () => {
     });
   });
 
+  describe("입출금 삭제 확인", () => {
+    const ledgerListQueryOptions: FinanceLedgerListQueryOptionsFactory = (options) => ({
+      queryKey: ["finance", options.academyId, "delete-confirm"],
+      queryFn: async () => buildFinanceLedgerList(ledgerEntries, options),
+    });
+
+    async function openDeleteConfirmation(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole("button", { name: "조율비 삭제" }));
+
+      return screen.findByRole("alertdialog", { name: "이 입출금 내역을 삭제할까요?" });
+    }
+
+    it("삭제를 누르면 확인 창을 먼저 보여주고 취소하면 삭제하지 않는다", async () => {
+      const user = userEvent.setup();
+      const deleteLedgerEntry = vi.fn();
+      renderFinanceLedgerListScreen(ledgerListQueryOptions, { deleteLedgerEntry });
+
+      const dialog = await openDeleteConfirmation(user);
+
+      expect(dialog).toHaveTextContent(
+        "삭제하면 되돌릴 수 없습니다. 수강료·교재·급여로 자동 기록된 내역은 원래 기록과의 연결이 끊어질 수 있습니다.",
+      );
+      expect(within(dialog).getByText("2026-08-21 · 조율비 · 30,000원")).toBeInTheDocument();
+      expect(deleteLedgerEntry).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole("button", { name: "취소" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      expect(deleteLedgerEntry).not.toHaveBeenCalled();
+    });
+
+    it("확인하면 고른 입출금 내역을 삭제하고 확인 창을 닫는다", async () => {
+      const user = userEvent.setup();
+      const deleteLedgerEntry = vi.fn().mockResolvedValue(undefined);
+      renderFinanceLedgerListScreen(ledgerListQueryOptions, { deleteLedgerEntry });
+
+      const dialog = await openDeleteConfirmation(user);
+      await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+      await waitFor(() =>
+        expect(deleteLedgerEntry).toHaveBeenCalledExactlyOnceWith({ ledgerId: "ledger-2" }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+    });
+
+    it("삭제하는 동안에는 확인 버튼을 다시 눌러도 한 번만 삭제한다", async () => {
+      const user = userEvent.setup();
+      let finishDeleting: () => void = () => undefined;
+      const deleteLedgerEntry = vi.fn(
+        () => new Promise<void>((resolve) => (finishDeleting = resolve)),
+      );
+      renderFinanceLedgerListScreen(ledgerListQueryOptions, { deleteLedgerEntry });
+
+      const dialog = await openDeleteConfirmation(user);
+      await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+      const pendingButton = await within(dialog).findByRole("button", { name: "삭제 중" });
+      expect(pendingButton).toBeDisabled();
+      await user.click(pendingButton);
+      expect(deleteLedgerEntry).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      finishDeleting();
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+    });
+
+    it("삭제에 실패하면 확인 창을 닫고 다시 시도할 수 있게 한다", async () => {
+      const user = userEvent.setup();
+      const deleteLedgerEntry = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("permission denied"))
+        .mockResolvedValueOnce(undefined);
+      renderFinanceLedgerListScreen(ledgerListQueryOptions, { deleteLedgerEntry });
+
+      const dialog = await openDeleteConfirmation(user);
+      await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
+      );
+      const retryDialog = await openDeleteConfirmation(user);
+      await user.click(within(retryDialog).getByRole("button", { name: "삭제" }));
+      await waitFor(() => expect(deleteLedgerEntry).toHaveBeenCalledTimes(2));
+    });
+  });
+
   it("Supabase 오류가 나면 화면에서 확인 가능한 오류 상태를 보여준다", async () => {
     renderFinanceLedgerListScreen((options) => ({
       queryKey: ["finance", options.academyId, "error"],
@@ -175,7 +269,10 @@ describe("FinanceLedgerListScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "입출금 내역을 불러오지 못했습니다.",
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("permission denied");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "이 작업을 할 권한이 없습니다. 원장에게 문의해 주세요.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("permission denied");
   });
 
   it("월수강료 수납 확인 시 수납 mutation을 호출한다", async () => {

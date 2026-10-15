@@ -59,4 +59,29 @@ describe("VendorsPage", () => {
     const vendorRow = await screen.findByRole("row", { name: /현악기 공방/ });
     expect(within(vendorRow).getByText("수리")).toBeInTheDocument();
   });
+
+  it("거래처 수정 다이얼로그에서 바꾼 정보를 목록에 반영한다", async () => {
+    const user = userEvent.setup();
+    window.history.pushState(null, "", "/management/vendors");
+
+    render(
+      <AppProviders>
+        <VendorsPage />
+      </AppProviders>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "클래식 악기사 수정" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "거래처 수정" });
+    const nameInput = within(dialog).getByLabelText("거래처명");
+    await user.clear(nameInput);
+    await user.type(nameInput, "클래식 악기마을");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    expect(
+      await screen.findByRole("row", { name: /클래식 악기마을/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("클래식 악기사")).not.toBeInTheDocument();
+  });
 });

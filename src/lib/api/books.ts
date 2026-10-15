@@ -1,3 +1,4 @@
+import type { ListView } from "@/domain/common-list";
 import {
   buildBookPurchaseList,
   type BookPurchaseListRow,
@@ -73,7 +74,7 @@ const BOOK_PURCHASE_LIST_SELECT =
 export async function fetchBookPurchaseList(
   supabase: BookPurchaseListSupabaseClient,
   options: FetchBookPurchaseListOptions,
-): Promise<BookPurchaseListRow[]> {
+): Promise<ListView<BookPurchaseListRow>> {
   const { data, error } = await supabase
     .from("book_releases")
     .select(BOOK_PURCHASE_LIST_SELECT)
@@ -86,15 +87,23 @@ export async function fetchBookPurchaseList(
   return buildBookPurchaseList((data ?? []).map(toBookSale), options);
 }
 
+export function createBookPurchaseListQueryKey(
+  options: FetchBookPurchaseListOptions,
+) {
+  return queryKeys.books.purchaseList(options.academyId, {
+    q: options.search,
+    status: options.filters?.status,
+    page: options.page?.toString(),
+    pageSize: options.pageSize?.toString(),
+  });
+}
+
 export function createBookPurchaseListQueryOptions(
   supabase: BookPurchaseListSupabaseClient,
   options: FetchBookPurchaseListOptions,
 ) {
   return {
-    queryKey: queryKeys.books.purchaseList(options.academyId, {
-      q: options.search,
-      status: options.filters?.status,
-    }),
+    queryKey: createBookPurchaseListQueryKey(options),
     queryFn: () => fetchBookPurchaseList(supabase, options),
   };
 }
@@ -123,7 +132,7 @@ export async function registerBookRelease(
 
   return buildBookPurchaseList([toBookSale(data)], {
     academyId: input.academyId,
-  })[0];
+  }).items[0];
 }
 
 function toBookSale(row: BookReleaseSupabaseRow): BookSale {

@@ -1,4 +1,9 @@
-import { buildListView, type ListView } from "./common-list";
+import { getFinanceToday } from "./finance-date";
+import {
+  buildListView,
+  type ListView,
+  type PageSizeOption,
+} from "./common-list";
 
 export type StatusManagementEntityType = "student" | "teacher";
 export type StudentManagedStatus = "suspended" | "withdrawn";
@@ -32,7 +37,16 @@ export type BuildStatusManagementListOptions = {
   entityType: StatusManagementEntityType;
   status: ManagedStatus;
   today?: string;
+  search?: string;
+  page?: number;
+  pageSize?: PageSizeOption;
 };
+
+/** 대상 종류는 호출하는 API가 정하므로, 화면과 API가 함께 쓰는 조회 조건에서는 뺀다. */
+export type StatusManagementFetchOptions<TStatus extends ManagedStatus> = Omit<
+  BuildStatusManagementListOptions,
+  "entityType" | "status"
+> & { status: TStatus };
 
 export function calculateRetentionUntil({
   changedAt,
@@ -51,7 +65,7 @@ export function buildStatusManagementList(
   rows: StatusManagementRow[],
   options: BuildStatusManagementListOptions,
 ): ListView<StatusManagementListItem> {
-  const today = options.today ?? toDateString(new Date());
+  const today = options.today ?? getFinanceToday();
   const items = rows
     .filter((row) => row.academyId === options.academyId)
     .filter((row) => row.entityType === options.entityType)
@@ -61,6 +75,8 @@ export function buildStatusManagementList(
 
   return buildListView(items, {
     getName: (item) => item.name,
+    getTieBreaker: (item) => item.entityId,
+    search: options.search,
     searchFields: [
       (item) => item.name,
       (item) => item.statusLabel,
@@ -69,6 +85,8 @@ export function buildStatusManagementList(
       (item) => item.detailSummary ?? "",
       (item) => item.statusReason ?? "",
     ],
+    page: options.page,
+    pageSize: options.pageSize,
   });
 }
 
@@ -140,8 +158,4 @@ function formatArchiveState(
   }
 
   return daysRemaining === 0 ? "보관 만료" : "보관 중";
-}
-
-function toDateString(date: Date) {
-  return date.toISOString().slice(0, 10);
 }

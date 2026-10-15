@@ -1,3 +1,9 @@
+import {
+  buildListView,
+  type ListView,
+  type PageSizeOption,
+} from "./common-list";
+
 export type AttendanceStatus =
   | "scheduled"
   | "present"
@@ -137,10 +143,18 @@ export type BuildLessonTicketListOptions = LessonTicketStatusOptions & {
   academyId: string;
   search?: string;
   filters?: LessonTicketListFilters;
+  page?: number;
+  pageSize?: PageSizeOption;
 };
 
 export type LessonTicketListRow = LessonTicketListItem &
   LessonTicketStatusSummary;
+
+/** 잔여 2회 이하는 잔여 부족, 만료 7일 전부터는 만료 임박으로 표시한다. */
+export const DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS = {
+  lowRemainingThreshold: 2,
+  expiringWithinDays: 7,
+} as const;
 
 export function applyAttendanceToTicket(
   ticket: LessonTicketBalance,
@@ -187,21 +201,29 @@ export function applyAttendanceToTicket(
 export function buildLessonTicketList(
   tickets: LessonTicketListItem[],
   options: BuildLessonTicketListOptions,
-): LessonTicketListRow[] {
-  return tickets
+): ListView<LessonTicketListRow> {
+  const rows = tickets
     .filter((ticket) => ticket.academyId === options.academyId)
     .map((ticket) => ({
       ...ticket,
       ...summarizeLessonTicketStatus(ticket, options),
     }))
-    .filter((ticket) => matchesLessonTicketFilters(ticket, options.filters))
-    .filter((ticket) => matchesLessonTicketSearch(ticket, options.search))
-    .sort(
-      (left, right) =>
-        left.studentName.localeCompare(right.studentName, "ko-KR") ||
-        left.instrumentName.localeCompare(right.instrumentName, "ko-KR") ||
-        left.validUntil.localeCompare(right.validUntil),
-    );
+    .filter((ticket) => matchesLessonTicketFilters(ticket, options.filters));
+
+  return buildListView(rows, {
+    getName: (ticket) => ticket.studentName,
+    getTieBreaker: toLessonTicketTieBreaker,
+    search: options.search,
+    searchFields: [
+      (ticket) => ticket.studentName,
+      (ticket) => ticket.instrumentName,
+      (ticket) => ticket.validFrom,
+      (ticket) => ticket.validUntil,
+      (ticket) => ticket.statuses.map(formatLessonTicketStatus).join(" "),
+    ],
+    page: options.page,
+    pageSize: options.pageSize,
+  });
 }
 
 export function formatLessonTicketStatus(status: LessonTicketStatus) {
@@ -343,23 +365,9 @@ function matchesLessonTicketFilters(
   return !filters?.status || ticket.statuses.includes(filters.status);
 }
 
-function matchesLessonTicketSearch(
-  ticket: LessonTicketListRow,
-  search: string | undefined,
-) {
-  const trimmedSearch = search?.trim().toLocaleLowerCase("ko-KR");
-
-  if (!trimmedSearch) {
-    return true;
-  }
-
-  return [
-    ticket.studentName,
-    ticket.instrumentName,
-    ticket.validFrom,
-    ticket.validUntil,
-    ...ticket.statuses.map(formatLessonTicketStatus),
-  ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
+/** 원생명이 같으면 악기명 → 만료일 → 회차권 id 순. 탭 구분자는 글자보다 앞서 정렬되어 항목별 순서를 유지한다. */
+function toLessonTicketTieBreaker(ticket: LessonTicketListRow) {
+  return [ticket.instrumentName, ticket.validUntil, ticket.ticketId].join("\t");
 }
 
 function assertSameScope(

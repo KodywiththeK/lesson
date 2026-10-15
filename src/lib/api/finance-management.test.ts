@@ -73,6 +73,48 @@ describe("finance management payment API", () => {
     })]);
   });
 
+  it("수입 계산용 회차권과 선생님은 목록 페이지로 자르지 않고 12건 전체를 가져온다", async () => {
+    const ticketRows = Array.from({ length: 12 }, (_, index) => ({
+      id: `ticket-${index}`, academy_id: "academy-1", student_id: `student-${index}`,
+      instrument_id: "piano", instrument_name: "피아노", total_granted_count: 4,
+      remaining_count: 4, valid_from: "2026-08-01", valid_until: "2026-12-31",
+      registered_at: "2026-08-05", paid_amount: 100000, paid_at: "2026-08-05",
+      students: { name: `원생${index}` },
+    }));
+    const teacherRows = Array.from({ length: 12 }, (_, index) => ({
+      id: `teacher-${index}`, academy_id: "academy-1", name: `선생님${index}`,
+      part: "피아노", phone: null, registered_on: "2026-01-01", salary_type: "monthly",
+      status: "employed", teacher_work_schedules: [], teacher_salary_settings: [],
+    }));
+    const rowsByTable: Record<string, unknown[]> = {
+      lesson_ticket_grants: ticketRows,
+      teachers: teacherRows,
+    };
+    const client = {
+      from(table: string) {
+        return {
+          select() {
+            const builder = {
+              eq() { return builder; },
+              is() { return builder; },
+              order() { return builder; },
+              then(onFulfilled: (value: unknown) => unknown) {
+                return Promise.resolve({ data: rowsByTable[table] ?? [], error: null }).then(onFulfilled);
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    } as unknown as FinanceManagementSupabaseClient;
+
+    const result = await fetchFinanceManagementData(client, "academy-1");
+
+    expect(Array.isArray(result.tickets)).toBe(true);
+    expect(result.tickets).toHaveLength(12);
+    expect(result.teachers).toHaveLength(12);
+  });
+
   it("교재 출고 조회는 book_releases에 없는 ordered_on 컬럼을 select하지 않는다", async () => {
     const calls: Array<{ table: string; select: string }> = [];
     const createResultBuilder = (table: string, data: unknown) => {

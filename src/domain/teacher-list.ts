@@ -73,6 +73,7 @@ export function buildTeacherList(
 
   return buildListView(scopedTeachers, {
     getName: (teacher) => teacher.name,
+    getTieBreaker: (teacher) => teacher.teacherId,
     search: options.search,
     searchFields: [
       (teacher) => teacher.name,

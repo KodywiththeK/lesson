@@ -25,5 +25,7 @@ describe("PassesPage", () => {
     ).toBeInTheDocument();
     const seoaRow = await screen.findByRole("row", { name: /한서아/ });
     expect(within(seoaRow).getByText("잔여 부족")).toBeInTheDocument();
+    expect(screen.getByText(/^총 \d+개$/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "페이지당 회차권 수" })).toHaveValue("10");
   });
 });

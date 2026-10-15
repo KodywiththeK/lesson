@@ -17,15 +17,18 @@ import {
   type BuildLessonTicketListOptions,
 } from "@/domain/lesson-ticket";
 import { buildStudentList } from "@/domain/student-list";
-import { buildStatusManagementList } from "@/domain/status-management";
+import {
+  buildStatusManagementList,
+  type StatusManagementFetchOptions,
+} from "@/domain/status-management";
 import { buildTeacherList } from "@/domain/teacher-list";
 import { buildVendorList } from "@/domain/vendor-list";
+import { createBookPurchaseListQueryKey } from "@/lib/api/books";
+import { createLessonTicketListQueryKey } from "@/lib/api/lesson-tickets";
 import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons";
 
 import {
   createInitialDemoAcademyState,
-  deleteDemoWithdrawnStudent,
-  deleteDemoResignedTeacher,
   deleteDemoLedgerEntry,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
@@ -39,6 +42,7 @@ import {
   updateDemoLedgerEntry,
   updateDemoStudentStatus,
   updateDemoTeacherStatus,
+  updateDemoVendor,
   type DemoAcademyState,
   type DemoBookReleaseInput,
   type DemoLessonTicketPurchaseInput,
@@ -50,19 +54,19 @@ import {
   type DemoTeacherStatusInput,
   type DemoTeacherUpdateInput,
   type DemoVendorRegistrationInput,
+  type DemoVendorUpdateInput,
 } from "./academy-demo-state";
 import { queryKeys } from "../api/query-keys";
+import { createVendorListQueryKey } from "../api/vendors";
 
 type DemoAcademyContextValue = {
   state: DemoAcademyState;
   registerStudent: (input: DemoStudentRegistrationInput) => void;
   updateStudent: (input: DemoStudentUpdateInput) => void;
   updateStudentStatus: (input: DemoStudentStatusInput) => void;
-  deleteStudent: (input: { academyId: string; studentId: string }) => void;
   registerTeacher: (input: DemoTeacherRegistrationInput) => void;
   updateTeacher: (input: DemoTeacherUpdateInput) => void;
   updateTeacherStatus: (input: DemoTeacherStatusInput) => void;
-  deleteTeacher: (input: { academyId: string; teacherId: string }) => void;
   registerLessonTicketPurchase: (
     input: Omit<DemoLessonTicketPurchaseInput, "studentName" | "instrumentName"> & {
       studentName?: string;
@@ -78,6 +82,7 @@ type DemoAcademyContextValue = {
   updateLedgerEntry: (input: LedgerEntry) => void;
   deleteLedgerEntry: (input: { ledgerId: string }) => void;
   registerVendor: (input: DemoVendorRegistrationInput) => void;
+  updateVendor: (input: DemoVendorUpdateInput) => void;
   registerBookRelease: (
     input: Omit<DemoBookReleaseInput, "studentName"> & {
       studentName?: string;
@@ -87,11 +92,9 @@ type DemoAcademyContextValue = {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
   };
-  createStudentStatusManagementQueryOptions: (options: {
-    academyId: string;
-    status: "suspended" | "withdrawn";
-    today?: string;
-  }) => {
+  createStudentStatusManagementQueryOptions: (
+    options: StatusManagementFetchOptions<"suspended" | "withdrawn">,
+  ) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStatusManagementList>>;
   };
@@ -99,11 +102,9 @@ type DemoAcademyContextValue = {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildTeacherList>>;
   };
-  createTeacherStatusManagementQueryOptions: (options: {
-    academyId: string;
-    status: "on_leave" | "resigned";
-    today?: string;
-  }) => {
+  createTeacherStatusManagementQueryOptions: (
+    options: StatusManagementFetchOptions<"on_leave" | "resigned">,
+  ) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStatusManagementList>>;
   };
@@ -158,9 +159,6 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       updateStudentStatus(input) {
         commitState((current) => updateDemoStudentStatus(current, input));
       },
-      deleteStudent(input) {
-        commitState((current) => deleteDemoWithdrawnStudent(current, input));
-      },
       registerTeacher(input) {
         commitState((current) => registerDemoAcademyTeacher(current, input));
       },
@@ -169,9 +167,6 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       updateTeacherStatus(input) {
         commitState((current) => updateDemoTeacherStatus(current, input));
-      },
-      deleteTeacher(input) {
-        commitState((current) => deleteDemoResignedTeacher(current, input));
       },
       async registerLessonTicketPurchase(input) {
         commitState((current) =>
@@ -235,6 +230,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       registerVendor(input) {
         commitState((current) => registerDemoVendor(current, input));
       },
+      updateVendor(input) {
+        commitState((current) => updateDemoVendor(current, input));
+      },
       registerBookRelease(input) {
         commitState((current) =>
           registerDemoBookRelease(current, {
@@ -255,6 +253,8 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
               teacherName: options.filters?.teacherName,
               instrumentName: options.filters?.instrumentName,
               weekdayLabel: options.filters?.weekdayLabel,
+              page: String(options.page ?? 1),
+              pageSize: String(options.pageSize ?? ""),
             }),
             "demo",
             revision,
@@ -276,6 +276,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
             ...queryKeys.statusManagement.list(options.academyId, {
               entityType: "student",
               status: options.status,
+              q: options.search,
+              page: String(options.page ?? 1),
+              pageSize: String(options.pageSize ?? ""),
             }),
             "demo",
             revision,
@@ -301,12 +304,7 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
                 detailSummary: student.weekdayLabels.join(", "),
                 statusReason: student.statusReason,
               })),
-              {
-                academyId: options.academyId,
-                entityType: "student",
-                status: options.status,
-                today: options.today,
-              },
+              { ...options, entityType: "student" },
             ),
         };
       },
@@ -318,6 +316,8 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
               part: options.filters?.part,
               payType: options.filters?.payType,
               status: options.filters?.status,
+              page: String(options.page ?? 1),
+              pageSize: String(options.pageSize ?? ""),
             }),
             "demo",
             revision,
@@ -339,6 +339,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
             ...queryKeys.statusManagement.list(options.academyId, {
               entityType: "teacher",
               status: options.status,
+              q: options.search,
+              page: String(options.page ?? 1),
+              pageSize: String(options.pageSize ?? ""),
             }),
             "demo",
             revision,
@@ -364,22 +367,14 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
                 detailSummary: teacher.workScheduleSummary,
                 statusReason: teacher.statusReason,
               })),
-              {
-                academyId: options.academyId,
-                entityType: "teacher",
-                status: options.status,
-                today: options.today,
-              },
+              { ...options, entityType: "teacher" },
             ),
         };
       },
       createLessonTicketListQueryOptions(options) {
         return {
           queryKey: [
-            ...queryKeys.lessonTickets.list(options.academyId, {
-              q: options.search,
-              status: options.filters?.status,
-            }),
+            ...createLessonTicketListQueryKey(options),
             "demo",
             revision,
           ],
@@ -436,24 +431,14 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       createVendorListQueryOptions(options) {
         return {
-          queryKey: [
-            ...queryKeys.vendors.list(options.academyId, {
-              q: options.search,
-              kind: options.filters?.kind,
-            }),
-            "demo",
-            revision,
-          ],
+          queryKey: [...createVendorListQueryKey(options), "demo", revision],
           queryFn: async () => buildVendorList(state.vendors, options),
         };
       },
       createBookPurchaseListQueryOptions(options) {
         return {
           queryKey: [
-            ...queryKeys.books.purchaseList(options.academyId, {
-              q: options.search,
-              status: options.filters?.status,
-            }),
+            ...createBookPurchaseListQueryKey(options),
             "demo",
             revision,
           ],

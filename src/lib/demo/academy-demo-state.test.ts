@@ -7,6 +7,7 @@ import {
   registerDemoBookRelease,
   registerDemoLessonTicketPurchase,
   registerDemoVendor,
+  updateDemoVendor,
 } from "./academy-demo-state";
 
 describe("academy demo state", () => {
@@ -123,7 +124,6 @@ describe("academy demo state", () => {
       contact: "02-7777-8888",
       kind: "수리",
       memo: "바이올린 브릿지 수리",
-      registeredAt: "2026-08-21",
     });
 
     expect(next.vendors).toContainEqual(
@@ -132,6 +132,30 @@ describe("academy demo state", () => {
         kind: "수리",
       }),
     );
+  });
+
+  it("거래처 수정은 대상 거래처의 정보만 바꾸고 학원과 id는 유지한다", () => {
+    const state = createInitialDemoAcademyState();
+    const target = state.vendors[0];
+
+    const next = updateDemoVendor(state, {
+      vendorId: target.vendorId,
+      name: "수정된 거래처",
+      contact: "02-0000-0000",
+      kind: "수리",
+      memo: "수정 메모",
+    });
+
+    expect(next.vendors).toHaveLength(state.vendors.length);
+    expect(next.vendors[0]).toEqual({
+      academyId: target.academyId,
+      vendorId: target.vendorId,
+      name: "수정된 거래처",
+      contact: "02-0000-0000",
+      kind: "수리",
+      memo: "수정 메모",
+    });
+    expect(next.vendors.slice(1)).toEqual(state.vendors.slice(1));
   });
 
   it("결제 완료 교재 출고는 구매 목록과 수입 ledger를 함께 갱신한다", () => {

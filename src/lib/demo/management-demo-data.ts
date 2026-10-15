@@ -1,21 +1,16 @@
 import type { LedgerEntry } from "@/domain/book-sale";
-import { buildBookPurchaseList, type BookSale } from "@/domain/book-sale";
-import { buildFinanceLedgerList } from "@/domain/finance-ledger";
+import type { BookSale } from "@/domain/book-sale";
 import {
-  buildLessonTicketList,
   registerLessonTicket,
   type LessonTicketListItem,
 } from "@/domain/lesson-ticket";
-import { buildStudentList, type StudentListRow } from "@/domain/student-list";
-import { buildStatusManagementList } from "@/domain/status-management";
-import { buildTeacherList, type TeacherListRow } from "@/domain/teacher-list";
-import { buildVendorList, type VendorListRow } from "@/domain/vendor-list";
+import type { StudentListRow } from "@/domain/student-list";
+import type { TeacherListRow } from "@/domain/teacher-list";
+import type { VendorListRow } from "@/domain/vendor-list";
 import type {
   RegisterLessonTicketGrantInput,
   RegisterLessonTicketGrantResult,
 } from "@/lib/api/lesson-tickets";
-
-import { queryKeys } from "../api/query-keys";
 
 export const demoAcademyId = "academy-demo";
 const academyId = demoAcademyId;
@@ -305,172 +300,6 @@ export const demoLedgerEntries: LedgerEntry[] = [
   },
 ];
 
-export function createDemoStudentListQueryOptions(
-  options: Parameters<typeof buildStudentList>[1],
-) {
-  return {
-    queryKey: queryKeys.students.list(options.academyId, {
-      q: options.search,
-    teacherName: options.filters?.teacherName,
-    instrumentName: options.filters?.instrumentName,
-    weekdayLabel: options.filters?.weekdayLabel,
-    page: String(options.page ?? 1),
-    pageSize: String(options.pageSize ?? ""),
-  }),
-    queryFn: async () =>
-      buildStudentList(
-        demoStudents.filter(
-          (student) => (student.status ?? "enrolled") === "enrolled" && !student.archivedAt,
-        ),
-        options,
-      ),
-  };
-}
-
-export function createDemoStudentStatusManagementQueryOptions(
-  options: {
-    academyId: string;
-    status: "suspended" | "withdrawn";
-    today?: string;
-  },
-) {
-  return {
-    queryKey: queryKeys.statusManagement.list(options.academyId, {
-      entityType: "student",
-      status: options.status,
-    }),
-    queryFn: async () =>
-      buildStatusManagementList(
-        demoStudents.map((student) => ({
-          academyId: student.academyId,
-          entityType: "student" as const,
-          entityId: student.studentId,
-          name: student.name,
-          status: (student.status ?? "enrolled") as "suspended" | "withdrawn",
-          changedAt:
-            student.status === "withdrawn"
-              ? student.withdrawnAt
-              : student.suspendedAt,
-          retentionUntil: student.retentionUntil,
-          archivedAt: student.archivedAt,
-          primaryInfo: student.instrumentNames.join(", "),
-          secondaryInfo: student.teacherNames.join(", "),
-          detailSummary: student.weekdayLabels.join(", "),
-          statusReason: student.statusReason,
-        })),
-        {
-          academyId: options.academyId,
-          entityType: "student",
-          status: options.status,
-          today: options.today,
-        },
-      ),
-  };
-}
-
-export function createDemoTeacherListQueryOptions(
-  options: Parameters<typeof buildTeacherList>[1],
-) {
-  return {
-    queryKey: queryKeys.teachers.list(options.academyId, {
-      q: options.search,
-      part: options.filters?.part,
-      payType: options.filters?.payType,
-      status: options.filters?.status,
-    }),
-    queryFn: async () =>
-      buildTeacherList(
-        demoTeachers.filter(
-          (teacher) => (teacher.status ?? "employed") === "employed" && !teacher.archivedAt,
-        ),
-        options,
-      ),
-  };
-}
-
-export function createDemoTeacherStatusManagementQueryOptions(
-  options: {
-    academyId: string;
-    status: "on_leave" | "resigned";
-    today?: string;
-  },
-) {
-  return {
-    queryKey: queryKeys.statusManagement.list(options.academyId, {
-      entityType: "teacher",
-      status: options.status,
-    }),
-    queryFn: async () =>
-      buildStatusManagementList(
-        demoTeachers.map((teacher) => ({
-          academyId: teacher.academyId,
-          entityType: "teacher" as const,
-          entityId: teacher.teacherId,
-          name: teacher.name,
-          status: (teacher.status ?? "employed") as "on_leave" | "resigned",
-          changedAt:
-            teacher.status === "resigned"
-              ? teacher.resignedAt
-              : teacher.onLeaveAt,
-          retentionUntil: teacher.retentionUntil,
-          archivedAt: teacher.archivedAt,
-          primaryInfo: teacher.part,
-          secondaryInfo: teacher.contact,
-          detailSummary: teacher.workScheduleSummary,
-          statusReason: teacher.statusReason,
-        })),
-        {
-          academyId: options.academyId,
-          entityType: "teacher",
-          status: options.status,
-          today: options.today,
-        },
-      ),
-  };
-}
-
-export function createDemoLessonTicketListQueryOptions(
-  options: Parameters<typeof buildLessonTicketList>[1],
-) {
-  return {
-    queryKey: queryKeys.lessonTickets.list(options.academyId, {
-      q: options.search,
-      status: options.filters?.status,
-    }),
-    queryFn: async () => buildLessonTicketList(demoTickets, options),
-  };
-}
-
-export function createDemoLessonTicketRegistrationOptionsQueryOptions(
-  targetAcademyId: string,
-) {
-  return {
-    queryKey: queryKeys.lessonTickets.registrationOptions(targetAcademyId),
-    queryFn: async () => [
-      {
-        studentId: "student-4",
-        studentName: "한서아",
-        instruments: [
-          {
-            instrumentId: "violin",
-            instrumentName: "바이올린",
-          },
-        ],
-      },
-      {
-        studentId: "student-6",
-        studentName: "최도윤",
-        instruments: [
-          {
-            instrumentId: "cello",
-            instrumentName: "첼로",
-          },
-        ],
-      },
-    ],
-  };
-}
-
 export async function registerDemoLessonTicket(
   input: RegisterLessonTicketGrantInput,
 ): Promise<RegisterLessonTicketGrantResult> {
@@ -484,48 +313,5 @@ export async function registerDemoLessonTicket(
       studentName: input.studentName,
       instrumentName: input.instrumentName,
     },
-  };
-}
-
-export function createDemoVendorListQueryOptions(
-  options: Parameters<typeof buildVendorList>[1],
-) {
-  return {
-    queryKey: queryKeys.vendors.list(options.academyId, {
-      q: options.search,
-      kind: options.filters?.kind,
-    }),
-    queryFn: async () => buildVendorList(demoVendors, options),
-  };
-}
-
-export function createDemoBookPurchaseListQueryOptions(
-  options: Parameters<typeof buildBookPurchaseList>[1],
-) {
-  return {
-    queryKey: queryKeys.books.purchaseList(options.academyId, {
-      q: options.search,
-      status: options.filters?.status,
-    }),
-    queryFn: async () => buildBookPurchaseList(demoBookSales, options),
-  };
-}
-
-export function createDemoFinanceLedgerListQueryOptions(
-  options: Parameters<typeof buildFinanceLedgerList>[1],
-) {
-  return {
-    queryKey: queryKeys.finance.ledgerList(options.academyId, {
-      q: options.search,
-      type: options.filters?.type,
-      source: options.filters?.source,
-      category: options.filters?.category,
-      from: options.dateRange?.from,
-      to: options.dateRange?.to,
-      sort: options.sort
-        ? `${options.sort.field}-${options.sort.direction}`
-        : undefined,
-    }),
-    queryFn: async () => buildFinanceLedgerList(demoLedgerEntries, options),
   };
 }

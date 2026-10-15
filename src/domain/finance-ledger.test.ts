@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { LedgerEntry } from "./book-sale";
 import {
   buildFinanceCalendarDays,
   buildFinanceLedgerList,
+  buildFinanceLedgerPage,
   buildIncomeExpenseGraph,
   createManualLedgerEntry,
   exportFinanceLedgerCsv,
@@ -318,5 +320,109 @@ describe("buildFinanceLedgerList", () => {
     expect(formatLedgerEntrySource("book-sale")).toBe("교재");
     expect(formatLedgerEntrySource("payroll")).toBe("급여");
     expect(formatLedgerEntrySource("manual")).toBe("수동");
+  });
+});
+
+describe("buildFinanceLedgerList 정렬 안정성", () => {
+  const baseEntry: LedgerEntry = {
+    academyId: "academy-1",
+    ledgerId: "ledger-a",
+    occurredOn: "2026-08-20",
+    type: "expense",
+    source: "manual",
+    category: "other",
+    amount: 30000,
+    description: "조율비",
+    refId: "manual-a",
+  };
+  const sameEverythingExceptId = ["ledger-c", "ledger-a", "ledger-b"].map(
+    (ledgerId) => ({ ...baseEntry, ledgerId, refId: ledgerId }),
+  );
+
+  it("날짜와 설명이 같아도 ledgerId로 순서를 고정해 새로 조회해도 페이지 경계가 흔들리지 않는다", () => {
+    const options = { academyId: "academy-1" };
+
+    expect(
+      buildFinanceLedgerList(sameEverythingExceptId, options).map((entry) => entry.ledgerId),
+    ).toEqual(["ledger-a", "ledger-b", "ledger-c"]);
+    expect(
+      buildFinanceLedgerList([...sameEverythingExceptId].reverse(), options).map(
+        (entry) => entry.ledgerId,
+      ),
+    ).toEqual(["ledger-a", "ledger-b", "ledger-c"]);
+  });
+
+  it("금액이 같으면 최신 날짜 순으로, 그래도 같으면 ledgerId로 순서를 고정한다", () => {
+    const entries: LedgerEntry[] = [
+      { ...baseEntry, ledgerId: "ledger-old", occurredOn: "2026-08-01", description: "가" },
+      { ...baseEntry, ledgerId: "ledger-new-b", occurredOn: "2026-08-20", description: "다" },
+      { ...baseEntry, ledgerId: "ledger-new-a", occurredOn: "2026-08-20", description: "나" },
+    ];
+
+    expect(
+      buildFinanceLedgerList(entries, {
+        academyId: "academy-1",
+        sort: { field: "amount", direction: "desc" },
+      }).map((entry) => entry.ledgerId),
+    ).toEqual(["ledger-new-a", "ledger-new-b", "ledger-old"]);
+  });
+});
+
+describe("buildFinanceLedgerPage", () => {
+  const entries: LedgerEntry[] = Array.from({ length: 25 }, (_, index) => ({
+    academyId: "academy-1",
+    ledgerId: `ledger-${index + 1}`,
+    occurredOn: "2026-08-20",
+    type: "income",
+    source: "manual",
+    category: "other",
+    amount: (index + 1) * 1000,
+    description: `내역 ${index + 1}`,
+    refId: `manual-${index + 1}`,
+  }));
+
+  it("받은 순서를 그대로 두고 10건씩 잘라 총 건수와 이동 가능 여부를 알려준다", () => {
+    const firstPage = buildFinanceLedgerPage(entries, { page: 1, pageSize: 10 });
+
+    expect(firstPage.items.map((entry) => entry.ledgerId)).toEqual(
+      entries.slice(0, 10).map((entry) => entry.ledgerId),
+    );
+    expect(firstPage).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      totalItems: 25,
+      totalPages: 3,
+      hasPreviousPage: false,
+      hasNextPage: true,
+    });
+  });
+
+  it("마지막 페이지는 남은 건수만 보여주고 다음 페이지가 없다", () => {
+    const lastPage = buildFinanceLedgerPage(entries, { page: 3, pageSize: 10 });
+
+    expect(lastPage.items).toHaveLength(5);
+    expect(lastPage).toMatchObject({ page: 3, hasPreviousPage: true, hasNextPage: false });
+  });
+
+  it("20건이나 30건씩 볼 수 있고 지원하지 않는 크기는 10건으로 본다", () => {
+    expect(buildFinanceLedgerPage(entries, { page: 1, pageSize: 20 }).items).toHaveLength(20);
+    expect(buildFinanceLedgerPage(entries, { page: 1, pageSize: 30 }).items).toHaveLength(25);
+    expect(buildFinanceLedgerPage(entries, { page: 1, pageSize: 7 })).toMatchObject({
+      pageSize: 10,
+      totalPages: 3,
+    });
+  });
+
+  it("범위를 벗어난 페이지는 가장 가까운 페이지로 맞추고 빈 목록도 1페이지로 본다", () => {
+    expect(buildFinanceLedgerPage(entries, { page: 99, pageSize: 10 }).page).toBe(3);
+    expect(buildFinanceLedgerPage(entries, { page: 0, pageSize: 10 }).page).toBe(1);
+    expect(buildFinanceLedgerPage([], { page: 4, pageSize: 10 })).toMatchObject({
+      items: [],
+      page: 1,
+      totalItems: 0,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
   });
 });

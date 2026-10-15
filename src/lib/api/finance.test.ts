@@ -97,7 +97,7 @@ describe("fetchFinanceLedgerList", () => {
 });
 
 describe("createFinanceLedgerListQueryOptions", () => {
-  it("학원 범위와 검색/필터를 queryKey와 queryFn에 함께 묶는다", async () => {
+  it("학원 범위와 검색/필터를 queryKey와 queryFn에 함께 묶고 페이지 칸은 비워 둔다", async () => {
     const { client } = createSupabaseStub([]);
     const options = createFinanceLedgerListQueryOptions(client, {
       academyId: "academy-1",
@@ -129,6 +129,8 @@ describe("createFinanceLedgerListQueryOptions", () => {
       "2026-08-01",
       "2026-08-31",
       "amount-desc",
+      "",
+      "",
     ]);
     await expect(options.queryFn()).resolves.toEqual([]);
   });

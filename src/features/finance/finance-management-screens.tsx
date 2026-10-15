@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -22,11 +22,23 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
 import { DateField, MonthField } from "@/components/operations/date-time-fields";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,9 +66,16 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BookSale, LedgerCategory, LedgerEntry } from "@/domain/book-sale";
+import {
+  buildListView,
+  compareKoreanNames,
+  type ListView,
+  type PageSizeOption,
+} from "@/domain/common-list";
 import { getFinanceToday } from "@/domain/finance-date";
 import {
   buildFinanceCalendarDays,
+  buildFinanceLedgerPage,
   buildIncomeExpenseGraph,
   exportFinanceLedgerCsv,
   formatLedgerCategory,
@@ -82,6 +101,7 @@ import {
   createMonthlyTuitionSnapshot,
   type TuitionRecord,
 } from "@/domain/tuition-income";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createFinanceLedgerListQueryOptions,
   deleteFinanceLedgerEntry as deleteFinanceLedgerEntryApi,
@@ -282,6 +302,8 @@ export function FinanceLedgerListScreen({
   const [dateRange, setDateRange] = useState(() => toMonthDateRange(getFinanceToday().slice(0, 7)));
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<LedgerEntry | null>(null);
+  const paging = useListPaging();
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createFinanceLedgerSupabaseClient()),
@@ -316,6 +338,14 @@ export function FinanceLedgerListScreen({
     () => ledgerListQuery.data ?? [],
     [ledgerListQuery.data],
   );
+  const ledgerPage = useMemo(
+    () =>
+      buildFinanceLedgerPage(entries, {
+        page: paging.page,
+        pageSize: paging.pageSize,
+      }),
+    [entries, paging.page, paging.pageSize],
+  );
   const registerMutation = useMutation({
     mutationFn: async (input: RegisterManualLedgerEntryInput) => {
       if (registerManualLedgerEntry) {
@@ -339,7 +369,7 @@ export function FinanceLedgerListScreen({
     },
     onError: (error) => {
       toast.error("수동 입출금 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -372,7 +402,7 @@ export function FinanceLedgerListScreen({
     },
     onError: (error) => {
       toast.error("입출금 내역 수정에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -398,9 +428,10 @@ export function FinanceLedgerListScreen({
     },
     onError: (error) => {
       toast.error("입출금 내역 삭제에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
+    onSettled: () => setDeletingEntry(null),
   });
   const headerActions = useMemo(
     () => (
@@ -449,6 +480,14 @@ export function FinanceLedgerListScreen({
   );
   const isHeaderActionMounted = usePageHeaderActions(headerActions);
 
+  /** 검색어·필터·정렬·기간이 바뀌면 보던 페이지가 의미를 잃으므로 1페이지로 돌아간다. */
+  function withPageReset<Value>(update: (value: Value) => void) {
+    return (value: Value) => {
+      update(value);
+      paging.resetPage();
+    };
+  }
+
   return (
     <section className="grid gap-4" aria-label="입출금 내역">
       <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
@@ -463,16 +502,17 @@ export function FinanceLedgerListScreen({
         sortValue={sortValue}
         source={source}
         type={type}
-        onChangeCategory={setCategory}
-        onChangeDateRange={setDateRange}
+        onChangeCategory={withPageReset(setCategory)}
+        onChangeDateRange={withPageReset(setDateRange)}
         onChangeMonth={(nextMonth) => {
           setMonth(nextMonth);
           setDateRange(toMonthDateRange(nextMonth));
+          paging.resetPage();
         }}
-        onChangeSearch={setSearch}
-        onChangeSort={setSortValue}
-        onChangeSource={setSource}
-        onChangeType={setType}
+        onChangeSearch={withPageReset(setSearch)}
+        onChangeSort={withPageReset(setSortValue)}
+        onChangeSource={withPageReset(setSource)}
+        onChangeType={withPageReset(setType)}
         onReset={() => {
           setSearch("");
           setType("");
@@ -482,20 +522,21 @@ export function FinanceLedgerListScreen({
           const currentMonth = getFinanceToday().slice(0, 7);
           setMonth(currentMonth);
           setDateRange(toMonthDateRange(currentMonth));
+          paging.resetPage();
         }}
       />
 
       {!hasInjectedQueryOptions && supabaseClientState?.error ? (
         <ListStatusAlert
-          message="Supabase 환경변수가 설정되면 입출금 내역을 불러올 수 있습니다."
-          detail={supabaseClientState.error.message}
+          message="입출금 내역을 불러오지 못했습니다."
+          detail={toUserMessage(supabaseClientState.error)}
         />
       ) : null}
 
       {ledgerListQuery.isError ? (
         <ListStatusAlert
           message="입출금 내역을 불러오지 못했습니다."
-          detail={ledgerListQuery.error.message}
+          detail={toUserMessage(ledgerListQuery.error)}
         />
       ) : null}
 
@@ -514,9 +555,11 @@ export function FinanceLedgerListScreen({
           !ledgerListQuery.isError &&
           (hasInjectedQueryOptions || !supabaseClientState?.error) ? (
             <FinanceLedgerTable
-              entries={entries}
-              onDelete={(entry) => deleteMutation.mutate(entry)}
+              view={ledgerPage}
+              onDelete={setDeletingEntry}
               onEdit={setEditingEntry}
+              onPageChange={paging.goToPage}
+              onPageSizeChange={paging.changePageSize}
             />
           ) : null}
         </TabsContent>
@@ -555,6 +598,13 @@ export function FinanceLedgerListScreen({
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <LedgerDeleteDialog
+        entry={deletingEntry}
+        isDeleting={deleteMutation.isPending}
+        onConfirm={(entry) => deleteMutation.mutate(entry)}
+        onOpenChange={(open) => !open && setDeletingEntry(null)}
+      />
     </section>
   );
 }
@@ -568,6 +618,7 @@ export function FinanceLessonIncomeScreen({
 }: FinanceDataScreenProps) {
   const queryClient = useQueryClient();
   const [month, setMonth] = useState(() => getFinanceToday().slice(0, 7));
+  const { search, changeSearch, paging } = useSearchableListPaging();
   const [paymentTarget, setPaymentTarget] = useState<{
     action: "paid" | "unpaid";
     row: LessonIncomeRow;
@@ -581,6 +632,18 @@ export function FinanceLessonIncomeScreen({
       ? buildLessonIncomeRows(financeData, academyId, month, tuitionSnapshotsQuery.data)
       : [],
     [academyId, financeData, month, tuitionSnapshotsQuery.data, tuitionSnapshotsQuery.isSuccess],
+  );
+  const rowsView = useMemo(
+    () =>
+      buildListView(rows, {
+        getName: (row) => row.studentName,
+        getTieBreaker: getLessonIncomeTieBreaker,
+        search,
+        searchFields: [(row) => row.studentName, (row) => row.instrumentName],
+        page: paging.page,
+        pageSize: paging.pageSize,
+      }),
+    [rows, search, paging.page, paging.pageSize],
   );
   const unpaidRows = useMemo(
     () => rows.filter((row) => row.source === "tuition" && row.status === "unpaid"),
@@ -636,7 +699,7 @@ export function FinanceLessonIncomeScreen({
     },
     onError: (error) => {
       toast.error("수강료 수납 처리에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -658,7 +721,7 @@ export function FinanceLessonIncomeScreen({
     },
     onError: (error) => {
       toast.error("수강료 미수납 처리에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -672,72 +735,100 @@ export function FinanceLessonIncomeScreen({
         amount={totalAmount}
         label="월별 전체 레슨수입"
         month={month}
-        onChangeMonth={setMonth}
+        onChangeMonth={(nextMonth) => {
+          setMonth(nextMonth);
+          paging.resetPage();
+        }}
+      />
+      <FinanceListSearch
+        label="레슨수입 검색"
+        placeholder="원생명, 악기"
+        value={search}
+        onChange={changeSearch}
       />
       {tuitionSnapshotsQuery.isError ? (
-        <ListStatusAlert message="월별 수강료를 불러오지 못했습니다." detail={String(tuitionSnapshotsQuery.error)} />
+        <ListStatusAlert
+          message="월별 수강료를 불러오지 못했습니다."
+          detail={toUserMessage(tuitionSnapshotsQuery.error)}
+        />
       ) : null}
       {tuitionSnapshotsQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">월별 수강료를 불러오는 중입니다.</p>
       ) : null}
-      <div className="grid gap-2 xl:hidden" aria-label="학원 레슨수입 간략 목록">
-        {rows.map((row) => (
-          <article key={row.id} className="rounded-md border border-border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold">{row.studentName} · {row.instrumentName}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{row.lessonKindLabel} · {row.progress}</p>
-              </div>
-              <p className="font-semibold">{formatWon(row.finalAmount)}</p>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
-              <span className="text-muted-foreground">
-                레슨비 {formatWon(row.lessonFee)} · 할인 {formatWon(row.discountTotal)}
-              </span>
-              <LessonIncomePaymentAction
-                row={row}
-                onClick={(action) => setPaymentTarget({ action, row })}
-              />
-            </div>
-          </article>
-        ))}
-      </div>
-      <div className="hidden overflow-x-auto rounded-lg border border-border bg-card xl:block">
-        <Table aria-label="학원 레슨수입" className="min-w-[60rem]">
-          <TableHeader className="bg-muted text-muted-foreground">
-            <TableRow>
-              <TableHead className="px-4 py-3">이름</TableHead>
-              <TableHead className="px-4 py-3">레슨종류</TableHead>
-              <TableHead className="px-4 py-3">악기</TableHead>
-              <TableHead className="px-4 py-3">진도</TableHead>
-              <TableHead className="px-4 py-3">레슨비</TableHead>
-              <TableHead className="px-4 py-3">할인</TableHead>
-              <TableHead className="px-4 py-3">최종금액</TableHead>
-              <TableHead className="px-4 py-3 text-right">수납</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                <TableCell className="px-4 py-3">{row.lessonKindLabel}</TableCell>
-                <TableCell className="px-4 py-3">{row.instrumentName}</TableCell>
-                <TableCell className="px-4 py-3">{row.progress}</TableCell>
-                <TableCell className="px-4 py-3">{formatWon(row.lessonFee)}</TableCell>
-                <TableCell className="px-4 py-3">{formatWon(row.discountTotal)}</TableCell>
-                <TableCell className="px-4 py-3 font-semibold">
-                  {formatWon(row.finalAmount)}
-                </TableCell>
-                <TableCell className="px-4 py-3 text-right">
+      <div className="rounded-lg border border-border bg-card">
+        {rowsView.items.length > 0 ? (
+          <div className="grid gap-2 p-3 xl:hidden" aria-label="학원 레슨수입 간략 목록">
+            {rowsView.items.map((row) => (
+              <article key={row.id} className="rounded-md border border-border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{row.studentName} · {row.instrumentName}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{row.lessonKindLabel} · {row.progress}</p>
+                  </div>
+                  <p className="font-semibold">{formatWon(row.finalAmount)}</p>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
+                  <span className="text-muted-foreground">
+                    레슨비 {formatWon(row.lessonFee)} · 할인 {formatWon(row.discountTotal)}
+                  </span>
                   <LessonIncomePaymentAction
                     row={row}
                     onClick={(action) => setPaymentTarget({ action, row })}
                   />
-                </TableCell>
-              </TableRow>
+                </div>
+              </article>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+        ) : null}
+        <div className="hidden overflow-x-auto xl:block">
+          <Table aria-label="학원 레슨수입" className="min-w-[60rem]">
+            <TableHeader className="bg-muted text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-3">이름</TableHead>
+                <TableHead className="px-4 py-3">레슨종류</TableHead>
+                <TableHead className="px-4 py-3">악기</TableHead>
+                <TableHead className="px-4 py-3">진도</TableHead>
+                <TableHead className="px-4 py-3">레슨비</TableHead>
+                <TableHead className="px-4 py-3">할인</TableHead>
+                <TableHead className="px-4 py-3">최종금액</TableHead>
+                <TableHead className="px-4 py-3 text-right">수납</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rowsView.items.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
+                  <TableCell className="px-4 py-3">{row.lessonKindLabel}</TableCell>
+                  <TableCell className="px-4 py-3">{row.instrumentName}</TableCell>
+                  <TableCell className="px-4 py-3">{row.progress}</TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(row.lessonFee)}</TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(row.discountTotal)}</TableCell>
+                  <TableCell className="px-4 py-3 font-semibold">
+                    {formatWon(row.finalAmount)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right">
+                    <LessonIncomePaymentAction
+                      row={row}
+                      onClick={(action) => setPaymentTarget({ action, row })}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {tuitionSnapshotsQuery.isSuccess ? (
+          <>
+            {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 레슨수입이 없습니다.</EmptyListMessage> : null}
+            <ListPagination
+              itemLabel="레슨수입"
+              countUnit="건"
+              view={rowsView}
+              onPageChange={paging.goToPage}
+              onPageSizeChange={paging.changePageSize}
+            />
+          </>
+        ) : null}
       </div>
       <PaymentDialog
         open={Boolean(paymentTarget)}
@@ -768,41 +859,73 @@ export function FinanceBooksScreen({
   academyId,
   financeData,
 }: FinanceDataScreenProps) {
-  const rows = buildBookFinanceRows(financeData.bookSales, academyId);
+  const { search, changeSearch, paging } = useSearchableListPaging();
+  const rows = useMemo(
+    () => buildBookFinanceRows(financeData.bookSales, academyId),
+    [academyId, financeData.bookSales],
+  );
+  const rowsView = useMemo(
+    () =>
+      buildListView(rows, {
+        getName: (row) => row.studentName,
+        getTieBreaker: getBookFinanceTieBreaker,
+        search,
+        searchFields: [(row) => row.studentName, (row) => row.bookTitle],
+        page: paging.page,
+        pageSize: paging.pageSize,
+      }),
+    [rows, search, paging.page, paging.pageSize],
+  );
 
   return (
     <section className="grid gap-4" aria-label="교재내역">
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <Table aria-label="교재내역" className="min-w-[48rem]">
-          <TableHeader className="bg-muted text-muted-foreground">
-            <TableRow>
-              <TableHead className="px-4 py-3">원생</TableHead>
-              <TableHead className="px-4 py-3">교재명</TableHead>
-              <TableHead className="px-4 py-3">금액</TableHead>
-              <TableHead className="px-4 py-3">발주일</TableHead>
-              <TableHead className="px-4 py-3">출고일</TableHead>
-              <TableHead className="px-4 py-3">입금일</TableHead>
-              <TableHead className="px-4 py-3">상태</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                <TableCell className="px-4 py-3">{row.bookTitle}</TableCell>
-                <TableCell className="px-4 py-3">{formatWon(row.amount)}</TableCell>
-                <TableCell className="px-4 py-3">{row.orderedOn || "-"}</TableCell>
-                <TableCell className="px-4 py-3">{row.shippedAt}</TableCell>
-                <TableCell className="px-4 py-3">{row.paidAt || "-"}</TableCell>
-                <TableCell className="px-4 py-3">
-                  <Badge variant={row.status === "paid" ? "secondary" : "outline"}>
-                    {row.status === "paid" ? "입금 완료" : "입금 대기"}
-                  </Badge>
-                </TableCell>
+      <FinanceListSearch
+        label="교재내역 검색"
+        placeholder="원생명, 교재명"
+        value={search}
+        onChange={changeSearch}
+      />
+      <div className="rounded-lg border border-border bg-card">
+        <div className="overflow-x-auto">
+          <Table aria-label="교재내역" className="min-w-[48rem]">
+            <TableHeader className="bg-muted text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-3">원생</TableHead>
+                <TableHead className="px-4 py-3">교재명</TableHead>
+                <TableHead className="px-4 py-3">금액</TableHead>
+                <TableHead className="px-4 py-3">발주일</TableHead>
+                <TableHead className="px-4 py-3">출고일</TableHead>
+                <TableHead className="px-4 py-3">입금일</TableHead>
+                <TableHead className="px-4 py-3">상태</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rowsView.items.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
+                  <TableCell className="px-4 py-3">{row.bookTitle}</TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(row.amount)}</TableCell>
+                  <TableCell className="px-4 py-3">{row.orderedOn || "-"}</TableCell>
+                  <TableCell className="px-4 py-3">{row.shippedAt}</TableCell>
+                  <TableCell className="px-4 py-3">{row.paidAt || "-"}</TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Badge variant={row.status === "paid" ? "secondary" : "outline"}>
+                      {row.status === "paid" ? "입금 완료" : "입금 대기"}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 교재내역이 없습니다.</EmptyListMessage> : null}
+        <ListPagination
+          itemLabel="교재내역"
+          countUnit="건"
+          view={rowsView}
+          onPageChange={paging.goToPage}
+          onPageSizeChange={paging.changePageSize}
+        />
       </div>
     </section>
   );
@@ -815,8 +938,24 @@ export function FinancePayrollScreen({
 }: FinanceDataScreenProps) {
   const queryClient = useQueryClient();
   const [month, setMonth] = useState(() => getFinanceToday().slice(0, 7));
+  const { search, changeSearch, paging } = useSearchableListPaging();
   const [paymentTarget, setPaymentTarget] = useState<PayrollRecord | null>(null);
-  const rows = buildPayrollRows(financeData, academyId, month);
+  // 급여는 선생님 전체로 계산하고, 검색과 페이지는 표에 보여 줄 행만 고른다.
+  const rows = useMemo(
+    () => buildPayrollRows(financeData, academyId, month),
+    [academyId, financeData, month],
+  );
+  const rowsView = useMemo(
+    () =>
+      buildListView(rows, {
+        getName: (row) => row.teacherName,
+        getTieBreaker: (row) => row.payrollId,
+        search,
+        page: paging.page,
+        pageSize: paging.pageSize,
+      }),
+    [rows, search, paging.page, paging.pageSize],
+  );
   const totalNetPay = rows.reduce((total, row) => total + row.netPay, 0);
   const markPayrollPaidMutation = useMutation({
     mutationFn: async (input: { payroll: PayrollRecord; paidAt: string }) => {
@@ -837,7 +976,7 @@ export function FinancePayrollScreen({
     },
     onError: (error) => {
       toast.error("급여 지급 확정에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -848,46 +987,65 @@ export function FinancePayrollScreen({
         amount={totalNetPay}
         label="월별 지급 예정 급여"
         month={month}
-        onChangeMonth={setMonth}
+        onChangeMonth={(nextMonth) => {
+          setMonth(nextMonth);
+          paging.resetPage();
+        }}
       />
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <Table aria-label="선생님 월급" className="min-w-[54rem]">
-          <TableHeader className="bg-muted text-muted-foreground">
-            <TableRow>
-              <TableHead className="px-4 py-3">선생님</TableHead>
-              <TableHead className="px-4 py-3">급여유형</TableHead>
-              <TableHead className="px-4 py-3">기본급여</TableHead>
-              <TableHead className="px-4 py-3">원천징수</TableHead>
-              <TableHead className="px-4 py-3">최종지급액</TableHead>
-              <TableHead className="px-4 py-3 text-right">지급</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.payrollId}>
-                <TableCell className="px-4 py-3 font-medium">{row.teacherName}</TableCell>
-                <TableCell className="px-4 py-3">{formatPayType(row.payType)}</TableCell>
-                <TableCell className="px-4 py-3">{formatWon(row.basePay)}</TableCell>
-                <TableCell className="px-4 py-3">{formatWon(row.withholdingTax)}</TableCell>
-                <TableCell className="px-4 py-3 font-semibold">{formatWon(row.netPay)}</TableCell>
-                <TableCell className="px-4 py-3 text-right">
-                  {row.status === "paid" ? (
-                    <Badge variant="secondary">지급 완료</Badge>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-label={`${row.teacherName} 급여 지급 확정`}
-                      onClick={() => setPaymentTarget(row)}
-                    >
-                      지급 확정
-                    </Button>
-                  )}
-                </TableCell>
+      <FinanceListSearch
+        label="선생님 월급 검색"
+        placeholder="선생님 이름"
+        value={search}
+        onChange={changeSearch}
+      />
+      <div className="rounded-lg border border-border bg-card">
+        <div className="overflow-x-auto">
+          <Table aria-label="선생님 월급" className="min-w-[54rem]">
+            <TableHeader className="bg-muted text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-3">선생님</TableHead>
+                <TableHead className="px-4 py-3">급여유형</TableHead>
+                <TableHead className="px-4 py-3">기본급여</TableHead>
+                <TableHead className="px-4 py-3">원천징수</TableHead>
+                <TableHead className="px-4 py-3">최종지급액</TableHead>
+                <TableHead className="px-4 py-3 text-right">지급</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rowsView.items.map((row) => (
+                <TableRow key={row.payrollId}>
+                  <TableCell className="px-4 py-3 font-medium">{row.teacherName}</TableCell>
+                  <TableCell className="px-4 py-3">{formatPayType(row.payType)}</TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(row.basePay)}</TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(row.withholdingTax)}</TableCell>
+                  <TableCell className="px-4 py-3 font-semibold">{formatWon(row.netPay)}</TableCell>
+                  <TableCell className="px-4 py-3 text-right">
+                    {row.status === "paid" ? (
+                      <Badge variant="secondary">지급 완료</Badge>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        aria-label={`${row.teacherName} 급여 지급 확정`}
+                        onClick={() => setPaymentTarget(row)}
+                      >
+                        지급 확정
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 선생님이 없습니다.</EmptyListMessage> : null}
+        <ListPagination
+          itemLabel="선생님 월급"
+          countUnit="명"
+          view={rowsView}
+          onPageChange={paging.goToPage}
+          onPageSizeChange={paging.changePageSize}
+        />
       </div>
       <PaymentDialog
         open={Boolean(paymentTarget)}
@@ -912,16 +1070,31 @@ export function FinancePayrollScreen({
 export function FinanceOverviewScreen({
   academyId,
   financeData,
-}: FinanceDataScreenProps) {
-  const [year, setYear] = useState(() => Number(getFinanceToday().slice(0, 4)));
-  const incomeEntries = financeData.ledgerEntries.filter(
-    (entry) => entry.type === "income",
+  initialYear,
+}: FinanceDataScreenProps & { initialYear?: number }) {
+  const [year, setYear] = useState(() => initialYear ?? Number(getFinanceToday().slice(0, 4)));
+  const yearIncomeEntries = financeData.ledgerEntries.filter(
+    (entry) =>
+      entry.type === "income" &&
+      entry.academyId === academyId &&
+      entry.occurredOn.startsWith(`${year}-`),
   );
-  const graph = buildIncomeExpenseGraph(incomeEntries, { academyId, year });
-  const categoryTotals = buildIncomeCategoryTotals(incomeEntries);
-  const maxMonthlyIncome = Math.max(
+  const graph = buildIncomeExpenseGraph(financeData.ledgerEntries, { academyId, year });
+  const categoryTotals = buildIncomeCategoryTotals(yearIncomeEntries);
+  const monthlyTotals = graph.months.map((month) => ({
+    month: month.month,
+    income: month.totalInstrumentIncome + month.academyIncome,
+    expense: month.expense,
+    netIncome: month.netIncome,
+  }));
+  const yearTotal = {
+    income: sumOf(monthlyTotals, "income"),
+    expense: sumOf(monthlyTotals, "expense"),
+    netIncome: sumOf(monthlyTotals, "netIncome"),
+  };
+  const maxMonthlyAmount = Math.max(
     1,
-    ...graph.months.map((month) => month.totalInstrumentIncome + month.academyIncome),
+    ...monthlyTotals.flatMap((month) => [month.income, month.expense]),
   );
 
   return (
@@ -937,35 +1110,33 @@ export function FinanceOverviewScreen({
           />
         </Label>
       </div>
+      <section aria-label="연간 요약" className="grid gap-2 sm:grid-cols-3">
+        <OverviewTotal label="수입" amount={yearTotal.income} />
+        <OverviewTotal label="지출" amount={yearTotal.expense} />
+        <OverviewTotal label="순수익" amount={yearTotal.netIncome} emphasized />
+      </section>
       <figure
-        aria-label="월별 수입 그래프"
+        aria-label="월별 수입·지출 그래프"
         className="grid gap-2 rounded-lg border border-border bg-card p-4"
       >
-        <figcaption className="text-base font-semibold">월별 수입 비교</figcaption>
-        <div className="grid gap-2">
-          {graph.months.map((month) => {
-            const monthlyIncome = month.totalInstrumentIncome + month.academyIncome;
-
-            return (
-              <div key={month.month} className="grid gap-1">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span>{month.month}</span>
-                  <span className="font-medium">{formatWon(monthlyIncome)}</span>
-                </div>
-                <div className="h-2 rounded-sm bg-muted">
-                  <div
-                    className="h-2 rounded-sm bg-primary"
-                    style={{
-                      width: `${Math.max(4, (monthlyIncome / maxMonthlyIncome) * 100)}%`,
-                    }}
-                  />
-                </div>
+        <figcaption className="text-base font-semibold">월별 수입·지출 비교</figcaption>
+        <div className="grid gap-3">
+          {monthlyTotals.map((month) => (
+            <div key={month.month} role="group" aria-label={month.month} className="grid gap-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 text-sm">
+                <span className="font-medium">{month.month}</span>
+                <span className="text-muted-foreground">
+                  수입 {formatWon(month.income)} · 지출 {formatWon(month.expense)} ·{" "}
+                  <span className="font-medium text-foreground">순수익 {formatWon(month.netIncome)}</span>
+                </span>
               </div>
-            );
-          })}
+              <OverviewBar amount={month.income} max={maxMonthlyAmount} className="bg-primary" />
+              <OverviewBar amount={month.expense} max={maxMonthlyAmount} className="bg-destructive/70" />
+            </div>
+          ))}
         </div>
       </figure>
-      <section className="rounded-lg border border-border bg-card p-4">
+      <section aria-label="분류별 수입" className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-semibold">분류별 수입</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {categoryTotals.map((item) => (
@@ -980,6 +1151,40 @@ export function FinanceOverviewScreen({
       </section>
     </section>
   );
+}
+
+function OverviewTotal({
+  label,
+  amount,
+  emphasized = false,
+}: {
+  label: string;
+  amount: number;
+  emphasized?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className={emphasized ? "mt-1 text-2xl font-semibold" : "mt-1 text-xl font-semibold"}>
+        {formatWon(amount)}
+      </p>
+    </div>
+  );
+}
+
+function OverviewBar({ amount, max, className }: { amount: number; max: number; className: string }) {
+  return (
+    <div className="h-2 rounded-sm bg-muted" aria-hidden="true">
+      <div
+        className={`h-2 rounded-sm ${className}`}
+        style={{ width: amount > 0 ? `${Math.max(4, (amount / max) * 100)}%` : "0%" }}
+      />
+    </div>
+  );
+}
+
+function sumOf<Key extends string>(rows: Array<Record<Key, number>>, key: Key) {
+  return rows.reduce((total, row) => total + row[key], 0);
 }
 
 function FinanceLedgerFilters({
@@ -1027,6 +1232,7 @@ function FinanceLedgerFilters({
         <span>월 선택</span>
         <MonthField
           aria-label="입출금 월 선택"
+          required
           value={month}
           onValueChange={onChangeMonth}
         />
@@ -1256,84 +1462,140 @@ function LedgerEntryForm({
 }
 
 function FinanceLedgerTable({
-  entries,
+  view,
   onDelete,
   onEdit,
+  onPageChange,
+  onPageSizeChange,
 }: {
-  entries: LedgerEntry[];
+  view: ListView<LedgerEntry>;
   onDelete: (entry: LedgerEntry) => void;
   onEdit: (entry: LedgerEntry) => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: PageSizeOption) => void;
 }) {
-  if (entries.length === 0) {
-    return (
-      <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-        조건에 맞는 입출금 내역이 없습니다.
-      </p>
-    );
-  }
-
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <Table aria-label="입출금 내역" className="min-w-[56rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">발생일</TableHead>
-            <TableHead className="px-4 py-3">유형</TableHead>
-            <TableHead className="px-4 py-3">출처</TableHead>
-            <TableHead className="px-4 py-3">분류</TableHead>
-            <TableHead className="px-4 py-3">금액</TableHead>
-            <TableHead className="px-4 py-3">설명</TableHead>
-            <TableHead className="px-4 py-3 text-right">관리</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {entries.map((entry) => (
-            <TableRow key={entry.ledgerId}>
-              <TableCell className="px-4 py-3">{entry.occurredOn}</TableCell>
-              <TableCell className="px-4 py-3">
-                <Badge variant={entry.type === "income" ? "secondary" : "outline"}>
-                  {formatLedgerEntryType(entry.type)}
-                </Badge>
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatLedgerEntrySource(entry.source)}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatLedgerCategory(entry.category)}
-              </TableCell>
-              <TableCell className="px-4 py-3">{formatWon(entry.amount)}</TableCell>
-              <TableCell className="px-4 py-3 font-medium">
-                {entry.description}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${entry.description} 수정`}
-                    onClick={() => onEdit(entry)}
-                  >
-                    <Pencil aria-hidden="true" />
-                    수정
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${entry.description} 삭제`}
-                    onClick={() => onDelete(entry)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    삭제
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div className="rounded-lg border border-border bg-card">
+      {view.items.length === 0 ? (
+        <EmptyListMessage>조건에 맞는 입출금 내역이 없습니다.</EmptyListMessage>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table aria-label="입출금 내역" className="min-w-[56rem]">
+            <TableHeader className="bg-muted text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-3">발생일</TableHead>
+                <TableHead className="px-4 py-3">유형</TableHead>
+                <TableHead className="px-4 py-3">출처</TableHead>
+                <TableHead className="px-4 py-3">분류</TableHead>
+                <TableHead className="px-4 py-3">금액</TableHead>
+                <TableHead className="px-4 py-3">설명</TableHead>
+                <TableHead className="px-4 py-3 text-right">관리</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {view.items.map((entry) => (
+                <TableRow key={entry.ledgerId}>
+                  <TableCell className="px-4 py-3">{entry.occurredOn}</TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Badge variant={entry.type === "income" ? "secondary" : "outline"}>
+                      {formatLedgerEntryType(entry.type)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    {formatLedgerEntrySource(entry.source)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    {formatLedgerCategory(entry.category)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">{formatWon(entry.amount)}</TableCell>
+                  <TableCell className="px-4 py-3 font-medium">
+                    {entry.description}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={`${entry.description} 수정`}
+                        onClick={() => onEdit(entry)}
+                      >
+                        <Pencil aria-hidden="true" />
+                        수정
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={`${entry.description} 삭제`}
+                        onClick={() => onDelete(entry)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                        삭제
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      <ListPagination
+        itemLabel="입출금 내역"
+        countUnit="건"
+        view={view}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
     </div>
+  );
+}
+
+function LedgerDeleteDialog({
+  entry,
+  isDeleting,
+  onConfirm,
+  onOpenChange,
+}: {
+  entry: LedgerEntry | null;
+  isDeleting: boolean;
+  onConfirm: (entry: LedgerEntry) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <AlertDialog open={Boolean(entry)} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>이 입출금 내역을 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            삭제하면 되돌릴 수 없습니다. 수강료·교재·급여로 자동 기록된 내역은 원래
+            기록과의 연결이 끊어질 수 있습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {entry ? (
+          <p className="rounded-md bg-muted px-3 py-2 text-sm font-medium">
+            {entry.occurredOn} · {entry.description} · {formatWon(entry.amount)}
+          </p>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isDeleting || !entry}
+            onClick={(event) => {
+              event.preventDefault();
+
+              if (entry) {
+                onConfirm(entry);
+              }
+            }}
+          >
+            {isDeleting ? "삭제 중" : "삭제"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -1404,12 +1666,57 @@ function FinanceMonthSummary({
         <span>월 선택</span>
         <MonthField
           aria-label={`${label} 월 선택`}
+          required
           value={month}
           onValueChange={onChangeMonth}
         />
       </Label>
     </div>
   );
+}
+
+function FinanceListSearch({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 sm:max-w-md">
+      <ListSearchField
+        label={label}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function EmptyListMessage({ children }: { children: string }) {
+  return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
+}
+
+/** 이름 검색이 있는 표의 상태. 검색어가 바뀌면 보던 페이지가 의미를 잃으므로 1페이지로 돌아간다. */
+function useSearchableListPaging() {
+  const [search, setSearch] = useState("");
+  const paging = useListPaging();
+  const { resetPage } = paging;
+
+  const changeSearch = useCallback(
+    (nextSearch: string) => {
+      setSearch(nextSearch);
+      resetPage();
+    },
+    [resetPage],
+  );
+
+  return { search, changeSearch, paging };
 }
 
 function LessonIncomePaymentAction({
@@ -1453,8 +1760,6 @@ function PaymentDialog({
   title: string;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [paidAt, setPaidAt] = useState("2026-08-21");
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -1464,24 +1769,43 @@ function PaymentDialog({
             확인하면 연결된 입출금 내역이 자동으로 기록됩니다.
           </DialogDescription>
         </DialogHeader>
-        <Label className="grid gap-1 text-sm font-medium">
-          <span>{dateLabel}</span>
-          <DateField
-            aria-label={dateLabel}
-            value={paidAt}
-            onValueChange={setPaidAt}
-          />
-        </Label>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            취소
-          </Button>
-          <Button type="button" onClick={() => onConfirm(paidAt)}>
-            확인
-          </Button>
-        </DialogFooter>
+        <PaymentDateForm
+          dateLabel={dateLabel}
+          onConfirm={onConfirm}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 다이얼로그가 열릴 때마다 새로 마운트되어 수납일이 항상 오늘로 시작한다. */
+function PaymentDateForm({
+  dateLabel,
+  onConfirm,
+  onCancel,
+}: {
+  dateLabel: string;
+  onConfirm: (paidAt: string) => void;
+  onCancel: () => void;
+}) {
+  const [paidAt, setPaidAt] = useState(getFinanceToday);
+
+  return (
+    <>
+      <Label className="grid gap-1 text-sm font-medium">
+        <span>{dateLabel}</span>
+        <DateField aria-label={dateLabel} value={paidAt} onValueChange={setPaidAt} />
+      </Label>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          취소
+        </Button>
+        <Button type="button" onClick={() => onConfirm(paidAt)}>
+          확인
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 
@@ -1579,9 +1903,14 @@ function buildLessonIncomeRows(
 
   return [...academyRows, ...privateRows].sort(
     (left, right) =>
-      left.studentName.localeCompare(right.studentName, "ko-KR") ||
-      left.instrumentName.localeCompare(right.instrumentName, "ko-KR"),
+      compareKoreanNames(left.studentName, right.studentName) ||
+      compareKoreanNames(getLessonIncomeTieBreaker(left), getLessonIncomeTieBreaker(right)),
   );
+}
+
+/** 이름이 같은 원생은 악기 순서, 그다음 id로 순서를 고정한다. */
+function getLessonIncomeTieBreaker(row: LessonIncomeRow) {
+  return `${row.instrumentName} ${row.id}`;
 }
 
 function createFallbackTuitionSnapshotsQueryOptions(
@@ -1637,6 +1966,11 @@ function buildBookFinanceRows(
       paidAt: sale.status === "paid" ? sale.paidAt : "",
       status: sale.status,
     }));
+}
+
+/** 이름이 같은 원생은 출고일이 이른 순서, 그다음 id로 순서를 고정한다. */
+function getBookFinanceTieBreaker(row: BookFinanceRow) {
+  return `${row.shippedAt} ${row.id}`;
 }
 
 function buildPayrollRows(
