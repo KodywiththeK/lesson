@@ -129,7 +129,7 @@ export function AppShell({
 
           <section className="flex min-w-0 flex-col">
             <header className="sticky top-0 z-40 border-b border-border bg-background/95 px-5 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-8">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <MobileNavigationDrawer
                     activeHref={activeRoute.item?.href}
@@ -188,11 +188,12 @@ function HeaderActions({
         <Button
           type="button"
           variant="outline"
+          size="icon"
           aria-label="작업 메뉴 열기"
+          title="페이지 작업"
           onClick={() => setIsOpen(true)}
         >
           <MoreHorizontal aria-hidden="true" className="size-4" />
-          작업
         </Button>
         <SheetContent side="right" className="w-80 max-w-[85vw] gap-0 p-0">
           <SheetHeader className="border-b border-border p-4 text-left">

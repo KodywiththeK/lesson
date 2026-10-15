@@ -10,7 +10,7 @@ describe("mainNavigation", () => {
       "회차권",
       "인원·거래처",
       "교재",
-      "수입",
+      "수입 관리",
     ]);
   });
 
@@ -54,6 +54,28 @@ describe("mainNavigation", () => {
     expect(lessonNavigation?.children?.map((item) => item.href)).toEqual([
       "/lessons/academy",
       "/lessons/private",
+    ]);
+  });
+
+  it("수입 관리 메뉴는 입출금 내역, 학원 레슨수입, 교재내역, 선생님 월급, 전체수입 하위 메뉴를 가진다", () => {
+    const financeNavigation = mainNavigation.find(
+      (item) => item.label === "수입 관리",
+    );
+
+    expect(financeNavigation?.href).toBe("/finance/ledger");
+    expect(financeNavigation?.children?.map((item) => item.label)).toEqual([
+      "입출금 내역",
+      "학원 레슨수입",
+      "교재내역",
+      "선생님 월급",
+      "전체수입",
+    ]);
+    expect(financeNavigation?.children?.map((item) => item.href)).toEqual([
+      "/finance/ledger",
+      "/finance/lesson-income",
+      "/finance/books",
+      "/finance/payroll",
+      "/finance/overview",
     ]);
   });
 });

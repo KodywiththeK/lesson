@@ -8,6 +8,11 @@ export type FixedIncomeSource = {
   instrumentId: string;
   instrumentName: string;
   monthlyAmount: number;
+  registeredOn: string;
+  lessonFee: number;
+  discountTotal: number;
+  discountLabel?: string;
+  progress: string;
   effectiveFrom: string;
   active: boolean;
 };
@@ -28,7 +33,12 @@ export type TuitionRecord = {
   enrollmentId: string;
   instrumentId: string;
   instrumentName: string;
+  progress: string;
+  lessonFee: number;
+  discountTotal: number;
+  discountLabel?: string;
   amount: number;
+  dueOn: string;
   status: TuitionStatus;
   paidAt?: string;
 };
@@ -82,7 +92,12 @@ export function createMonthlyTuitionSnapshot(
       enrollmentId: source.enrollmentId,
       instrumentId: source.instrumentId,
       instrumentName: source.instrumentName,
+      progress: source.progress,
+      lessonFee: source.lessonFee,
+      discountTotal: source.discountTotal,
+      discountLabel: source.discountLabel,
       amount: source.monthlyAmount,
+      dueOn: calculateTuitionDueOn(options.month, source.registeredOn),
       status: "unpaid",
     }));
 }
@@ -109,11 +124,30 @@ export function markTuitionAsPaid(
       occurredOn: input.paidAt,
       type: "income",
       source: "tuition",
+      category: "tuition",
       amount: record.amount,
       description: `수강료 수납: ${record.month} ${record.studentName} ${record.instrumentName}`,
       refId: record.tuitionId,
     },
   };
+}
+
+function calculateTuitionDueOn(month: string, registeredOn: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const dueDay = Number(registeredOn.slice(-2));
+  const lastDayOfMonth = new Date(year, monthIndex, 0).getDate();
+
+  if (dueDay <= lastDayOfMonth) {
+    return `${month}-${String(dueDay).padStart(2, "0")}`;
+  }
+
+  const overflowDate = new Date(year, monthIndex, 1);
+
+  return [
+    overflowDate.getFullYear(),
+    String(overflowDate.getMonth() + 1).padStart(2, "0"),
+    String(overflowDate.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 export function markTuitionAsUnpaid(

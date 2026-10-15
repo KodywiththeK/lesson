@@ -1,10 +1,13 @@
-import type { LedgerEntry } from "./book-sale";
+import type { LedgerCategory, LedgerEntry } from "./book-sale";
+
+export type { LedgerCategory };
 
 export type ManualLedgerInput = {
   academyId: string;
   ledgerId: string;
   occurredOn: string;
   type: "income" | "expense";
+  category?: LedgerCategory;
   amount: number;
   description: string;
   createdBy: string;
@@ -53,13 +56,53 @@ export type IncomeExpenseGraph = {
 export type FinanceLedgerListFilters = {
   type?: LedgerEntry["type"];
   source?: LedgerEntry["source"];
+  category?: LedgerCategory;
+};
+
+export type FinanceLedgerSortField = "occurredOn" | "amount";
+
+export type FinanceLedgerSort = {
+  field: FinanceLedgerSortField;
+  direction: "asc" | "desc";
 };
 
 export type BuildFinanceLedgerListOptions = {
   academyId: string;
   search?: string;
+  dateRange?: {
+    from: string;
+    to: string;
+  };
   filters?: FinanceLedgerListFilters;
+  sort?: FinanceLedgerSort;
 };
+
+export type LedgerCategoryOption = {
+  value: LedgerCategory;
+  label: string;
+};
+
+export type FinanceCalendarDay = {
+  date: string;
+  income: number;
+  expense: number;
+  netIncome: number;
+  entries: LedgerEntry[];
+};
+
+export const ledgerCategoryOptions: LedgerCategoryOption[] = [
+  { value: "tuition", label: "수강료" },
+  { value: "lesson-ticket", label: "회차권" },
+  { value: "book-sale", label: "교재판매" },
+  { value: "payroll", label: "급여" },
+  { value: "book-order", label: "교재발주" },
+  { value: "rent", label: "임대료" },
+  { value: "utilities", label: "관리비" },
+  { value: "tuning-repair", label: "조율/수리" },
+  { value: "supplies", label: "소모품" },
+  { value: "tax", label: "세금" },
+  { value: "other", label: "기타" },
+];
 
 export function createManualLedgerEntry(
   input: ManualLedgerInput,
@@ -87,6 +130,7 @@ export function createManualLedgerEntry(
     description,
     refId: input.ledgerId,
     createdBy: input.createdBy,
+    category: input.category ?? "other",
   };
 }
 
@@ -96,13 +140,10 @@ export function buildFinanceLedgerList(
 ): LedgerEntry[] {
   return entries
     .filter((entry) => entry.academyId === options.academyId)
+    .filter((entry) => matchesFinanceLedgerDateRange(entry, options.dateRange))
     .filter((entry) => matchesFinanceLedgerFilters(entry, options.filters))
     .filter((entry) => matchesFinanceLedgerSearch(entry, options.search))
-    .sort(
-      (left, right) =>
-        right.occurredOn.localeCompare(left.occurredOn) ||
-        left.description.localeCompare(right.description, "ko-KR"),
-    );
+    .sort((left, right) => compareFinanceLedgerEntries(left, right, options.sort));
 }
 
 export function formatLedgerEntryType(type: LedgerEntry["type"]) {
@@ -119,6 +160,76 @@ export function formatLedgerEntrySource(source: LedgerEntry["source"]) {
   };
 
   return labels[source];
+}
+
+export function formatLedgerCategory(category: LedgerCategory | undefined) {
+  return (
+    ledgerCategoryOptions.find((option) => option.value === category)?.label ??
+    "기타"
+  );
+}
+
+export function toDefaultLedgerCategory(
+  source: LedgerEntry["source"],
+): LedgerCategory {
+  const categoryBySource: Record<LedgerEntry["source"], LedgerCategory> = {
+    tuition: "tuition",
+    "book-sale": "book-sale",
+    "lesson-ticket": "lesson-ticket",
+    payroll: "payroll",
+    manual: "other",
+  };
+
+  return categoryBySource[source];
+}
+
+export function buildFinanceCalendarDays(
+  entries: LedgerEntry[],
+  options: {
+    academyId: string;
+    month: string;
+  },
+): FinanceCalendarDay[] {
+  return buildMonthDates(options.month).map((date) => {
+    const dayEntries = buildFinanceLedgerList(entries, {
+      academyId: options.academyId,
+      dateRange: {
+        from: date,
+        to: date,
+      },
+      sort: {
+        field: "occurredOn",
+        direction: "asc",
+      },
+    });
+    const income = sumAmounts(dayEntries.filter((entry) => entry.type === "income"));
+    const expense = sumAmounts(dayEntries.filter((entry) => entry.type === "expense"));
+
+    return {
+      date,
+      income,
+      expense,
+      netIncome: income - expense,
+      entries: dayEntries,
+    };
+  });
+}
+
+export function exportFinanceLedgerCsv(entries: LedgerEntry[]) {
+  const rows = [
+    ["발생일", "유형", "출처", "분류", "금액", "설명", "참조 ID"],
+    ...entries.map((entry) => [
+      entry.occurredOn,
+      formatLedgerEntryType(entry.type),
+      formatLedgerEntrySource(entry.source),
+      formatLedgerCategory(entry.category ?? toDefaultLedgerCategory(entry.source)),
+      String(entry.amount),
+      entry.description,
+      entry.refId,
+    ]),
+  ];
+
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
 }
 
 export function buildIncomeExpenseGraph(
@@ -155,8 +266,21 @@ function matchesFinanceLedgerFilters(
 
   return (
     (!filters.type || entry.type === filters.type) &&
-    (!filters.source || entry.source === filters.source)
+    (!filters.source || entry.source === filters.source) &&
+    (!filters.category ||
+      (entry.category ?? toDefaultLedgerCategory(entry.source)) === filters.category)
   );
+}
+
+function matchesFinanceLedgerDateRange(
+  entry: LedgerEntry,
+  dateRange: BuildFinanceLedgerListOptions["dateRange"],
+) {
+  if (!dateRange) {
+    return true;
+  }
+
+  return entry.occurredOn >= dateRange.from && entry.occurredOn <= dateRange.to;
 }
 
 function matchesFinanceLedgerSearch(
@@ -177,7 +301,26 @@ function matchesFinanceLedgerSearch(
     entry.source,
     formatLedgerEntryType(entry.type),
     formatLedgerEntrySource(entry.source),
+    formatLedgerCategory(entry.category ?? toDefaultLedgerCategory(entry.source)),
   ].some((value) => value.toLocaleLowerCase("ko-KR").includes(trimmedSearch));
+}
+
+function compareFinanceLedgerEntries(
+  left: LedgerEntry,
+  right: LedgerEntry,
+  sort: FinanceLedgerSort | undefined,
+) {
+  if (sort?.field === "amount") {
+    return compareNumber(left.amount, right.amount, sort.direction);
+  }
+
+  const direction = sort?.direction ?? "desc";
+  const dateCompare =
+    direction === "asc"
+      ? left.occurredOn.localeCompare(right.occurredOn)
+      : right.occurredOn.localeCompare(left.occurredOn);
+
+  return dateCompare || left.description.localeCompare(right.description, "ko-KR");
 }
 
 function buildMonthlyGraphPoint(
@@ -227,6 +370,33 @@ function buildInstrumentBreakdown(entries: FinanceGraphLedgerEntry[]) {
 
 function sumAmounts(entries: FinanceGraphLedgerEntry[]) {
   return entries.reduce((total, entry) => total + entry.amount, 0);
+}
+
+function compareNumber(left: number, right: number, direction: "asc" | "desc") {
+  return direction === "asc" ? left - right : right - left;
+}
+
+function buildMonthDates(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const dates: string[] = [];
+  const date = new Date(year, monthIndex - 1, 1);
+
+  while (date.getMonth() === monthIndex - 1) {
+    dates.push(
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+    );
+    date.setDate(date.getDate() + 1);
+  }
+
+  return dates;
+}
+
+function escapeCsvCell(value: string) {
+  if (!/[",\n]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replaceAll("\"", "\"\"")}"`;
 }
 
 function assertPositiveMoney(amount: number) {

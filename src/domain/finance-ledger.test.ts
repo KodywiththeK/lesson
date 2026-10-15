@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildFinanceCalendarDays,
   buildFinanceLedgerList,
   buildIncomeExpenseGraph,
   createManualLedgerEntry,
+  exportFinanceLedgerCsv,
   formatLedgerEntrySource,
   formatLedgerEntryType,
+  ledgerCategoryOptions,
 } from "./finance-ledger";
 
 describe("createManualLedgerEntry", () => {
@@ -31,6 +34,7 @@ describe("createManualLedgerEntry", () => {
       occurredOn: "2026-08-21",
       type: "expense",
       source: "manual",
+      category: "other",
       amount: 30000,
       description: "조율비",
       refId: "manual-1",
@@ -154,6 +158,97 @@ describe("buildIncomeExpenseGraph", () => {
   });
 });
 
+describe("finance ledger filters and export", () => {
+  const entries = [
+    {
+      academyId: "academy-1",
+      ledgerId: "ledger-1",
+      occurredOn: "2026-08-06",
+      type: "income" as const,
+      source: "tuition" as const,
+      category: "tuition" as const,
+      amount: 140000,
+      description: "김민지 8월 피아노 수강료",
+      refId: "tuition-1",
+    },
+    {
+      academyId: "academy-1",
+      ledgerId: "ledger-2",
+      occurredOn: "2026-08-20",
+      type: "expense" as const,
+      source: "manual" as const,
+      category: "tuning-repair" as const,
+      amount: 70000,
+      description: "피아노 조율비",
+      refId: "manual-1",
+    },
+  ];
+
+  it("기간, 고정 분류, 금액 정렬 기준으로 입출금 내역을 만든다", () => {
+    expect(ledgerCategoryOptions.map((category) => category.label)).toEqual([
+      "수강료",
+      "회차권",
+      "교재판매",
+      "급여",
+      "교재발주",
+      "임대료",
+      "관리비",
+      "조율/수리",
+      "소모품",
+      "세금",
+      "기타",
+    ]);
+
+    const result = buildFinanceLedgerList(entries, {
+      academyId: "academy-1",
+      dateRange: {
+        from: "2026-08-01",
+        to: "2026-08-31",
+      },
+      filters: {
+        category: "tuning-repair",
+      },
+      sort: {
+        field: "amount",
+        direction: "desc",
+      },
+    });
+
+    expect(result.map((entry) => entry.ledgerId)).toEqual(["ledger-2"]);
+  });
+
+  it("월 캘린더 일자별 수입/지출 합계를 계산한다", () => {
+    const calendarDays = buildFinanceCalendarDays(entries, {
+      academyId: "academy-1",
+      month: "2026-08",
+    });
+
+    expect(calendarDays.find((day) => day.date === "2026-08-06")).toMatchObject({
+      income: 140000,
+      expense: 0,
+      netIncome: 140000,
+      entries: [entries[0]],
+    });
+    expect(calendarDays.find((day) => day.date === "2026-08-20")).toMatchObject({
+      income: 0,
+      expense: 70000,
+      netIncome: -70000,
+      entries: [entries[1]],
+    });
+  });
+
+  it("현재 필터 결과를 엑셀에서 열 수 있는 CSV로 내보낸다", () => {
+    const csv = exportFinanceLedgerCsv(entries);
+
+    expect(csv).toContain(
+      "발생일,유형,출처,분류,금액,설명,참조 ID",
+    );
+    expect(csv).toContain(
+      "2026-08-06,수입,수강료,수강료,140000,김민지 8월 피아노 수강료,tuition-1",
+    );
+  });
+});
+
 describe("buildFinanceLedgerList", () => {
   it("현재 학원의 수입/지출 내역을 최신순으로 보여주고 검색과 유형 필터를 적용한다", () => {
     const list = buildFinanceLedgerList(
@@ -164,6 +259,7 @@ describe("buildFinanceLedgerList", () => {
           occurredOn: "2026-08-20",
           type: "income",
           source: "book-sale",
+          category: "book-sale",
           amount: 12000,
           description: "교재 판매: 바이엘 2 / 김민지",
           refId: "sale-1",
@@ -174,6 +270,7 @@ describe("buildFinanceLedgerList", () => {
           occurredOn: "2026-08-21",
           type: "expense",
           source: "manual",
+          category: "tuning-repair",
           amount: 30000,
           description: "조율비",
           refId: "manual-1",
@@ -184,6 +281,7 @@ describe("buildFinanceLedgerList", () => {
           occurredOn: "2026-08-21",
           type: "income",
           source: "tuition",
+          category: "tuition",
           amount: 999999,
           description: "다른 학원 수강료",
           refId: "tuition-1",
@@ -205,6 +303,7 @@ describe("buildFinanceLedgerList", () => {
         occurredOn: "2026-08-21",
         type: "expense",
         source: "manual",
+        category: "tuning-repair",
         amount: 30000,
         description: "조율비",
         refId: "manual-1",

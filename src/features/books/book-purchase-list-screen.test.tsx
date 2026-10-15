@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildBookPurchaseList, type BookSale } from "@/domain/book-sale";
 
@@ -39,6 +39,7 @@ const bookSales: BookSale[] = [
 
 function renderBookPurchaseListScreen(
   queryOptionsFactory: BookPurchaseListQueryOptionsFactory,
+  canRecordPayment = true,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -53,6 +54,7 @@ function renderBookPurchaseListScreen(
       <BookPurchaseListScreen
         academyId="academy-1"
         academyName="더 클래식"
+        canRecordPayment={canRecordPayment}
         queryOptionsFactory={queryOptionsFactory}
       />
     </QueryClientProvider>,
@@ -60,6 +62,20 @@ function renderBookPurchaseListScreen(
 }
 
 describe("BookPurchaseListScreen", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("교재 출고일은 오늘로 시작하고 데스크는 결제 완료를 고를 수 없다", async () => {
+    vi.setSystemTime(new Date("2026-10-15T12:00:00+09:00"));
+    renderBookPurchaseListScreen((options) => ({
+      queryKey: ["books", options.academyId],
+      queryFn: async () => buildBookPurchaseList(bookSales, options),
+    }), false);
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "교재 출고" }));
+    const dialog = screen.getByRole("dialog", { name: "교재 출고" });
+    expect(within(dialog).getByLabelText("출고일")).toHaveValue("2026-10-15");
+    expect(within(dialog).queryByRole("option", { name: "결제 완료" })).not.toBeInTheDocument();
+  });
   it("교재 구매 목록을 표로 보여주고 원생명, 교재명, 자동 입력 가격, 출고일, 결제 상태를 표시한다", async () => {
     renderBookPurchaseListScreen((options) => ({
       queryKey: ["books", options.academyId, options.search ?? ""],

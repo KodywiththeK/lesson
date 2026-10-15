@@ -53,23 +53,18 @@ export type RegisterBookReleaseInput = {
 };
 
 export type BookReleaseMutationSupabaseClient = {
-  from(table: "books"): {
-    insert(values: Record<string, unknown>): {
-      select(select: "id"): {
-        single(): PromiseLike<SupabaseQueryResult<{ id: string }>>;
-      };
-    };
-  };
-  from(table: "book_releases"): {
-    insert(values: Record<string, unknown>): {
-      select(select: string): {
-        single(): PromiseLike<SupabaseQueryResult<BookReleaseSupabaseRow>>;
-      };
-    };
-  };
-  from(table: "ledger_entries"): {
-    insert(values: Record<string, unknown>): PromiseLike<SupabaseQueryResult<null>>;
-  };
+  rpc(
+    name: "register_book_release",
+    args: {
+      p_academy_id: string;
+      p_student_id: string;
+      p_student_name: string;
+      p_book_title: string;
+      p_price: number;
+      p_shipped_at: string;
+      p_status: "payment-pending" | "paid";
+    },
+  ): PromiseLike<SupabaseQueryResult<BookReleaseSupabaseRow>>;
 };
 
 const BOOK_PURCHASE_LIST_SELECT =
@@ -108,39 +103,15 @@ export async function registerBookRelease(
   supabase: BookReleaseMutationSupabaseClient,
   input: RegisterBookReleaseInput,
 ): Promise<BookPurchaseListRow> {
-  const { data: book, error: bookError } = await supabase
-    .from("books")
-    .insert({
-      academy_id: input.academyId,
-      title: input.bookTitle,
-      price: input.price,
-    })
-    .select("id")
-    .single();
-
-  if (bookError) {
-    throw new Error(`교재를 등록하지 못했습니다: ${bookError.message}`);
-  }
-
-  if (!book) {
-    throw new Error("교재를 등록했지만 반환된 데이터가 없습니다.");
-  }
-
-  const { data, error } = await supabase
-    .from("book_releases")
-    .insert({
-      academy_id: input.academyId,
-      book_id: book.id,
-      student_id: input.studentId,
-      student_name: input.studentName,
-      book_title: input.bookTitle,
-      price: input.price,
-      shipped_at: input.shippedAt,
-      status: input.status,
-      paid_at: input.status === "paid" ? input.shippedAt : null,
-    })
-    .select(BOOK_PURCHASE_LIST_SELECT)
-    .single();
+  const { data, error } = await supabase.rpc("register_book_release", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+    p_student_name: input.studentName,
+    p_book_title: input.bookTitle,
+    p_price: input.price,
+    p_shipped_at: input.shippedAt,
+    p_status: input.status,
+  });
 
   if (error) {
     throw new Error(`교재 출고를 등록하지 못했습니다: ${error.message}`);
@@ -148,23 +119,6 @@ export async function registerBookRelease(
 
   if (!data) {
     throw new Error("교재 출고를 등록했지만 반환된 데이터가 없습니다.");
-  }
-
-  if (input.status === "paid") {
-    const { error: ledgerError } = await supabase.from("ledger_entries").insert({
-      academy_id: input.academyId,
-      occurred_on: input.shippedAt,
-      entry_type: "income",
-      source: "book-sale",
-      amount: input.price,
-      description: `교재 판매: ${input.bookTitle} / ${input.studentName}`,
-      ref_table: "book_releases",
-      ref_id: data.id,
-    });
-
-    if (ledgerError) {
-      throw new Error(`교재 수입 내역을 저장하지 못했습니다: ${ledgerError.message}`);
-    }
   }
 
   return buildBookPurchaseList([toBookSale(data)], {

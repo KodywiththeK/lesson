@@ -1,12 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppProviders } from "../../providers";
 import StatusManagementPage from "./page";
 
 describe("StatusManagementPage", () => {
+  afterEach(() => vi.useRealTimers());
   it("휴원/퇴원 통합 관리 화면에서 원생과 선생님 상태 목록을 전환한다", async () => {
+    vi.setSystemTime(new Date("2026-09-05T12:00:00+09:00"));
     const user = userEvent.setup();
     window.history.pushState(null, "", "/management/status");
 

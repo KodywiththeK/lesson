@@ -1,11 +1,89 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCompletedLessonRevenues,
   calculateHourlyPayroll,
   calculateMonthlyPayroll,
   calculateRatioPayroll,
   markPayrollAsPaid,
 } from "./payroll";
+
+describe("buildCompletedLessonRevenues", () => {
+  it("출석 완료와 보강 완료 수업만 급여 계산용 수업 매출로 변환한다", () => {
+    const revenues = buildCompletedLessonRevenues(
+      [
+        {
+          academyId: "academy-1",
+          lessonEventId: "lesson-1",
+          teacherId: "teacher-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentName: "바이올린",
+          lessonKind: "academy",
+          status: "present",
+          startedAt: "2026-08-06T09:00:00+09:00",
+          endedAt: "2026-08-06T10:00:00+09:00",
+          monthlyLessonFee: 140000,
+        },
+        {
+          academyId: "academy-1",
+          lessonEventId: "lesson-2",
+          teacherId: "teacher-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentName: "바이올린",
+          lessonKind: "makeup",
+          status: "present",
+          startedAt: "2026-08-13T09:00:00+09:00",
+          endedAt: "2026-08-13T10:00:00+09:00",
+          monthlyLessonFee: 140000,
+        },
+        {
+          academyId: "academy-1",
+          lessonEventId: "lesson-3",
+          teacherId: "teacher-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentName: "바이올린",
+          lessonKind: "academy",
+          status: "absent",
+          startedAt: "2026-08-20T09:00:00+09:00",
+          endedAt: "2026-08-20T10:00:00+09:00",
+          monthlyLessonFee: 140000,
+        },
+      ],
+      {
+        academyId: "academy-1",
+        month: "2026-08",
+      },
+    );
+
+    expect(revenues).toEqual([
+      {
+        academyId: "academy-1",
+        lessonEventId: "lesson-1",
+        teacherId: "teacher-1",
+        studentId: "student-1",
+        studentName: "김민지",
+        instrumentName: "바이올린",
+        lessonRevenue: 70000,
+        completedOn: "2026-08-06",
+        durationHours: 1,
+      },
+      {
+        academyId: "academy-1",
+        lessonEventId: "lesson-2",
+        teacherId: "teacher-1",
+        studentId: "student-1",
+        studentName: "김민지",
+        instrumentName: "바이올린",
+        lessonRevenue: 70000,
+        completedOn: "2026-08-13",
+        durationHours: 1,
+      },
+    ]);
+  });
+});
 
 describe("calculateRatioPayroll", () => {
   it("비율제 선생님의 완료 수업 수강료와 선생님 비율로 기본 급여를 계산한다", () => {
@@ -178,6 +256,61 @@ describe("calculateMonthlyPayroll", () => {
 });
 
 describe("calculateHourlyPayroll", () => {
+  it("시급제 근무시간은 완료 수업의 실제 시간 합산 값을 사용한다", () => {
+    const completedLessons = buildCompletedLessonRevenues(
+      [
+        {
+          academyId: "academy-1",
+          lessonEventId: "lesson-1",
+          teacherId: "teacher-3",
+          studentId: "student-1",
+          studentName: "김민지",
+          instrumentName: "피아노",
+          lessonKind: "academy",
+          status: "present",
+          startedAt: "2026-08-06T09:00:00+09:00",
+          endedAt: "2026-08-06T10:30:00+09:00",
+          monthlyLessonFee: 150000,
+        },
+        {
+          academyId: "academy-1",
+          lessonEventId: "lesson-2",
+          teacherId: "teacher-3",
+          studentId: "student-2",
+          studentName: "이서윤",
+          instrumentName: "피아노",
+          lessonKind: "makeup",
+          status: "present",
+          startedAt: "2026-08-07T09:00:00+09:00",
+          endedAt: "2026-08-07T10:00:00+09:00",
+          monthlyLessonFee: 150000,
+        },
+      ],
+      {
+        academyId: "academy-1",
+        month: "2026-08",
+      },
+    );
+    const workedHours = completedLessons.reduce(
+      (total, lesson) => total + (lesson.durationHours ?? 0),
+      0,
+    );
+
+    expect(workedHours).toBe(2.5);
+    expect(
+      calculateHourlyPayroll({
+        academyId: "academy-1",
+        teacherId: "teacher-3",
+        teacherName: "최선생",
+        month: "2026-08",
+        hourlyRate: 30_000,
+        workedHours,
+        withholdingTaxRate: 0.033,
+        rounding: "floor",
+      }).netPay,
+    ).toBe(72_525);
+  });
+
   it("시급제 급여는 월 근무 시간과 시급으로 계산한다", () => {
     const payroll = calculateHourlyPayroll({
       academyId: "academy-1",
@@ -248,6 +381,7 @@ describe("markPayrollAsPaid", () => {
       occurredOn: "2026-08-31",
       type: "expense",
       source: "payroll",
+      category: "payroll",
       amount: 58020,
       description: "급여 지급: 2026-08 박선생",
       refId: "2026-08:teacher-1",

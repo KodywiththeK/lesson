@@ -64,6 +64,7 @@ import {
   type StudentListSupabaseClient,
 } from "@/lib/api/students";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getFinanceToday } from "@/domain/finance-date";
 
 type BookPurchaseListQueryOptions = {
   queryKey: QueryKey;
@@ -77,6 +78,7 @@ export type BookPurchaseListQueryOptionsFactory = (
 type BookPurchaseListScreenProps = {
   academyId: string;
   academyName: string;
+  canRecordPayment: boolean;
   queryOptionsFactory?: BookPurchaseListQueryOptionsFactory;
   students?: StudentListRow[];
   registerBookRelease?: (input: {
@@ -113,6 +115,7 @@ const statusFilterOptions: Array<{
 
 export function BookPurchaseListScreen({
   academyId,
+  canRecordPayment,
   queryOptionsFactory,
   students = [],
   registerBookRelease,
@@ -192,7 +195,7 @@ export function BookPurchaseListScreen({
         queryKey: [...queryKeys.academy(academyId), "books"],
       });
       void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "finance"],
+        queryKey: queryKeys.finance.all(academyId),
       });
     },
     onError: (error) => {
@@ -219,6 +222,7 @@ export function BookPurchaseListScreen({
             </DialogDescription>
           </DialogHeader>
           <BookReleaseForm
+            canRecordPayment={canRecordPayment}
             students={studentOptions}
             onSubmit={(input) => {
               registerMutation.mutate(input);
@@ -227,7 +231,7 @@ export function BookPurchaseListScreen({
         </DialogContent>
       </Dialog>
     ),
-    [isReleaseOpen, registerMutation, studentOptions],
+    [canRecordPayment, isReleaseOpen, registerMutation, studentOptions],
   );
   const isHeaderActionMounted = usePageHeaderActions(releaseAction);
 
@@ -298,9 +302,11 @@ export function BookPurchaseListScreen({
 }
 
 function BookReleaseForm({
+  canRecordPayment,
   students,
   onSubmit,
 }: {
+  canRecordPayment: boolean;
   students: StudentListRow[];
   onSubmit: (input: {
     studentId: string;
@@ -314,7 +320,7 @@ function BookReleaseForm({
   const [studentId, setStudentId] = useState("");
   const [bookTitle, setBookTitle] = useState("");
   const [price, setPrice] = useState(0);
-  const [shippedAt, setShippedAt] = useState("2026-08-21");
+  const [shippedAt, setShippedAt] = useState(getFinanceToday);
   const [status, setStatus] = useState<BookSaleStatus>("payment-pending");
   const selectedStudent = students.find((student) => student.studentId === studentId);
   const canSubmit =
@@ -396,7 +402,9 @@ function BookReleaseForm({
             onChange={(event) => setStatus(event.target.value as BookSaleStatus)}
           >
             <NativeSelectOption value="payment-pending">결제 대기</NativeSelectOption>
-            <NativeSelectOption value="paid">결제 완료</NativeSelectOption>
+            {canRecordPayment ? (
+              <NativeSelectOption value="paid">결제 완료</NativeSelectOption>
+            ) : null}
           </NativeSelect>
         </Label>
       </div>

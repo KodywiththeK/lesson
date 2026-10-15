@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { nextRedirectMock } from "@/test/setup";
 
@@ -12,7 +12,9 @@ import PrivateLessonsPage from "./private/page";
 describe("LessonsPage", () => {
   beforeEach(() => {
     nextRedirectMock.mockClear();
+    vi.setSystemTime(new Date("2026-09-05T12:00:00+09:00"));
   });
+  afterEach(() => vi.useRealTimers());
 
   it("/lessons는 학원레슨표로 이동한다", () => {
     expect(() => LessonsPage()).toThrow("NEXT_REDIRECT:/lessons/academy");

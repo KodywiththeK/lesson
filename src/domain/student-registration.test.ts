@@ -168,6 +168,11 @@ describe("registerStudent", () => {
         instrumentId: "piano",
         instrumentName: "피아노",
         monthlyAmount: 150000,
+        registeredOn: "2026-08-20",
+        lessonFee: 160000,
+        discountTotal: 10000,
+        discountLabel: undefined,
+        progress: "바이엘 2",
         effectiveFrom: "2026-08",
       },
     ]);
@@ -207,8 +212,8 @@ describe("registerStudent", () => {
     ).toThrow("최종 수강료가 레슨비와 할인 합계와 일치하지 않습니다.");
   });
 
-  it("시간이 없는 요일은 수강 정보에는 남기되 반복 일정 소스로 만들지 않는다", () => {
-    const result = registerStudent({
+  it("시간이 없는 학원레슨 요일은 등록하지 않는다", () => {
+    expect(() => registerStudent({
       academyId: "academy-1",
       studentId: "student-1",
       name: "김민지",
@@ -229,12 +234,7 @@ describe("registerStudent", () => {
           finalMonthlyFee: 160000,
         },
       ],
-    });
-
-    expect(result.enrollments[0].weeklySchedules).toEqual([
-      { weekday: "monday" },
-    ]);
-    expect(result.scheduleSources).toEqual([]);
+    })).toThrow("학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다.");
   });
 
   it("학원 수업은 하나 이상의 수업 요일이 필요하다", () => {
@@ -260,6 +260,6 @@ describe("registerStudent", () => {
           },
         ],
       }),
-    ).toThrow("학원 수업은 하나 이상의 수업 요일이 필요합니다.");
+    ).toThrow("학원레슨 요일을 선택해야 합니다.");
   });
 });

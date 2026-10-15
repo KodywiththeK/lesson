@@ -34,7 +34,12 @@ describe("Home", () => {
       "휴원/퇴원",
       "거래처",
       "교재",
-      "수입",
+      "수입 관리",
+      "입출금 내역",
+      "학원 레슨수입",
+      "교재내역",
+      "선생님 월급",
+      "전체수입",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
@@ -42,5 +47,8 @@ describe("Home", () => {
     expect(
       within(navigation).getByRole("link", { name: "레슨 시간표" }),
     ).toHaveAttribute("href", "/lessons/academy");
+    expect(
+      within(navigation).getByRole("link", { name: "수입 관리" }),
+    ).toHaveAttribute("href", "/finance/ledger");
   });
 });

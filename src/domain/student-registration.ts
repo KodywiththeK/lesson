@@ -39,6 +39,31 @@ export type StudentInstrumentWeeklyScheduleInput = {
   endTime?: string;
 };
 
+export function getAcademyScheduleValidationError(input: {
+  lessonType: LessonType;
+  teacherId?: string | null;
+  weeklySchedules: ReadonlyArray<{ startTime?: string; endTime?: string }>;
+}): string | null {
+  if (input.lessonType !== "academy") {
+    return null;
+  }
+  if (!input.teacherId?.trim()) {
+    return "학원레슨 선생님을 선택해야 합니다.";
+  }
+  if (input.weeklySchedules.length === 0) {
+    return "학원레슨 요일을 선택해야 합니다.";
+  }
+  if (input.weeklySchedules.some(({ startTime, endTime }) => !startTime || !endTime)) {
+    return "학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다.";
+  }
+  if (input.weeklySchedules.some(({ startTime, endTime }) =>
+    Boolean(startTime && endTime && endTime <= startTime)
+  )) {
+    return "학원레슨 종료 시간은 시작 시간보다 늦어야 합니다.";
+  }
+  return null;
+}
+
 export type RegisterStudentInput = {
   academyId: string;
   studentId: string;
@@ -97,6 +122,11 @@ export type FixedIncomeSource = {
   instrumentId: string;
   instrumentName: string;
   monthlyAmount: number;
+  registeredOn: string;
+  lessonFee: number;
+  discountTotal: number;
+  discountLabel?: string;
+  progress: string;
   effectiveFrom: string;
 };
 
@@ -147,6 +177,11 @@ export function registerStudent(input: RegisterStudentInput): RegisterStudentRes
         instrumentId: enrollment.instrumentId,
         instrumentName: enrollment.instrumentName,
         monthlyAmount: enrollment.finalMonthlyFee,
+        registeredOn: input.registeredAt,
+        lessonFee: enrollment.lessonFee,
+        discountTotal: enrollment.discountTotal,
+        discountLabel: enrollment.discountLabel,
+        progress: enrollment.progress,
         effectiveFrom: toMonth(input.registeredAt),
       })),
   };
@@ -207,42 +242,16 @@ function validateInstrument(
   if (instrument.lessonType !== "academy") {
     return;
   }
-
-  if (weeklySchedules.length === 0) {
-    throw new Error("학원 수업은 하나 이상의 수업 요일이 필요합니다.");
-  }
-
-  if (
-    weeklySchedules.some(
-      (schedule) =>
-        Boolean(schedule.startTime) !== Boolean(schedule.endTime),
-    )
-  ) {
-    throw new Error("요일별 시작 시간과 종료 시간은 함께 입력해야 합니다.");
-  }
-
-  if (
-    weeklySchedules.some(
-      (schedule) =>
-        schedule.startTime &&
-        schedule.endTime &&
-        schedule.endTime <= schedule.startTime,
-    )
-  ) {
-    throw new Error("종료 시간은 시작 시간보다 늦어야 합니다.");
-  }
+  const scheduleError = getAcademyScheduleValidationError({
+    lessonType: instrument.lessonType,
+    teacherId: instrument.teacherId,
+    weeklySchedules,
+  });
+  if (scheduleError) throw new Error(scheduleError);
 }
 
 function toScheduleSource(enrollment: StudentEnrollment): AcademyLessonEnrollment[] {
-  const completeSchedules = enrollment.weeklySchedules.filter(
-    (schedule) => schedule.startTime && schedule.endTime,
-  );
-
-  if (completeSchedules.length === 0) {
-    return [];
-  }
-
-  return completeSchedules.map((schedule) => ({
+  return enrollment.weeklySchedules.map((schedule) => ({
     academyId: enrollment.academyId,
     enrollmentId: `${enrollment.enrollmentId}:${schedule.weekday}`,
     studentId: enrollment.studentId,

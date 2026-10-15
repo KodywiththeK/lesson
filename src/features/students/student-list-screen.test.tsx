@@ -239,6 +239,28 @@ describe("StudentListScreen", () => {
     });
   });
 
+  it("학원레슨은 선택한 모든 요일의 수업 시간을 채워야 등록할 수 있다", async () => {
+    const user = userEvent.setup();
+    renderStudentListScreen(
+      (options) => ({
+        queryKey: ["students", options.academyId, "registration-validation"],
+        queryFn: async () => buildStudentList(studentRows, options),
+      }),
+    );
+
+    await screen.findByRole("cell", { name: "김민지" });
+    await user.click(screen.getByRole("button", { name: "원생 등록" }));
+    const dialog = screen.getByRole("dialog", { name: "원생 등록" });
+    await user.type(within(dialog).getByLabelText("원생명"), "윤라온");
+    await user.type(within(dialog).getByLabelText("연락처"), "010-7777-8888");
+    await user.click(within(dialog).getByLabelText("피아노 월요일"));
+    expect(within(dialog).getByRole("button", { name: "등록" })).toBeDisabled();
+
+    await user.type(within(dialog).getByLabelText("피아노 월 시작 시간"), "14:00");
+    await user.type(within(dialog).getByLabelText("피아노 월 종료 시간"), "14:50");
+    expect(within(dialog).getByRole("button", { name: "등록" })).toBeEnabled();
+  });
+
   it("원생이 10명을 넘으면 페이지네이션과 페이지당 개수 변경을 제공한다", async () => {
     const user = userEvent.setup();
     const manyStudents = Array.from({ length: 12 }, (_, index) => ({

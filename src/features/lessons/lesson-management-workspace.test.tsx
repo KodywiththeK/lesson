@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
 
@@ -37,6 +37,7 @@ describe("LessonManagementWorkspace", () => {
   beforeEach(() => {
     window.history.pushState(null, "", "/lessons/academy");
   });
+  afterEach(() => vi.useRealTimers());
 
   it("학원레슨표 캘린더를 예시 데이터로 보여준다", async () => {
     renderWorkspace();
@@ -58,6 +59,7 @@ describe("LessonManagementWorkspace", () => {
   });
 
   it("오늘 날짜는 캘린더에서 하이라이트하고 접근성 상태를 표시한다", () => {
+    vi.setSystemTime(new Date("2026-08-05T12:00:00+09:00"));
     renderWorkspace({ lessonKind: "private" });
 
     expect(

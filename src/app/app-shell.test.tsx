@@ -31,7 +31,12 @@ describe("AppShell", () => {
       "휴원/퇴원",
       "거래처",
       "교재",
-      "수입",
+      "수입 관리",
+      "입출금 내역",
+      "학원 레슨수입",
+      "교재내역",
+      "선생님 월급",
+      "전체수입",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
@@ -82,7 +87,7 @@ describe("AppShell", () => {
     );
     expect(labels).not.toContain("선생님");
     expect(labels).not.toContain("휴원/퇴원");
-    expect(labels).not.toContain("수입");
+    expect(labels).not.toContain("수입 관리");
     expect(labels).not.toContain("거래처");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();

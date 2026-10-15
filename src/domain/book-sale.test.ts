@@ -128,6 +128,7 @@ describe("completeBookSalePayment", () => {
       occurredOn: "2026-08-22",
       type: "income",
       source: "book-sale",
+      category: "book-sale",
       amount: 12000,
       description: "교재 판매: 바이엘 2 / 김민지",
       refId: "sale-1",

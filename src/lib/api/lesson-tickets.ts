@@ -250,6 +250,8 @@ function toLessonTicketListItem(
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     registeredAt: row.registered_at,
+    paidAmount: row.paid_amount ?? undefined,
+    paidAt: row.paid_at ?? undefined,
   };
 }
 
@@ -289,6 +291,7 @@ async function insertLessonTicketIncomeLedger(
     occurred_on: input.registeredAt,
     entry_type: "income",
     source: "lesson-ticket",
+    category: "lesson-ticket",
     amount: input.paidAmount,
     description: `${input.studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
     ref_id: ticketId,

@@ -101,11 +101,16 @@ describe("queryKeys", () => {
   });
 
   it("학원별 입출입 내역 key에 academyId와 검색/유형/출처 필터를 포함한다", () => {
+    expect(queryKeys.finance.all("academy-1")).toEqual(["academy", "academy-1", "finance"]);
     expect(
       queryKeys.finance.ledgerList("academy-1", {
         q: "조율",
         type: "expense",
         source: "manual",
+        category: "tuning-repair",
+        from: "2026-08-01",
+        to: "2026-08-31",
+        sort: "amount-desc",
       }),
     ).toEqual([
       "academy",
@@ -115,6 +120,10 @@ describe("queryKeys", () => {
       "조율",
       "expense",
       "manual",
+      "tuning-repair",
+      "2026-08-01",
+      "2026-08-31",
+      "amount-desc",
     ]);
   });
 

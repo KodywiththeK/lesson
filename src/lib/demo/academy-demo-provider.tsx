@@ -10,7 +10,7 @@ import {
 } from "react";
 import type { QueryKey } from "@tanstack/react-query";
 
-import { buildBookPurchaseList } from "@/domain/book-sale";
+import { buildBookPurchaseList, type LedgerEntry } from "@/domain/book-sale";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
   buildLessonTicketList,
@@ -26,6 +26,7 @@ import {
   createInitialDemoAcademyState,
   deleteDemoWithdrawnStudent,
   deleteDemoResignedTeacher,
+  deleteDemoLedgerEntry,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
@@ -35,6 +36,7 @@ import {
   registerDemoVendor,
   updateDemoAcademyStudent,
   updateDemoAcademyTeacher,
+  updateDemoLedgerEntry,
   updateDemoStudentStatus,
   updateDemoTeacherStatus,
   type DemoAcademyState,
@@ -73,6 +75,8 @@ type DemoAcademyContextValue = {
     status: "present" | "absent",
   ) => void;
   registerManualLedgerEntry: (input: DemoManualLedgerInput) => void;
+  updateLedgerEntry: (input: LedgerEntry) => void;
+  deleteLedgerEntry: (input: { ledgerId: string }) => void;
   registerVendor: (input: DemoVendorRegistrationInput) => void;
   registerBookRelease: (
     input: Omit<DemoBookReleaseInput, "studentName"> & {
@@ -221,6 +225,12 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       registerManualLedgerEntry(input) {
         commitState((current) => registerDemoManualLedgerEntry(current, input));
+      },
+      updateLedgerEntry(input) {
+        commitState((current) => updateDemoLedgerEntry(current, input));
+      },
+      deleteLedgerEntry(input) {
+        commitState((current) => deleteDemoLedgerEntry(current, input));
       },
       registerVendor(input) {
         commitState((current) => registerDemoVendor(current, input));
@@ -411,6 +421,12 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
               q: options.search,
               type: options.filters?.type,
               source: options.filters?.source,
+              category: options.filters?.category,
+              from: options.dateRange?.from,
+              to: options.dateRange?.to,
+              sort: options.sort
+                ? `${options.sort.field}-${options.sort.direction}`
+                : undefined,
             }),
             "demo",
             revision,

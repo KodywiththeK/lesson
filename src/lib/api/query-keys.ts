@@ -29,6 +29,10 @@ type FinanceLedgerListFilters = {
   q?: string;
   type?: string;
   source?: string;
+  category?: string;
+  from?: string;
+  to?: string;
+  sort?: string;
 };
 
 type LessonTicketListFilters = {
@@ -103,14 +107,19 @@ export const queryKeys = {
       ] as const,
   },
   finance: {
+    all: (academyId: string) =>
+      [...queryKeys.academy(academyId), "finance"] as const,
     ledgerList: (academyId: string, filters: FinanceLedgerListFilters = {}) =>
       [
-        ...queryKeys.academy(academyId),
-        "finance",
+        ...queryKeys.finance.all(academyId),
         "ledger-list",
         filters.q ?? "",
         filters.type ?? "",
         filters.source ?? "",
+        filters.category ?? "",
+        filters.from ?? "",
+        filters.to ?? "",
+        filters.sort ?? "",
       ] as const,
   },
   lessonTickets: {

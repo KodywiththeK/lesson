@@ -380,6 +380,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          ordered_on: string
           quantity: number
           stocked_at: string
         }
@@ -389,6 +390,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          ordered_on: string
           quantity: number
           stocked_at: string
         }
@@ -398,6 +400,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          ordered_on?: string
           quantity?: number
           stocked_at?: string
         }
@@ -569,8 +572,14 @@ export type Database = {
           id: string
           instrument_id: string
           instrument_name: string
+          discount_label: string | null
+          discount_total: number
+          due_on: string
+          lesson_fee: number
           month: string
           paid_at: string | null
+          paid_ledger_entry_id: string | null
+          progress: string
           status: string
           student_id: string
           student_instrument_id: string | null
@@ -584,8 +593,14 @@ export type Database = {
           id?: string
           instrument_id: string
           instrument_name: string
+          discount_label?: string | null
+          discount_total?: number
+          due_on: string
+          lesson_fee?: number
           month: string
           paid_at?: string | null
+          paid_ledger_entry_id?: string | null
+          progress?: string
           status?: string
           student_id: string
           student_instrument_id?: string | null
@@ -599,8 +614,14 @@ export type Database = {
           id?: string
           instrument_id?: string
           instrument_name?: string
+          discount_label?: string | null
+          discount_total?: number
+          due_on?: string
+          lesson_fee?: number
           month?: string
           paid_at?: string | null
+          paid_ledger_entry_id?: string | null
+          progress?: string
           status?: string
           student_id?: string
           student_instrument_id?: string | null
@@ -630,6 +651,13 @@ export type Database = {
             referencedColumns: ["academy_id", "id"]
           },
           {
+            foreignKeyName: "fixed_income_snapshots_paid_ledger_fk"
+            columns: ["academy_id", "paid_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_entries"
+            referencedColumns: ["academy_id", "id"]
+          },
+          {
             foreignKeyName: "fixed_income_snapshots_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -649,6 +677,7 @@ export type Database = {
         Row: {
           academy_id: string
           amount: number
+          category: string
           created_at: string
           created_by: string | null
           description: string
@@ -658,10 +687,13 @@ export type Database = {
           ref_id: string | null
           ref_table: string | null
           source: Database["public"]["Enums"]["ledger_entry_source"]
+          updated_at: string
+          updated_by: string | null
         }
         Insert: {
           academy_id: string
           amount: number
+          category?: string
           created_at?: string
           created_by?: string | null
           description: string
@@ -671,10 +703,13 @@ export type Database = {
           ref_id?: string | null
           ref_table?: string | null
           source: Database["public"]["Enums"]["ledger_entry_source"]
+          updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           academy_id?: string
           amount?: number
+          category?: string
           created_at?: string
           created_by?: string | null
           description?: string
@@ -684,6 +719,8 @@ export type Database = {
           ref_id?: string | null
           ref_table?: string | null
           source?: Database["public"]["Enums"]["ledger_entry_source"]
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -696,6 +733,13 @@ export type Database = {
           {
             foreignKeyName: "ledger_entries_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_entries_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1232,6 +1276,7 @@ export type Database = {
           month: string
           net_pay: number
           paid_at: string | null
+          paid_ledger_entry_id: string | null
           pay_type: string
           status: string
           teacher_id: string
@@ -1248,6 +1293,7 @@ export type Database = {
           month: string
           net_pay: number
           paid_at?: string | null
+          paid_ledger_entry_id?: string | null
           pay_type: string
           status?: string
           teacher_id: string
@@ -1264,6 +1310,7 @@ export type Database = {
           month?: string
           net_pay?: number
           paid_at?: string | null
+          paid_ledger_entry_id?: string | null
           pay_type?: string
           status?: string
           teacher_id?: string
@@ -1284,6 +1331,13 @@ export type Database = {
             columns: ["academy_id", "teacher_id"]
             isOneToOne: false
             referencedRelation: "teachers"
+            referencedColumns: ["academy_id", "id"]
+          },
+          {
+            foreignKeyName: "salary_settlements_paid_ledger_fk"
+            columns: ["academy_id", "paid_ledger_entry_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_entries"
             referencedColumns: ["academy_id", "id"]
           },
           {
@@ -1739,6 +1793,37 @@ export type Database = {
       ensure_monthly_academy_lesson_events: {
         Args: { p_academy_id: string; p_month: string }
         Returns: number
+      }
+      ensure_monthly_fixed_income_snapshots: {
+        Args: { p_academy_id: string; p_month: string }
+        Returns: Database["public"]["Tables"]["fixed_income_snapshots"]["Row"][]
+      }
+      mark_fixed_income_snapshot_paid: {
+        Args: {
+          p_academy_id: string
+          p_paid_at: string
+          p_snapshot_id: string
+        }
+        Returns: Database["public"]["Tables"]["fixed_income_snapshots"]["Row"]
+      }
+      mark_fixed_income_snapshot_unpaid: {
+        Args: { p_academy_id: string; p_snapshot_id: string }
+        Returns: Database["public"]["Tables"]["fixed_income_snapshots"]["Row"]
+      }
+      mark_salary_settlement_paid: {
+        Args: {
+          p_academy_id: string
+          p_base_pay: number
+          p_lesson_event_ids: string[]
+          p_month: string
+          p_net_pay: number
+          p_paid_at: string
+          p_pay_type: string
+          p_teacher_id: string
+          p_teacher_name: string
+          p_withholding_tax: number
+        }
+        Returns: Database["public"]["Tables"]["salary_settlements"]["Row"]
       }
       mark_private_lesson_attendance: {
         Args: {

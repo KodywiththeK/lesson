@@ -24,6 +24,8 @@ export type LessonTicketListItem = LessonTicket & {
   ticketId: string;
   studentName: string;
   instrumentName: string;
+  paidAmount?: number;
+  paidAt?: string;
 };
 
 export type AttendanceConfirmation = {

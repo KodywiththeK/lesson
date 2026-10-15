@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createBookPurchaseListQueryOptions,
   fetchBookPurchaseList,
+  registerBookRelease,
   type BookPurchaseListSupabaseClient,
   type BookReleaseSupabaseRow,
 } from "./books";
@@ -89,6 +90,29 @@ describe("fetchBookPurchaseList", () => {
         academyId: "academy-1",
       }),
     ).rejects.toThrow("교재 구매 목록을 불러오지 못했습니다: permission denied");
+  });
+});
+
+describe("registerBookRelease", () => {
+  it("교재와 출고, 결제 수입을 단일 RPC에서 등록한다", async () => {
+    const row: BookReleaseSupabaseRow = {
+      id: "release-1", academy_id: "academy-1", book_id: "book-1",
+      student_id: "student-1", student_name: "김민지", book_title: "바이엘 2",
+      price: 12000, shipped_at: "2026-08-21", status: "paid", paid_at: "2026-08-21",
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: row, error: null });
+    const client = { rpc };
+
+    await expect(registerBookRelease(client, {
+      academyId: "academy-1", studentId: "student-1", studentName: "김민지",
+      bookTitle: "바이엘 2", price: 12000, shippedAt: "2026-08-21", status: "paid",
+    })).resolves.toMatchObject({ saleId: "release-1", status: "paid" });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith("register_book_release", {
+      p_academy_id: "academy-1", p_student_id: "student-1", p_student_name: "김민지",
+      p_book_title: "바이엘 2", p_price: 12000, p_shipped_at: "2026-08-21",
+      p_status: "paid",
+    });
   });
 });
 

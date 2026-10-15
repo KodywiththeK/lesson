@@ -17,9 +17,14 @@ describe("createMonthlyTuitionSnapshot", () => {
           enrollmentId: "student-1:piano",
           instrumentId: "piano",
           instrumentName: "피아노",
-          monthlyAmount: 150000,
-          effectiveFrom: "2026-08",
-          active: true,
+        monthlyAmount: 150000,
+        registeredOn: "2026-08-06",
+        lessonFee: 160000,
+        discountTotal: 10000,
+        discountLabel: "형제 할인",
+        progress: "체르니 100",
+        effectiveFrom: "2026-08",
+        active: true,
         },
       ],
       {
@@ -38,7 +43,12 @@ describe("createMonthlyTuitionSnapshot", () => {
         enrollmentId: "student-1:piano",
         instrumentId: "piano",
         instrumentName: "피아노",
+        progress: "체르니 100",
+        lessonFee: 160000,
+        discountTotal: 10000,
+        discountLabel: "형제 할인",
         amount: 150000,
+        dueOn: "2026-08-06",
         status: "unpaid",
       },
     ]);
@@ -55,6 +65,10 @@ describe("createMonthlyTuitionSnapshot", () => {
           instrumentId: "piano",
           instrumentName: "피아노",
           monthlyAmount: 150000,
+          registeredOn: "2026-08-06",
+          lessonFee: 150000,
+          discountTotal: 0,
+          progress: "바이엘",
           effectiveFrom: "2026-08",
           active: true,
         },
@@ -66,6 +80,10 @@ describe("createMonthlyTuitionSnapshot", () => {
           instrumentId: "piano",
           instrumentName: "피아노",
           monthlyAmount: 150000,
+          registeredOn: "2026-08-06",
+          lessonFee: 150000,
+          discountTotal: 0,
+          progress: "바이엘",
           effectiveFrom: "2026-08",
           active: false,
         },
@@ -77,6 +95,10 @@ describe("createMonthlyTuitionSnapshot", () => {
           instrumentId: "piano",
           instrumentName: "피아노",
           monthlyAmount: 150000,
+          registeredOn: "2026-09-06",
+          lessonFee: 150000,
+          discountTotal: 0,
+          progress: "바이엘",
           effectiveFrom: "2026-09",
           active: true,
         },
@@ -101,9 +123,41 @@ describe("markTuitionAsPaid", () => {
     enrollmentId: "student-1:piano",
     instrumentId: "piano",
     instrumentName: "피아노",
+    progress: "바이엘 2",
+    lessonFee: 150000,
+    discountTotal: 0,
     amount: 150000,
+    dueOn: "2026-08-06",
     status: "unpaid" as const,
   };
+
+  it("31일 등록 원생의 2월 수강료 납부 발생일은 다음달 1일로 계산한다", () => {
+    const snapshot = createMonthlyTuitionSnapshot(
+      [
+        {
+          academyId: "academy-1",
+          studentId: "student-1",
+          studentName: "김민지",
+          enrollmentId: "student-1:piano",
+          instrumentId: "piano",
+          instrumentName: "피아노",
+          monthlyAmount: 150000,
+          registeredOn: "2026-01-31",
+          lessonFee: 150000,
+          discountTotal: 0,
+          progress: "바이엘",
+          effectiveFrom: "2026-01",
+          active: true,
+        },
+      ],
+      {
+        academyId: "academy-1",
+        month: "2026-02",
+      },
+    );
+
+    expect(snapshot[0].dueOn).toBe("2026-03-01");
+  });
 
   it("수납 완료 시 상태를 paid로 바꾸고 수강료 수입 ledger를 만든다", () => {
     const result = markTuitionAsPaid(unpaidRecord, {
@@ -122,6 +176,7 @@ describe("markTuitionAsPaid", () => {
       occurredOn: "2026-08-25",
       type: "income",
       source: "tuition",
+      category: "tuition",
       amount: 150000,
       description: "수강료 수납: 2026-08 김민지 피아노",
       refId: "2026-08:student-1:piano",
@@ -150,7 +205,11 @@ describe("markTuitionAsUnpaid", () => {
         enrollmentId: "student-1:piano",
         instrumentId: "piano",
         instrumentName: "피아노",
+        progress: "바이엘 2",
+        lessonFee: 150000,
+        discountTotal: 0,
         amount: 150000,
+        dueOn: "2026-08-06",
         status: "unpaid",
       },
       {

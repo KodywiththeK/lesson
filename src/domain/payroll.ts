@@ -43,6 +43,28 @@ export type CompletedLessonRevenue = {
   instrumentName: string;
   lessonRevenue: number;
   completedOn: string;
+  durationHours?: number;
+};
+
+export type PayrollLessonSource = {
+  academyId: string;
+  lessonEventId: string;
+  teacherId: string;
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  lessonKind: "academy" | "private" | "makeup";
+  status:
+    | "pending"
+    | "scheduled"
+    | "present"
+    | "absent"
+    | "cancelled"
+    | "makeup"
+    | "pass";
+  startedAt: string;
+  endedAt: string;
+  monthlyLessonFee: number;
 };
 
 export type PayrollStatus = "pending" | "paid";
@@ -115,6 +137,48 @@ export function calculateRatioPayroll(
   };
 }
 
+export function buildCompletedLessonRevenues(
+  lessons: PayrollLessonSource[],
+  options: {
+    academyId: string;
+    month: string;
+  },
+): CompletedLessonRevenue[] {
+  const completedLessons = lessons.filter(
+    (lesson) =>
+      lesson.academyId === options.academyId &&
+      lesson.status === "present" &&
+      (lesson.lessonKind === "academy" || lesson.lessonKind === "makeup") &&
+      toMonth(toDate(lesson.startedAt)) === options.month,
+  );
+  const completedCountByEnrollment = new Map<string, number>();
+
+  for (const lesson of completedLessons) {
+    const key = toCompletedLessonRevenueKey(lesson);
+    completedCountByEnrollment.set(
+      key,
+      (completedCountByEnrollment.get(key) ?? 0) + 1,
+    );
+  }
+
+  return completedLessons.map((lesson) => {
+    const completedCount =
+      completedCountByEnrollment.get(toCompletedLessonRevenueKey(lesson)) ?? 1;
+
+    return {
+      academyId: lesson.academyId,
+      lessonEventId: lesson.lessonEventId,
+      teacherId: lesson.teacherId,
+      studentId: lesson.studentId,
+      studentName: lesson.studentName,
+      instrumentName: lesson.instrumentName,
+      lessonRevenue: Math.floor(lesson.monthlyLessonFee / completedCount),
+      completedOn: toDate(lesson.startedAt),
+      durationHours: calculateDurationHours(lesson.startedAt, lesson.endedAt),
+    };
+  });
+}
+
 export function calculateMonthlyPayroll(
   policy: MonthlyPayrollPolicy,
 ): PayrollRecord {
@@ -171,6 +235,7 @@ export function markPayrollAsPaid(
       occurredOn: input.paidAt,
       type: "expense",
       source: "payroll",
+      category: "payroll",
       amount: payroll.netPay,
       description: `급여 지급: ${payroll.month} ${payroll.teacherName}`,
       refId: payroll.payrollId,
@@ -256,4 +321,28 @@ function toMonth(date: string) {
   }
 
   return `${match[1]}-${match[2]}`;
+}
+
+function toDate(value: string) {
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+
+  if (!match) {
+    throw new Error("날짜는 YYYY-MM-DD 형식이어야 합니다.");
+  }
+
+  return match[1];
+}
+
+function toCompletedLessonRevenueKey(lesson: PayrollLessonSource) {
+  return `${lesson.studentId}:${lesson.instrumentName}`;
+}
+
+function calculateDurationHours(startedAt: string, endedAt: string) {
+  const milliseconds = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+
+  if (milliseconds <= 0) {
+    throw new Error("수업 종료 시간은 시작 시간보다 늦어야 합니다.");
+  }
+
+  return milliseconds / 1000 / 60 / 60;
 }

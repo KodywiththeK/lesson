@@ -6,7 +6,7 @@ import {
   generateAcademyLessonEvents,
   type Weekday,
 } from "@/domain/academy-lesson-schedule";
-import type { BookSale, LedgerEntry } from "@/domain/book-sale";
+import type { BookSale, LedgerCategory, LedgerEntry } from "@/domain/book-sale";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
   applyAttendanceToTicket,
@@ -157,6 +157,7 @@ export type MarkDemoPrivateLessonAttendanceInput = {
 export type DemoManualLedgerInput = {
   occurredOn: string;
   type: LedgerEntry["type"];
+  category?: LedgerCategory;
   amount: number;
   description: string;
 };
@@ -440,8 +441,9 @@ export function registerDemoAcademyStudent(
         ledgerId: `ledger-demo-${source.studentId}-${source.instrumentId}`,
         occurredOn: `${source.effectiveFrom}-01`,
         type: "income" as const,
-        source: "tuition" as const,
-        amount: source.monthlyAmount,
+          source: "tuition" as const,
+          category: "tuition" as const,
+          amount: source.monthlyAmount,
         description: `${source.studentName} ${source.effectiveFrom} ${source.instrumentName} 수강료`,
         refId: source.enrollmentId,
       })),
@@ -740,6 +742,8 @@ export function registerDemoLessonTicketPurchase(
     ticketId: existingTicket?.ticketId ?? `ticket-demo-${state.tickets.length + 1}`,
     studentName: input.studentName,
     instrumentName: input.instrumentName,
+    paidAmount: input.paidAmount,
+    paidAt: input.paidAmount > 0 ? input.registeredAt : undefined,
   };
   const tickets = existingTicket
     ? state.tickets.map((candidate) =>
@@ -759,6 +763,7 @@ export function registerDemoLessonTicketPurchase(
           occurredOn: input.registeredAt,
           type: "income",
           source: "lesson-ticket",
+          category: "lesson-ticket",
           amount: input.paidAmount,
           description: `${input.studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
           refId: ticket.ticketId,
@@ -858,6 +863,7 @@ export function registerDemoManualLedgerEntry(
           occurredOn: input.occurredOn,
           type: input.type,
           source: "manual",
+          category: input.category ?? "other",
           amount: input.amount,
           description,
           refId: `manual-${state.ledgerEntries.length + 1}`,
@@ -950,6 +956,7 @@ export function registerDemoBookRelease(
                 occurredOn: sale.paidAt,
                 type: "income",
                 source: "book-sale",
+                category: "book-sale",
                 amount: sale.price,
                 description: `교재 판매: ${sale.bookTitle} / ${sale.studentName}`,
                 refId: sale.saleId,
@@ -958,6 +965,44 @@ export function registerDemoBookRelease(
             { academyId: state.academyId },
           )
         : state.ledgerEntries,
+  };
+}
+
+export function updateDemoLedgerEntry(
+  state: DemoAcademyState,
+  input: LedgerEntry,
+): DemoAcademyState {
+  return {
+    ...state,
+    ledgerEntries: buildFinanceLedgerList(
+      state.ledgerEntries.map((entry) =>
+        entry.ledgerId === input.ledgerId &&
+        entry.academyId === input.academyId
+          ? {
+              ...entry,
+              occurredOn: input.occurredOn,
+              type: input.type,
+              source: input.source,
+              category: input.category,
+              amount: input.amount,
+              description: input.description,
+            }
+          : entry,
+      ),
+      { academyId: state.academyId },
+    ),
+  };
+}
+
+export function deleteDemoLedgerEntry(
+  state: DemoAcademyState,
+  input: { ledgerId: string },
+): DemoAcademyState {
+  return {
+    ...state,
+    ledgerEntries: state.ledgerEntries.filter(
+      (entry) => entry.ledgerId !== input.ledgerId,
+    ),
   };
 }
 

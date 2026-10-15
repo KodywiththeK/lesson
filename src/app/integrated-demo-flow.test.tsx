@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { AppProviders } from "./providers";
-import FinancePage from "./finance/page";
+import FinanceLedgerPage from "./finance/ledger/page";
 import PrivateLessonsPage from "./lessons/private/page";
 import PassesPage from "./passes/page";
 
@@ -44,9 +44,13 @@ describe("integrated demo flow", () => {
 
     view.rerender(
       <AppProviders>
-        <FinancePage />
+        <FinanceLedgerPage />
       </AppProviders>,
     );
+
+    fireEvent.change(screen.getByLabelText("입출금 월 선택"), {
+      target: { value: "2026-08" },
+    });
 
     expect(
       await screen.findByText("한서아 바이올린 회차권 4회 구매"),

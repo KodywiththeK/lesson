@@ -44,6 +44,7 @@ test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", asyn
 test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 수 있다", async ({
   page,
 }) => {
+  await page.clock.setFixedTime(new Date("2026-09-05T12:00:00+09:00"));
   await page.goto("/");
 
   await page.getByRole("link", { name: "레슨 시간표" }).click();
@@ -110,7 +111,7 @@ test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다"
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "선생님" }).click();
+  await page.getByRole("link", { name: "선생님", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/teachers$/);
 
   await expect(
@@ -168,7 +169,7 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
 test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "교재" }).click();
+  await page.getByRole("link", { name: "교재", exact: true }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "교재 관리" }),
@@ -178,15 +179,26 @@ test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다
   ).toBeVisible();
 });
 
-test("수입 메뉴에서 입출입 내역 화면으로 이동할 수 있다", async ({ page }) => {
+test("수입 관리 메뉴에서 입출금 내역 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "수입" }).click();
+  await page.getByRole("link", { name: "수입 관리" }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "수입 관리" }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/\/finance\/ledger/);
   await expect(
-    page.getByRole("searchbox", { name: "입출입 내역 검색" }),
+    page.getByRole("searchbox", { name: "입출금 내역 검색" }),
   ).toBeVisible();
+});
+
+test("좁은 화면에서도 레슨수입과 수납 액션을 가로 잘림 없이 확인한다", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/finance/lesson-income");
+
+  await expect(page.getByRole("heading", { level: 1, name: "수입 관리" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "작업 메뉴 열기" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "김민지 수납 처리" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

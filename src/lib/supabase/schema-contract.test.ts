@@ -38,6 +38,24 @@ const domainTables = [
   "audit_events",
 ];
 
+describe("교재 출고 원장 연동", () => {
+  it("단일 트랜잭션에서 출고와 결제 수입을 기록한다", () => {
+    expect(migrationSql).toContain("create function public.register_book_release");
+    expect(migrationSql).toContain("insert into public.book_releases");
+    expect(migrationSql).toContain("insert into public.ledger_entries");
+    expect(migrationSql).toContain("grant execute on function public.register_book_release");
+  });
+});
+
+describe("과거 완납 데이터 보정", () => {
+  it("원천 ID로 중복을 막고 수강료 원장 연결을 복구한다", () => {
+    expect(migrationSql).toContain("'book_releases', b.id::text");
+    expect(migrationSql).toContain("'fixed_income_snapshots', s.id::text");
+    expect(migrationSql).toContain("paid_ledger_entry_id = inserted.id");
+    expect(migrationSql).toContain("and l.ref_id = b.id::text");
+  });
+});
+
 const tenantScopedReferenceTables = [
   "academy_members",
   "teachers",
@@ -78,6 +96,13 @@ const updatedAtTables = [
 ];
 
 describe("Supabase schema contract", () => {
+  it("수입 원장은 owner만 접근하고 월수강료 재조회는 기존 항목을 보존한다", () => {
+    expect(migrationSql).toContain('create policy "ledger_entries_select_owner_only"');
+    expect(migrationSql).toContain('create trigger ledger_entries_require_finance_owner');
+    expect(migrationSql).toContain('create or replace function public.ensure_monthly_fixed_income_snapshots');
+    expect(migrationSql).toContain('on conflict (academy_id, month, student_id, instrument_id) do nothing');
+  });
+
   it("PDF 도메인 persistence 테이블을 migration에 포함한다", () => {
     for (const tableName of domainTables) {
       expect(migrationSql).toContain(`create table public.${tableName}`);
@@ -184,6 +209,68 @@ describe("Supabase schema contract", () => {
     );
     expect(migrationSql).toContain("add column if not exists paid_amount");
     expect(migrationSql).toContain("add column if not exists paid_at date");
+  });
+
+  it("수입 관리 개편을 위해 ledger 수정/삭제, 고정 분류, 감사 기록을 지원한다", () => {
+    expect(migrationSql).toContain("add column if not exists category text");
+    expect(migrationSql).toContain("add column if not exists updated_by uuid");
+    expect(migrationSql).toContain("grant select, insert, update, delete on public.ledger_entries to authenticated");
+    expect(migrationSql).toContain("create or replace function private.set_ledger_entry_update_metadata");
+    expect(migrationSql).toContain("new.updated_by = (select auth.uid())");
+    expect(migrationSql).toContain("create policy \"ledger_entries_update_owner_desk_finance\"");
+    expect(migrationSql).toContain("create policy \"ledger_entries_delete_owner_desk_finance\"");
+    expect(migrationSql).toContain("create trigger ledger_entries_audit_insert");
+    expect(migrationSql).toContain("create trigger ledger_entries_audit_update");
+    expect(migrationSql).toContain("create trigger ledger_entries_audit_delete");
+  });
+
+  it("학원 레슨수입 월별 생성과 수납 상태 연결 컬럼을 둔다", () => {
+    expect(migrationSql).toContain("alter table public.fixed_income_snapshots");
+    expect(migrationSql).toContain("add column if not exists due_on date");
+    expect(migrationSql).toContain("add column if not exists lesson_fee integer");
+    expect(migrationSql).toContain("add column if not exists discount_total integer");
+    expect(migrationSql).toContain("add column if not exists progress text");
+    expect(migrationSql).toContain("add column if not exists paid_ledger_entry_id uuid");
+    expect(migrationSql).toContain(
+      "create or replace function public.ensure_monthly_fixed_income_snapshots",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.ensure_monthly_fixed_income_snapshots",
+    );
+  });
+
+  it("수강료 수납/미수납과 급여 지급 확정은 원자 RPC로 처리한다", () => {
+    expect(migrationSql).toContain(
+      "create or replace function public.mark_fixed_income_snapshot_paid",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.mark_fixed_income_snapshot_unpaid",
+    );
+    expect(migrationSql).toContain(
+      "create or replace function public.mark_salary_settlement_paid",
+    );
+    expect(migrationSql).toContain(
+      "add column if not exists paid_ledger_entry_id uuid",
+    );
+    expect(migrationSql).toContain(
+      "constraint salary_settlements_paid_ledger_fk",
+    );
+    expect(migrationSql).toContain("for update");
+    expect(migrationSql).toContain(
+      "grant execute on function public.mark_fixed_income_snapshot_paid",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.mark_fixed_income_snapshot_unpaid",
+    );
+    expect(migrationSql).toContain(
+      "grant execute on function public.mark_salary_settlement_paid",
+    );
+  });
+
+  it("교재내역에서 발주일을 추적한다", () => {
+    expect(migrationSql).toContain("alter table public.book_inventory_batches");
+    expect(migrationSql).toContain("add column if not exists ordered_on date");
+    expect(migrationSql).toContain("ordered_on = stocked_at");
   });
 
   it("개인레슨 출석과 회차권 차감은 public RPC 하나로 원자 처리한다", () => {

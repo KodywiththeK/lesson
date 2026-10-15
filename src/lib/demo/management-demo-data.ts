@@ -201,6 +201,8 @@ export const demoTickets: LessonTicketListItem[] = [
     validFrom: "2026-08-01",
     validUntil: "2026-08-28",
     registeredAt: "2026-08-01",
+    paidAmount: 280000,
+    paidAt: "2026-08-01",
   },
   {
     academyId,
@@ -214,6 +216,8 @@ export const demoTickets: LessonTicketListItem[] = [
     validFrom: "2026-08-10",
     validUntil: "2026-08-24",
     registeredAt: "2026-08-10",
+    paidAmount: 160000,
+    paidAt: "2026-08-10",
   },
 ];
 
@@ -245,6 +249,7 @@ export const demoBookSales: BookSale[] = [
     studentId: "student-1",
     studentName: "김민지",
     price: 12000,
+    orderedOn: "2026-08-10",
     shippedAt: "2026-08-18",
     status: "payment-pending",
   },
@@ -256,6 +261,7 @@ export const demoBookSales: BookSale[] = [
     studentId: "student-4",
     studentName: "한서아",
     price: 18000,
+    orderedOn: "2026-08-08",
     shippedAt: "2026-08-12",
     status: "paid",
     paidAt: "2026-08-14",
@@ -270,6 +276,7 @@ export const demoLedgerEntries: LedgerEntry[] = [
     occurredOn: "2026-08-05",
     type: "income",
     source: "tuition",
+    category: "tuition",
     amount: 140000,
     description: "김민지 8월 피아노 수강료",
     refId: "fixed-income-1",
@@ -280,6 +287,7 @@ export const demoLedgerEntries: LedgerEntry[] = [
     occurredOn: "2026-08-14",
     type: "income",
     source: "book-sale",
+    category: "book-sale",
     amount: 18000,
     description: "교재 판매: 스즈키 바이올린 1 / 한서아",
     refId: "book-sale-2",
@@ -290,6 +298,7 @@ export const demoLedgerEntries: LedgerEntry[] = [
     occurredOn: "2026-08-20",
     type: "expense",
     source: "manual",
+    category: "tuning-repair",
     amount: 70000,
     description: "피아노 조율비",
     refId: "manual-1",
@@ -510,6 +519,12 @@ export function createDemoFinanceLedgerListQueryOptions(
       q: options.search,
       type: options.filters?.type,
       source: options.filters?.source,
+      category: options.filters?.category,
+      from: options.dateRange?.from,
+      to: options.dateRange?.to,
+      sort: options.sort
+        ? `${options.sort.field}-${options.sort.direction}`
+        : undefined,
     }),
     queryFn: async () => buildFinanceLedgerList(demoLedgerEntries, options),
   };

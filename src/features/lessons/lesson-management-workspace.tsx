@@ -379,6 +379,7 @@ export function LessonManagementWorkspace({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
     },
     onError: (error) => {
       toast.error("학원 수업 출결 저장에 실패했습니다.", {
@@ -412,6 +413,7 @@ export function LessonManagementWorkspace({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
     },
     onError: (error) => {
       toast.error("학원 수업 출결 초기화에 실패했습니다.", {

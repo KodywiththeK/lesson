@@ -23,6 +23,7 @@ export default function BooksPage() {
           <BookPurchaseListScreen
             academyId={academy.academyId}
             academyName={academy.academyName}
+            canRecordPayment={academy.permissionContext.role === "owner"}
             queryOptionsFactory={
               useTestDemo ? demo.createBookPurchaseListQueryOptions : undefined
             }

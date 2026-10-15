@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type { ListView } from "@/domain/common-list";
+import { getAcademyScheduleValidationError } from "@/domain/student-registration";
 import type {
   BuildStudentListOptions,
   StudentListRow,
@@ -227,6 +228,7 @@ export function StudentListScreen({
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "status-management"],
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
     },
     onError: (error) => {
       toast.error("원생 등록에 실패했습니다.", {
@@ -557,10 +559,11 @@ function StudentRegistrationForm({
       orderedDrafts.every(
         (draft) =>
           draft.weeklySchedules.length > 0 &&
-          !draft.weeklySchedules.some(
-            (schedule) =>
-              Boolean(schedule.startTime) !== Boolean(schedule.endTime),
-          ),
+          !getAcademyScheduleValidationError({
+            lessonType: draft.lessonType,
+            teacherId: draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers),
+            weeklySchedules: draft.weeklySchedules,
+          }),
       ),
   );
 

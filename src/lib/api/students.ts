@@ -9,6 +9,7 @@ import {
   buildStatusManagementList,
   type StatusManagementListItem,
 } from "@/domain/status-management";
+import { getAcademyScheduleValidationError } from "@/domain/student-registration";
 
 import { queryKeys } from "./query-keys";
 
@@ -464,6 +465,11 @@ export async function registerStudentEnrollment(
 
   if (input.instruments.length === 0) {
     throw new Error("하나 이상의 수강 악기가 필요합니다.");
+  }
+
+  for (const instrument of input.instruments) {
+    const scheduleError = getAcademyScheduleValidationError(instrument);
+    if (scheduleError) throw new Error(scheduleError);
   }
 
   const { data: studentId, error } = await supabase.rpc(

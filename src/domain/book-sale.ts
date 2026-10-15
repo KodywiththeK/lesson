@@ -4,6 +4,7 @@ export type BookStockInput = {
   title: string;
   price: number;
   quantity: number;
+  orderedOn?: string;
   stockedAt: string;
 };
 
@@ -29,6 +30,7 @@ export type PendingBookSale = {
   studentId: string;
   studentName: string;
   price: number;
+  orderedOn?: string;
   shippedAt: string;
   status: "payment-pending";
 };
@@ -40,6 +42,19 @@ export type PaidBookSale = Omit<PendingBookSale, "status"> & {
 };
 
 export type BookSale = PendingBookSale | PaidBookSale;
+
+export type LedgerCategory =
+  | "tuition"
+  | "lesson-ticket"
+  | "book-sale"
+  | "payroll"
+  | "book-order"
+  | "rent"
+  | "utilities"
+  | "tuning-repair"
+  | "supplies"
+  | "tax"
+  | "other";
 
 export type ShipBookResult = {
   stock: BookStock;
@@ -57,6 +72,7 @@ export type LedgerEntry = {
   occurredOn: string;
   type: "income" | "expense";
   source: "book-sale" | "tuition" | "payroll" | "manual" | "lesson-ticket";
+  category?: LedgerCategory;
   amount: number;
   description: string;
   refId: string;
@@ -149,6 +165,7 @@ export function completeBookSalePayment(
       occurredOn: input.paidAt,
       type: "income",
       source: "book-sale",
+      category: "book-sale",
       amount: sale.price,
       description: `교재 판매: ${sale.bookTitle} / ${sale.studentName}`,
       refId: sale.saleId,

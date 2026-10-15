@@ -204,7 +204,7 @@ describe("registerStudentEnrollment", () => {
           lessonType: "academy",
           weeklySchedules: [
             { weekday: "monday", startTime: "15:00", endTime: "15:50" },
-            { weekday: "wednesday" },
+            { weekday: "wednesday", startTime: "15:00", endTime: "15:50" },
           ],
           progress: "바이엘 상",
           lessonFee: 150000,
@@ -241,7 +241,7 @@ describe("registerStudentEnrollment", () => {
               final_monthly_fee: 140000,
               weekly_schedules: [
                 { weekday: "월", start_time: "15:00", end_time: "15:50" },
-                { weekday: "수", start_time: null, end_time: null },
+                { weekday: "수", start_time: "15:00", end_time: "15:50" },
               ],
             },
           ],
@@ -260,6 +260,30 @@ describe("registerStudentEnrollment", () => {
       ],
       weekdayLabels: ["월", "수"],
     });
+  });
+
+  it("학원레슨에 선생님이나 시간이 없으면 RPC 호출 전에 거부한다", async () => {
+    let called = false;
+    const client: StudentRegistrationSupabaseClient = {
+      async rpc() { called = true; return { data: "student-1", error: null }; },
+    };
+    const input = {
+      academyId: "academy-1", name: "윤라온", registeredAt: "2026-08-21",
+      contact: { relationship: "모", phone: "010-1111-2222" },
+      instruments: [{
+        instrumentId: "piano", instrumentName: "피아노", teacherId: "",
+        lessonType: "academy" as const,
+        weeklySchedules: [{ weekday: "monday" as const }],
+        progress: "신규", lessonFee: 140000, discountTotal: 0,
+        finalMonthlyFee: 140000,
+      }],
+    };
+
+    await expect(registerStudentEnrollment(client, input)).rejects.toThrow("학원레슨");
+    expect(called).toBe(false);
+    input.instruments[0].teacherId = "teacher-1";
+    await expect(registerStudentEnrollment(client, input)).rejects.toThrow("모든 요일");
+    expect(called).toBe(false);
   });
 });
 
