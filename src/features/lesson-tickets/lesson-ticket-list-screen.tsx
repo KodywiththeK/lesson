@@ -19,6 +19,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -552,29 +553,26 @@ function LessonTicketRegistrationForm({
       <div className="grid gap-3 sm:grid-cols-3">
         <Label className="grid gap-1">
           <span>유효 시작일</span>
-          <Input
+          <DateField
             aria-label="유효 시작일"
-            type="date"
             value={validFrom}
-            onChange={(event) => setValidFrom(event.target.value)}
+            onValueChange={setValidFrom}
           />
         </Label>
         <Label className="grid gap-1">
           <span>유효 만료일</span>
-          <Input
+          <DateField
             aria-label="유효 만료일"
-            type="date"
             value={validUntil}
-            onChange={(event) => setValidUntil(event.target.value)}
+            onValueChange={setValidUntil}
           />
         </Label>
         <Label className="grid gap-1">
           <span>등록일</span>
-          <Input
+          <DateField
             aria-label="등록일"
-            type="date"
             value={registeredAt}
-            onChange={(event) => setRegisteredAt(event.target.value)}
+            onValueChange={setRegisteredAt}
           />
         </Label>
       </div>

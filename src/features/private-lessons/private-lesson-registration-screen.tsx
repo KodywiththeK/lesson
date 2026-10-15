@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { DateTimeField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   NativeSelect,
@@ -371,22 +371,20 @@ function PrivateLessonRegistrationForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1">
           <span>시작 시간</span>
-          <Input
+          <DateTimeField
             aria-label="시작 시간"
-            type="datetime-local"
             value={startAt}
             disabled={!selectedTeacher}
-            onChange={(event) => setStartAt(event.target.value)}
+            onValueChange={setStartAt}
           />
         </Label>
         <Label className="grid gap-1">
           <span>종료 시간</span>
-          <Input
+          <DateTimeField
             aria-label="종료 시간"
-            type="datetime-local"
             value={endAt}
             disabled={!selectedTeacher}
-            onChange={(event) => setEndAt(event.target.value)}
+            onValueChange={setEndAt}
           />
         </Label>
       </div>

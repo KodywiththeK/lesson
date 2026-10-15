@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { DateField, DateTimeField, MonthField, TimeField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1340,20 +1341,18 @@ function AcademyLessonEventDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <Label className="grid gap-1">
               <span>시작 시간</span>
-              <Input
+              <DateTimeField
                 aria-label="시작 시간"
-                type="datetime-local"
                 value={startAt}
-                onChange={(event) => setStartAt(event.target.value)}
+                onValueChange={setStartAt}
               />
             </Label>
             <Label className="grid gap-1">
               <span>종료 시간</span>
-              <Input
+              <DateTimeField
                 aria-label="종료 시간"
-                type="datetime-local"
                 value={endAt}
-                onChange={(event) => setEndAt(event.target.value)}
+                onValueChange={setEndAt}
               />
             </Label>
           </div>
@@ -1452,12 +1451,11 @@ function LessonMonthControl({
         <Label className="sr-only" htmlFor={`${toControlId(variantLabel)}-month`}>
           {variantLabel} 월 선택
         </Label>
-        <Input
+        <MonthField
           id={`${toControlId(variantLabel)}-month`}
           aria-label={`${variantLabel} 월 선택`}
-          type="month"
           value={selectedMonth}
-          onChange={(event) => onChangeMonth(event.target.value)}
+          onValueChange={onChangeMonth}
           className="w-40"
         />
         <Button
@@ -1796,11 +1794,10 @@ function AcademyLessonTableView({
         </div>
         <Label className="grid gap-1 text-sm font-medium sm:min-w-48">
           <span>테이블 날짜</span>
-          <Input
+          <DateField
             aria-label="학원 레슨 테이블 날짜 선택"
-            type="date"
             value={selectedDate}
-            onChange={(event) => onChangeDate(event.target.value)}
+            onValueChange={onChangeDate}
           />
         </Label>
       </div>
@@ -2320,31 +2317,31 @@ function MoveAcademyLessonDialog({
             <div className="grid gap-3 sm:grid-cols-3">
               <Label className="grid gap-1 text-sm font-medium">
                 <span>이동 날짜</span>
-                <Input
-                  type="date"
+                <DateField
+                  aria-label="이동 날짜"
                   value={draft.targetDate}
-                  onChange={(event) =>
-                    onChange({ ...draft, targetDate: event.target.value })
+                  onValueChange={(nextValue) =>
+                    onChange({ ...draft, targetDate: nextValue })
                   }
                 />
               </Label>
               <Label className="grid gap-1 text-sm font-medium">
                 <span>시작 시간</span>
-                <Input
-                  type="time"
+                <TimeField
+                  aria-label="시작 시간"
                   value={draft.startTime}
-                  onChange={(event) =>
-                    onChange({ ...draft, startTime: event.target.value })
+                  onValueChange={(nextValue) =>
+                    onChange({ ...draft, startTime: nextValue })
                   }
                 />
               </Label>
               <Label className="grid gap-1 text-sm font-medium">
                 <span>종료 시간</span>
-                <Input
-                  type="time"
+                <TimeField
+                  aria-label="종료 시간"
                   value={draft.endTime}
-                  onChange={(event) =>
-                    onChange({ ...draft, endTime: event.target.value })
+                  onValueChange={(nextValue) =>
+                    onChange({ ...draft, endTime: nextValue })
                   }
                 />
               </Label>
@@ -2586,12 +2583,11 @@ function MakeupDialog({
           <div className="grid gap-3">
             <Label className="grid gap-1 text-sm font-medium">
               <span>보강일</span>
-              <Input
+              <DateField
                 aria-label="보강일"
-                type="date"
                 value={draft.targetDate}
-                onChange={(event) =>
-                  onChange({ ...draft, targetDate: event.target.value })
+                onValueChange={(nextValue) =>
+                  onChange({ ...draft, targetDate: nextValue })
                 }
               />
             </Label>

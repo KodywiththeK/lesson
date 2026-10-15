@@ -27,6 +27,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField, TimeField } from "@/components/operations/date-time-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -631,11 +632,10 @@ function TeacherProfileForm({
         </Label>
         <Label className="grid gap-1">
           <span>등록일</span>
-          <Input
+          <DateField
             aria-label="등록일"
-            type="date"
             value={registeredAt}
-            onChange={(event) => setRegisteredAt(event.target.value)}
+            onValueChange={setRegisteredAt}
           />
         </Label>
       </div>
@@ -643,20 +643,18 @@ function TeacherProfileForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1">
           <span>계약 시작일</span>
-          <Input
+          <DateField
             aria-label="계약 시작일"
-            type="date"
             value={contractStartOn}
-            onChange={(event) => setContractStartOn(event.target.value)}
+            onValueChange={setContractStartOn}
           />
         </Label>
         <Label className="grid gap-1">
           <span>계약 종료일</span>
-          <Input
+          <DateField
             aria-label="계약 종료일"
-            type="date"
             value={contractEndOn}
-            onChange={(event) => setContractEndOn(event.target.value)}
+            onValueChange={setContractEndOn}
           />
         </Label>
       </div>
@@ -685,31 +683,29 @@ function TeacherProfileForm({
                 />
                 <span>{schedule.label}</span>
               </Label>
-              <Input
+              <TimeField
                 aria-label={`${schedule.label} 시작 시간`}
-                type="time"
                 value={schedule.startTime}
                 disabled={!schedule.checked}
-                onChange={(event) => {
+                onValueChange={(nextValue) => {
                   setWorkSchedules((current) =>
                     current.map((item, itemIndex) =>
                       itemIndex === index
-                        ? { ...item, startTime: event.target.value }
+                        ? { ...item, startTime: nextValue }
                         : item,
                     ),
                   );
                 }}
               />
-              <Input
+              <TimeField
                 aria-label={`${schedule.label} 종료 시간`}
-                type="time"
                 value={schedule.endTime}
                 disabled={!schedule.checked}
-                onChange={(event) => {
+                onValueChange={(nextValue) => {
                   setWorkSchedules((current) =>
                     current.map((item, itemIndex) =>
                       itemIndex === index
-                        ? { ...item, endTime: event.target.value }
+                        ? { ...item, endTime: nextValue }
                         : item,
                     ),
                   );

@@ -19,6 +19,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -315,11 +316,10 @@ function VendorRegistrationForm({
       </div>
       <Label className="grid gap-1">
         <span>등록일</span>
-        <Input
+        <DateField
           aria-label="등록일"
-          type="date"
           value={registeredAt}
-          onChange={(event) => setRegisteredAt(event.target.value)}
+          onValueChange={setRegisteredAt}
         />
       </Label>
       <Label className="grid gap-1">

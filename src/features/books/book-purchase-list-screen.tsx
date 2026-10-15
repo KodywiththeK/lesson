@@ -19,6 +19,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -387,11 +388,10 @@ function BookReleaseForm({
         </Label>
         <Label className="grid gap-1">
           <span>출고일</span>
-          <Input
+          <DateField
             aria-label="출고일"
-            type="date"
             value={shippedAt}
-            onChange={(event) => setShippedAt(event.target.value)}
+            onValueChange={setShippedAt}
           />
         </Label>
         <Label className="grid gap-1">

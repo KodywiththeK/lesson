@@ -26,6 +26,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField, MonthField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1024,11 +1025,10 @@ function FinanceLedgerFilters({
       />
       <Label className="grid gap-1 text-sm font-medium">
         <span>월 선택</span>
-        <Input
+        <MonthField
           aria-label="입출금 월 선택"
-          type="month"
           value={month}
-          onChange={(event) => onChangeMonth(event.target.value)}
+          onValueChange={onChangeMonth}
         />
       </Label>
       <ListFilterSelect
@@ -1065,23 +1065,21 @@ function FinanceLedgerFilters({
       <div className="grid gap-3 lg:col-span-6 lg:grid-cols-[9rem_9rem_11rem]">
         <Label className="grid gap-1 text-sm font-medium">
           <span>시작일</span>
-          <Input
+          <DateField
             aria-label="입출금 시작일"
-            type="date"
             value={dateRange.from}
-            onChange={(event) =>
-              onChangeDateRange({ ...dateRange, from: event.target.value })
+            onValueChange={(nextValue) =>
+              onChangeDateRange({ ...dateRange, from: nextValue })
             }
           />
         </Label>
         <Label className="grid gap-1 text-sm font-medium">
           <span>종료일</span>
-          <Input
+          <DateField
             aria-label="입출금 종료일"
-            type="date"
             value={dateRange.to}
-            onChange={(event) =>
-              onChangeDateRange({ ...dateRange, to: event.target.value })
+            onValueChange={(nextValue) =>
+              onChangeDateRange({ ...dateRange, to: nextValue })
             }
           />
         </Label>
@@ -1151,14 +1149,13 @@ function LedgerEntryForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1">
           <span>발생일</span>
-          <Input
+          <DateField
             aria-label="발생일"
-            type="date"
             value={draft.occurredOn}
-            onChange={(event) =>
+            onValueChange={(nextValue) =>
               setDraft((current) => ({
                 ...current,
-                occurredOn: event.target.value,
+                occurredOn: nextValue,
               }))
             }
           />
@@ -1405,11 +1402,10 @@ function FinanceMonthSummary({
       </div>
       <Label className="grid gap-1 text-sm font-medium sm:min-w-44">
         <span>월 선택</span>
-        <Input
+        <MonthField
           aria-label={`${label} 월 선택`}
-          type="month"
           value={month}
-          onChange={(event) => onChangeMonth(event.target.value)}
+          onValueChange={onChangeMonth}
         />
       </Label>
     </div>
@@ -1470,11 +1466,10 @@ function PaymentDialog({
         </DialogHeader>
         <Label className="grid gap-1 text-sm font-medium">
           <span>{dateLabel}</span>
-          <Input
+          <DateField
             aria-label={dateLabel}
-            type="date"
             value={paidAt}
-            onChange={(event) => setPaidAt(event.target.value)}
+            onValueChange={setPaidAt}
           />
         </Label>
         <DialogFooter>

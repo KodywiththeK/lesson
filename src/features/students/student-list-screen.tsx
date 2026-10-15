@@ -19,6 +19,7 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { DateField, TimeField } from "@/components/operations/date-time-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -626,11 +627,10 @@ function StudentRegistrationForm({
         </Label>
         <Label className="grid gap-1">
           <span>등록일</span>
-          <Input
+          <DateField
             aria-label="등록일"
-            type="date"
             value={registeredAt}
-            onChange={(event) => setRegisteredAt(event.target.value)}
+            onValueChange={setRegisteredAt}
           />
         </Label>
       </div>
@@ -869,31 +869,29 @@ function StudentRegistrationInstrumentCard({
                 <span className="self-center text-sm font-medium">
                   {weekdayLabel}
                 </span>
-                <Input
+                <TimeField
                   aria-label={`${draft.instrumentName} ${weekdayLabel} 시작 시간`}
-                  type="time"
                   value={schedule.startTime ?? ""}
-                  onChange={(event) =>
+                  onValueChange={(nextValue) =>
                     onChange({
                       ...draft,
                       weeklySchedules: draft.weeklySchedules.map((current) =>
                         current.weekday === schedule.weekday
-                          ? { ...current, startTime: event.target.value }
+                          ? { ...current, startTime: nextValue }
                           : current,
                       ),
                     })
                   }
                 />
-                <Input
+                <TimeField
                   aria-label={`${draft.instrumentName} ${weekdayLabel} 종료 시간`}
-                  type="time"
                   value={schedule.endTime ?? ""}
-                  onChange={(event) =>
+                  onValueChange={(nextValue) =>
                     onChange({
                       ...draft,
                       weeklySchedules: draft.weeklySchedules.map((current) =>
                         current.weekday === schedule.weekday
-                          ? { ...current, endTime: event.target.value }
+                          ? { ...current, endTime: nextValue }
                           : current,
                       ),
                     })
@@ -1440,20 +1438,18 @@ function StudentEditForm({
       <div className="grid gap-3 sm:grid-cols-3">
         <Label className="grid gap-1">
           <span>시작 시간</span>
-          <Input
+          <TimeField
             aria-label="시작 시간"
-            type="time"
             value={startTime}
-            onChange={(event) => setStartTime(event.target.value)}
+            onValueChange={setStartTime}
           />
         </Label>
         <Label className="grid gap-1">
           <span>종료 시간</span>
-          <Input
+          <TimeField
             aria-label="종료 시간"
-            type="time"
             value={endTime}
-            onChange={(event) => setEndTime(event.target.value)}
+            onValueChange={setEndTime}
           />
         </Label>
         <Label className="grid gap-1">

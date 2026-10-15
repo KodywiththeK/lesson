@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있다", async ({
   page,
@@ -202,3 +202,45 @@ test("좁은 화면에서도 레슨수입과 수납 액션을 가로 잘림 없�
   await expect(page.getByRole("button", { name: "김민지 수납 처리" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+async function openPageAction(page: Page, name: string, isNarrow: boolean) {
+  if (isNarrow) {
+    await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
+  }
+  await page.getByRole("button", { name }).first().click();
+}
+
+for (const viewport of [
+  { name: "데스크톱", width: 1280, height: 800 },
+  { name: "320px 모바일", width: 320, height: 640 },
+]) {
+  test(`${viewport.name}에서 다이얼로그 안 날짜·일시 선택기를 클릭해 값을 고를 수 있다`, async ({ page }) => {
+    const isNarrow = viewport.width < 768;
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto("/finance/ledger");
+
+    await openPageAction(page, "수동 입출금 등록", isNarrow);
+    const dialog = page.getByRole("dialog", { name: "수동 입출금 등록" });
+    const trigger = dialog.getByRole("button", { name: "발생일 달력 열기" });
+    await trigger.click();
+    const triggerBox = await trigger.boundingBox();
+    const popoverBox = await page.locator('[data-slot="popover-content"]').boundingBox();
+    expect(popoverBox!.x + popoverBox!.width).toBeLessThanOrEqual(triggerBox!.x + triggerBox!.width + 1);
+    await page.getByRole("button", { name: /\d{4}년 \d{1,2}월 15일/ }).click();
+
+    await expect(dialog.getByRole("textbox", { name: "발생일" })).toHaveValue(/^\d{4}-\d{2}-15$/);
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await page.goto("/lessons/academy");
+    await openPageAction(page, "일정 추가", isNarrow);
+    const eventDialog = page.getByRole("dialog", { name: "학원 일정 추가" });
+    await eventDialog.getByRole("button", { name: "시작 시간 달력 열기" }).click();
+    await page.getByRole("button", { name: /\d{4}년 \d{1,2}월 20일/ }).click();
+    await page.getByRole("combobox", { name: "시" }).selectOption("09");
+    await page.getByRole("combobox", { name: "분" }).selectOption("05");
+
+    await expect(eventDialog.getByRole("textbox", { name: "시작 시간" })).toHaveValue(/^\d{4}-\d{2}-20T09:05$/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+  });
+}

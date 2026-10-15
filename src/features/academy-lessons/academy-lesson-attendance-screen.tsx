@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { DateField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -137,14 +137,13 @@ export function AcademyLessonAttendanceScreen({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <Label className="grid gap-1 text-sm font-medium">
             <span>출석 날짜</span>
-            <Input
+            <DateField
               aria-label="출석 날짜"
               className="min-w-40"
-              type="date"
               value={date}
-              onChange={(event) => {
-                setDate(event.target.value);
-                onDateChange?.(event.target.value);
+              onValueChange={(nextDate) => {
+                setDate(nextDate);
+                onDateChange?.(nextDate);
               }}
             />
           </Label>
