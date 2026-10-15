@@ -12,7 +12,7 @@
 - 버튼과 메뉴 액션의 아이콘은 lucide icons를 우선 사용한다.
 - 새 UI를 만들 때는 먼저 `src/components/ui/`의 shadcn 컴포넌트를 확인한다.
 - 직접 만든 input, select, table, dialog, badge, alert, toast, empty state는 금지한다. 필요한 경우 shadcn 컴포넌트를 얇게 조합한 도메인 컴포넌트를 만든다.
-- 반복되는 운영 앱 패턴은 `src/components/management/` 아래에 shadcn 조합 컴포넌트로 둔다.
+- 반복되는 운영 앱 패턴은 `src/components/management/`(목록 제어)와 `src/components/operations/`(입력·툴바) 아래에 shadcn 조합 컴포넌트로 둔다.
 - 컴포넌트별 선택 기준은 [shadcn-component-guide.md](./shadcn-component-guide.md)를 따른다.
 - 2026-08-21 기준 공식 shadcn All Components 목록을 대조했고, 설치 가능한 단일 컴포넌트는 모두 `src/components/ui/`에 둔다.
 - `Toast`는 현재 프로젝트에서 Base UI 전용이라 설치할 수 없으므로 `Sonner`를 공식 toast 표준으로 사용한다.
@@ -37,7 +37,7 @@
 - `Dialog`
 - `Form`
 - `Calendar`
-- `Date Picker`: `Calendar` + `Popover` + `Button` + `Field` 조합으로 만든다.
+- `Date Picker`: `Calendar` + `Popover` + `Button` 조합이며, 화면에서는 `src/components/operations/date-time-fields.tsx`의 필드를 쓴다.
 - `Badge`
 - `Button`
 - `DropdownMenu`
@@ -69,6 +69,17 @@
 - 저장 완료, 삭제 완료, 비동기 처리 성공/실패는 `Sonner`의 `toast` API를 사용한다.
 - `src/app/layout.tsx`에는 `Toaster`가 있고, `src/app/providers.tsx`에는 전역 `TooltipProvider`가 있다.
 - 별도 `toast.tsx` 파일을 손으로 만들지 않는다. Base UI 전환이 결정되면 별도 phase에서 공식 `Toast` 도입 여부를 다시 판단한다.
+
+## 입력 컨트롤 일관성
+
+- 날짜·월·시간·일시는 기본 브라우저 입력 대신 공통 필드(`DateField`, `MonthField`, `TimeField`, `DateTimeField`)를 쓴다. 규칙은 [shadcn-component-guide.md](./shadcn-component-guide.md)의 "날짜·시간·월 입력"이 SSOT다.
+- 선택기: 텍스트 입력 오른쪽에 아이콘 버튼을 두고, Popover는 버튼 오른쪽 끝 기준(`align="end"`)으로 연다. 버튼은 `… 달력 열기`처럼 대상이 드러나는 접근 가능한 이름을 가진다.
+- 포맷: 값은 사람이 읽고 쓸 수 있는 `YYYY-MM-DD`, `YYYY-MM`, `HH:mm`, `YYYY-MM-DDTHH:mm`이며 `placeholder`로 형식을 보여 준다. 숫자는 `tabular-nums`로 맞춘다.
+- 오류: 잘못된 값은 `aria-invalid`와 destructive 토큰의 invalid 스타일로 표시하고 제출을 막는다. 의미 검증 오류는 각 화면의 기존 오류 표현을 쓴다.
+- disabled: 입력과 선택기 버튼을 함께 비활성화한다.
+- 반응형: 선택기 Popover는 화면 폭 안에 들어와야 하며 320px에서도 가로 스크롤을 만들지 않는다.
+- 레이어: Popover(`z-50`)는 Dialog 내용(`z-[60]`)과 Sheet(`z-50`) 위에서도 쓰이므로 선택기는 `z-[70]`을 쓰고, AlertDialog(`z-[70]`/`z-[80]`)는 선택기를 열지 않는다.
+- 금액: 원 단위는 `min={1} step={1}` 정수 입력이다.
 
 ## 토큰
 

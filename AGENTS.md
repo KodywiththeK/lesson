@@ -56,6 +56,7 @@
 - 사용자 수정 가능 metadata는 권한 판단에 사용하지 않는다.
 - 외부 노출 테이블은 RLS를 활성화하고 역할별 접근을 테스트한다.
 - UI 테스트는 접근 가능한 role, label, 사용자가 보는 텍스트를 우선한다. test id는 필요한 경우에만 사용한다.
+- UI 기본 부품은 설치된 shadcn/ui를 우선하고 조합만 shared/feature 컴포넌트에 둔다. 날짜·월·시간 입력은 브라우저 기본 input 대신 `src/components/operations/date-time-fields.tsx`를 쓰며, 예외 사유는 evidence에 기록한다.
 
 ## 완료 증거
 

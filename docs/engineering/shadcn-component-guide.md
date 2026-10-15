@@ -9,7 +9,7 @@
 - 프로젝트 기준: `components.json`의 `new-york`, RSC, TypeScript, CSS variables, lucide icon 설정을 따른다.
 - 설치된 컴포넌트는 `src/components/ui/`에 둔다.
 - shadcn 원본 컴포넌트는 가능한 그대로 유지한다.
-- 서비스 도메인에 맞춘 조합은 `src/components/management/`처럼 별도 폴더에 만든다.
+- 서비스 도메인에 맞춘 조합은 `src/components/management/`(목록 제어), `src/components/operations/`(입력·툴바 조합)처럼 별도 폴더에 만든다.
 - 공식 문서에는 있으나 현재 `new-york-v4` 레지스트리에서 단일 파일로 내려오지 않는 항목은 조합 패턴으로 문서화한다.
 - 2026-08-21 기준 공식 shadcn All Components 목록과 `src/components/ui/`를 대조했다.
 - 설치 가능한 단일 컴포넌트는 모두 `src/components/ui/`에 내려받아 둔다.
@@ -32,7 +32,7 @@
 | `Bubble` | 고객지원, AI 도우미, 알림 대화형 피드처럼 말풍선 맥락이 있을 때만 사용한다. |
 | `Button` | 모든 명령 액션의 기본이다. 아이콘은 lucide를 우선 사용한다. |
 | `ButtonGroup` | 동일 맥락의 분할 액션, 보기 전환, 빠른 필터 묶음에 사용한다. |
-| `Calendar` | 수업일, 보강일, 출결일, 급여 기간 선택에 사용한다. |
+| `Calendar` | 수업일, 보강일, 출결일, 급여 기간 선택의 달력 본체다. 직접 쓰지 않고 `src/components/operations/date-time-fields.tsx`의 날짜·일시 필드를 통해 쓴다. |
 | `Card` | 개별 반복 항목이나 작은 위젯에만 사용한다. 페이지 섹션 전체를 카드로 감싸지 않는다. |
 | `Carousel` | 교재 이미지나 안내 이미지처럼 실제로 넘겨볼 자료가 있을 때만 사용한다. |
 | `Chart` | 수입, 급여, 원생 수 추이처럼 수치 데이터를 시각화할 때 사용한다. |
@@ -88,7 +88,7 @@
 | 항목 | 현재 처리 |
 | --- | --- |
 | `Toast` | 2026-08-21에 `pnpm dlx shadcn@latest add toast`를 실행했지만 현재 프로젝트에서는 Base UI 전용이라고 차단됐다. 액션 결과 알림은 `Sonner`와 `src/components/ui/sonner.tsx`의 `Toaster`를 사용한다. Base UI 전환을 결정하기 전에는 `Toast`를 수동 이식하지 않는다. |
-| `Date Picker` | `pnpm dlx shadcn@latest add date-picker` 결과 단일 레지스트리 항목이 없었다. 날짜 선택은 `Calendar` + `Popover` + `Button` + 필요 시 `Field` 조합으로 만든다. |
+| `Date Picker` | `pnpm dlx shadcn@latest add date-picker` 결과 단일 레지스트리 항목이 없었다. 공식 예시도 `Calendar` + `Popover` + `Button` 조합이며, 독립 `TimePicker`나 월 선택 컴포넌트도 없다. 이 프로젝트는 아래 "날짜·시간·월 입력" 규칙의 공통 필드를 표준으로 삼는다. |
 | `Data Table` | `pnpm dlx shadcn@latest add data-table` 결과 단일 레지스트리 항목이 없었다. 표 상태 엔진은 `@tanstack/react-table`, 화면 컴포넌트는 shadcn `Table`, `Checkbox`, `DropdownMenu`, `Button`, `Pagination`, `Skeleton`, `Empty`를 조합한다. |
 | `Typography` | `pnpm dlx shadcn@latest add typography` 결과 단일 레지스트리 항목이 없었다. 텍스트 스타일은 `docs/engineering/design-system.md`의 semantic typography 규칙으로 관리한다. |
 
@@ -169,7 +169,7 @@
 - 옵션이 많거나 검색이 필요한 필터: `Combobox` 또는 `Command` + `Popover`를 사용한다.
 - 목록 표: 단순 목록은 `Table`, 정렬/페이지/선택이 필요하면 `Table` + TanStack Table을 사용한다.
 - Data Table: `@tanstack/react-table`로 상태를 계산하고, DOM은 shadcn `Table`로 렌더링한다.
-- Date Picker: `Calendar`는 날짜 선택 본체, `Popover`는 floating panel, `Button`은 trigger, `Field`는 label/error를 담당한다.
+- Date Picker: `Calendar`는 날짜 선택 본체, `Popover`는 floating panel, `Button`은 trigger, `Field`는 label/error를 담당한다. 화면에서는 이 조합을 직접 만들지 않고 아래 공통 필드를 쓴다.
 - 빈 목록: `Empty`를 사용하고, 다음 액션이 명확하면 `Button`을 함께 둔다.
 - 오류 상태: `Alert`를 사용한다.
 - 파괴적 확인: `AlertDialog`를 사용한다.
@@ -177,10 +177,35 @@
 - 긴 상세 편집: `Sheet` 또는 `Drawer`를 사용한다.
 - 액션 결과 알림: `Sonner`를 사용한다. `Toast` 이름의 직접 구현체를 만들지 않는다.
 
+## 날짜·시간·월 입력
+
+브라우저 기본 `input type="date|time|datetime-local|month"`는 쓰지 않는다. 화면마다 모양과 동작이 달라지고 모바일·데스크톱에서 일관된 선택 경험을 줄 수 없기 때문이다.
+
+- 위치: `src/components/operations/date-time-fields.tsx`의 `DateField`, `TimeField`, `DateTimeField`, `MonthField`. 설치된 shadcn `Input`, `Button`, `Popover`, `Calendar`, `NativeSelect`만 조합하며 새 기본 부품을 직접 그리지 않는다.
+- 값 형식(저장·API 계약은 기존과 같다): 날짜 `YYYY-MM-DD`, 월 `YYYY-MM`, 시간 `HH:mm`(24시간), 일시 `YYYY-MM-DDTHH:mm`.
+- 사용법: `<DateField aria-label="등록일" value={v} onValueChange={setV} />`. `aria-label`은 필수이며 기존 `Label` 래핑 구조와 테스트의 `getByLabelText`가 그대로 동작하도록 이전 label 문구를 유지한다. 값 변경은 `event.target.value`가 아니라 문자열 값을 받는 `onValueChange`다.
+- 입력 방식: 텍스트 입력으로 직접 쓰거나 옆의 선택기 버튼(`… 달력 열기`, `… 시간 선택 열기`, `… 월 선택 열기`)으로 고른다. 존재하지 않는 값(`2026-02-30`, `24:00`, `2026-13`)과 입력 중인 미완성 값은 `aria-invalid`와 브라우저 제약 검증(`setCustomValidity`)으로 제출을 막는다. 빈 값은 `required`일 때만 막는다.
+- `onValueChange` 계약: 완성된 유효 값 또는 빈 문자열만 전달한다. 입력 중인 `2026-1` 같은 미완성 문자열은 필드 안에만 머물고 화면 state, 조회 query, 날짜 계산으로 올라가지 않는다(레슨 캘린더 월 이동이 `Invalid Date`를 만나지 않게 하기 위함). 달력에서는 이미 선택된 날짜를 다시 눌러도 선택이 해제되지 않고 그 값으로 확정된다.
+- 시간은 시(00–23)와 분(00–59)을 각각 1분 단위로 고른다.
+- 빈 값 정책: 비어 있는 시간·일시에서 선택기를 열어도 오늘 날짜나 `00:00`을 임의로 채우지 않는다. 날짜와 시, 분을 모두 고른 뒤에만 `onValueChange`가 호출되고, 고르다 닫으면 버려진다. 이미 완성된 값에서 일부만 바꾸면 나머지는 유지한다.
+- `disabled`이면 입력과 선택기 버튼을 모두 막는다.
+- 필드는 형식만 책임진다. 시작<종료, 유효기간 같은 의미 검증은 각 화면의 도메인 helper에서 한다.
+- 선택기 버튼은 입력 오른쪽에 있으므로 Popover는 버튼의 오른쪽 끝을 기준으로(`align="end"`) 열린다. 화면 가장자리에서는 Radix 충돌 처리로 안쪽으로 밀린다.
+- 선택기는 `PopoverContent`로 열리며 Dialog(`z-[60]`) 위에 보이도록 `z-[70]`을 쓴다. 새 Dialog/오버레이 z-index를 바꾸면 선택기 레이어를 함께 확인한다.
+- 모바일: 선택기 폭은 `max-w-[calc(100vw-2rem)]`로 제한한다. 320px 화면에서도 달력과 시·분 선택이 화면 안에 들어와야 한다.
+- 월 드롭다운은 브라우저 언어와 상관없이 한국어(`10월`)로 표시한다.
+
+## 금액 입력
+
+- 원 단위 금액은 `Input type="number" min={1} step={1}`로 1원 단위 양의 정수만 허용한다. HTML `step`은 허용 간격이 아니라 `min`에서 출발하는 유효값 격자이므로 `min={1}`에 `step={1000}`을 쓰면 `140000`이 거부된다.
+- 쉼표를 문자로 입력하는 UX(`140,000`)는 아직 정해지지 않았다. 필요해지면 표시 포맷과 저장 숫자를 분리한 공통 금액 입력을 설계하기 전에 사용자에게 질문한다.
+- 금액 폼 테스트는 `src/test/expect-whole-won-input.ts`의 `expectWholeWonInput`으로 `140000` 허용과 `0`·음수·소수 거부를 확인한다.
+
 ## 금지 규칙
 
 - shadcn에 있는 컴포넌트를 손으로 다시 만들지 않는다.
 - 기본 HTML `button`, `input`, `select`, `table`을 직접 스타일링해 쓰지 않는다. 예외가 필요하면 이유를 evidence에 기록한다.
+- `input type="date|time|datetime-local|month"`를 직접 쓰지 않는다. 위 공통 날짜·시간·월 필드를 사용한다.
 - `Card` 안에 또 다른 `Card`를 넣지 않는다.
 - 페이지 섹션 전체를 카드처럼 띄우지 않는다.
 - 아이콘만 있는 버튼에는 접근 가능한 이름과 필요 시 `Tooltip`을 제공한다.

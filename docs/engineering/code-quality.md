@@ -70,6 +70,9 @@
 
 ### 폼과 다이얼로그
 
+- UI 기본 부품(input, select, popover, calendar, dialog 등)은 설치된 shadcn/ui(`src/components/ui/`)를 먼저 쓰고, 도메인에 맞춘 조합만 `src/components/operations/`·`management/`나 feature 안에 둔다. 기본 HTML 요소나 브라우저 기본 입력(`type="date|time|datetime-local|month"`)을 쓰는 예외는 이유를 evidence에 기록한다.
+- 날짜·월·시간·일시 입력은 `src/components/operations/date-time-fields.tsx`의 공통 필드를 쓴다. 필드는 형식만 책임지고 시작<종료 같은 의미 검증은 화면의 도메인 helper에 둔다.
+- 원 단위 금액 `type="number"`는 `min={1} step={1}`로 둔다. `step`은 허용 간격이 아니라 `min` 기준 유효값 격자라 `step={1000}`은 `140000`을 거부한다.
 - 단일 필드 검증은 필드 가까이에 둔다.
 - 여러 필드 조합 검증은 schema 또는 도메인 helper로 모은다.
 - submit handler는 입력 수집, 검증, mutation, toast/navigation을 읽기 쉬운 순서로 분리한다.
