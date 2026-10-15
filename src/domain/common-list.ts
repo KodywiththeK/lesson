@@ -12,6 +12,8 @@ export type ListFilterValue =
 
 export type BuildListViewOptions<TItem> = {
   getName: (item: TItem) => string;
+  /** 이름이 같은 항목의 순서를 고정하는 보조 기준(보통 id). 페이지 경계의 중복·누락을 막는다. */
+  getTieBreaker?: (item: TItem) => string;
   search?: string;
   searchFields?: Array<(item: TItem) => string | number | undefined>;
   filters?: Record<string, ListFilterValue>;
@@ -38,6 +40,35 @@ const collator = new Intl.Collator("ko-KR", {
   sensitivity: "base",
 });
 
+/** 이름 정렬 기본 규칙: 숫자 크기 → 한글 가나다 → 영문. 대소문자는 구분하지 않는다. */
+export function compareKoreanNames(left: string, right: string) {
+  return collator.compare(left, right);
+}
+
+export type PageNumberItem = number | "ellipsis";
+
+/** 페이지 이동 버튼에 보여줄 번호. 처음·끝·현재 앞뒤 한 페이지만 두고 나머지는 생략한다. */
+export function buildPageNumbers(page: number, totalPages: number): PageNumberItem[] {
+  const visiblePages = new Set(
+    [1, page - 1, page, page + 1, totalPages].filter((number) => number >= 1 && number <= totalPages),
+  );
+  // 현재 페이지가 가장자리에 있어도 번호 개수가 크게 흔들리지 않게 앞/뒤 두 번째 페이지를 채운다.
+  if (page <= 2) visiblePages.add(Math.min(2, totalPages));
+  if (page >= totalPages - 1) visiblePages.add(Math.max(totalPages - 1, 1));
+  if (totalPages <= 5) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const sorted = [...visiblePages].sort((left, right) => left - right);
+
+  return sorted.flatMap((number, index): PageNumberItem[] => {
+    const hiddenPages = index > 0 ? number - sorted[index - 1] - 1 : 0;
+    if (hiddenPages === 0) return [number];
+    // 한 페이지만 가리는 생략 부호는 번호를 그대로 보여주는 편이 낫다.
+    return hiddenPages === 1 ? [number - 1, number] : ["ellipsis", number];
+  });
+}
+
 export function normalizePageSize(pageSize: number | undefined): PageSizeOption {
   if (PAGE_SIZE_OPTIONS.includes(pageSize as PageSizeOption)) {
     return pageSize as PageSizeOption;
@@ -54,19 +85,33 @@ export function buildListView<TItem>(
   const filteredItems = items
     .filter((item) => matchesSearch(item, options))
     .filter((item) => matchesFilters(item, options))
-    .sort((left, right) =>
-      collator.compare(options.getName(left), options.getName(right)),
+    .sort(
+      (left, right) =>
+        compareKoreanNames(options.getName(left), options.getName(right)) ||
+        compareKoreanNames(
+          options.getTieBreaker?.(left) ?? "",
+          options.getTieBreaker?.(right) ?? "",
+        ),
     );
-  const totalItems = filteredItems.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  return paginateItems(filteredItems, { page: options.page, pageSize });
+}
+
+/** 이미 원하는 순서로 정렬된 목록을 순서를 바꾸지 않고 해당 페이지만 잘라 `ListView`로 만든다. */
+export function paginateItems<TItem>(
+  items: TItem[],
+  options: { page?: number; pageSize?: number },
+): ListView<TItem> {
+  const pageSize = normalizePageSize(options.pageSize);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const page = clampPage(options.page ?? 1, totalPages);
   const startIndex = (page - 1) * pageSize;
 
   return {
-    items: filteredItems.slice(startIndex, startIndex + pageSize),
+    items: items.slice(startIndex, startIndex + pageSize),
     page,
     pageSize,
-    totalItems,
+    totalItems: items.length,
     totalPages,
     hasPreviousPage: page > 1,
     hasNextPage: page < totalPages,

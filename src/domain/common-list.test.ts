@@ -4,7 +4,10 @@ import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
   buildListView,
+  buildPageNumbers,
+  compareKoreanNames,
   normalizePageSize,
+  paginateItems,
 } from "./common-list";
 
 type StudentRow = {
@@ -116,5 +119,79 @@ describe("buildListView", () => {
 
     expect(view.items).toHaveLength(11);
     expect(view.totalPages).toBe(1);
+  });
+});
+
+describe("compareKoreanNames", () => {
+  it("숫자는 숫자 크기로, 한글은 가나다순으로, 영문은 그 뒤에 정렬한다", () => {
+    const names = ["Alice", "이서연", "10반", "가은", "7반", "각", "bob"];
+
+    expect([...names].sort(compareKoreanNames)).toEqual(["7반", "10반", "가은", "각", "이서연", "Alice", "bob"]);
+  });
+});
+
+describe("buildListView 동명이인 정렬", () => {
+  it("이름이 같으면 보조 기준으로 순서를 고정해 페이지 경계에서 중복·누락이 없게 한다", () => {
+    const rows = [
+      { id: "c", name: "김민지" },
+      { id: "a", name: "김민지" },
+      { id: "b", name: "김민지" },
+    ];
+    const options = {
+      getName: (row: (typeof rows)[number]) => row.name,
+      getTieBreaker: (row: (typeof rows)[number]) => row.id,
+      pageSize: 10,
+    };
+
+    expect(buildListView(rows, options).items.map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(buildListView([...rows].reverse(), options).items.map((row) => row.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("buildPageNumbers", () => {
+  it("페이지가 적으면 모든 번호를 보여준다", () => {
+    expect(buildPageNumbers(1, 1)).toEqual([1]);
+    expect(buildPageNumbers(2, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("페이지가 많으면 처음·끝·현재 주변만 보여주고 나머지는 생략한다", () => {
+    expect(buildPageNumbers(1, 10)).toEqual([1, 2, "ellipsis", 10]);
+    expect(buildPageNumbers(5, 10)).toEqual([1, "ellipsis", 4, 5, 6, "ellipsis", 10]);
+    expect(buildPageNumbers(10, 10)).toEqual([1, "ellipsis", 9, 10]);
+    expect(buildPageNumbers(3, 10)).toEqual([1, 2, 3, 4, "ellipsis", 10]);
+  });
+
+  it("생략 부호가 한 페이지만 가리게 되면 그 번호를 그대로 보여준다", () => {
+    expect(buildPageNumbers(3, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(buildPageNumbers(4, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe("paginateItems", () => {
+  const items = Array.from({ length: 25 }, (_, index) => index + 1);
+
+  it("이미 정렬된 목록의 순서를 바꾸지 않고 해당 페이지만 자른다", () => {
+    const view = paginateItems(items, { page: 3, pageSize: 10 });
+
+    expect(view.items).toEqual([21, 22, 23, 24, 25]);
+    expect(view).toMatchObject({ page: 3, pageSize: 10, totalItems: 25, totalPages: 3 });
+    expect(view.hasPreviousPage).toBe(true);
+    expect(view.hasNextPage).toBe(false);
+  });
+
+  it("범위를 벗어난 페이지는 가장 가까운 페이지로, 빈 목록은 1페이지로 맞춘다", () => {
+    expect(paginateItems(items, { page: 99, pageSize: 10 }).page).toBe(3);
+    expect(paginateItems(items, { page: 0, pageSize: 10 }).page).toBe(1);
+    expect(paginateItems([], { page: 5, pageSize: 10 })).toMatchObject({
+      items: [],
+      page: 1,
+      totalItems: 0,
+      totalPages: 1,
+      hasNextPage: false,
+    });
+  });
+
+  it("허용되지 않은 페이지 크기는 기본 10개로 바꾼다", () => {
+    expect(paginateItems(items, { page: 1, pageSize: 15 }).pageSize).toBe(10);
   });
 });

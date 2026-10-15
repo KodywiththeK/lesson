@@ -40,6 +40,8 @@ describe("queryKeys", () => {
         part: "피아노",
         payType: "ratio",
         status: "employed",
+        page: "2",
+        pageSize: "20",
       }),
     ).toEqual([
       "academy",
@@ -50,6 +52,8 @@ describe("queryKeys", () => {
       "피아노",
       "ratio",
       "employed",
+      "2",
+      "20",
     ]);
   });
 
@@ -58,6 +62,9 @@ describe("queryKeys", () => {
       queryKeys.statusManagement.list("academy-1", {
         entityType: "student",
         status: "withdrawn",
+        q: "민지",
+        page: "2",
+        pageSize: "20",
       }),
     ).toEqual([
       "academy",
@@ -65,6 +72,9 @@ describe("queryKeys", () => {
       "status-management",
       "student",
       "withdrawn",
+      "민지",
+      "2",
+      "20",
     ]);
   });
 
@@ -73,6 +83,8 @@ describe("queryKeys", () => {
       queryKeys.vendors.list("academy-1", {
         q: "문구",
         kind: "교재",
+        page: "3",
+        pageSize: "10",
       }),
     ).toEqual([
       "academy",
@@ -81,6 +93,8 @@ describe("queryKeys", () => {
       "list",
       "문구",
       "교재",
+      "3",
+      "10",
     ]);
   });
 
@@ -89,6 +103,8 @@ describe("queryKeys", () => {
       queryKeys.books.purchaseList("academy-1", {
         q: "바이엘",
         status: "payment-pending",
+        page: "2",
+        pageSize: "30",
       }),
     ).toEqual([
       "academy",
@@ -97,6 +113,8 @@ describe("queryKeys", () => {
       "purchase-list",
       "바이엘",
       "payment-pending",
+      "2",
+      "30",
     ]);
   });
 
@@ -111,6 +129,8 @@ describe("queryKeys", () => {
         from: "2026-08-01",
         to: "2026-08-31",
         sort: "amount-desc",
+        page: "2",
+        pageSize: "20",
       }),
     ).toEqual([
       "academy",
@@ -124,6 +144,8 @@ describe("queryKeys", () => {
       "2026-08-01",
       "2026-08-31",
       "amount-desc",
+      "2",
+      "20",
     ]);
   });
 
@@ -132,6 +154,8 @@ describe("queryKeys", () => {
       queryKeys.lessonTickets.list("academy-1", {
         q: "피아노",
         status: "low-remaining",
+        page: "2",
+        pageSize: "10",
       }),
     ).toEqual([
       "academy",
@@ -140,7 +164,14 @@ describe("queryKeys", () => {
       "list",
       "피아노",
       "low-remaining",
+      "2",
+      "10",
     ]);
+  });
+
+  it("선생님·원생 옵션 key는 목록 key와 분리해 페이지가 바뀌어도 전체 목록을 다시 조회하지 않는다", () => {
+    expect(queryKeys.teachers.options("academy-1")).toEqual(["academy", "academy-1", "teachers", "options"]);
+    expect(queryKeys.students.options("academy-1")).toEqual(["academy", "academy-1", "students", "options"]);
   });
 
   it("회차권 등록 선택지 key를 학원별로 분리한다", () => {

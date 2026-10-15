@@ -138,6 +138,40 @@ describe("날짜와 시간 선택 필드", () => {
     expect(onValueChange).toHaveBeenLastCalledWith("");
   });
 
+  it("필수 필드를 지워도 빈 값은 전달하지 않고 포커스를 잃으면 마지막 값으로 되돌린다", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<MonthField aria-label="조회 월" value="2026-10" required onValueChange={onValueChange} />);
+    const input = screen.getByRole("textbox", { name: "조회 월" });
+
+    await user.clear(input);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue("");
+
+    await user.tab();
+    expect(input).toHaveValue("2026-10");
+  });
+
+  it.each([
+    ["날짜", DateField, "2026-10-15", "2026-10-2"],
+    ["시간", TimeField, "09:05", "9:"],
+    ["월", MonthField, "2026-10", "2026-1"],
+    ["일시", DateTimeField, "2026-10-15T09:05", "2026-10-15T9"],
+  ] as const)("%s 필드에 잘못된 글자를 남기고 포커스를 잃으면 마지막 유효 값으로 되돌린다", async (_name, Field, valid, typed) => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<Field aria-label="값" value={valid} onValueChange={onValueChange} />);
+    const input = screen.getByRole("textbox", { name: "값" });
+
+    await user.clear(input);
+    await user.type(input, typed);
+    expect(input).toHaveValue(typed);
+    await user.tab();
+
+    expect(input).toHaveValue(valid);
+    expect((input as HTMLInputElement).checkValidity()).toBe(true);
+  });
+
   it("입력 중이던 미완성 값은 선택기로 같은 값을 골라도 선택한 값으로 바로잡는다", async () => {
     const user = userEvent.setup();
     render(<Controlled Field={DateField} initial="2026-10-20" label="등록일" />);

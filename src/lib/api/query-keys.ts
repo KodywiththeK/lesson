@@ -9,6 +9,8 @@ type StudentListFilters = {
 };
 
 type TeacherListFilters = {
+  page?: string;
+  pageSize?: string;
   q?: string;
   part?: string;
   payType?: string;
@@ -16,16 +18,22 @@ type TeacherListFilters = {
 };
 
 type VendorListFilters = {
+  page?: string;
+  pageSize?: string;
   q?: string;
   kind?: string;
 };
 
 type BookPurchaseListFilters = {
+  page?: string;
+  pageSize?: string;
   q?: string;
   status?: string;
 };
 
 type FinanceLedgerListFilters = {
+  page?: string;
+  pageSize?: string;
   q?: string;
   type?: string;
   source?: string;
@@ -36,6 +44,8 @@ type FinanceLedgerListFilters = {
 };
 
 type LessonTicketListFilters = {
+  page?: string;
+  pageSize?: string;
   q?: string;
   status?: string;
 };
@@ -43,11 +53,16 @@ type LessonTicketListFilters = {
 type StatusManagementListFilters = {
   entityType: "student" | "teacher";
   status: "suspended" | "withdrawn" | "on_leave" | "resigned";
+  q?: string;
+  page?: string;
+  pageSize?: string;
 };
 
 export const queryKeys = {
   academy: (academyId: string) => ["academy", academyId] as const,
   students: {
+    options: (academyId: string) =>
+      [...queryKeys.academy(academyId), "students", "options"] as const,
     list: (academyId: string, filters: StudentListFilters = {}) =>
       [
         ...queryKeys.academy(academyId),
@@ -63,6 +78,8 @@ export const queryKeys = {
       ] as const,
   },
   teachers: {
+    options: (academyId: string) =>
+      [...queryKeys.academy(academyId), "teachers", "options"] as const,
     list: (academyId: string, filters: TeacherListFilters = {}) =>
       [
         ...queryKeys.academy(academyId),
@@ -72,6 +89,8 @@ export const queryKeys = {
         filters.part ?? "",
         filters.payType ?? "",
         filters.status ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   statusManagement: {
@@ -81,6 +100,9 @@ export const queryKeys = {
         "status-management",
         filters.entityType,
         filters.status,
+        filters.q ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   vendors: {
@@ -91,6 +113,8 @@ export const queryKeys = {
         "list",
         filters.q ?? "",
         filters.kind ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   books: {
@@ -104,6 +128,8 @@ export const queryKeys = {
         "purchase-list",
         filters.q ?? "",
         filters.status ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   finance: {
@@ -120,6 +146,8 @@ export const queryKeys = {
         filters.from ?? "",
         filters.to ?? "",
         filters.sort ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
   },
   lessonTickets: {
@@ -130,6 +158,8 @@ export const queryKeys = {
         "list",
         filters.q ?? "",
         filters.status ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
       ] as const,
     registrationOptions: (academyId: string) =>
       [

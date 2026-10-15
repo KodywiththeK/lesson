@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { getFinanceToday } from "@/domain/finance-date";
 import { cn } from "@/lib/utils";
 
 type FieldProps = {
@@ -142,8 +143,8 @@ type PickerApi = {
 };
 
 /**
- * 입력 중인 글자는 필드가 들고 있다가 완성된 유효 값(또는 빈 값)일 때만 `onValueChange`로 올린다.
- * 화면 state에는 `2026-1` 같은 미완성 문자열이 들어오지 않는다.
+ * 입력 중인 글자는 필드가 들고 있다가 완성된 유효 값(또는 필수가 아닌 필드의 빈 값)일 때만
+ * `onValueChange`로 올린다. 화면 state에는 `2026-1` 같은 미완성 문자열이 들어오지 않는다.
  */
 function PickerField({
   kind,
@@ -179,7 +180,17 @@ function PickerField({
 
   function handleTextChange(next: string) {
     setText(next);
-    if (next === "" || isValidValue(next)) onValueChange(next);
+    // 필수 필드는 비운 값을 올리지 않는다. 화면 state가 빈 값이 되어 조회·계산이 깨지는 것을 막는다.
+    const canCommit = next === "" ? !required : isValidValue(next);
+    if (canCommit) onValueChange(next);
+  }
+
+  /** 완성되지 않은 글자를 남기고 떠나면 화면이 실제 값과 달라지므로 마지막 값으로 되돌린다. */
+  function handleBlur() {
+    const isIncomplete = text === "" ? required : !isValidValue(text);
+    if (isIncomplete) {
+      setText(value);
+    }
   }
 
   return (
@@ -198,6 +209,7 @@ function PickerField({
           disabled={disabled}
           required={required}
           onChange={(event) => handleTextChange(event.target.value)}
+          onBlur={handleBlur}
           className="min-w-0 flex-1 tabular-nums"
         />
         <PopoverTrigger asChild>
@@ -278,7 +290,7 @@ function MonthPanel({ value, onSelect }: { value: string; onSelect: (month: stri
   const match = MONTH_PATTERN.exec(value);
   const selectedYear = match ? Number(match[1]) : undefined;
   const selectedMonth = match?.[2];
-  const baseYear = selectedYear ?? new Date().getFullYear();
+  const baseYear = selectedYear ?? Number(getFinanceToday().slice(0, 4));
   const [year, setYear] = useState(baseYear);
   const years = Array.from({ length: YEAR_RANGE * 2 + 1 }, (_, index) => baseYear - YEAR_RANGE + index);
 
