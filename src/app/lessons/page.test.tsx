@@ -53,7 +53,7 @@ describe("LessonsPage", () => {
       screen.getByRole("gridcell", { name: /5 오늘/ }),
     ).toHaveAttribute("aria-current", "date");
     expect(
-      screen.getByRole("button", { name: "미등원인원" }),
+      screen.getByRole("button", { name: "결석인원" }),
     ).toBeInTheDocument();
   });
 
@@ -69,7 +69,7 @@ describe("LessonsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "레슨원생 검색" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "레슨원생 검색" });
+    const dialog = await screen.findByRole("dialog", { name: "레슨원생 검색 및 선택" });
 
     expect(within(dialog).getByText("한서아")).toBeInTheDocument();
     expect(within(dialog).getByText("최도윤")).toBeInTheDocument();

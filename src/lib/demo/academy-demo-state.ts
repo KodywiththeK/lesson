@@ -9,8 +9,9 @@ import {
 import type { BookSale, LedgerCategory, LedgerEntry } from "@/domain/book-sale";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
+  adjustLessonTicket,
   applyAttendanceToTicket,
-  registerLessonTicket,
+  applyLessonTicketRegistration,
   type LessonTicketListItem,
   type LessonTicketUsage,
 } from "@/domain/lesson-ticket";
@@ -38,6 +39,12 @@ import {
 } from "@/domain/teacher";
 import { registerVendor } from "@/domain/vendor";
 import type { VendorListRow } from "@/domain/vendor-list";
+import type {
+  AdjustLessonTicketInput,
+  AdjustLessonTicketResult,
+  RegisterLessonTicketInput,
+  RegisterLessonTicketResult,
+} from "@/lib/api/lesson-tickets";
 import type { UpdateStudentProfileInput } from "@/lib/api/students";
 
 import { demoLessonWorkspaceData } from "./lesson-demo-data";
@@ -134,18 +141,6 @@ export type DemoTeacherStatusInput = {
   status: TeacherStatus;
   changedAt?: string;
   reason?: string;
-};
-
-export type DemoLessonTicketPurchaseInput = {
-  studentId: string;
-  studentName: string;
-  instrumentId: string;
-  instrumentName: string;
-  grantedCount: number;
-  validFrom: string;
-  validUntil: string;
-  registeredAt: string;
-  paidAmount: number;
 };
 
 export type MarkDemoPrivateLessonAttendanceInput = {
@@ -672,58 +667,102 @@ function calculateRetentionUntil(changedAt: string) {
   return date.toISOString().slice(0, 10);
 }
 
-export function registerDemoLessonTicketPurchase(
+export function registerDemoLessonTicket(
   state: DemoAcademyState,
-  input: DemoLessonTicketPurchaseInput,
-): DemoAcademyState {
+  input: RegisterLessonTicketInput,
+): { state: DemoAcademyState; result: RegisterLessonTicketResult } {
   const existingTicket = state.tickets.find(
     (ticket) =>
       ticket.studentId === input.studentId &&
       ticket.instrumentId === input.instrumentId,
   );
-  const registered = registerLessonTicket(existingTicket, {
+  const registered = applyLessonTicketRegistration(existingTicket, {
     academyId: state.academyId,
     studentId: input.studentId,
     instrumentId: input.instrumentId,
     grantedCount: input.grantedCount,
-    validFrom: input.validFrom,
-    validUntil: input.validUntil,
+    validDays: input.validDays,
     registeredAt: input.registeredAt,
   });
+  const studentName =
+    existingTicket?.studentName ??
+    state.students.find((student) => student.studentId === input.studentId)?.name ??
+    "이름 없음";
+  const paidAmount = input.paidAmount ?? 0;
   const ticket: LessonTicketListItem = {
     ...registered.ticket,
     ticketId: existingTicket?.ticketId ?? `ticket-demo-${state.tickets.length + 1}`,
-    studentName: input.studentName,
+    studentName,
     instrumentName: input.instrumentName,
-    paidAmount: input.paidAmount,
-    paidAt: input.paidAmount > 0 ? input.registeredAt : undefined,
+    paidAmount: (existingTicket?.paidAmount ?? 0) + paidAmount,
+    paidAt: paidAmount > 0 ? input.registeredAt : existingTicket?.paidAt,
   };
   const tickets = existingTicket
     ? state.tickets.map((candidate) =>
         candidate.ticketId === existingTicket.ticketId ? ticket : candidate,
       )
     : [...state.tickets, ticket];
+  const ledgerEntries =
+    paidAmount > 0
+      ? buildFinanceLedgerList(
+          [
+            ...state.ledgerEntries,
+            {
+              academyId: state.academyId,
+              ledgerId: `ledger-ticket-${ticket.ticketId}-${state.ledgerEntries.length + 1}`,
+              occurredOn: input.registeredAt,
+              type: "income",
+              source: "lesson-ticket",
+              category: "lesson-ticket",
+              amount: paidAmount,
+              description: `${studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
+              refId: ticket.ticketId,
+            },
+          ],
+          { academyId: state.academyId },
+        )
+      : state.ledgerEntries;
 
   return {
-    ...state,
-    tickets,
-    ledgerEntries: buildFinanceLedgerList(
-      [
-        ...state.ledgerEntries,
-        {
-          academyId: state.academyId,
-          ledgerId: `ledger-ticket-${ticket.ticketId}-${input.registeredAt}`,
-          occurredOn: input.registeredAt,
-          type: "income",
-          source: "lesson-ticket",
-          category: "lesson-ticket",
-          amount: input.paidAmount,
-          description: `${input.studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
-          refId: ticket.ticketId,
-        },
-      ],
-      { academyId: state.academyId },
-    ),
+    state: { ...state, tickets, ledgerEntries },
+    result: {
+      ticketId: ticket.ticketId,
+      merged: Boolean(existingTicket),
+      totalGrantedCount: ticket.totalGrantedCount,
+      remainingCount: ticket.remainingCount,
+      validFrom: ticket.validFrom,
+      validUntil: ticket.validUntil,
+    },
+  };
+}
+
+export function adjustDemoLessonTicket(
+  state: DemoAcademyState,
+  input: AdjustLessonTicketInput,
+): { state: DemoAcademyState; result: AdjustLessonTicketResult } {
+  const existingTicket = state.tickets.find(
+    (ticket) => ticket.ticketId === input.ticketId,
+  );
+
+  if (!existingTicket) {
+    throw new Error("회차권을 찾지 못했습니다.");
+  }
+
+  const adjusted = adjustLessonTicket(existingTicket, input);
+
+  return {
+    state: {
+      ...state,
+      tickets: state.tickets.map((ticket) =>
+        ticket.ticketId === input.ticketId ? { ...ticket, ...adjusted } : ticket,
+      ),
+    },
+    result: {
+      ticketId: input.ticketId,
+      totalGrantedCount: adjusted.totalGrantedCount,
+      remainingCount: adjusted.remainingCount,
+      validUntil: adjusted.validUntil,
+    },
   };
 }
 
@@ -788,6 +827,47 @@ export function markDemoPrivateLessonAttendance(
     ticketUsages: deduction.usage
       ? [...state.ticketUsages, deduction.usage]
       : state.ticketUsages,
+  };
+}
+
+/** 등원 확인을 취소해 예정 상태로 되돌리고, 그 레슨으로 차감한 회차권 1회를 복구한다. */
+export function cancelDemoPrivateLessonAttendance(
+  state: DemoAcademyState,
+  input: { lessonId: string },
+): DemoAcademyState {
+  const lesson = state.privateLessons.find((candidate) => candidate.id === input.lessonId);
+
+  if (!lesson) {
+    throw new Error("등원 확인을 취소할 개인레슨을 찾을 수 없습니다.");
+  }
+
+  const usage = state.ticketUsages.find(
+    (candidate) => candidate.lessonEventId === input.lessonId,
+  );
+
+  return {
+    ...state,
+    privateLessons: state.privateLessons.map((candidate) =>
+      candidate.id === input.lessonId ? { ...candidate, status: "scheduled" } : candidate,
+    ),
+    tickets: usage
+      ? state.tickets.map((ticket) =>
+          ticket.academyId === usage.academyId &&
+          ticket.studentId === usage.studentId &&
+          ticket.instrumentId === usage.instrumentId
+            ? {
+                ...ticket,
+                remainingCount: Math.min(
+                  ticket.totalGrantedCount,
+                  ticket.remainingCount + usage.usedCount,
+                ),
+              }
+            : ticket,
+        )
+      : state.tickets,
+    ticketUsages: state.ticketUsages.filter(
+      (candidate) => candidate.lessonEventId !== input.lessonId,
+    ),
   };
 }
 

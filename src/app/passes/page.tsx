@@ -36,8 +36,11 @@ export default function PassesPage() {
                 ? demo.createLessonTicketRegistrationOptionsQueryOptions
                 : undefined
             }
-            registerLessonTicketPurchase={
-              useTestDemo ? demo.registerLessonTicketPurchase : undefined
+            registerLessonTicket={
+              useTestDemo ? demo.registerLessonTicket : undefined
+            }
+            adjustLessonTicket={
+              useTestDemo ? demo.adjustLessonTicket : undefined
             }
           />
         </AppShell>

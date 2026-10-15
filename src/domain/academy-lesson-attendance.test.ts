@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDailyAcademyAttendance,
+  checkAcademyLessonEditable,
+  checkAcademyLessonMoveTarget,
+  findUnresolvedAbsences,
+  formatAcademyLessonOriginLabel,
   markAllAcademyLessonAttendance,
   markStudentAcademyLessonAttendance,
   removeResolvedAbsenceFromQueue,
+  type DailyAcademyAttendanceRow,
 } from "./academy-lesson-attendance";
 import type { AcademyLessonEvent } from "./academy-lesson-schedule";
 
@@ -172,5 +177,82 @@ describe("removeResolvedAbsenceFromQueue", () => {
     expect(result.absenceQueue.map((absence) => absence.lessonEventId)).toEqual([
       "lesson-2",
     ]);
+  });
+});
+
+function buildRow(
+  overrides: Partial<DailyAcademyAttendanceRow> & Pick<DailyAcademyAttendanceRow, "lessonEventId">,
+): DailyAcademyAttendanceRow {
+  return {
+    academyId: "academy-1",
+    studentId: "student-1",
+    studentName: "김민지",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    date: "2026-08-12",
+    startTime: "15:00",
+    endTime: "15:50",
+    status: "pending",
+    ...overrides,
+  };
+}
+
+describe("findUnresolvedAbsences", () => {
+  it("처리하지 않은 결석만 돌려주고 보강·패스로 확정한 결석은 제외한다", () => {
+    const rows = [
+      buildRow({ lessonEventId: "a", status: "absent" }),
+      buildRow({ lessonEventId: "b", status: "absent", absenceResolution: "makeup" }),
+      buildRow({ lessonEventId: "c", status: "absent", absenceResolution: "pass" }),
+      buildRow({ lessonEventId: "d", status: "present" }),
+      buildRow({ lessonEventId: "e", status: "pending" }),
+    ];
+
+    expect(findUnresolvedAbsences(rows).map((row) => row.lessonEventId)).toEqual(["a"]);
+  });
+});
+
+describe("checkAcademyLessonEditable", () => {
+  it("출결을 처리하기 전 일정은 이동·삭제할 수 있다", () => {
+    const row = buildRow({ lessonEventId: "a" });
+
+    expect(checkAcademyLessonEditable(row, "move")).toEqual({ ok: true });
+    expect(checkAcademyLessonEditable(row, "delete")).toEqual({ ok: true });
+  });
+
+  it("이미 출석·결석이 처리된 일정은 초기화한 뒤에 이동·삭제하라고 안내한다", () => {
+    const row = buildRow({ lessonEventId: "a", status: "present" });
+
+    expect(checkAcademyLessonEditable(row, "delete")).toEqual({
+      ok: false,
+      reason: "이미 출결이 처리된 일정은 삭제할 수 없습니다. 먼저 출결을 초기화해 주세요.",
+    });
+    expect(checkAcademyLessonEditable(row, "move")).toEqual({
+      ok: false,
+      reason: "이미 출결이 처리된 일정은 이동할 수 없습니다. 먼저 출결을 초기화해 주세요.",
+    });
+  });
+});
+
+describe("formatAcademyLessonOriginLabel", () => {
+  it("학원 레슨의 보강 일정은 보강 수업으로 표시한다", () => {
+    expect(formatAcademyLessonOriginLabel("makeup")).toBe("보강 수업");
+    expect(formatAcademyLessonOriginLabel("regular")).toBe("정기");
+    expect(formatAcademyLessonOriginLabel("rescheduled")).toBe("이동");
+  });
+});
+
+describe("checkAcademyLessonMoveTarget", () => {
+  const row = buildRow({ lessonEventId: "a", date: "2026-08-21" });
+
+  it("같은 달 안의 다른 날짜로는 옮길 수 있다", () => {
+    expect(checkAcademyLessonMoveTarget(row, "2026-08-31")).toEqual({ ok: true });
+  });
+
+  it("달을 넘기면 같은 달 안에서만 이동할 수 있다고 안내한다", () => {
+    const message =
+      "일정은 같은 달 안에서만 이동할 수 있습니다. 다른 달에 수업을 잡으려면 일정 추가를 이용해 주세요.";
+
+    expect(checkAcademyLessonMoveTarget(row, "2026-09-01")).toEqual({ ok: false, reason: message });
+    expect(checkAcademyLessonMoveTarget(row, "2027-08-21")).toEqual({ ok: false, reason: message });
   });
 });

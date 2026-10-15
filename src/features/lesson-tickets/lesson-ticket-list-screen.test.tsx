@@ -2,9 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { describe, expect, it } from "vitest";
-
-import { expectWholeWonInput } from "@/test/expect-whole-won-input";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildLessonTicketList,
@@ -16,6 +14,12 @@ import {
   type LessonTicketListQueryOptionsFactory,
   type LessonTicketRegistrationOptionsQueryFactory,
 } from "./lesson-ticket-list-screen";
+
+const { toastMock } = vi.hoisted(() => ({
+  toastMock: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("sonner", () => ({ toast: toastMock }));
 
 const lessonTickets: LessonTicketListItem[] = [
   {
@@ -46,12 +50,14 @@ const lessonTickets: LessonTicketListItem[] = [
   },
 ];
 
+type ScreenProps = ComponentProps<typeof LessonTicketListScreen>;
+
 function renderLessonTicketListScreen(
   queryOptionsFactory: LessonTicketListQueryOptionsFactory,
-  registrationOptionsQueryFactory?: LessonTicketRegistrationOptionsQueryFactory,
-  registerLessonTicket?: ComponentProps<
-    typeof LessonTicketListScreen
-  >["registerLessonTicket"],
+  extraProps: Pick<
+    ScreenProps,
+    "registrationOptionsQueryFactory" | "registerLessonTicket" | "adjustLessonTicket"
+  > = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -68,12 +74,37 @@ function renderLessonTicketListScreen(
         academyName="더 클래식"
         today="2026-09-01"
         queryOptionsFactory={queryOptionsFactory}
-        registrationOptionsQueryFactory={registrationOptionsQueryFactory}
-        registerLessonTicket={registerLessonTicket}
+        {...extraProps}
       />
     </QueryClientProvider>,
   );
 }
+
+function listLessonTickets(tickets: LessonTicketListItem[] = lessonTickets): LessonTicketListQueryOptionsFactory {
+  return (options) => ({
+    queryKey: ["lesson-tickets", options.academyId, options.search ?? "", options.filters?.status ?? ""],
+    queryFn: async () => buildLessonTicketList(tickets, options),
+  });
+}
+
+const pianoRegistrationOptions: LessonTicketRegistrationOptionsQueryFactory = (academyId) => ({
+  queryKey: ["lesson-ticket-registration-options", academyId],
+  queryFn: async () => [
+    {
+      studentId: "student-1",
+      studentName: "김민지",
+      instruments: [{ instrumentId: "piano", instrumentName: "피아노" }],
+    },
+    {
+      studentId: "student-2",
+      studentName: "한서아",
+      instruments: [
+        { instrumentId: "violin", instrumentName: "바이올린" },
+        { instrumentId: "cello", instrumentName: "첼로" },
+      ],
+    },
+  ],
+});
 
 // 원생01~원생25. 앞 15명은 피아노, 나머지는 바이올린. 원생05부터는 잔여 2회로 잔여 부족 상태다.
 const manyLessonTickets: LessonTicketListItem[] = Array.from({ length: 25 }, (_, index) => {
@@ -108,23 +139,88 @@ const pagedQueryOptionsFactory: LessonTicketListQueryOptionsFactory = (options) 
 });
 
 describe("LessonTicketListScreen", () => {
-  it("회차권 목록을 표로 보여주고 원생, 악기, 총/잔여 회수, 유효기간, 상태를 표시한다", async () => {
-    renderLessonTicketListScreen((options) => ({
-      queryKey: ["lesson-tickets", options.academyId, options.search ?? ""],
-      queryFn: async () => buildLessonTicketList(lessonTickets, options),
-    }));
+  beforeEach(() => {
+    toastMock.success.mockClear();
+    toastMock.error.mockClear();
+  });
+
+  it("회차권 목록을 표로 보여주고 원생, 악기, 총 부여·사용·잔여 회수, 등록일, 만료일, 상태를 표시한다", async () => {
+    renderLessonTicketListScreen(listLessonTickets());
 
     const table = await screen.findByRole("table", { name: "회차권 목록" });
-    expect(within(table).getByRole("cell", { name: "김민지" })).toBeInTheDocument();
-    expect(within(table).getByRole("cell", { name: "피아노" })).toBeInTheDocument();
-    expect(within(table).getByRole("cell", { name: "12회" })).toBeInTheDocument();
-    expect(within(table).getByRole("cell", { name: "2회" })).toBeInTheDocument();
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers).toEqual([
+      "원생",
+      "악기",
+      "총 부여",
+      "사용",
+      "잔여",
+      "등록일",
+      "만료일",
+      "상태",
+      "관리",
+    ]);
+
+    const row = within(table).getByRole("row", { name: /김민지/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "김민지",
+      "피아노",
+      "12회",
+      "10회",
+      "2회",
+      "2026-08-01",
+      "2026-09-07",
+      "잔여 부족",
+      "수정",
+    ]);
     expect(
-      within(table).getByRole("cell", { name: "2026-08-01 ~ 2026-09-07" }),
+      within(row).getByRole("button", { name: "김민지 피아노 회차권 수정" }),
     ).toBeInTheDocument();
-    expect(
-      within(table).getByRole("cell", { name: "잔여 부족 만료 임박" }),
-    ).toBeInTheDocument();
+  });
+
+  it("잔여가 부족하거나 소진된 회차권은 눈에 띄는 배지로, 만료일이 다가오는 것만으로는 강조하지 않는다", async () => {
+    renderLessonTicketListScreen(
+      listLessonTickets([
+        ...lessonTickets,
+        {
+          ...lessonTickets[1],
+          ticketId: "ticket-3",
+          studentName: "박소진",
+          remainingCount: 0,
+        },
+        {
+          ...lessonTickets[1],
+          ticketId: "ticket-4",
+          studentId: "student-4",
+          studentName: "정임박",
+          remainingCount: 6,
+          validUntil: "2026-09-03",
+        },
+      ]),
+    );
+
+    const table = await screen.findByRole("table", { name: "회차권 목록" });
+    const lowBadge = within(within(table).getByRole("row", { name: /김민지/ })).getByText("잔여 부족");
+    const exhaustedBadge = within(within(table).getByRole("row", { name: /박소진/ })).getByText("소진");
+    const nearExpiryRow = within(table).getByRole("row", { name: /정임박/ });
+
+    expect(lowBadge).toHaveAttribute("data-variant", "destructive");
+    expect(exhaustedBadge).toHaveAttribute("data-variant", "destructive");
+    expect(within(nearExpiryRow).getByText("정상")).toBeInTheDocument();
+    expect(within(nearExpiryRow).queryByText("만료 임박")).not.toBeInTheDocument();
+  });
+
+  it("상태 필터는 잔여 부족, 만료, 소진만 고를 수 있다", async () => {
+    renderLessonTicketListScreen(listLessonTickets());
+
+    await screen.findByRole("table", { name: "회차권 목록" });
+    const options = within(screen.getByLabelText("회차권 상태 필터"))
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+
+    expect(options).toEqual(["전체", "잔여 부족", "만료", "소진"]);
   });
 
   it("검색어와 상태 필터 변경을 TanStack Query 입력으로 반영한다", async () => {
@@ -165,6 +261,7 @@ describe("LessonTicketListScreen", () => {
         status: "low-remaining",
       },
     });
+    expect(seenOptions.at(-1)).not.toHaveProperty("expiringWithinDays");
   });
 
   it("Supabase 오류가 나면 화면에서 확인 가능한 오류 상태를 보여준다", async () => {
@@ -183,56 +280,37 @@ describe("LessonTicketListScreen", () => {
     );
     expect(screen.getByRole("alert")).not.toHaveTextContent("permission denied");
   });
+});
 
-  it("회차권 결제 금액은 1원 단위 양의 정수를 제출 검증으로 허용한다", async () => {
-    const user = userEvent.setup();
-
-    renderLessonTicketListScreen((options) => ({
-      queryKey: ["lesson-tickets", options.academyId],
-      queryFn: async () => buildLessonTicketList(lessonTickets, options),
-    }));
-
-    await user.click(screen.getByRole("button", { name: "회차권 등록" }));
-    const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
-
-    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "결제 금액" }));
+describe("회차권 등록 폼", () => {
+  beforeEach(() => {
+    toastMock.success.mockClear();
+    toastMock.error.mockClear();
   });
 
-  it("회차권 등록 폼은 등록일·유효 시작일을 오늘로 채우고 악기가 하나면 자동 선택한다", async () => {
+  async function openRegistrationDialog(extraProps: Parameters<typeof renderLessonTicketListScreen>[1] = {}) {
     const user = userEvent.setup();
 
-    renderLessonTicketListScreen(
-      (options) => ({
-        queryKey: ["lesson-tickets", options.academyId],
-        queryFn: async () => buildLessonTicketList(lessonTickets, options),
-      }),
-      (academyId) => ({
-        queryKey: ["lesson-ticket-registration-options", academyId],
-        queryFn: async () => [
-          {
-            studentId: "student-1",
-            studentName: "김민지",
-            instruments: [{ instrumentId: "piano", instrumentName: "피아노" }],
-          },
-          {
-            studentId: "student-2",
-            studentName: "한서아",
-            instruments: [
-              { instrumentId: "violin", instrumentName: "바이올린" },
-              { instrumentId: "cello", instrumentName: "첼로" },
-            ],
-          },
-        ],
-      }),
-    );
-
+    renderLessonTicketListScreen(listLessonTickets(), {
+      registrationOptionsQueryFactory: pianoRegistrationOptions,
+      ...extraProps,
+    });
     await user.click(screen.getByRole("button", { name: "회차권 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
     await within(dialog).findByRole("option", { name: "김민지" });
 
+    return { user, dialog };
+  }
+
+  it("부여 회수 1회, 사용 기한 30일, 등록일 오늘로 시작하고 유효 시작일·만료일 입력칸은 없다", async () => {
+    const { user, dialog } = await openRegistrationDialog();
+
+    expect(within(dialog).getByRole("spinbutton", { name: "부여 회수" })).toHaveValue(1);
+    expect(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" })).toHaveValue(30);
     expect(within(dialog).getByLabelText("등록일")).toHaveValue("2026-09-01");
-    expect(within(dialog).getByLabelText("유효 시작일")).toHaveValue("2026-09-01");
-    expect(within(dialog).getByLabelText("유효 만료일")).toHaveValue("");
+    expect(within(dialog).queryByLabelText("유효 시작일")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("유효 만료일")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("만료일")).not.toBeInTheDocument();
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByLabelText("악기")).toHaveValue("piano");
@@ -241,102 +319,317 @@ describe("LessonTicketListScreen", () => {
     expect(within(dialog).getByLabelText("악기")).toHaveValue("");
   });
 
-  it("회차권 등록 다이얼로그에서 원생과 악기를 선택해 등록 mutation을 실행한다", async () => {
-    const user = userEvent.setup();
-    const registrations: Array<Record<string, unknown>> = [];
+  it("만료일은 등록일 + 사용 기한으로 계산해 미리 보여주고 입력이 바뀌면 다시 계산한다", async () => {
+    const { dialog } = await openRegistrationDialog();
 
-    renderLessonTicketListScreen(
-      (options) => ({
-        queryKey: ["lesson-tickets", options.academyId],
-        queryFn: async () => buildLessonTicketList(lessonTickets, options),
-      }),
-      (academyId) => ({
-        queryKey: ["lesson-ticket-registration-options", academyId],
-        queryFn: async () => [
-          {
-            studentId: "student-1",
-            studentName: "김민지",
-            instruments: [
-              {
-                instrumentId: "piano",
-                instrumentName: "피아노",
-              },
-            ],
-          },
-        ],
-      }),
-      async (input) => {
+    expect(within(dialog).getByText("만료일: 2026-10-01")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
+      target: { value: "60" },
+    });
+    expect(within(dialog).getByText("만료일: 2026-10-31")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("등록일"), {
+      target: { value: "2026-09-15" },
+    });
+    expect(within(dialog).getByText("만료일: 2026-11-14")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
+      target: { value: "0" },
+    });
+    expect(within(dialog).getByText("만료일: 사용 기한을 1~3650일로 입력해 주세요")).toBeInTheDocument();
+  });
+
+  it("결제 금액은 선택 입력이고 0원과 1원 단위 정수를 허용하며 음수·소수는 거절한다", async () => {
+    const { dialog } = await openRegistrationDialog();
+    const amountInput = within(dialog).getByRole<HTMLInputElement>("spinbutton", { name: "결제 금액" });
+
+    expect(amountInput).not.toBeRequired();
+    expect(amountInput).toHaveValue(null);
+    for (const [value, isValid] of [
+      ["0", true],
+      ["1", true],
+      ["140000", true],
+      ["-1000", false],
+      ["1.5", false],
+    ] as const) {
+      fireEvent.change(amountInput, { target: { value } });
+      expect(amountInput.checkValidity(), `${value}원 입력의 제약 검증`).toBe(isValid);
+    }
+    expect(
+      within(dialog).getByText("입력하면 수입 내역에 기록됩니다(원장만 입력 가능)."),
+    ).toBeInTheDocument();
+  });
+
+  it("결제 금액을 비워도 등록할 수 있고 입력값을 등록 요청에 담아 보낸다", async () => {
+    const registrations: Array<Record<string, unknown>> = [];
+    const { user, dialog } = await openRegistrationDialog({
+      registerLessonTicket: async (input) => {
         registrations.push(input);
 
         return {
-          ticket: {
-            academyId: input.academyId,
-            ticketId: "ticket-3",
-            studentId: input.studentId,
-            studentName: input.studentName,
-            instrumentId: input.instrumentId,
-            instrumentName: input.instrumentName,
-            totalGrantedCount: input.grantedCount,
-            remainingCount: input.grantedCount,
-            validFrom: input.validFrom,
-            validUntil: input.validUntil,
-            registeredAt: input.registeredAt,
-          },
-          event: {
-            type: "created-new-ticket",
-            addedCount: input.grantedCount,
-            nextValidUntil: input.validUntil,
-          },
+          ticketId: "ticket-3",
+          merged: false,
+          totalGrantedCount: input.grantedCount,
+          remainingCount: input.grantedCount,
+          validFrom: input.registeredAt,
+          validUntil: "2026-10-31",
         };
       },
-    );
+    });
 
-    await user.click(screen.getByRole("button", { name: "회차권 등록" }));
-
-    const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
-    await within(dialog).findByRole("option", { name: "김민지" });
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-    await within(dialog).findByRole("option", { name: "피아노" });
-    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
       target: { value: "10" },
     });
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
-      target: { value: "150000" },
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
+      target: { value: "60" },
     });
-    fireEvent.change(within(dialog).getByLabelText("유효 시작일"), {
-      target: { value: "2026-09-01" },
-    });
-    fireEvent.change(within(dialog).getByLabelText("유효 만료일"), {
-      target: { value: "2026-10-31" },
-    });
-    fireEvent.change(within(dialog).getByLabelText("등록일"), {
-      target: { value: "2026-09-01" },
-    });
-    await waitFor(() => {
-      expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
-    });
-    fireEvent.submit(
-      within(dialog).getByRole("form", { name: "회차권 등록 입력" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
     await waitFor(() => {
       expect(registrations).toEqual([
         {
           academyId: "academy-1",
           studentId: "student-1",
-          studentName: "김민지",
           instrumentId: "piano",
           instrumentName: "피아노",
           grantedCount: 10,
-          validFrom: "2026-09-01",
-          validUntil: "2026-10-31",
+          validDays: 60,
           registeredAt: "2026-09-01",
-          paidAmount: 150000,
         },
       ]);
     });
     expect(screen.queryByRole("dialog", { name: "회차권 등록" })).toBeNull();
+    expect(toastMock.success).toHaveBeenCalledWith("회차권을 등록했습니다.");
+  });
+
+  it("결제 금액을 입력하면 금액과 함께 등록하고 0원도 그대로 보낸다", async () => {
+    const registrations: Array<Record<string, unknown>> = [];
+    const { user, dialog } = await openRegistrationDialog({
+      registerLessonTicket: async (input) => {
+        registrations.push(input);
+
+        return {
+          ticketId: "ticket-3",
+          merged: false,
+          totalGrantedCount: input.grantedCount,
+          remainingCount: input.grantedCount,
+          validFrom: input.registeredAt,
+          validUntil: "2026-10-01",
+        };
+      },
+    });
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
+      target: { value: "150000" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(registrations).toHaveLength(1));
+    expect(registrations[0]).toMatchObject({ paidAmount: 150000 });
+  });
+
+  it("부여 회수나 사용 기한이 1 미만이면 저장할 수 없다", async () => {
+    const { user, dialog } = await openRegistrationDialog();
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "0" },
+    });
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "3" },
+    });
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
+      target: { value: "" },
+    });
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+  });
+
+  it("기존 회차권에 추가되면 더한 회수와 새 만료일을 알려준다", async () => {
+    const { user, dialog } = await openRegistrationDialog({
+      registerLessonTicket: async () => ({
+        ticketId: "ticket-1",
+        merged: true,
+        totalGrantedCount: 22,
+        remainingCount: 12,
+        validFrom: "2026-08-01",
+        validUntil: "2026-10-01",
+      }),
+    });
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "10" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(toastMock.success).toHaveBeenCalledWith(
+        "기존 회차권에 10회를 추가하고 만료일을 2026-10-01로 갱신했습니다.",
+      );
+    });
+  });
+
+  it("서버가 거절하면 한국어 사유를 보여주고 다이얼로그를 유지한다", async () => {
+    const { user, dialog } = await openRegistrationDialog({
+      registerLessonTicket: async () => {
+        throw new Error(
+          "회차권을 등록하지 못했습니다: 결제 금액을 수입으로 기록하는 것은 원장만 할 수 있습니다. 결제 금액을 비우고 등록해 주세요.",
+        );
+      },
+    });
+
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
+      target: { value: "1000" },
+    });
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith("회차권 등록에 실패했습니다.", {
+        description:
+          "결제 금액을 수입으로 기록하는 것은 원장만 할 수 있습니다. 결제 금액을 비우고 등록해 주세요.",
+      });
+    });
+    expect(screen.getByRole("dialog", { name: "회차권 등록" })).toBeInTheDocument();
+  });
+});
+
+describe("회차권 직접 수정", () => {
+  beforeEach(() => {
+    toastMock.success.mockClear();
+    toastMock.error.mockClear();
+  });
+
+  async function openAdjustDialog(adjustLessonTicket?: ScreenProps["adjustLessonTicket"]) {
+    const user = userEvent.setup();
+
+    renderLessonTicketListScreen(listLessonTickets(), { adjustLessonTicket });
+    await user.click(await screen.findByRole("button", { name: "김민지 피아노 회차권 수정" }));
+    const dialog = await screen.findByRole("dialog", { name: "회차권 수정" });
+
+    return { user, dialog };
+  }
+
+  it("원생·악기는 읽기 전용으로 보여주고 현재 회수와 만료일을 채워 연다", async () => {
+    const { dialog } = await openAdjustDialog();
+
+    expect(within(dialog).getByText("김민지")).toBeInTheDocument();
+    expect(within(dialog).getByText("피아노")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "원생" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("spinbutton", { name: "부여 회수" })).toHaveValue(12);
+    expect(within(dialog).getByRole("spinbutton", { name: "잔여 회수" })).toHaveValue(2);
+    expect(within(dialog).getByLabelText("만료일")).toHaveValue("2026-09-07");
+    expect(within(dialog).getByLabelText("수정 사유")).toHaveValue("");
+  });
+
+  it("수정 사유가 비어 있으면 저장 버튼이 비활성이고 이유를 문장으로 알려준다", async () => {
+    const { user, dialog } = await openAdjustDialog();
+
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+    expect(within(dialog).getByText("수정 사유를 입력해 주세요.")).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText("수정 사유"), "수기 장부와 맞추기");
+
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
+    expect(within(dialog).queryByText("수정 사유를 입력해 주세요.")).not.toBeInTheDocument();
+  });
+
+  it("잘못된 값은 이유를 알려주고 저장할 수 없다", async () => {
+    const { user, dialog } = await openAdjustDialog();
+    await user.type(within(dialog).getByLabelText("수정 사유"), "수기 장부와 맞추기");
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "잔여 회수" }), {
+      target: { value: "13" },
+    });
+    expect(within(dialog).getByText("잔여 회수는 부여 회수보다 많을 수 없습니다.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "잔여 회수" }), {
+      target: { value: "-1" },
+    });
+    expect(within(dialog).getByText("잔여 회수는 0회 이상의 정수여야 합니다.")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "잔여 회수" }), {
+      target: { value: "0" },
+    });
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "0" },
+    });
+    expect(within(dialog).getByText("부여 회수는 1회 이상의 정수여야 합니다.")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "12" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("만료일"), {
+      target: { value: "2026-07-31" },
+    });
+    expect(within(dialog).getByText("만료일은 유효 시작일 이후여야 합니다.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+  });
+
+  it("저장하면 수정 요청을 보내고 다이얼로그를 닫으며 성공을 알린다", async () => {
+    const adjustments: Array<Record<string, unknown>> = [];
+    const { user, dialog } = await openAdjustDialog(async (input) => {
+      adjustments.push(input);
+
+      return {
+        ticketId: input.ticketId,
+        totalGrantedCount: input.totalGrantedCount,
+        remainingCount: input.remainingCount,
+        validUntil: input.validUntil,
+      };
+    });
+
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
+      target: { value: "10" },
+    });
+    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "잔여 회수" }), {
+      target: { value: "6" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("만료일"), {
+      target: { value: "2026-10-15" },
+    });
+    await user.type(within(dialog).getByLabelText("수정 사유"), "수기 장부와 맞추기");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(adjustments).toEqual([
+        {
+          academyId: "academy-1",
+          ticketId: "ticket-1",
+          totalGrantedCount: 10,
+          remainingCount: 6,
+          validUntil: "2026-10-15",
+          reason: "수기 장부와 맞추기",
+        },
+      ]);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "회차권 수정" })).not.toBeInTheDocument();
+    });
+    expect(toastMock.success).toHaveBeenCalledWith("회차권을 수정했습니다.");
+  });
+
+  it("서버가 거절하면 한국어 사유를 보여주고 다이얼로그를 유지한다", async () => {
+    const { user, dialog } = await openAdjustDialog(async () => {
+      throw new Error("회차권을 수정하지 못했습니다: 회차권을 찾지 못했습니다.");
+    });
+    await user.type(within(dialog).getByLabelText("수정 사유"), "수기 장부와 맞추기");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith("회차권 수정에 실패했습니다.", {
+        description: "회차권을 찾지 못했습니다.",
+      });
+    });
+    expect(screen.getByRole("dialog", { name: "회차권 수정" })).toBeInTheDocument();
   });
 });
 

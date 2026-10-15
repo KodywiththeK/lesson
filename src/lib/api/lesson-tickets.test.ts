@@ -6,10 +6,12 @@ import {
   fetchAllLessonTickets,
   fetchLessonTicketRegistrationOptions,
   fetchLessonTicketList,
-  registerLessonTicketGrant,
-  type LessonTicketGrantRegistrationSupabaseClient,
+  adjustLessonTicket,
+  registerLessonTicket,
+  type AdjustLessonTicketSupabaseClient,
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
+  type RegisterLessonTicketSupabaseClient,
 } from "./lesson-tickets";
 
 function createGrantRow(
@@ -99,7 +101,6 @@ describe("fetchLessonTicketList", () => {
       academyId: "academy-1",
       today: "2026-09-01",
       lowRemainingThreshold: 2,
-      expiringWithinDays: 7,
       search: "피아노",
     });
 
@@ -116,7 +117,7 @@ describe("fetchLessonTicketList", () => {
       ticketId: "ticket-1",
       studentName: "김민지",
       instrumentName: "피아노",
-      statuses: ["low-remaining", "expiring-soon"],
+      statuses: ["low-remaining"],
     });
   });
 
@@ -127,7 +128,6 @@ describe("fetchLessonTicketList", () => {
       academyId: "academy-1",
       today: "2026-09-01",
       lowRemainingThreshold: 2,
-      expiringWithinDays: 7,
       page: 3,
       pageSize: 10,
     });
@@ -150,8 +150,7 @@ describe("fetchLessonTicketList", () => {
         academyId: "academy-1",
         today: "2026-09-01",
         lowRemainingThreshold: 2,
-        expiringWithinDays: 7,
-      }),
+        }),
     ).rejects.toThrow("회차권 목록을 불러오지 못했습니다: permission denied");
   });
 });
@@ -163,7 +162,6 @@ describe("createLessonTicketListQueryOptions", () => {
       academyId: "academy-1",
       today: "2026-09-01",
       lowRemainingThreshold: 2,
-      expiringWithinDays: 7,
       search: "피아노",
       filters: {
         status: "low-remaining",
@@ -189,7 +187,6 @@ describe("createLessonTicketListQueryOptions", () => {
       academyId: "academy-1",
       today: "2026-09-01",
       lowRemainingThreshold: 2,
-      expiringWithinDays: 7,
     };
 
     const secondPage = createLessonTicketListQueryOptions(client, { ...baseOptions, page: 2, pageSize: 20 });
@@ -334,269 +331,172 @@ describe("fetchLessonTicketRegistrationOptions 정렬", () => {
   });
 });
 
-describe("registerLessonTicketGrant", () => {
-  it("기존 회차권이 있으면 회수와 유효기간을 병합해 update한다", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const client = {
-      from(table: "lesson_ticket_grants" | "ledger_entries") {
-        calls.push({ table });
+type RpcCall = { functionName: string; payload: Record<string, unknown> };
 
-        if (table === "ledger_entries") {
-          return {
-            async insert(values: Record<string, unknown>) {
-              calls[calls.length - 1].insert = values;
+function createRpcStub<TClient>(result: { data: unknown; error: Error | null }) {
+  const calls: RpcCall[] = [];
+  const client = {
+    async rpc(functionName: string, payload: Record<string, unknown>) {
+      calls.push({ functionName, payload });
 
-              return {
-                data: null,
-                error: null,
-              };
-            },
-          };
-        }
+      return result;
+    },
+  } as unknown as TClient;
 
-        return {
-          select(select: string) {
-            calls[calls.length - 1].select = select;
+  return { client, calls };
+}
 
-            return createExistingTicketLookup(calls, [
-              {
-                id: "ticket-1",
-                academy_id: "academy-1",
-                student_id: "student-1",
-                instrument_id: "piano",
-                instrument_name: "피아노",
-                total_granted_count: 12,
-                remaining_count: 3,
-                valid_from: "2026-08-01",
-                valid_until: "2026-09-30",
-                registered_at: "2026-08-01",
-                students: {
-                  name: "김민지",
-                },
-              },
-            ]);
-          },
-          update(values: Record<string, unknown>) {
-            calls[calls.length - 1].update = values;
+describe("registerLessonTicket", () => {
+  const input = {
+    academyId: "academy-1",
+    studentId: "student-1",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    grantedCount: 10,
+    validDays: 30,
+    registeredAt: "2026-09-20",
+  };
 
-            return createPersistedTicketResult(calls, {
-              id: "ticket-1",
-              academy_id: "academy-1",
-              student_id: "student-1",
-              instrument_id: "piano",
-              instrument_name: "피아노",
-              total_granted_count: 22,
-              remaining_count: 13,
-              valid_from: "2026-10-01",
-              valid_until: "2026-11-30",
-              registered_at: "2026-09-20",
-              students: {
-                name: "김민지",
-              },
-            });
-          },
-          insert() {
-            throw new Error("insert should not be called");
-          },
-        };
+  it("등록 RPC를 한 번 호출하고 결과를 camelCase로 돌려준다", async () => {
+    const { client, calls } = createRpcStub<RegisterLessonTicketSupabaseClient>({
+      data: {
+        ticket_id: "ticket-1",
+        merged: true,
+        total_granted_count: 22,
+        remaining_count: 13,
+        valid_from: "2026-08-01",
+        valid_until: "2026-10-20",
       },
-    } as unknown as LessonTicketGrantRegistrationSupabaseClient;
-
-    const result = await registerLessonTicketGrant(client, {
-      academyId: "academy-1",
-      studentId: "student-1",
-      studentName: "김민지",
-      instrumentId: "piano",
-      instrumentName: "피아노",
-      grantedCount: 10,
-      validFrom: "2026-10-01",
-      validUntil: "2026-11-30",
-      registeredAt: "2026-09-20",
+      error: null,
     });
 
-    expect(calls).toMatchObject([
+    const result = await registerLessonTicket(client, { ...input, paidAmount: 150000 });
+
+    expect(calls).toEqual([
       {
-        table: "lesson_ticket_grants",
-        select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)",
-        eq: [
-          ["academy_id", "academy-1"],
-          ["student_id", "student-1"],
-          ["instrument_id", "piano"],
-        ],
-        order: ["valid_until", { ascending: false }],
-        limit: 1,
-      },
-      {
-        table: "lesson_ticket_grants",
-        update: {
-          total_granted_count: 22,
-          remaining_count: 13,
-          valid_from: "2026-10-01",
-          valid_until: "2026-11-30",
-          registered_at: "2026-09-20",
-          instrument_name: "피아노",
-          paid_amount: 0,
-          paid_at: null,
+        functionName: "register_lesson_ticket",
+        payload: {
+          p_academy_id: "academy-1",
+          p_student_id: "student-1",
+          p_instrument_id: "piano",
+          p_instrument_name: "피아노",
+          p_granted_count: 10,
+          p_valid_days: 30,
+          p_registered_at: "2026-09-20",
+          p_paid_amount: 150000,
         },
-        eq: [["id", "ticket-1"]],
       },
     ]);
-    expect(result.ticket).toMatchObject({
+    expect(result).toEqual({
       ticketId: "ticket-1",
+      merged: true,
       totalGrantedCount: 22,
       remainingCount: 13,
-      validUntil: "2026-11-30",
+      validFrom: "2026-08-01",
+      validUntil: "2026-10-20",
     });
-    expect(result.event.type).toBe("merged-existing-ticket");
   });
 
-  it("기존 회차권이 없으면 새 회차권을 insert한다", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const client = {
-      from(table: "lesson_ticket_grants" | "ledger_entries") {
-        calls.push({ table });
-
-        if (table === "ledger_entries") {
-          return {
-            async insert(values: Record<string, unknown>) {
-              calls[calls.length - 1].insert = values;
-
-              return {
-                data: null,
-                error: null,
-              };
-            },
-          };
-        }
-
-        return {
-          select(select: string) {
-            calls[calls.length - 1].select = select;
-
-            return createExistingTicketLookup(calls, []);
-          },
-          update() {
-            throw new Error("update should not be called");
-          },
-          insert(values: Record<string, unknown>) {
-            calls[calls.length - 1].insert = values;
-
-            return createPersistedTicketResult(calls, {
-              id: "ticket-2",
-              academy_id: "academy-1",
-              student_id: "student-2",
-              instrument_id: "violin",
-              instrument_name: "바이올린",
-              total_granted_count: 8,
-              remaining_count: 8,
-              valid_from: "2026-09-01",
-              valid_until: "2026-10-31",
-              registered_at: "2026-09-01",
-              paid_amount: 160000,
-              paid_at: "2026-09-01",
-              students: {
-                name: "이서윤",
-              },
-            });
-          },
-        };
+  it("결제 금액을 입력하지 않으면 0원으로 보낸다", async () => {
+    const { client, calls } = createRpcStub<RegisterLessonTicketSupabaseClient>({
+      data: {
+        ticket_id: "ticket-2",
+        merged: false,
+        total_granted_count: 10,
+        remaining_count: 10,
+        valid_from: "2026-09-20",
+        valid_until: "2026-10-20",
       },
-    } as unknown as LessonTicketGrantRegistrationSupabaseClient;
-
-    const result = await registerLessonTicketGrant(client, {
-      academyId: "academy-1",
-      studentId: "student-2",
-      studentName: "이서윤",
-      instrumentId: "violin",
-      instrumentName: "바이올린",
-      grantedCount: 8,
-      validFrom: "2026-09-01",
-      validUntil: "2026-10-31",
-      registeredAt: "2026-09-01",
-      paidAmount: 160000,
+      error: null,
     });
 
-    expect(calls[1]).toMatchObject({
-      table: "lesson_ticket_grants",
-      insert: {
-        academy_id: "academy-1",
-        student_id: "student-2",
-        instrument_id: "violin",
-        instrument_name: "바이올린",
-        total_granted_count: 8,
-        remaining_count: 8,
-        valid_from: "2026-09-01",
-        valid_until: "2026-10-31",
-        registered_at: "2026-09-01",
-        paid_amount: 160000,
-        paid_at: "2026-09-01",
-      },
+    await registerLessonTicket(client, input);
+
+    expect(calls[0].payload).toMatchObject({ p_paid_amount: 0 });
+  });
+
+  it("RPC 오류는 한국어 원인을 살려 등록 실패 오류로 감싼다", async () => {
+    const { client } = createRpcStub<RegisterLessonTicketSupabaseClient>({
+      data: null,
+      error: new Error(
+        "결제 금액을 수입으로 기록하는 것은 원장만 할 수 있습니다. 결제 금액을 비우고 등록해 주세요.",
+      ),
     });
-    expect(calls[2]).toMatchObject({
-      table: "ledger_entries",
-      insert: {
-        academy_id: "academy-1",
-        occurred_on: "2026-09-01",
-        entry_type: "income",
-        source: "lesson-ticket",
-        amount: 160000,
-        description: "이서윤 바이올린 회차권 8회 구매",
-        ref_id: "ticket-2",
-      },
-    });
-    expect(result.event.type).toBe("created-new-ticket");
+
+    await expect(registerLessonTicket(client, { ...input, paidAmount: 1000 })).rejects.toThrow(
+      "회차권을 등록하지 못했습니다: 결제 금액을 수입으로 기록하는 것은 원장만 할 수 있습니다.",
+    );
+  });
+
+  it("RPC가 결과를 돌려주지 않으면 오류로 처리한다", async () => {
+    const { client } = createRpcStub<RegisterLessonTicketSupabaseClient>({ data: null, error: null });
+
+    await expect(registerLessonTicket(client, input)).rejects.toThrow(
+      "회차권을 등록했지만 반환된 데이터가 없습니다.",
+    );
   });
 });
 
-function createExistingTicketLookup(
-  calls: Array<Record<string, unknown>>,
-  rows: LessonTicketGrantSupabaseRow[],
-) {
-  return {
-    eq(column: string, value: string) {
-      const latestCall = calls[calls.length - 1];
-      latestCall.eq = [...((latestCall.eq as unknown[]) ?? []), [column, value]];
-
-      return this;
-    },
-    order(column: string, options: { ascending: boolean }) {
-      calls[calls.length - 1].order = [column, options];
-
-      return this;
-    },
-    async limit(count: number) {
-      calls[calls.length - 1].limit = count;
-
-      return {
-        data: rows,
-        error: null,
-      };
-    },
+describe("adjustLessonTicket", () => {
+  const input = {
+    academyId: "academy-1",
+    ticketId: "ticket-1",
+    totalGrantedCount: 10,
+    remainingCount: 6,
+    validUntil: "2026-10-15",
+    reason: "수기 장부와 맞추기",
   };
-}
 
-function createPersistedTicketResult(
-  calls: Array<Record<string, unknown>>,
-  row: LessonTicketGrantSupabaseRow,
-) {
-  return {
-    eq(column: string, value: string) {
-      const latestCall = calls[calls.length - 1];
-      latestCall.eq = [...((latestCall.eq as unknown[]) ?? []), [column, value]];
+  it("수정 RPC를 호출하고 결과를 camelCase로 돌려준다", async () => {
+    const { client, calls } = createRpcStub<AdjustLessonTicketSupabaseClient>({
+      data: {
+        ticket_id: "ticket-1",
+        total_granted_count: 10,
+        remaining_count: 6,
+        valid_until: "2026-10-15",
+      },
+      error: null,
+    });
 
-      return this;
-    },
-    select(select: string) {
-      calls[calls.length - 1].select = select;
+    const result = await adjustLessonTicket(client, input);
 
-      return this;
-    },
-    async single() {
-      return {
-        data: row,
-        error: null,
-      };
-    },
-  };
-}
+    expect(calls).toEqual([
+      {
+        functionName: "adjust_lesson_ticket",
+        payload: {
+          p_academy_id: "academy-1",
+          p_ticket_id: "ticket-1",
+          p_total_granted_count: 10,
+          p_remaining_count: 6,
+          p_valid_until: "2026-10-15",
+          p_reason: "수기 장부와 맞추기",
+        },
+      },
+    ]);
+    expect(result).toEqual({
+      ticketId: "ticket-1",
+      totalGrantedCount: 10,
+      remainingCount: 6,
+      validUntil: "2026-10-15",
+    });
+  });
+
+  it("RPC 오류는 수정 실패 오류로 감싼다", async () => {
+    const { client } = createRpcStub<AdjustLessonTicketSupabaseClient>({
+      data: null,
+      error: new Error("잔여 회수는 부여 회수보다 많을 수 없습니다."),
+    });
+
+    await expect(adjustLessonTicket(client, input)).rejects.toThrow(
+      "회차권을 수정하지 못했습니다: 잔여 회수는 부여 회수보다 많을 수 없습니다.",
+    );
+  });
+
+  it("RPC가 결과를 돌려주지 않으면 오류로 처리한다", async () => {
+    const { client } = createRpcStub<AdjustLessonTicketSupabaseClient>({ data: null, error: null });
+
+    await expect(adjustLessonTicket(client, input)).rejects.toThrow(
+      "회차권을 수정했지만 반환된 데이터가 없습니다.",
+    );
+  });
+});

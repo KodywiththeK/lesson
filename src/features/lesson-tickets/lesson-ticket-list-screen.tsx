@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import {
   keepPreviousData,
   useMutation,
@@ -22,24 +22,16 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
-import { DateField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -58,19 +50,26 @@ import {
 } from "@/domain/lesson-ticket";
 import { toUserMessage } from "@/lib/errors/user-message";
 import {
+  adjustLessonTicket as adjustLessonTicketRpc,
   createLessonTicketListQueryKey,
   createLessonTicketListQueryOptions,
   createLessonTicketRegistrationOptionsQueryOptions,
-  registerLessonTicketGrant,
-  type LessonTicketGrantRegistrationSupabaseClient,
+  registerLessonTicket as registerLessonTicketRpc,
+  type AdjustLessonTicketInput,
+  type AdjustLessonTicketResult,
+  type AdjustLessonTicketSupabaseClient,
   type LessonTicketListSupabaseClient,
   type LessonTicketRegistrationOptionsSupabaseClient,
   type LessonTicketRegistrationStudentOption,
-  type RegisterLessonTicketGrantInput,
-  type RegisterLessonTicketGrantResult,
+  type RegisterLessonTicketInput,
+  type RegisterLessonTicketResult,
+  type RegisterLessonTicketSupabaseClient,
 } from "@/lib/api/lesson-tickets";
 import { queryKeys } from "@/lib/api/query-keys";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+import { LessonTicketAdjustDialog } from "./lesson-ticket-adjust-dialog";
+import { LessonTicketRegistrationForm } from "./lesson-ticket-registration-form";
 
 type LessonTicketListQueryOptions = {
   queryKey: QueryKey;
@@ -97,16 +96,17 @@ type LessonTicketListScreenProps = {
   queryOptionsFactory?: LessonTicketListQueryOptionsFactory;
   registrationOptionsQueryFactory?: LessonTicketRegistrationOptionsQueryFactory;
   registerLessonTicket?: (
-    input: RegisterLessonTicketGrantInput,
-  ) => Promise<RegisterLessonTicketGrantResult>;
-  registerLessonTicketPurchase?: (
-    input: RegisterLessonTicketGrantInput & { paidAmount: number },
-  ) => Promise<void>;
+    input: RegisterLessonTicketInput,
+  ) => Promise<RegisterLessonTicketResult>;
+  adjustLessonTicket?: (
+    input: AdjustLessonTicketInput,
+  ) => Promise<AdjustLessonTicketResult>;
 };
 
 type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
   LessonTicketRegistrationOptionsSupabaseClient &
-  LessonTicketGrantRegistrationSupabaseClient;
+  RegisterLessonTicketSupabaseClient &
+  AdjustLessonTicketSupabaseClient;
 
 type SupabaseClientState =
   | {
@@ -123,7 +123,6 @@ const statusFilterOptions: Array<{
   label: string;
 }> = [
   { value: "low-remaining", label: formatLessonTicketStatus("low-remaining") },
-  { value: "expiring-soon", label: formatLessonTicketStatus("expiring-soon") },
   { value: "expired", label: formatLessonTicketStatus("expired") },
   { value: "exhausted", label: formatLessonTicketStatus("exhausted") },
 ];
@@ -134,7 +133,7 @@ export function LessonTicketListScreen({
   queryOptionsFactory,
   registrationOptionsQueryFactory,
   registerLessonTicket,
-  registerLessonTicketPurchase,
+  adjustLessonTicket,
 }: LessonTicketListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -144,19 +143,20 @@ export function LessonTicketListScreen({
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const hasInjectedRegistrationOptions = Boolean(registrationOptionsQueryFactory);
   const hasInjectedRegistrationMutation = Boolean(registerLessonTicket);
-  const hasInjectedPurchaseMutation = Boolean(registerLessonTicketPurchase);
+  const hasInjectedAdjustMutation = Boolean(adjustLessonTicket);
   const supabaseClientState = useMemo(
     () =>
       hasInjectedQueryOptions &&
       hasInjectedRegistrationOptions &&
-      (hasInjectedRegistrationMutation || hasInjectedPurchaseMutation)
+      hasInjectedRegistrationMutation &&
+      hasInjectedAdjustMutation
         ? null
         : createLessonTicketSupabaseClient(),
     [
       hasInjectedQueryOptions,
-      hasInjectedRegistrationMutation,
-      hasInjectedPurchaseMutation,
       hasInjectedRegistrationOptions,
+      hasInjectedRegistrationMutation,
+      hasInjectedAdjustMutation,
     ],
   );
 
@@ -197,43 +197,51 @@ export function LessonTicketListScreen({
       isRegistrationOpen &&
       (hasInjectedRegistrationOptions || !supabaseClientState?.error),
   });
+  function invalidateTicketRelatedQueries() {
+    for (const section of ["lesson-tickets", "finance", "lesson-workspace"]) {
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.academy(academyId), section],
+      });
+    }
+  }
+
   const registerMutation = useMutation({
-    mutationFn: async (input: RegisterLessonTicketGrantInput) => {
-      if (registerLessonTicketPurchase) {
-        if (!input.paidAmount) {
-          throw new Error("회차권 결제 금액이 필요합니다.");
-        }
-
-        await registerLessonTicketPurchase({
-          ...input,
-          paidAmount: input.paidAmount,
-        });
-        return;
-      }
-
-      const mutation =
+    mutationFn: (input: RegisterLessonTicketInput) => {
+      const register =
         registerLessonTicket ??
         createDefaultRegisterLessonTicket(
           supabaseClientState ?? createMissingSupabaseClientState(),
         );
 
-      await mutation(input);
+      return register(input);
     },
-    onSuccess: () => {
+    onSuccess: (result, input) => {
       setIsRegistrationOpen(false);
-      toast.success("회차권을 등록했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "finance"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "lesson-workspace"],
-      });
+      toast.success(describeRegistration(result, input));
+      invalidateTicketRelatedQueries();
     },
     onError: (error) => {
       toast.error("회차권 등록에 실패했습니다.", {
+        description: toUserMessage(error),
+      });
+    },
+  });
+  const adjustMutation = useMutation({
+    mutationFn: (input: AdjustLessonTicketInput) => {
+      const adjust =
+        adjustLessonTicket ??
+        createDefaultAdjustLessonTicket(
+          supabaseClientState ?? createMissingSupabaseClientState(),
+        );
+
+      return adjust(input);
+    },
+    onSuccess: () => {
+      toast.success("회차권을 수정했습니다.");
+      invalidateTicketRelatedQueries();
+    },
+    onError: (error) => {
+      toast.error("회차권 수정에 실패했습니다.", {
         description: toUserMessage(error),
       });
     },
@@ -312,7 +320,7 @@ export function LessonTicketListScreen({
             label="회차권 검색"
             value={search}
             onChange={changeSearch}
-            placeholder="원생명, 악기, 유효기간, 상태"
+            placeholder="원생명, 악기, 등록일, 만료일, 상태"
           />
           <ListFilterSelect
             label="회차권 상태 필터"
@@ -355,7 +363,16 @@ export function LessonTicketListScreen({
 
         {ticketListView && !lessonTicketListQuery.isError ? (
           <>
-            <LessonTicketTable tickets={ticketListView.items} />
+            <LessonTicketTable
+              tickets={ticketListView.items}
+              isAdjusting={adjustMutation.isPending}
+              onAdjust={(ticket, input, onSaved) =>
+                adjustMutation.mutate(
+                  { ...input, academyId, ticketId: ticket.ticketId },
+                  { onSuccess: onSaved },
+                )
+              }
+            />
             <ListPagination
               itemLabel="회차권"
               countUnit="개"
@@ -409,13 +426,35 @@ function createDefaultRegisterLessonTicket(
   supabaseClientState: SupabaseClientState,
 ) {
   if (supabaseClientState.error) {
-    return async () => {
+    return async (): Promise<RegisterLessonTicketResult> => {
       throw supabaseClientState.error;
     };
   }
 
-  return (input: RegisterLessonTicketGrantInput) =>
-    registerLessonTicketGrant(supabaseClientState.client, input);
+  return (input: RegisterLessonTicketInput) =>
+    registerLessonTicketRpc(supabaseClientState.client, input);
+}
+
+function createDefaultAdjustLessonTicket(
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return async (): Promise<AdjustLessonTicketResult> => {
+      throw supabaseClientState.error;
+    };
+  }
+
+  return (input: AdjustLessonTicketInput) =>
+    adjustLessonTicketRpc(supabaseClientState.client, input);
+}
+
+function describeRegistration(
+  result: RegisterLessonTicketResult,
+  input: RegisterLessonTicketInput,
+) {
+  return result.merged
+    ? `기존 회차권에 ${input.grantedCount}회를 추가하고 만료일을 ${result.validUntil}로 갱신했습니다.`
+    : "회차권을 등록했습니다.";
 }
 
 function createLessonTicketSupabaseClient(): SupabaseClientState {
@@ -441,187 +480,15 @@ function createMissingSupabaseClientState(): SupabaseClientState {
   };
 }
 
-function LessonTicketRegistrationForm({
-  academyId,
-  today,
-  options,
-  isLoading,
-  error,
-  isSaving,
-  onSubmit,
+function LessonTicketTable({
+  tickets,
+  isAdjusting,
+  onAdjust,
 }: {
-  academyId: string;
-  today: string;
-  options: LessonTicketRegistrationStudentOption[];
-  isLoading: boolean;
-  error: Error | null;
-  isSaving: boolean;
-  onSubmit: (input: RegisterLessonTicketGrantInput) => void;
+  tickets: LessonTicketListRow[];
+  isAdjusting: boolean;
+  onAdjust: ComponentProps<typeof LessonTicketAdjustDialog>["onAdjust"];
 }) {
-  const [studentId, setStudentId] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
-  const [grantedCount, setGrantedCount] = useState(1);
-  const [validFrom, setValidFrom] = useState(today);
-  const [validUntil, setValidUntil] = useState("");
-  const [registeredAt, setRegisteredAt] = useState(today);
-  const [paidAmount, setPaidAmount] = useState(0);
-  const selectedStudent = options.find((option) => option.studentId === studentId);
-  const selectedInstrument = selectedStudent?.instruments.find(
-    (instrument) => instrument.instrumentId === instrumentId,
-  );
-  const canSubmit =
-    Boolean(selectedStudent) &&
-    Boolean(selectedInstrument) &&
-    grantedCount > 0 &&
-    Boolean(validFrom) &&
-    Boolean(validUntil) &&
-    Boolean(registeredAt) &&
-    paidAmount > 0 &&
-    !isSaving;
-
-  return (
-    <form
-      aria-label="회차권 등록 입력"
-      className="grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        if (!selectedStudent || !selectedInstrument || !canSubmit) {
-          return;
-        }
-
-        onSubmit({
-          academyId,
-          studentId: selectedStudent.studentId,
-          studentName: selectedStudent.studentName,
-          instrumentId: selectedInstrument.instrumentId,
-          instrumentName: selectedInstrument.instrumentName,
-          grantedCount,
-          validFrom,
-          validUntil,
-          registeredAt,
-          paidAmount,
-        });
-      }}
-    >
-      {error ? (
-        <ListStatusAlert
-          message="회차권 등록 선택지를 불러오지 못했습니다."
-          detail={toUserMessage(error)}
-        />
-      ) : null}
-
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">
-          회차권 등록 선택지를 불러오는 중입니다.
-        </p>
-      ) : null}
-
-      <Label className="grid gap-1">
-        <span>원생</span>
-        <NativeSelect
-          aria-label="원생"
-          value={studentId}
-          onChange={(event) => {
-            const nextStudent = options.find((option) => option.studentId === event.target.value);
-
-            setStudentId(event.target.value);
-            // 악기가 하나뿐이면 선택 단계를 줄인다.
-            setInstrumentId(
-              nextStudent?.instruments.length === 1 ? nextStudent.instruments[0].instrumentId : "",
-            );
-          }}
-        >
-          <NativeSelectOption value="">원생 선택</NativeSelectOption>
-          {options.map((option) => (
-            <NativeSelectOption key={option.studentId} value={option.studentId}>
-              {option.studentName}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Label>
-
-      <Label className="grid gap-1">
-        <span>악기</span>
-        <NativeSelect
-          aria-label="악기"
-          value={instrumentId}
-          disabled={!selectedStudent}
-          onChange={(event) => setInstrumentId(event.target.value)}
-        >
-          <NativeSelectOption value="">악기 선택</NativeSelectOption>
-          {(selectedStudent?.instruments ?? []).map((instrument) => (
-            <NativeSelectOption
-              key={instrument.instrumentId}
-              value={instrument.instrumentId}
-            >
-              {instrument.instrumentName}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Label>
-
-      <Label className="grid gap-1">
-        <span>부여 회수</span>
-        <Input
-          aria-label="부여 회수"
-          type="number"
-          min={1}
-          step={1}
-          value={grantedCount}
-          onChange={(event) => setGrantedCount(Number(event.target.value))}
-        />
-      </Label>
-
-      <Label className="grid gap-1">
-        <span>결제 금액</span>
-        <Input
-          aria-label="결제 금액"
-          type="number"
-          min={1}
-          step={1}
-          value={paidAmount}
-          onChange={(event) => setPaidAmount(Number(event.target.value))}
-        />
-      </Label>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Label className="grid gap-1">
-          <span>유효 시작일</span>
-          <DateField
-            aria-label="유효 시작일"
-            value={validFrom}
-            onValueChange={setValidFrom}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>유효 만료일</span>
-          <DateField
-            aria-label="유효 만료일"
-            value={validUntil}
-            onValueChange={setValidUntil}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>등록일</span>
-          <DateField
-            aria-label="등록일"
-            value={registeredAt}
-            onValueChange={setRegisteredAt}
-          />
-        </Label>
-      </div>
-
-      <DialogFooter>
-        <Button type="submit" disabled={!canSubmit}>
-          {isSaving ? "저장 중" : "저장"}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
-function LessonTicketTable({ tickets }: { tickets: LessonTicketListRow[] }) {
   if (tickets.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
@@ -632,60 +499,91 @@ function LessonTicketTable({ tickets }: { tickets: LessonTicketListRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <Table aria-label="회차권 목록" className="min-w-[54rem]">
+      <Table aria-label="회차권 목록" className="min-w-[60rem]">
         <TableHeader className="bg-muted text-muted-foreground">
           <TableRow>
             <TableHead className="px-4 py-3">원생</TableHead>
             <TableHead className="px-4 py-3">악기</TableHead>
             <TableHead className="px-4 py-3">총 부여</TableHead>
+            <TableHead className="px-4 py-3">사용</TableHead>
             <TableHead className="px-4 py-3">잔여</TableHead>
-            <TableHead className="px-4 py-3">유효기간</TableHead>
+            <TableHead className="px-4 py-3">등록일</TableHead>
+            <TableHead className="px-4 py-3">만료일</TableHead>
             <TableHead className="px-4 py-3">상태</TableHead>
+            <TableHead className="px-4 py-3">관리</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tickets.map((ticket) => (
-            <TableRow key={ticket.ticketId}>
-              <TableCell className="px-4 py-3 font-medium">
-                {ticket.studentName}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {ticket.instrumentName}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatCount(ticket.totalGrantedCount)}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatCount(ticket.remainingCount)}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {ticket.validFrom} ~ {ticket.validUntil}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                <span className="flex flex-wrap gap-1">
-                  {ticket.statuses.length > 0 ? (
-                    ticket.statuses.map((status) => (
-                      <Badge key={status} variant={getStatusVariant(status)}>
-                        {formatLessonTicketStatus(status)}
-                      </Badge>
-                    ))
-                  ) : (
-                    <Badge variant="secondary">정상</Badge>
-                  )}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))}
+          {tickets.map((ticket) => {
+            const needsAttention = hasLowOrNoRemaining(ticket);
+
+            return (
+              <TableRow
+                key={ticket.ticketId}
+                className={needsAttention ? "bg-destructive/5" : undefined}
+              >
+                <TableCell className="px-4 py-3 font-medium">
+                  {ticket.studentName}
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  {ticket.instrumentName}
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  {formatCount(ticket.totalGrantedCount)}
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  {formatCount(ticket.totalGrantedCount - ticket.remainingCount)}
+                </TableCell>
+                <TableCell
+                  className={
+                    needsAttention
+                      ? "px-4 py-3 font-semibold text-destructive"
+                      : "px-4 py-3"
+                  }
+                >
+                  {formatCount(ticket.remainingCount)}
+                </TableCell>
+                <TableCell className="px-4 py-3">{ticket.registeredAt}</TableCell>
+                <TableCell className="px-4 py-3">{ticket.validUntil}</TableCell>
+                <TableCell className="px-4 py-3">
+                  <span className="flex flex-wrap gap-1">
+                    {ticket.statuses.length > 0 ? (
+                      ticket.statuses.map((status) => (
+                        <Badge key={status} variant={getStatusVariant(status)}>
+                          {formatLessonTicketStatus(status)}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="secondary">정상</Badge>
+                    )}
+                  </span>
+                </TableCell>
+                <TableCell className="px-4 py-3">
+                  <LessonTicketAdjustDialog
+                    ticket={ticket}
+                    isSaving={isAdjusting}
+                    onAdjust={onAdjust}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
   );
 }
 
+/** 잔여 부족과 소진은 운영자가 바로 알아보도록 강조한다. 만료일 기준 강조는 하지 않는다. */
+function hasLowOrNoRemaining(ticket: LessonTicketListRow) {
+  return (
+    ticket.statuses.includes("low-remaining") ||
+    ticket.statuses.includes("exhausted")
+  );
+}
+
 function getStatusVariant(status: LessonTicketStatus) {
-  return status === "expired" || status === "exhausted"
-    ? "destructive"
-    : "outline";
+  return status === "expired" ? "secondary" : "destructive";
 }
 
 function formatCount(count: number) {

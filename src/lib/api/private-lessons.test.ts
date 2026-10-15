@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   fetchAcademyLessonRegistrationOptions,
   fetchPrivateLessonRegistrationOptions,
+  cancelPrivateLessonAttendance,
   markPrivateLessonAttendance,
   registerPrivateLessonEvent,
   type PrivateLessonEventSupabaseRow,
@@ -25,7 +26,7 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id)",
+          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, start_time, end_time)",
         eq: ["academy_id", "academy-1"],
       },
       {
@@ -45,6 +46,14 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               instrumentId: "piano",
               instrumentName: "피아노",
               teacherId: "teacher-1",
+              lessonMinutes: 40,
+            },
+            {
+              studentInstrumentId: "student-instrument-4",
+              instrumentId: "violin",
+              instrumentName: "바이올린",
+              teacherId: undefined,
+              lessonMinutes: 30,
             },
           ],
         },
@@ -132,6 +141,17 @@ function createRegistrationOptionsClient(
                             lesson_type: "private",
                             active: true,
                             teacher_id: "teacher-1",
+                            start_time: "14:00:00",
+                            end_time: "14:40:00",
+                          },
+                          {
+                            id: "student-instrument-4",
+                            instrument_id: "violin",
+                            instrument_name: "바이올린",
+                            lesson_type: "private",
+                            active: true,
+                            start_time: null,
+                            end_time: null,
                           },
                           {
                             id: "student-instrument-2",
@@ -348,6 +368,55 @@ describe("markPrivateLessonAttendance", () => {
         markedAt: "2026-08-21T18:05:00+09:00",
       }),
     ).rejects.toThrow("개인레슨 출결을 저장하지 못했습니다: 회차권 잔여가 없습니다.");
+  });
+});
+
+describe("cancelPrivateLessonAttendance", () => {
+  it("등원 확인 취소를 회차권 복구 RPC로 위임한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      async rpc(functionName: string, payload: Record<string, unknown>) {
+        calls.push({ functionName, payload });
+
+        return { data: null, error: null };
+      },
+    };
+
+    await cancelPrivateLessonAttendance(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      studentId: "student-1",
+      instrumentId: "violin",
+    });
+
+    expect(calls).toEqual([
+      {
+        functionName: "cancel_private_lesson_attendance",
+        payload: {
+          p_academy_id: "academy-1",
+          p_lesson_event_id: "lesson-1",
+          p_student_id: "student-1",
+          p_instrument_id: "violin",
+        },
+      },
+    ]);
+  });
+
+  it("RPC 오류를 등원 확인 취소 실패 메시지로 감싼다", async () => {
+    const client = {
+      async rpc() {
+        return { data: null, error: new Error("개인레슨 일정을 찾지 못했습니다.") };
+      },
+    };
+
+    await expect(
+      cancelPrivateLessonAttendance(client, {
+        academyId: "academy-1",
+        lessonEventId: "lesson-1",
+        studentId: "student-1",
+        instrumentId: "violin",
+      }),
+    ).rejects.toThrow("등원 확인을 취소하지 못했습니다: 개인레슨 일정을 찾지 못했습니다.");
   });
 });
 

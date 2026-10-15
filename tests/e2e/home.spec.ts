@@ -90,14 +90,14 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
     page.getByRole("grid", { name: "2026년 9월 개인레슨 캘린더" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "레슨원생 검색" }).click();
-  const searchDialog = page.getByRole("dialog", { name: "레슨원생 검색" });
+  const searchDialog = page.getByRole("dialog", { name: "레슨원생 검색 및 선택" });
   await expect(searchDialog.getByText("한서아")).toBeVisible();
   await expect(searchDialog.getByText("바이올린 2회")).toBeVisible();
   await expect(searchDialog.getByText("김민지")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "개인레슨 등록" }).click();
-  await expect(page.getByRole("dialog", { name: "개인레슨 등록" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "레슨 일정 등록" })).toBeVisible();
 });
 
 test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다", async ({ page }) => {

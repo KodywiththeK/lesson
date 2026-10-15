@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cancelDemoPrivateLessonAttendance,
   createInitialDemoAcademyState,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoBookRelease,
-  registerDemoLessonTicketPurchase,
+  adjustDemoLessonTicket,
+  registerDemoLessonTicket,
   registerDemoVendor,
   updateDemoVendor,
 } from "./academy-demo-state";
@@ -55,17 +57,16 @@ describe("academy demo state", () => {
     ).toBe(true);
   });
 
-  it("회차권 구매는 회차권 목록과 수입 ledger를 함께 갱신한다", () => {
+  it("같은 원생·악기로 등록하면 기존 회차권에 회수를 더하고 만료일을 등록일 기준으로 갱신하며 수입 ledger를 남긴다", () => {
     const state = createInitialDemoAcademyState();
 
-    const next = registerDemoLessonTicketPurchase(state, {
+    const { state: next, result } = registerDemoLessonTicket(state, {
+      academyId: state.academyId,
       studentId: "student-4",
-      studentName: "한서아",
       instrumentId: "violin",
       instrumentName: "바이올린",
       grantedCount: 4,
-      validFrom: "2026-08-21",
-      validUntil: "2026-09-20",
+      validDays: 30,
       registeredAt: "2026-08-21",
       paidAmount: 160000,
     });
@@ -76,7 +77,23 @@ describe("academy demo state", () => {
         candidate.instrumentId === "violin",
     );
 
-    expect(ticket?.remainingCount).toBe(6);
+    expect(next.tickets).toHaveLength(state.tickets.length);
+    expect(ticket).toMatchObject({
+      ticketId: "ticket-1",
+      totalGrantedCount: 12,
+      remainingCount: 6,
+      validUntil: "2026-09-20",
+      registeredAt: "2026-08-21",
+      paidAmount: 440000,
+    });
+    expect(result).toEqual({
+      ticketId: "ticket-1",
+      merged: true,
+      totalGrantedCount: 12,
+      remainingCount: 6,
+      validFrom: "2026-08-01",
+      validUntil: "2026-09-20",
+    });
     expect(next.ledgerEntries).toContainEqual(
       expect.objectContaining({
         type: "income",
@@ -84,6 +101,77 @@ describe("academy demo state", () => {
         amount: 160000,
         description: "한서아 바이올린 회차권 4회 구매",
       }),
+    );
+  });
+
+  it("기존 회차권이 없으면 새 회차권을 만들고 결제 금액이 없으면 수입 ledger를 남기지 않는다", () => {
+    const state = createInitialDemoAcademyState();
+
+    const { state: next, result } = registerDemoLessonTicket(state, {
+      academyId: state.academyId,
+      studentId: "student-1",
+      instrumentId: "piano",
+      instrumentName: "피아노",
+      grantedCount: 8,
+      validDays: 30,
+      registeredAt: "2026-08-21",
+    });
+
+    expect(next.tickets).toHaveLength(state.tickets.length + 1);
+    expect(next.tickets.at(-1)).toMatchObject({
+      studentId: "student-1",
+      studentName: "김민지",
+      instrumentId: "piano",
+      totalGrantedCount: 8,
+      remainingCount: 8,
+      validFrom: "2026-08-21",
+      validUntil: "2026-09-20",
+    });
+    expect(result).toMatchObject({ merged: false, remainingCount: 8, validUntil: "2026-09-20" });
+    expect(next.ledgerEntries).toHaveLength(state.ledgerEntries.length);
+  });
+
+  it("회차권 직접 수정은 부여 회수·잔여 회수·만료일을 바꾼다", () => {
+    const state = createInitialDemoAcademyState();
+
+    const { state: next, result } = adjustDemoLessonTicket(state, {
+      academyId: state.academyId,
+      ticketId: "ticket-1",
+      totalGrantedCount: 10,
+      remainingCount: 5,
+      validUntil: "2026-09-30",
+      reason: "수기 장부와 맞추기",
+    });
+
+    expect(next.tickets.find((ticket) => ticket.ticketId === "ticket-1")).toMatchObject({
+      totalGrantedCount: 10,
+      remainingCount: 5,
+      validUntil: "2026-09-30",
+    });
+    expect(result).toEqual({
+      ticketId: "ticket-1",
+      totalGrantedCount: 10,
+      remainingCount: 5,
+      validUntil: "2026-09-30",
+    });
+  });
+
+  it("없는 회차권이나 잘못된 수정 값은 오류로 막는다", () => {
+    const state = createInitialDemoAcademyState();
+    const input = {
+      academyId: state.academyId,
+      ticketId: "ticket-1",
+      totalGrantedCount: 10,
+      remainingCount: 5,
+      validUntil: "2026-09-30",
+      reason: "수기 장부와 맞추기",
+    };
+
+    expect(() => adjustDemoLessonTicket(state, { ...input, ticketId: "ticket-x" })).toThrow(
+      "회차권을 찾지 못했습니다.",
+    );
+    expect(() => adjustDemoLessonTicket(state, { ...input, reason: " " })).toThrow(
+      "수정 사유를 입력해 주세요.",
     );
   });
 
@@ -114,6 +202,27 @@ describe("academy demo state", () => {
       twice.tickets.find((ticket) => ticket.ticketId === "ticket-1")
         ?.remainingCount,
     ).toBe(1);
+  });
+
+  it("개인레슨 등원 확인을 취소하면 예정 상태로 돌아가고 차감한 회차권 1회를 복구한다", () => {
+    const state = createInitialDemoAcademyState();
+    const lessonId = "private-lesson-1";
+    const remainingOf = (target: typeof state) =>
+      target.tickets.find((ticket) => ticket.ticketId === "ticket-1")?.remainingCount;
+
+    const present = markDemoPrivateLessonAttendance(state, {
+      lessonId,
+      status: "present",
+      markedAt: "2026-08-21T18:05:00+09:00",
+    });
+    const cancelled = cancelDemoPrivateLessonAttendance(present, { lessonId });
+    const cancelledAgain = cancelDemoPrivateLessonAttendance(cancelled, { lessonId });
+
+    expect(remainingOf(present)).toBe(1);
+    expect(remainingOf(cancelled)).toBe(2);
+    expect(cancelled.ticketUsages).toEqual([]);
+    expect(cancelled.privateLessons.find((lesson) => lesson.id === lessonId)?.status).toBe("scheduled");
+    expect(remainingOf(cancelledAgain)).toBe(2);
   });
 
   it("거래처 등록은 거래처 목록에 신규 항목을 추가한다", () => {

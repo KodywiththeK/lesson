@@ -19,6 +19,9 @@ export type LessonTicketBalance = {
   remainingCount: number;
 };
 
+/** DB `register_lesson_ticket`의 상한과 같다. */
+export const MAX_LESSON_TICKET_VALID_DAYS = 3650;
+
 export type LessonTicket = LessonTicketBalance & {
   totalGrantedCount: number;
   validFrom: string;
@@ -50,35 +53,16 @@ export type LessonTicketUsage = {
   usedCount: 1;
 };
 
-export type LessonTicketManualAdjustmentInput = {
-  academyId: string;
-  deltaCount: number;
+export type LessonTicketAdjustmentInput = {
+  totalGrantedCount: number;
+  remainingCount: number;
+  validUntil: string;
   reason: string;
-  adjustedAt: string;
-  adjustedBy: string;
 };
 
-export type LessonTicketManualAdjustmentOptions = {
-  canAdjust: boolean;
-};
-
-export type LessonTicketManualAdjustmentEvent = {
-  type: "manual-adjustment";
-  academyId: string;
-  studentId: string;
-  instrumentId: string;
-  previousRemainingCount: number;
-  nextRemainingCount: number;
-  deltaCount: number;
-  reason: string;
-  adjustedAt: string;
-  adjustedBy: string;
-};
-
-export type LessonTicketManualAdjustmentResult = {
-  ticket: LessonTicketBalance;
-  event: LessonTicketManualAdjustmentEvent;
-};
+export type LessonTicketAdjustmentValidation =
+  | { ok: true }
+  | { ok: false; reason: string };
 
 export type ApplyAttendanceOptions = {
   alreadyDeductedLessonEventIds?: string[];
@@ -95,8 +79,8 @@ export type LessonTicketRegistration = {
   studentId: string;
   instrumentId: string;
   grantedCount: number;
-  validFrom: string;
-  validUntil: string;
+  /** 사용 기한(일수). 만료일은 등록일에 이 일수를 더해 계산한다. */
+  validDays: number;
   registeredAt: string;
 };
 
@@ -118,21 +102,15 @@ export type RegisterLessonTicketResult = {
   event: LessonTicketRegistrationEvent;
 };
 
-export type LessonTicketStatus =
-  | "low-remaining"
-  | "expiring-soon"
-  | "expired"
-  | "exhausted";
+export type LessonTicketStatus = "low-remaining" | "expired" | "exhausted";
 
 export type LessonTicketStatusOptions = {
   today: string;
   lowRemainingThreshold: number;
-  expiringWithinDays: number;
 };
 
 export type LessonTicketStatusSummary = {
   statuses: LessonTicketStatus[];
-  daysUntilExpiration: number;
 };
 
 export type LessonTicketListFilters = {
@@ -150,10 +128,9 @@ export type BuildLessonTicketListOptions = LessonTicketStatusOptions & {
 export type LessonTicketListRow = LessonTicketListItem &
   LessonTicketStatusSummary;
 
-/** 잔여 2회 이하는 잔여 부족, 만료 7일 전부터는 만료 임박으로 표시한다. */
+/** 잔여 2회 이하는 잔여 부족으로 표시한다. 만료일이 다가오는 것은 따로 강조하지 않는다. */
 export const DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS = {
   lowRemainingThreshold: 2,
-  expiringWithinDays: 7,
 } as const;
 
 export function applyAttendanceToTicket(
@@ -217,7 +194,7 @@ export function buildLessonTicketList(
     searchFields: [
       (ticket) => ticket.studentName,
       (ticket) => ticket.instrumentName,
-      (ticket) => ticket.validFrom,
+      (ticket) => ticket.registeredAt,
       (ticket) => ticket.validUntil,
       (ticket) => ticket.statuses.map(formatLessonTicketStatus).join(" "),
     ],
@@ -229,7 +206,6 @@ export function buildLessonTicketList(
 export function formatLessonTicketStatus(status: LessonTicketStatus) {
   const labels: Record<LessonTicketStatus, string> = {
     "low-remaining": "잔여 부족",
-    "expiring-soon": "만료 임박",
     expired: "만료",
     exhausted: "소진",
   };
@@ -237,12 +213,26 @@ export function formatLessonTicketStatus(status: LessonTicketStatus) {
   return labels[status];
 }
 
-export function registerLessonTicket(
+/** 만료일 = 등록일 + 사용 기한(일수). */
+export function calculateLessonTicketValidUntil(
+  registeredAt: string,
+  validDays: number,
+) {
+  assertPositiveValidDays(validDays);
+
+  return toDateString(toUtcDayNumber(registeredAt) + validDays);
+}
+
+/** 같은 원생·악기 회차권이 있으면 회수를 더하고 만료일을 등록일 기준으로 새로 계산한다. */
+export function applyLessonTicketRegistration(
   existingTicket: LessonTicket | undefined,
   registration: LessonTicketRegistration,
 ): RegisterLessonTicketResult {
   assertPositiveCount(registration.grantedCount);
-  assertValidDateRange(registration.validFrom, registration.validUntil);
+  const validUntil = calculateLessonTicketValidUntil(
+    registration.registeredAt,
+    registration.validDays,
+  );
 
   if (!existingTicket) {
     return {
@@ -252,14 +242,14 @@ export function registerLessonTicket(
         instrumentId: registration.instrumentId,
         totalGrantedCount: registration.grantedCount,
         remainingCount: registration.grantedCount,
-        validFrom: registration.validFrom,
-        validUntil: registration.validUntil,
+        validFrom: registration.registeredAt,
+        validUntil,
         registeredAt: registration.registeredAt,
       },
       event: {
         type: "created-new-ticket",
         addedCount: registration.grantedCount,
-        nextValidUntil: registration.validUntil,
+        nextValidUntil: validUntil,
       },
     };
   }
@@ -272,15 +262,15 @@ export function registerLessonTicket(
       totalGrantedCount:
         existingTicket.totalGrantedCount + registration.grantedCount,
       remainingCount: existingTicket.remainingCount + registration.grantedCount,
-      validFrom: registration.validFrom,
-      validUntil: registration.validUntil,
+      validFrom: minDate(existingTicket.validFrom, registration.registeredAt),
+      validUntil,
       registeredAt: registration.registeredAt,
     },
     event: {
       type: "merged-existing-ticket",
       addedCount: registration.grantedCount,
       previousValidUntil: existingTicket.validUntil,
-      nextValidUntil: registration.validUntil,
+      nextValidUntil: validUntil,
     },
   };
 }
@@ -290,8 +280,6 @@ export function summarizeLessonTicketStatus(
   options: LessonTicketStatusOptions,
 ): LessonTicketStatusSummary {
   const statuses: LessonTicketStatus[] = [];
-  const daysUntilExpiration =
-    toUtcDayNumber(ticket.validUntil) - toUtcDayNumber(options.today);
 
   if (ticket.remainingCount <= 0) {
     statuses.push("exhausted");
@@ -299,62 +287,60 @@ export function summarizeLessonTicketStatus(
     statuses.push("low-remaining");
   }
 
-  if (daysUntilExpiration < 0) {
+  if (toUtcDayNumber(ticket.validUntil) < toUtcDayNumber(options.today)) {
     statuses.push("expired");
-  } else if (daysUntilExpiration <= options.expiringWithinDays) {
-    statuses.push("expiring-soon");
   }
 
-  return {
-    statuses,
-    daysUntilExpiration,
-  };
+  return { statuses };
 }
 
-export function adjustLessonTicketManually(
-  ticket: LessonTicketBalance,
-  input: LessonTicketManualAdjustmentInput,
-  options: LessonTicketManualAdjustmentOptions,
-): LessonTicketManualAdjustmentResult {
-  if (!options.canAdjust) {
-    throw new Error("회차권 수동 수정 권한이 없습니다.");
+export function validateLessonTicketAdjustment(
+  ticket: LessonTicket,
+  input: LessonTicketAdjustmentInput,
+): LessonTicketAdjustmentValidation {
+  if (!Number.isInteger(input.totalGrantedCount) || input.totalGrantedCount < 1) {
+    return invalidAdjustment("부여 회수는 1회 이상의 정수여야 합니다.");
   }
 
-  if (ticket.academyId !== input.academyId) {
-    throw new Error("학원 범위가 일치하지 않습니다.");
+  if (!Number.isInteger(input.remainingCount) || input.remainingCount < 0) {
+    return invalidAdjustment("잔여 회수는 0회 이상의 정수여야 합니다.");
   }
 
-  assertNonZeroInteger(input.deltaCount);
-
-  const reason = input.reason.trim();
-
-  if (!reason) {
-    throw new Error("회차권 수동 수정 사유는 필수입니다.");
+  if (input.remainingCount > input.totalGrantedCount) {
+    return invalidAdjustment("잔여 회수는 부여 회수보다 많을 수 없습니다.");
   }
 
-  const nextRemainingCount = ticket.remainingCount + input.deltaCount;
+  if (!input.validUntil) {
+    return invalidAdjustment("만료일을 입력해 주세요.");
+  }
 
-  if (nextRemainingCount < 0) {
-    throw new Error("잔여 회차는 0보다 작을 수 없습니다.");
+  if (toUtcDayNumber(input.validUntil) < toUtcDayNumber(ticket.validFrom)) {
+    return invalidAdjustment("만료일은 유효 시작일 이후여야 합니다.");
+  }
+
+  if (!input.reason.trim()) {
+    return invalidAdjustment("수정 사유를 입력해 주세요.");
+  }
+
+  return { ok: true };
+}
+
+/** 잘못 입력된 회수·만료일을 직접 고친다. 입력이 올바르지 않으면 이유와 함께 던진다. */
+export function adjustLessonTicket(
+  ticket: LessonTicket,
+  input: LessonTicketAdjustmentInput,
+): LessonTicket {
+  const validation = validateLessonTicketAdjustment(ticket, input);
+
+  if (!validation.ok) {
+    throw new Error(validation.reason);
   }
 
   return {
-    ticket: {
-      ...ticket,
-      remainingCount: nextRemainingCount,
-    },
-    event: {
-      type: "manual-adjustment",
-      academyId: ticket.academyId,
-      studentId: ticket.studentId,
-      instrumentId: ticket.instrumentId,
-      previousRemainingCount: ticket.remainingCount,
-      nextRemainingCount,
-      deltaCount: input.deltaCount,
-      reason,
-      adjustedAt: input.adjustedAt,
-      adjustedBy: input.adjustedBy,
-    },
+    ...ticket,
+    totalGrantedCount: input.totalGrantedCount,
+    remainingCount: input.remainingCount,
+    validUntil: input.validUntil,
   };
 }
 
@@ -410,16 +396,26 @@ function assertPositiveCount(count: number) {
   }
 }
 
-function assertNonZeroInteger(count: number) {
-  if (!Number.isInteger(count) || count === 0) {
-    throw new Error("회차권 수동 수정 회수는 0이 아닌 정수여야 합니다.");
+function assertPositiveValidDays(validDays: number) {
+  if (!Number.isInteger(validDays) || validDays <= 0) {
+    throw new Error("사용 기한은 1일 이상의 정수여야 합니다.");
+  }
+
+  if (validDays > MAX_LESSON_TICKET_VALID_DAYS) {
+    throw new Error(`사용 기한은 ${MAX_LESSON_TICKET_VALID_DAYS}일 이하로 입력해 주세요.`);
   }
 }
 
-function assertValidDateRange(validFrom: string, validUntil: string) {
-  if (toUtcDayNumber(validUntil) < toUtcDayNumber(validFrom)) {
-    throw new Error("회차권 유효 만료일은 시작일 이후여야 합니다.");
-  }
+function invalidAdjustment(reason: string): LessonTicketAdjustmentValidation {
+  return { ok: false, reason };
+}
+
+function minDate(left: string, right: string) {
+  return toUtcDayNumber(left) <= toUtcDayNumber(right) ? left : right;
+}
+
+function toDateString(utcDayNumber: number) {
+  return new Date(utcDayNumber * 86_400_000).toISOString().slice(0, 10);
 }
 
 function toUtcDayNumber(date: string) {

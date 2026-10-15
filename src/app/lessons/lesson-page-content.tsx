@@ -40,6 +40,7 @@ export function LessonPageContent({ lessonKind }: LessonPageContentProps) {
               academyId={academy.academyId}
               academyName={academy.academyName}
               lessonKind={lessonKind}
+              canManage={academy.permissionContext.role !== "teacher"}
               demoData={
                 useTestDemo
                   ? {
@@ -51,6 +52,7 @@ export function LessonPageContent({ lessonKind }: LessonPageContentProps) {
                         instrumentId: ticket.instrumentId,
                         instrumentName: ticket.instrumentName,
                         remainingCount: ticket.remainingCount,
+                        totalGrantedCount: ticket.totalGrantedCount,
                       })),
                       registrationOptions: {
                         students: demo.state.students
@@ -138,6 +140,9 @@ export function LessonPageContent({ lessonKind }: LessonPageContentProps) {
               }
               onMarkPrivateLessonAttendance={
                 useTestDemo ? demo.markPrivateLessonAttendance : undefined
+              }
+              onCancelPrivateLessonAttendance={
+                useTestDemo ? demo.cancelPrivateLessonAttendance : undefined
               }
             />
           </Suspense>

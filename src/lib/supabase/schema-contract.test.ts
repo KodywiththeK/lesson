@@ -478,3 +478,143 @@ describe("Supabase schema contract", () => {
     expect(migrationSql).toContain("lesson-archive-expired-people");
   });
 });
+
+describe("레슨 시간표 명세 RPC 계약 (적용 전 migration)", () => {
+  const workflows = readFileSync(
+    path.join(process.cwd(), "supabase/migrations/20261016090000_lesson_schedule_workflows.sql"),
+    "utf8",
+  ).toLocaleLowerCase();
+  const tickets = readFileSync(
+    path.join(process.cwd(), "supabase/migrations/20261016090100_lesson_ticket_registration_and_adjustment.sql"),
+    "utf8",
+  ).toLocaleLowerCase();
+
+  it("결석 확정은 이미 처리된 결석을 거부하고 회차권을 건드리지 않으며 포스트잇에 기록한다", () => {
+    expect(workflows).toContain("create or replace function public.resolve_academy_lesson_absence");
+    expect(workflows).toContain("이미 보강 또는 패스로 처리된 결석입니다");
+    expect(workflows).toContain("insert into public.absence_resolutions");
+    expect(workflows).toContain("insert into public.monthly_memos");
+    expect(workflows).toContain("unread = true");
+    expect(workflows).toContain("time_unspecified");
+    const resolveBody = workflows.slice(
+      workflows.indexOf("create or replace function public.resolve_academy_lesson_absence"),
+      workflows.indexOf("create or replace function public.delete_academy_lesson_event"),
+    );
+    expect(resolveBody).not.toContain("lesson_ticket_grants");
+    expect(resolveBody).not.toContain("lesson_ticket_usages");
+  });
+
+  it("일정 삭제는 사유를 요구하고 출결 처리된 일정을 거부하며 audit을 남긴다", () => {
+    expect(workflows).toContain("create or replace function public.delete_academy_lesson_event");
+    expect(workflows).toContain("삭제 사유를 입력해 주세요");
+    expect(workflows).toContain("이미 출결 처리된 일정은 삭제할 수 없습니다");
+    expect(workflows).toContain("status = 'deleted'");
+    expect(workflows).toContain("'lesson_event.deleted'");
+  });
+
+  it("일정 이동은 같은 달 안으로 제한한다", () => {
+    expect(workflows).toContain("create or replace function public.move_academy_lesson_event");
+    expect(workflows).toContain("일정은 같은 달 안에서만 이동할 수 있습니다");
+  });
+
+  it("개인레슨 등원 확인 취소는 차감한 회차를 복구하고 출결 기록을 지운다", () => {
+    expect(workflows).toContain("create or replace function public.cancel_private_lesson_attendance");
+    expect(workflows).toContain("remaining_count = least(total_granted_count, remaining_count + v_usage.used_count)");
+    expect(workflows).toContain("delete from public.lesson_ticket_usages");
+    expect(workflows).toContain("delete from public.attendance_records");
+  });
+
+  it("월별 포스트잇은 학원/개인레슨 구분으로 달마다 하나만 둔다", () => {
+    expect(workflows).toContain("add column if not exists lesson_kind text not null default 'academy'");
+    expect(workflows).toContain("unique (academy_id, lesson_kind, month)");
+  });
+
+  it("회차권 등록은 한 트랜잭션에서 합산·만료일 계산·결제 금액 원장 기록을 하고 결제는 원장만 허용한다", () => {
+    expect(tickets).toContain("create or replace function public.register_lesson_ticket");
+    expect(tickets).toContain("v_valid_until := p_registered_at + p_valid_days");
+    expect(tickets).toContain("total_granted_count = v_existing.total_granted_count + p_granted_count");
+    expect(tickets).toContain("paid_amount = v_existing.paid_amount + v_paid");
+    expect(tickets).toContain("insert into public.ledger_entries");
+    expect(tickets).toContain("결제 금액을 수입으로 기록하는 것은 원장만 할 수 있습니다");
+  });
+
+  it("회차권 직접 수정은 사유를 요구하고 이력과 audit을 남긴다", () => {
+    expect(tickets).toContain("create or replace function public.adjust_lesson_ticket");
+    expect(tickets).toContain("수정 사유를 입력해 주세요");
+    expect(tickets).toContain("insert into public.lesson_ticket_adjustments");
+    expect(tickets).toContain("'lesson_ticket.adjusted'");
+  });
+
+  it.each([
+    ["resolve_academy_lesson_absence(uuid, uuid, uuid, text, date, time, time, text)"],
+    ["delete_academy_lesson_event(uuid, uuid, text)"],
+    ["cancel_private_lesson_attendance(uuid, uuid, uuid, text)"],
+  ])("%s는 anon을 막고 authenticated에만 실행을 허용한다", (signature) => {
+    expect(workflows).toContain(`revoke all on function public.${signature} from anon`);
+    expect(workflows).toContain(`grant execute on function public.${signature} to authenticated`);
+  });
+
+  it.each([
+    ["register_lesson_ticket(uuid, uuid, text, text, integer, integer, date, integer)"],
+    ["adjust_lesson_ticket(uuid, uuid, integer, integer, date, text)"],
+  ])("%s는 anon을 막고 authenticated에만 실행을 허용한다", (signature) => {
+    expect(tickets).toContain(`revoke all on function public.${signature} from anon`);
+    expect(tickets).toContain(`grant execute on function public.${signature} to authenticated`);
+  });
+  it("월별 메모의 옛 (academy_id, month) unique 제약을 모두 제거한다", () => {
+    expect(workflows).toContain("drop constraint if exists monthly_memos_academy_month_key");
+    expect(workflows).toContain("drop constraint if exists monthly_memos_academy_id_month_key");
+    // 이름이 달라도 (academy_id, month) 컬럼만으로 된 unique는 모두 찾아 지운다.
+    expect(workflows).toContain("con.contype = 'u'");
+    expect(workflows).toContain("array['academy_id', 'month']");
+  });
+
+  it("일정 이동은 보강 시간 미정 표시를 새 일정에 이어 준다", () => {
+    const moveBody = workflows.slice(
+      workflows.indexOf("create or replace function public.move_academy_lesson_event"),
+      workflows.indexOf("create or replace function public.resolve_academy_lesson_absence"),
+    );
+    expect(moveBody).toContain("time_unspecified");
+    expect(moveBody).toContain("v_source.time_unspecified");
+  });
+
+  it("회차권 사용 기한은 상한을 한국어로 검사한다", () => {
+    expect(tickets).toContain("p_valid_days > 3650");
+    expect(tickets).toContain("사용 기한은 3650일 이하로 입력해 주세요");
+  });
+
+  it("옛 보강 생성 RPC는 새 결석 확정 RPC로 우회되지 않도록 호출 권한을 회수한다", () => {
+    expect(workflows).toContain("revoke execute on function public.create_makeup_lesson_event");
+  });
+
+  it("보강 일정을 삭제하면 결석 처리를 보강 없는 패스로 바꾸고 포스트잇에 기록한다", () => {
+    const deleteBody = workflows.slice(
+      workflows.indexOf("create or replace function public.delete_academy_lesson_event"),
+      workflows.indexOf("create or replace function public.cancel_private_lesson_attendance"),
+    );
+    expect(deleteBody).toContain("update public.absence_resolutions");
+    expect(deleteBody).toContain("resolved_as = 'pass'");
+    expect(deleteBody).toContain("makeup_lesson_event_id = null");
+    expect(deleteBody).toContain("insert into public.monthly_memos");
+    expect(deleteBody).toContain("보강 삭제로 패스 처리");
+  });
+
+  it("보강 일정을 이동해도 결석 처리 연결과 보강 표시를 유지한다", () => {
+    const moveBody = workflows.slice(
+      workflows.indexOf("create or replace function public.move_academy_lesson_event"),
+      workflows.indexOf("create or replace function public.resolve_academy_lesson_absence"),
+    );
+    expect(moveBody).toContain("update public.absence_resolutions");
+    expect(moveBody).toContain("makeup_lesson_event_id = v_moved.id");
+    expect(moveBody).toContain("case when v_source.origin = 'makeup' then 'makeup' else 'rescheduled' end");
+    expect(moveBody).toContain("coalesce(v_source.source_lesson_event_id, v_source.id)");
+  });
+
+  it("처리된 결석의 출결은 직접 수정·삭제할 수 없도록 서버 trigger가 막는다", () => {
+    expect(workflows).toContain("create or replace function private.guard_resolved_absence_attendance");
+    expect(workflows).toContain("이미 보강 또는 패스로 처리된 결석은 변경할 수 없습니다");
+    expect(workflows).toContain("before update or delete on public.attendance_records");
+    expect(workflows).toContain("pg_trigger_depth() > 1");
+  });
+
+});

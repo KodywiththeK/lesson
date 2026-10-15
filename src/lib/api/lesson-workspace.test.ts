@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAcademyLessonEvent,
-  createMakeupLessonEvent,
+  deleteAcademyLessonEvent,
+  fetchAcademyAttendeeCounts,
   fetchLessonWorkspaceData,
   moveAcademyLessonEvent,
   resetAcademyLessonAttendance,
+  resolveAcademyLessonAbsence,
   type LessonWorkspaceSupabaseClient,
 } from "./lesson-workspace";
 
@@ -139,6 +141,75 @@ describe("fetchLessonWorkspaceData", () => {
     });
   });
 
+  it("학원 레슨의 보강 처리 여부와 시간 미입력 여부를 서버 값으로 읽고 보강 일정은 보강 수업으로 표시한다", async () => {
+    const academyRow = (id: string, overrides: Record<string, unknown>) => ({
+      id,
+      academy_id: "academy-1",
+      student_id: "student-1",
+      students: { name: "김민지" },
+      instrument_id: "piano",
+      instrument_name: "피아노",
+      teacher_id: "teacher-1",
+      teachers: { name: "박선생" },
+      lesson_kind: "academy",
+      origin: "regular",
+      starts_at: "2026-08-21T15:00:00+09:00",
+      ends_at: "2026-08-21T15:50:00+09:00",
+      status: "scheduled",
+      time_unspecified: false,
+      attendance_records: [],
+      ...overrides,
+    });
+    const absent = (resolution: unknown) => [
+      {
+        status: "absent",
+        absence_reason: "감기",
+        marked_at: "2026-08-21T06:00:00Z",
+        absence_resolutions: resolution,
+      },
+    ];
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls, {
+      eventRows: [
+        academyRow("unresolved", { attendance_records: absent(null) }),
+        academyRow("resolved-object", { attendance_records: absent({ resolved_as: "makeup" }) }),
+        academyRow("resolved-array", { attendance_records: absent([{ resolved_as: "pass" }]) }),
+        academyRow("makeup-event", {
+          origin: "makeup",
+          source_lesson_event_id: "resolved-object",
+          time_unspecified: true,
+          starts_at: "2026-08-24T15:00:00+09:00",
+          ends_at: "2026-08-24T15:50:00+09:00",
+        }),
+        academyRow("private-makeup", { lesson_kind: "private", origin: "makeup" }),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, {
+      academyId: "academy-1",
+      month: "2026-08",
+    });
+    const rows = result.academySheets.flatMap((sheet) => sheet.rows);
+    const byId = (id: string) => rows.find((row) => row.lessonEventId === id);
+
+    expect(byId("unresolved")?.absenceResolution).toBeUndefined();
+    expect(byId("resolved-object")?.absenceResolution).toBe("makeup");
+    expect(byId("resolved-array")?.absenceResolution).toBe("pass");
+    expect(byId("makeup-event")).toMatchObject({
+      originLabel: "보강 수업",
+      timeUnspecified: true,
+      sourceLessonEventId: "resolved-object",
+    });
+    expect(byId("unresolved")?.sourceLessonEventId).toBeUndefined();
+    expect(byId("unresolved")?.timeUnspecified).toBeUndefined();
+    expect(result.privateLessons[0]?.originLabel).toBe("보강");
+
+    const eventsSelect = calls.find((call) => call.table === "lesson_events")?.select as string;
+    expect(eventsSelect).toContain("time_unspecified");
+    expect(eventsSelect).toContain("source_lesson_event_id");
+    expect(eventsSelect).toContain("absence_resolutions");
+  });
+
   it("회차권 잔여는 오늘 유효한 회차권만 같은 원생·악기끼리 합산한다", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-10T03:00:00Z"));
@@ -149,6 +220,7 @@ describe("fetchLessonWorkspaceData", () => {
       instrument_id: instrumentId,
       instrument_name: instrumentId === "piano" ? "피아노" : "바이올린",
       remaining_count: remaining,
+      total_granted_count: remaining + 1,
       valid_from: from,
       valid_until: until,
     });
@@ -170,8 +242,55 @@ describe("fetchLessonWorkspaceData", () => {
         instrumentId: "piano",
         instrumentName: "피아노",
         remainingCount: 5,
+        // 총 회차도 유효한 회차권만 합산한다: (3+1) + (2+1)
+        totalGrantedCount: 7,
+        priorLessonCount: 0,
       },
     ]);
+  });
+
+  it("회차는 회차권 유효 기간 안에서 조회한 달 이전에 잡힌 레슨 수를 이어서 센다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-10T03:00:00Z"));
+    const calls: Array<Record<string, unknown>> = [];
+    const prior = (studentId: string, instrumentId: string, startsAt: string) => ({
+      student_id: studentId,
+      instrument_id: instrumentId,
+      starts_at: startsAt,
+    });
+    const client = createLessonWorkspaceClient(calls, {
+      ticketRows: [
+        {
+          id: "g1",
+          academy_id: "academy-1",
+          student_id: "student-1",
+          instrument_id: "piano",
+          instrument_name: "피아노",
+          remaining_count: 4,
+          total_granted_count: 8,
+          valid_from: "2026-09-01",
+          valid_until: "2026-12-31",
+        },
+      ],
+      priorLessonRows: [
+        prior("student-1", "piano", "2026-09-08T10:00:00+09:00"),
+        prior("student-1", "piano", "2026-09-15T10:00:00+09:00"),
+        prior("student-1", "piano", "2026-09-22T10:00:00+09:00"),
+        // 회차권 시작 전 레슨, 회차권 없는 악기, 다른 원생은 세지 않는다.
+        prior("student-1", "piano", "2026-08-25T10:00:00+09:00"),
+        prior("student-1", "violin", "2026-09-10T10:00:00+09:00"),
+        prior("student-2", "piano", "2026-09-10T10:00:00+09:00"),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-10" });
+
+    expect(result.ticketBalances).toEqual([
+      expect.objectContaining({ studentId: "student-1", instrumentId: "piano", priorLessonCount: 3 }),
+    ]);
+    const priorCall = calls.find((call) => call.select === "student_id, instrument_id, starts_at");
+    expect(priorCall?.gte).toEqual(["starts_at", "2026-09-01T00:00:00+09:00"]);
+    expect(priorCall?.lt).toEqual(["starts_at", "2026-10-01T00:00:00+09:00"]);
   });
 
   it("정기 학원 레슨 이벤트 생성 실패를 레슨관리표 조회 오류로 전달한다", async () => {
@@ -264,33 +383,169 @@ describe("createAcademyLessonEvent", () => {
   });
 });
 
-describe("createMakeupLessonEvent", () => {
-  it("결석 원본 수업과 연결된 보강 event 생성을 RPC로 위임한다", async () => {
+describe("resolveAcademyLessonAbsence", () => {
+  it("결석을 보강으로 확정하면 사유서 내용을 RPC로 보내고 보강 일정 id와 포스트잇 기록을 돌려받는다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const client = createLessonWorkspaceClient(calls);
 
-    await createMakeupLessonEvent(client, {
+    const result = await resolveAcademyLessonAbsence(client, {
       academyId: "academy-1",
       sourceLessonEventId: "lesson-absent",
       studentId: "student-1",
+      resolution: "makeup",
       targetDate: "2026-08-24",
       startTime: "15:00",
       endTime: "15:50",
-      reason: "감기 결석",
+      reason: " 감기 결석 ",
     });
 
     expect(calls.at(-1)).toEqual({
-      functionName: "create_makeup_lesson_event",
+      functionName: "resolve_academy_lesson_absence",
       payload: {
         p_academy_id: "academy-1",
         p_source_lesson_event_id: "lesson-absent",
         p_student_id: "student-1",
+        p_resolution: "makeup",
         p_target_date: "2026-08-24",
         p_start_time: "15:00",
         p_end_time: "15:50",
         p_reason: "감기 결석",
       },
     });
+    expect(result).toEqual({
+      resolution: "makeup",
+      makeupLessonEventId: "lesson-makeup",
+      memoLine: "김민지, 8/24 [월요일] 15:00 보강 - 8/21 [금요일] 감기 결석",
+      month: "2026-08",
+    });
+  });
+
+  it("패스는 날짜·시간·사유가 없어도 보낼 수 있고 보강 일정 id는 없다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls, {
+      resolveResult: {
+        resolution: "pass",
+        makeup_lesson_event_id: null,
+        memo_line: "김민지, 8/21 [금요일] 사유없음",
+        month: "2026-08",
+      },
+    });
+
+    const result = await resolveAcademyLessonAbsence(client, {
+      academyId: "academy-1",
+      sourceLessonEventId: "lesson-absent",
+      studentId: "student-1",
+      resolution: "pass",
+    });
+
+    expect(calls.at(-1)?.payload).toEqual({
+      p_academy_id: "academy-1",
+      p_source_lesson_event_id: "lesson-absent",
+      p_student_id: "student-1",
+      p_resolution: "pass",
+      p_target_date: null,
+      p_start_time: null,
+      p_end_time: null,
+      p_reason: null,
+    });
+    expect(result.makeupLessonEventId).toBeNull();
+    expect(result.memoLine).toBe("김민지, 8/21 [금요일] 사유없음");
+  });
+
+  it("이미 처리된 결석 같은 DB 거부 사유를 저장 실패 오류에 담는다", async () => {
+    const client = createLessonWorkspaceClient([], {
+      rpcError: new Error("이미 보강 또는 패스로 처리된 결석입니다."),
+    });
+
+    await expect(
+      resolveAcademyLessonAbsence(client, {
+        academyId: "academy-1",
+        sourceLessonEventId: "lesson-absent",
+        studentId: "student-1",
+        resolution: "pass",
+      }),
+    ).rejects.toThrow("결석 사유서를 저장하지 못했습니다: 이미 보강 또는 패스로 처리된 결석입니다.");
+  });
+});
+
+describe("deleteAcademyLessonEvent", () => {
+  it("삭제 사유와 함께 학원 일정 삭제를 RPC로 위임한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls);
+
+    await deleteAcademyLessonEvent(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      reason: " 휴원 ",
+    });
+
+    expect(calls.at(-1)).toEqual({
+      functionName: "delete_academy_lesson_event",
+      payload: {
+        p_academy_id: "academy-1",
+        p_lesson_event_id: "lesson-1",
+        p_reason: "휴원",
+      },
+    });
+    // 일정 삭제 함수 한 번뿐이다. 원생·수강 정보 테이블은 건드리지 않는다.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("출결이 처리된 일정 삭제를 거부하면 사유를 오류에 담는다", async () => {
+    const client = createLessonWorkspaceClient([], {
+      rpcError: new Error("이미 출결 처리된 일정은 삭제할 수 없습니다."),
+    });
+
+    await expect(
+      deleteAcademyLessonEvent(client, {
+        academyId: "academy-1",
+        lessonEventId: "lesson-1",
+        reason: "휴원",
+      }),
+    ).rejects.toThrow("학원 일정을 삭제하지 못했습니다: 이미 출결 처리된 일정은 삭제할 수 없습니다.");
+  });
+});
+
+describe("fetchAcademyAttendeeCounts", () => {
+  it("그 달 정기 일정을 준비한 뒤 날짜별 학원 레슨 등원 인원을 원생 기준으로 센다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const eventRow = (id: string, studentId: string, startsAt: string, overrides = {}) => ({
+      id,
+      student_id: studentId,
+      lesson_kind: "academy",
+      status: "scheduled",
+      starts_at: startsAt,
+      ...overrides,
+    });
+    const client = createLessonWorkspaceClient(calls, {
+      eventRows: [
+        eventRow("a", "student-1", "2026-09-01T15:00:00+09:00"),
+        eventRow("b", "student-1", "2026-09-01T17:00:00+09:00"),
+        eventRow("c", "student-2", "2026-09-01T16:00:00+09:00"),
+        eventRow("d", "student-3", "2026-09-02T16:00:00+09:00"),
+        eventRow("e", "student-4", "2026-09-02T16:00:00+09:00", { lesson_kind: "private" }),
+        eventRow("f", "student-5", "2026-09-02T16:00:00+09:00", { status: "cancelled" }),
+      ],
+    });
+
+    const counts = await fetchAcademyAttendeeCounts(client, {
+      academyId: "academy-1",
+      month: "2026-09",
+    });
+
+    expect(calls[0]).toEqual({
+      functionName: "ensure_monthly_academy_lesson_events",
+      payload: { p_academy_id: "academy-1", p_month: "2026-09" },
+    });
+    expect(counts).toEqual({ "2026-09-01": 2, "2026-09-02": 1 });
+  });
+
+  it("정기 일정 준비에 실패하면 인원을 잘못 세지 않고 오류로 알린다", async () => {
+    const client = createLessonWorkspaceClient([], { rpcError: new Error("permission denied") });
+
+    await expect(
+      fetchAcademyAttendeeCounts(client, { academyId: "academy-1", month: "2026-09" }),
+    ).rejects.toThrow("다음 달 정기 일정을 준비하지 못했습니다: permission denied");
   });
 });
 
@@ -319,6 +574,8 @@ describe("moveAcademyLessonEvent", () => {
         p_reason: "콩쿠르 보충",
       },
     });
+    // 이동은 그 달 일정만 바꾸므로 원생·수강 정보 테이블 쓰기가 없다.
+    expect(calls).toHaveLength(1);
     expect(result).toMatchObject({
       lessonEventId: "lesson-moved",
       date: "2026-08-24",
@@ -360,12 +617,26 @@ function createLessonWorkspaceClient(
     rpcError?: Error;
     eventRows?: Array<Record<string, unknown>>;
     ticketRows?: Array<Record<string, unknown>>;
+    priorLessonRows?: Array<Record<string, unknown>>;
     lessonMemoMissingTargetColumns?: boolean;
+    resolveResult?: Record<string, unknown>;
   } = {},
 ): LessonWorkspaceSupabaseClient {
   return {
     async rpc(functionName: string, payload: Record<string, unknown>) {
       calls.push({ functionName, payload });
+
+      if (functionName === "resolve_academy_lesson_absence" && !options.rpcError) {
+        return {
+          data: options.resolveResult ?? {
+            resolution: "makeup",
+            makeup_lesson_event_id: "lesson-makeup",
+            memo_line: "김민지, 8/24 [월요일] 15:00 보강 - 8/21 [금요일] 감기 결석",
+            month: "2026-08",
+          },
+          error: null,
+        };
+      }
 
       if (functionName === "move_academy_lesson_event") {
         return {
@@ -417,6 +688,7 @@ function createListBuilder(
   options: {
     eventRows?: Array<Record<string, unknown>>;
     ticketRows?: Array<Record<string, unknown>>;
+    priorLessonRows?: Array<Record<string, unknown>>;
     lessonMemoMissingTargetColumns?: boolean;
   } = {},
 ) {
@@ -604,6 +876,14 @@ function createListBuilder(
         latestCall.result = "ticket-balances";
         resolve({
           data: options.ticketRows ?? [],
+          error: null,
+        });
+        return;
+      }
+
+      if (table === "lesson_events" && latestCall.select === "student_id, instrument_id, starts_at") {
+        resolve({
+          data: options.priorLessonRows ?? [],
           error: null,
         });
         return;

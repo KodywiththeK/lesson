@@ -54,7 +54,7 @@ export const mainNavigation: NavigationItem[] = [
   {
     label: "회차권",
     href: "/passes",
-    description: "회차권 등록, 추가, 차감, 만료 임박 상태를 관리합니다.",
+    description: "회차권 등록, 추가, 수정, 차감, 잔여 부족 상태를 관리합니다.",
     icon: ScrollText,
     feature: "tickets",
   },

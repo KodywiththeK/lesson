@@ -19,7 +19,6 @@ describe("데모 학원 provider의 목록 queryKey", () => {
       academyId: "academy-1",
       today: "2026-08-21",
       lowRemainingThreshold: 2,
-      expiringWithinDays: 7,
     };
 
     const firstPage = demo.createLessonTicketListQueryOptions({ ...options, page: 1, pageSize: 10 });

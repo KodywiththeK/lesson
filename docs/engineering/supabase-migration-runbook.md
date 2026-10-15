@@ -100,6 +100,31 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - DNS/network sandbox 오류가 나면 같은 명령을 승인 권한으로 1회 재시도한다.
 - 인증 실패가 나면 비밀번호가 틀린 것이므로 반복하지 않고 사용자에게 새 URL이나 CLI 로그인을 요청한다.
 
+## 레슨 시간표 migration 체크리스트 (2026-10-16 시리즈)
+
+**2026-10-15에 적용 완료**(CLI `db push`, 아래 기록 참고). 새 환경에 적용할 때는 아래 순서와 확인 항목을 그대로 따른다.
+
+1. `supabase/migrations/20261016090000_lesson_schedule_workflows.sql` — `lesson_events.time_unspecified`, `monthly_memos.lesson_kind`와 새 unique 제약, `move_academy_lesson_event` 재정의, `resolve_academy_lesson_absence`, `delete_academy_lesson_event`, `cancel_private_lesson_attendance`.
+2. `supabase/migrations/20261016090100_lesson_ticket_registration_and_adjustment.sql` — `register_lesson_ticket`, `adjust_lesson_ticket`.
+
+**배포 순서(중요)**: 앱 코드가 `lesson_events.time_unspecified`와 `monthly_memos.lesson_kind` 컬럼을 select/upsert하므로 **migration을 먼저 적용한 뒤 앱을 배포한다**. 순서가 바뀌면 레슨 캘린더 조회가 PostgREST 400으로 실패해 레슨 화면 전체가 "불러오지 못했습니다"로 막힌다.
+
+적용 전 확인:
+- 기존 `monthly_memos` 행이 `lesson_kind='academy'`로 채워지는지, 옛 `(academy_id, month)` unique가 모두 제거되는지. migration은 `monthly_memos_academy_month_key`와 `monthly_memos_academy_id_month_key` 두 이름을 지우지만 `drop constraint if exists`라 다른 이름이면 조용히 건너뛴다. 적용 전에 `select conname from pg_constraint where conrelid = 'public.monthly_memos'::regclass and contype = 'u';`로 실제 이름을 확인한다.
+- `absence_resolutions` 테이블·FK 이름과 `lesson-workspace.ts`의 embed 힌트가 일치하는지.
+- 원격에 이미 같은 이름의 함수가 있다면 인자 시그니처가 다른지(overload 충돌).
+
+적용 후 기록:
+- 원격 migration history와 로컬 파일명 timestamp 일치 여부, 실제 함수 정의 SQL, `pnpm vitest run src/lib/supabase/schema-contract.test.ts` 결과.
+- 현재 계약 테스트는 SQL 문자열 확인만 하므로 실제 DB 동작(보강 멱등, 차감 복구, 합산)은 적용 후 수동 또는 DB 테스트로 확인한다.
+
+### 적용 기록 (2026-10-15)
+
+- 방법: `.env.local`의 `SUPABASE_ACCESS_TOKEN`으로 `pnpm supabase db push --dry-run` 후 `pnpm supabase db push --yes`(MCP는 이 세션에서 인증되지 않아 CLI fallback 사용).
+- 결과: 원격 history `20261016090000`, `20261016090100`이 로컬 파일명과 일치. 스키마 확인: `lesson_events.time_unspecified`, `monthly_memos.lesson_kind` 존재, `monthly_memos`의 옛 `(academy_id, month)` unique 제거와 `monthly_memos_academy_kind_month_key`만 남음, RPC 6종 존재, `guard_resolved_absence_attendance` trigger 활성, 옛 `create_makeup_lesson_event`의 authenticated 실행 권한 회수.
+- 적용 후 `notify pgrst, 'reload schema'`로 스키마 캐시를 갱신했다.
+- 실제 데이터로 보강 멱등·차감 복구·병합 동작을 확인하는 스모크 테스트는 운영 데이터 읽기 권한이 거부되어 실행하지 못했다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

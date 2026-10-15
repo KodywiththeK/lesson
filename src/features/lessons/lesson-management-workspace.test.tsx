@@ -189,7 +189,7 @@ describe("LessonManagementWorkspace", () => {
     ).toBeInTheDocument();
   });
 
-  it("학원 레슨 출석 다이얼로그에서 검색, 일괄 처리, 선택 초기화를 수행한다", async () => {
+  it("학원 레슨 출석 다이얼로그에서 검색, 전체 등원, 확인 저장, 출결 초기화를 수행한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -209,18 +209,29 @@ describe("LessonManagementWorkspace", () => {
     expect(within(dialog).queryByText("김민지")).not.toBeInTheDocument();
 
     await user.clear(within(dialog).getByRole("searchbox", { name: "원생 검색" }));
-    await user.click(within(dialog).getByRole("button", { name: "현재 목록 3건 출석" }));
+    await user.click(within(dialog).getByRole("button", { name: "전체 등원" }));
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument();
+    });
 
-    expect(within(dialog).getAllByText("출석").length).toBeGreaterThanOrEqual(3);
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /21/ }),
+    );
+    const reopened = await screen.findByRole("dialog", {
+      name: "2026-08-21 출석 확인",
+    });
+    expect(within(reopened).getAllByText("출석").length).toBeGreaterThanOrEqual(3);
 
-    await user.click(within(dialog).getByRole("checkbox", { name: "이서윤 선택" }));
-    await user.click(within(dialog).getByRole("button", { name: "선택 초기화" }));
+    await user.click(within(reopened).getByRole("button", { name: "이서윤 출결 초기화" }));
 
-    const seoyunRow = within(dialog).getByRole("row", { name: /이서윤/ });
+    const seoyunRow = within(reopened).getByRole("row", { name: /이서윤/ });
     expect(within(seoyunRow).getByText("대기")).toBeInTheDocument();
   });
 
-  it("검색으로 좁힌 목록의 일괄 처리는 보이는 원생에게만 적용되고 대상 건수가 버튼에 드러난다", async () => {
+  it("검색으로 좁힌 목록의 전체 결석은 보이는 원생에게만 적용되고 저장 전에는 상태가 바뀌지 않는다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -234,22 +245,43 @@ describe("LessonManagementWorkspace", () => {
       name: "2026-08-21 출석 확인",
     });
 
-    expect(within(dialog).getByRole("button", { name: "현재 목록 3건 결석" })).toBeEnabled();
-
     await user.type(within(dialog).getByRole("searchbox", { name: "원생 검색" }), "이서윤");
-    expect(within(dialog).queryByRole("button", { name: "현재 목록 3건 결석" })).not.toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "현재 목록 1건 결석" }));
-
+    await user.click(within(dialog).getByRole("button", { name: "전체 결석" }));
     await user.clear(within(dialog).getByRole("searchbox", { name: "원생 검색" }));
 
+    // 고르기만 했을 뿐 확인 전이라 저장된 상태는 그대로다.
     const statusFilter = within(dialog).getByRole("combobox", { name: "출결 상태 필터" });
     await user.selectOptions(statusFilter, "absent");
-    expect(within(dialog).getByRole("row", { name: /이서윤/ })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("row", { name: /김민지/ })).not.toBeInTheDocument();
-
-    await user.selectOptions(statusFilter, "present");
-    expect(within(dialog).getByRole("row", { name: /김민지/ })).toBeInTheDocument();
     expect(within(dialog).queryByRole("row", { name: /이서윤/ })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("row", { name: /박지호/ })).toBeInTheDocument();
+
+    await user.selectOptions(statusFilter, "all");
+    expect(within(dialog).getByRole("radio", { name: "이서윤 결석" })).toBeChecked();
+    expect(within(dialog).getByRole("radio", { name: "김민지 등원" })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument();
+    });
+    await user.click(
+      within(
+        screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" }),
+      ).getByRole("gridcell", { name: /21/ }),
+    );
+    const reopened = await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" });
+    await user.selectOptions(
+      within(reopened).getByRole("combobox", { name: "출결 상태 필터" }),
+      "absent",
+    );
+    expect(within(reopened).getByRole("row", { name: /이서윤/ })).toBeInTheDocument();
+    expect(within(reopened).queryByRole("row", { name: /김민지/ })).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      within(reopened).getByRole("combobox", { name: "출결 상태 필터" }),
+      "present",
+    );
+    expect(within(reopened).getByRole("row", { name: /김민지/ })).toBeInTheDocument();
+    expect(within(reopened).queryByRole("row", { name: /이서윤/ })).not.toBeInTheDocument();
   });
 
   it("학원 레슨 출석 다이얼로그에서 이번 일정만 다른 날짜로 이동한다", async () => {
@@ -309,54 +341,6 @@ describe("LessonManagementWorkspace", () => {
     expect(
       await screen.findByRole("dialog", { name: "2026-08-22 개인레슨 출석 확인" }),
     ).toBeInTheDocument();
-  });
-
-  it("미등원 인원을 보강 처리하면 보강일 캘린더에 보강 일정이 표시된다", async () => {
-    const user = userEvent.setup();
-
-    renderWorkspace();
-
-    await user.click(screen.getByRole("button", { name: "미등원인원" }));
-
-    const absentDialog = await screen.findByRole("dialog", {
-      name: "2026년 8월 미등원 인원",
-    });
-
-    expect(within(absentDialog).getByText("박지호")).toBeInTheDocument();
-    expect(absentDialog).toHaveTextContent("2026-08-21");
-    expect(within(absentDialog).getByText("강도현")).toBeInTheDocument();
-    expect(absentDialog).toHaveTextContent("2026-08-22");
-
-    await user.click(within(absentDialog).getByRole("button", { name: "박지호 보강 입력" }));
-
-    const makeupDialog = await screen.findByRole("dialog", {
-      name: "보강 입력",
-    });
-
-    await user.clear(within(makeupDialog).getByLabelText("보강일"));
-    await user.type(within(makeupDialog).getByLabelText("보강일"), "2026-08-24");
-    await user.type(within(makeupDialog).getByLabelText("보강 사유"), "감기 결석");
-    await user.click(within(makeupDialog).getByRole("button", { name: "보강 저장" }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "보강 입력" })).not.toBeInTheDocument();
-    });
-
-    expect(
-      within(
-        screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" }),
-      ).getAllByText("박지호"),
-    ).toHaveLength(2);
-
-    await user.click(
-      within(
-        screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" }),
-      ).getByRole("gridcell", { name: /24/ }),
-    );
-
-    expect(
-      await screen.findByRole("dialog", { name: "2026-08-24 출석 확인" }),
-    ).toHaveTextContent("보강");
   });
 
   it("학원 레슨표에서 비정기 일정을 직접 추가하고 출처를 구분한다", async () => {
@@ -568,7 +552,7 @@ describe("LessonManagementWorkspace", () => {
       name: "2026-08-21 출석 확인",
     });
     expect(within(dayDialog).getByRole("tab", { name: "메모 1" })).toBeInTheDocument();
-    await user.click(within(dayDialog).getByRole("button", { name: "닫기" }));
+    await user.click(within(dayDialog).getByRole("button", { name: "취소" }));
 
     academyView.unmount();
     renderWorkspace({ lessonKind: "private" });
@@ -592,7 +576,7 @@ describe("LessonManagementWorkspace", () => {
     async function openScheduleDialog(user: ReturnType<typeof userEvent.setup>) {
       renderWorkspace({ lessonKind: "private" });
       await user.click(screen.getByRole("button", { name: "레슨시간표 보내기" }));
-      const dialog = await screen.findByRole("dialog", { name: "레슨시간표 보내기" });
+      const dialog = await screen.findByRole("dialog", { name: "선생님별 레슨시간표" });
       await user.selectOptions(within(dialog).getByLabelText("선생님 선택"), "teacher-3");
       return dialog;
     }
@@ -649,7 +633,7 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "레슨시간표 보내기" }));
 
     const scheduleDialog = await screen.findByRole("dialog", {
-      name: "레슨시간표 보내기",
+      name: "선생님별 레슨시간표",
     });
 
     await user.selectOptions(
@@ -661,28 +645,22 @@ describe("LessonManagementWorkspace", () => {
       "8/22 최도윤 10:30 첼로",
     );
 
-    await user.click(within(scheduleDialog).getByRole("button", { name: "닫기" }));
+    await user.click(within(scheduleDialog).getByRole("button", { name: "Close" }));
 
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const registrationDialog = await screen.findByRole("dialog", {
-      name: "개인레슨 등록",
+      name: "레슨 일정 등록",
     });
 
     await user.selectOptions(within(registrationDialog).getByLabelText("원생"), "student-4");
     await user.selectOptions(within(registrationDialog).getByLabelText("악기"), "violin");
     await user.selectOptions(within(registrationDialog).getByLabelText("선생님"), "teacher-2");
-    await user.type(
-      within(registrationDialog).getByLabelText("시작 시간"),
-      "2026-08-23T17:00",
-    );
-    await user.type(
-      within(registrationDialog).getByLabelText("종료 시간"),
-      "2026-08-23T17:40",
-    );
-    await user.click(within(registrationDialog).getByRole("button", { name: "저장" }));
+    await user.type(within(registrationDialog).getByLabelText("날짜"), "2026-08-23");
+    await user.type(within(registrationDialog).getByLabelText("시작 시간"), "17:00");
+    await user.click(within(registrationDialog).getByRole("button", { name: "완료" }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "개인레슨 등록" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "레슨 일정 등록" })).not.toBeInTheDocument();
     });
 
     expect(
@@ -690,7 +668,7 @@ describe("LessonManagementWorkspace", () => {
     ).toHaveTextContent("한서아");
   });
 
-  it("개인레슨표에서 레슨원생 검색 다이얼로그로 잔여 회차와 최근 레슨을 확인한다", async () => {
+  it("개인레슨표에서 레슨원생 검색 다이얼로그로 원생별 잔여 회차를 찾고 선택해 최근 레슨을 확인한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace({ lessonKind: "private" });
@@ -698,18 +676,21 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "레슨원생 검색" }));
 
     const searchDialog = await screen.findByRole("dialog", {
-      name: "레슨원생 검색",
+      name: "레슨원생 검색 및 선택",
     });
 
     expect(within(searchDialog).getByText("한서아")).toBeInTheDocument();
     expect(within(searchDialog).getByText("바이올린 2회")).toBeInTheDocument();
-    expect(within(searchDialog).getByText("최근 레슨: 2026-08-21 바이올린 예정")).toBeInTheDocument();
 
     await user.type(within(searchDialog).getByRole("searchbox", { name: "레슨원생 검색어" }), "최도윤");
 
     expect(within(searchDialog).queryByText("한서아")).not.toBeInTheDocument();
     expect(within(searchDialog).getByText("최도윤")).toBeInTheDocument();
     expect(within(searchDialog).getByText("첼로 1회")).toBeInTheDocument();
+
+    await user.click(within(searchDialog).getByRole("button", { name: /최도윤/ }));
+
+    expect(within(searchDialog).getByText("최근 레슨: 2026-08-22 첼로 예정")).toBeInTheDocument();
   });
   describe("월별 개인레슨 표 페이지 이동", () => {
     async function openPrivateLessonTable() {

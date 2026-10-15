@@ -194,6 +194,7 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       instrumentId: "violin",
       instrumentName: "바이올린",
       remainingCount: 2,
+      totalGrantedCount: 4,
     },
     {
       academyId: "academy-demo",
@@ -201,6 +202,7 @@ export const demoLessonWorkspaceData: LessonWorkspaceDemoData = {
       instrumentId: "cello",
       instrumentName: "첼로",
       remainingCount: 1,
+      totalGrantedCount: 4,
     },
   ],
   registrationOptions: {

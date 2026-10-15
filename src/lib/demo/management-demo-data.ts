@@ -1,16 +1,9 @@
 import type { LedgerEntry } from "@/domain/book-sale";
 import type { BookSale } from "@/domain/book-sale";
-import {
-  registerLessonTicket,
-  type LessonTicketListItem,
-} from "@/domain/lesson-ticket";
+import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { StudentListRow } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import type { VendorListRow } from "@/domain/vendor-list";
-import type {
-  RegisterLessonTicketGrantInput,
-  RegisterLessonTicketGrantResult,
-} from "@/lib/api/lesson-tickets";
 
 export const demoAcademyId = "academy-demo";
 const academyId = demoAcademyId;
@@ -299,19 +292,3 @@ export const demoLedgerEntries: LedgerEntry[] = [
     refId: "manual-1",
   },
 ];
-
-export async function registerDemoLessonTicket(
-  input: RegisterLessonTicketGrantInput,
-): Promise<RegisterLessonTicketGrantResult> {
-  const result = registerLessonTicket(undefined, input);
-
-  return {
-    event: result.event,
-    ticket: {
-      ...result.ticket,
-      ticketId: `ticket-demo-${Date.now()}`,
-      studentName: input.studentName,
-      instrumentName: input.instrumentName,
-    },
-  };
-}

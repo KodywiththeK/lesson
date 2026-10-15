@@ -24,17 +24,25 @@ import {
 import { buildTeacherList } from "@/domain/teacher-list";
 import { buildVendorList } from "@/domain/vendor-list";
 import { createBookPurchaseListQueryKey } from "@/lib/api/books";
-import { createLessonTicketListQueryKey } from "@/lib/api/lesson-tickets";
+import {
+  createLessonTicketListQueryKey,
+  type AdjustLessonTicketInput,
+  type AdjustLessonTicketResult,
+  type RegisterLessonTicketInput,
+  type RegisterLessonTicketResult,
+} from "@/lib/api/lesson-tickets";
 import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons";
 
 import {
+  adjustDemoLessonTicket,
   createInitialDemoAcademyState,
   deleteDemoLedgerEntry,
+  cancelDemoPrivateLessonAttendance,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
   registerDemoBookRelease,
-  registerDemoLessonTicketPurchase,
+  registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
   registerDemoVendor,
   updateDemoAcademyStudent,
@@ -45,7 +53,6 @@ import {
   updateDemoVendor,
   type DemoAcademyState,
   type DemoBookReleaseInput,
-  type DemoLessonTicketPurchaseInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
   type DemoStudentUpdateInput,
@@ -67,17 +74,14 @@ type DemoAcademyContextValue = {
   registerTeacher: (input: DemoTeacherRegistrationInput) => void;
   updateTeacher: (input: DemoTeacherUpdateInput) => void;
   updateTeacherStatus: (input: DemoTeacherStatusInput) => void;
-  registerLessonTicketPurchase: (
-    input: Omit<DemoLessonTicketPurchaseInput, "studentName" | "instrumentName"> & {
-      studentName?: string;
-      instrumentName?: string;
-    },
-  ) => Promise<void>;
+  registerLessonTicket: (input: RegisterLessonTicketInput) => Promise<RegisterLessonTicketResult>;
+  adjustLessonTicket: (input: AdjustLessonTicketInput) => Promise<AdjustLessonTicketResult>;
   registerPrivateLesson: (input: RegisterPrivateLessonEventInput) => Promise<void>;
   markPrivateLessonAttendance: (
     lessonId: string,
     status: "present" | "absent",
   ) => void;
+  cancelPrivateLessonAttendance: (lessonId: string) => void;
   registerManualLedgerEntry: (input: DemoManualLedgerInput) => void;
   updateLedgerEntry: (input: LedgerEntry) => void;
   deleteLedgerEntry: (input: { ledgerId: string }) => void;
@@ -168,25 +172,18 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       updateTeacherStatus(input) {
         commitState((current) => updateDemoTeacherStatus(current, input));
       },
-      async registerLessonTicketPurchase(input) {
-        commitState((current) =>
-          registerDemoLessonTicketPurchase(current, {
-            ...input,
-            studentName:
-              input.studentName ??
-              current.students.find((student) => student.studentId === input.studentId)
-                ?.name ??
-              "이름 없음",
-            instrumentName:
-              input.instrumentName ??
-              current.enrollments.find(
-                (enrollment) =>
-                  enrollment.studentId === input.studentId &&
-                  enrollment.instrumentId === input.instrumentId,
-              )?.instrumentName ??
-              "악기 없음",
-          }),
-        );
+      async registerLessonTicket(input) {
+        // 결과는 화면에 보이는 현재 상태로 먼저 계산하고(검증 실패면 여기서 던진다), 저장은 최신 상태에 적용한다.
+        const { result } = registerDemoLessonTicket(state, input);
+        commitState((current) => registerDemoLessonTicket(current, input).state);
+
+        return result;
+      },
+      async adjustLessonTicket(input) {
+        const { result } = adjustDemoLessonTicket(state, input);
+        commitState((current) => adjustDemoLessonTicket(current, input).state);
+
+        return result;
       },
       async registerPrivateLesson(input) {
         commitState((current) => ({
@@ -216,6 +213,11 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
             status,
             markedAt: new Date().toISOString(),
           }),
+        );
+      },
+      cancelPrivateLessonAttendance(lessonId) {
+        commitState((current) =>
+          cancelDemoPrivateLessonAttendance(current, { lessonId }),
         );
       },
       registerManualLedgerEntry(input) {

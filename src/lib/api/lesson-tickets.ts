@@ -1,13 +1,10 @@
 import { compareKoreanNames, type ListView } from "@/domain/common-list";
 import {
   buildLessonTicketList,
-  registerLessonTicket,
   type BuildLessonTicketListOptions,
-  type LessonTicket,
+  type LessonTicketAdjustmentInput,
   type LessonTicketListItem,
   type LessonTicketListRow,
-  type LessonTicketRegistration,
-  type RegisterLessonTicketResult,
 } from "@/domain/lesson-ticket";
 
 import { queryKeys } from "./query-keys";
@@ -94,51 +91,85 @@ export type LessonTicketRegistrationOptionsSupabaseClient = {
   from(table: "students"): LessonTicketRegistrationOptionsFromBuilder;
 };
 
-export type RegisterLessonTicketGrantInput = LessonTicketRegistration & {
-  studentName: string;
+export type RegisterLessonTicketInput = {
+  academyId: string;
+  studentId: string;
+  instrumentId: string;
   instrumentName: string;
+  grantedCount: number;
+  /** 사용 기한(일수). 만료일은 서버가 등록일 + 기한으로 계산한다. */
+  validDays: number;
+  registeredAt: string;
+  /** 입력하면 수입 원장에 기록된다(원장만 가능). 비우면 0원으로 등록한다. */
   paidAmount?: number;
 };
 
-export type RegisterLessonTicketGrantResult = RegisterLessonTicketResult & {
-  ticket: LessonTicketListItem;
+export type RegisterLessonTicketResult = {
+  ticketId: string;
+  /** 같은 원생·악기의 기존 회차권에 더해졌으면 true. */
+  merged: boolean;
+  totalGrantedCount: number;
+  remainingCount: number;
+  validFrom: string;
+  validUntil: string;
 };
 
-type LessonTicketGrantLookupBuilder = {
-  eq(
-    column: "academy_id" | "student_id" | "instrument_id",
-    value: string,
-  ): LessonTicketGrantLookupBuilder;
-  order(
-    column: "valid_until",
-    options: { ascending: boolean },
-  ): {
-    limit(
-      count: number,
-    ): PromiseLike<SupabaseQueryResult<LessonTicketGrantSupabaseRow[]>>;
-  };
+export type AdjustLessonTicketInput = LessonTicketAdjustmentInput & {
+  academyId: string;
+  ticketId: string;
 };
 
-type LessonTicketGrantPersistBuilder = {
-  eq(column: "id", value: string): LessonTicketGrantPersistBuilder;
-  select(select: string): {
-    single(): PromiseLike<SupabaseQueryResult<LessonTicketGrantSupabaseRow>>;
-  };
+export type AdjustLessonTicketResult = {
+  ticketId: string;
+  totalGrantedCount: number;
+  remainingCount: number;
+  validUntil: string;
 };
 
-type LessonTicketGrantRegistrationFromBuilder = {
-  select(select: string): LessonTicketGrantLookupBuilder;
-  update(values: Record<string, unknown>): LessonTicketGrantPersistBuilder;
-  insert(values: Record<string, unknown>): LessonTicketGrantPersistBuilder;
+type RegisterLessonTicketRpcRow = {
+  ticket_id: string;
+  merged: boolean;
+  total_granted_count: number;
+  remaining_count: number;
+  valid_from: string;
+  valid_until: string;
 };
 
-type LedgerEntryInsertFromBuilder = {
-  insert(values: Record<string, unknown>): PromiseLike<SupabaseQueryResult<null>>;
+type AdjustLessonTicketRpcRow = {
+  ticket_id: string;
+  total_granted_count: number;
+  remaining_count: number;
+  valid_until: string;
 };
 
-export type LessonTicketGrantRegistrationSupabaseClient = {
-  from(table: "lesson_ticket_grants"): LessonTicketGrantRegistrationFromBuilder;
-  from(table: "ledger_entries"): LedgerEntryInsertFromBuilder;
+export type RegisterLessonTicketSupabaseClient = {
+  rpc(
+    functionName: "register_lesson_ticket",
+    payload: {
+      p_academy_id: string;
+      p_student_id: string;
+      p_instrument_id: string;
+      p_instrument_name: string;
+      p_granted_count: number;
+      p_valid_days: number;
+      p_registered_at: string;
+      p_paid_amount: number;
+    },
+  ): PromiseLike<SupabaseQueryResult<RegisterLessonTicketRpcRow>>;
+};
+
+export type AdjustLessonTicketSupabaseClient = {
+  rpc(
+    functionName: "adjust_lesson_ticket",
+    payload: {
+      p_academy_id: string;
+      p_ticket_id: string;
+      p_total_granted_count: number;
+      p_remaining_count: number;
+      p_valid_until: string;
+      p_reason: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<AdjustLessonTicketRpcRow>>;
 };
 
 const LESSON_TICKET_LIST_SELECT =
@@ -205,38 +236,67 @@ export function createLessonTicketRegistrationOptionsQueryOptions(
   };
 }
 
-export async function registerLessonTicketGrant(
-  supabase: LessonTicketGrantRegistrationSupabaseClient,
-  input: RegisterLessonTicketGrantInput,
-): Promise<RegisterLessonTicketGrantResult> {
-  const existingTicket = await fetchLatestLessonTicketGrant(supabase, input);
-  const registered = registerLessonTicket(existingTicket?.ticket, input);
-  const persistedTicket = existingTicket
-    ? await updateLessonTicketGrant(
-        supabase,
-        existingTicket.ticketId,
-        {
-          ...registered.ticket,
-          instrumentName: input.instrumentName,
-        },
-        input.paidAmount ?? 0,
-      )
-    : await insertLessonTicketGrant(
-        supabase,
-        {
-          ...registered.ticket,
-          instrumentName: input.instrumentName,
-        },
-        input.paidAmount ?? 0,
-      );
+/** 신규 등록과 기존 회차권 추가를 서버 RPC 한 번으로 처리한다(결제 금액이 있으면 수입 기록까지 같은 트랜잭션). */
+export async function registerLessonTicket(
+  supabase: RegisterLessonTicketSupabaseClient,
+  input: RegisterLessonTicketInput,
+): Promise<RegisterLessonTicketResult> {
+  const { data, error } = await supabase.rpc("register_lesson_ticket", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+    p_instrument_id: input.instrumentId,
+    p_instrument_name: input.instrumentName,
+    p_granted_count: input.grantedCount,
+    p_valid_days: input.validDays,
+    p_registered_at: input.registeredAt,
+    p_paid_amount: input.paidAmount ?? 0,
+  });
 
-  if (input.paidAmount && input.paidAmount > 0) {
-    await insertLessonTicketIncomeLedger(supabase, input, persistedTicket.ticketId);
+  if (error) {
+    throw new Error(`회차권을 등록하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("회차권을 등록했지만 반환된 데이터가 없습니다.");
   }
 
   return {
-    ticket: persistedTicket,
-    event: registered.event,
+    ticketId: data.ticket_id,
+    merged: data.merged,
+    totalGrantedCount: data.total_granted_count,
+    remainingCount: data.remaining_count,
+    validFrom: data.valid_from,
+    validUntil: data.valid_until,
+  };
+}
+
+/** 잘못 입력된 부여 회수·잔여 회수·만료일을 사유와 함께 고친다. */
+export async function adjustLessonTicket(
+  supabase: AdjustLessonTicketSupabaseClient,
+  input: AdjustLessonTicketInput,
+): Promise<AdjustLessonTicketResult> {
+  const { data, error } = await supabase.rpc("adjust_lesson_ticket", {
+    p_academy_id: input.academyId,
+    p_ticket_id: input.ticketId,
+    p_total_granted_count: input.totalGrantedCount,
+    p_remaining_count: input.remainingCount,
+    p_valid_until: input.validUntil,
+    p_reason: input.reason,
+  });
+
+  if (error) {
+    throw new Error(`회차권을 수정하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("회차권을 수정했지만 반환된 데이터가 없습니다.");
+  }
+
+  return {
+    ticketId: data.ticket_id,
+    totalGrantedCount: data.total_granted_count,
+    remainingCount: data.remaining_count,
+    validUntil: data.valid_until,
   };
 }
 
@@ -304,133 +364,5 @@ function toLessonTicketRegistrationStudentOption(
         },
       ];
     }),
-  };
-}
-
-async function insertLessonTicketIncomeLedger(
-  supabase: LessonTicketGrantRegistrationSupabaseClient,
-  input: RegisterLessonTicketGrantInput,
-  ticketId: string,
-) {
-  const { error } = await supabase.from("ledger_entries").insert({
-    academy_id: input.academyId,
-    occurred_on: input.registeredAt,
-    entry_type: "income",
-    source: "lesson-ticket",
-    category: "lesson-ticket",
-    amount: input.paidAmount,
-    description: `${input.studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
-    ref_id: ticketId,
-  });
-
-  if (error) {
-    throw new Error(`회차권 수입 내역을 저장하지 못했습니다: ${error.message}`);
-  }
-}
-
-async function fetchLatestLessonTicketGrant(
-  supabase: LessonTicketGrantRegistrationSupabaseClient,
-  input: RegisterLessonTicketGrantInput,
-) {
-  const { data, error } = await supabase
-    .from("lesson_ticket_grants")
-    .select(LESSON_TICKET_LIST_SELECT)
-    .eq("academy_id", input.academyId)
-    .eq("student_id", input.studentId)
-    .eq("instrument_id", input.instrumentId)
-    .order("valid_until", { ascending: false })
-    .limit(1);
-
-  if (error) {
-    throw new Error(`기존 회차권을 확인하지 못했습니다: ${error.message}`);
-  }
-
-  const row = data?.[0];
-
-  if (!row) {
-    return undefined;
-  }
-
-  return {
-    ticketId: row.id,
-    ticket: toLessonTicket(row),
-  };
-}
-
-async function updateLessonTicketGrant(
-  supabase: LessonTicketGrantRegistrationSupabaseClient,
-  ticketId: string,
-  ticket: LessonTicket & { instrumentName: string },
-  paidAmount: number,
-) {
-  const { data, error } = await supabase
-    .from("lesson_ticket_grants")
-    .update(toLessonTicketGrantMutationRow(ticket, paidAmount))
-    .eq("id", ticketId)
-    .select(LESSON_TICKET_LIST_SELECT)
-    .single();
-
-  if (error) {
-    throw new Error(`회차권을 갱신하지 못했습니다: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error("회차권을 갱신했지만 반환된 데이터가 없습니다.");
-  }
-
-  return toLessonTicketListItem(data);
-}
-
-async function insertLessonTicketGrant(
-  supabase: LessonTicketGrantRegistrationSupabaseClient,
-  ticket: LessonTicket & { instrumentName: string },
-  paidAmount: number,
-) {
-  const { data, error } = await supabase
-    .from("lesson_ticket_grants")
-    .insert(toLessonTicketGrantMutationRow(ticket, paidAmount))
-    .select(LESSON_TICKET_LIST_SELECT)
-    .single();
-
-  if (error) {
-    throw new Error(`회차권을 등록하지 못했습니다: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error("회차권을 등록했지만 반환된 데이터가 없습니다.");
-  }
-
-  return toLessonTicketListItem(data);
-}
-
-function toLessonTicket(row: LessonTicketGrantSupabaseRow): LessonTicket {
-  return {
-    academyId: row.academy_id,
-    studentId: row.student_id,
-    instrumentId: row.instrument_id,
-    totalGrantedCount: row.total_granted_count,
-    remainingCount: row.remaining_count,
-    validFrom: row.valid_from,
-    validUntil: row.valid_until,
-    registeredAt: row.registered_at,
-  };
-}
-
-function toLessonTicketGrantMutationRow(
-  ticket: LessonTicket & { instrumentName: string },
-  paidAmount: number,
-) {
-  return {
-    academy_id: ticket.academyId,
-    student_id: ticket.studentId,
-    instrument_id: ticket.instrumentId,
-    instrument_name: ticket.instrumentName,
-    total_granted_count: ticket.totalGrantedCount,
-    remaining_count: ticket.remainingCount,
-    valid_from: ticket.validFrom,
-    valid_until: ticket.validUntil,
-    registered_at: ticket.registeredAt,
-    paid_amount: paidAmount,
-    paid_at: paidAmount > 0 ? ticket.registeredAt : null,
   };
 }

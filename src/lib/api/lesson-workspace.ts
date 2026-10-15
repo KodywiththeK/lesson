@@ -1,8 +1,12 @@
-import type {
-  DailyAcademyAttendanceRow,
-  DailyAcademyAttendanceSheet,
-  LessonEventOrigin,
+import {
+  formatAcademyLessonOriginLabel,
+  toDailyAcademyAttendanceSheet,
+  type AbsenceResolutionKind,
+  type DailyAcademyAttendanceRow,
+  type DailyAcademyAttendanceSheet,
+  type LessonEventOrigin,
 } from "@/domain/academy-lesson-attendance";
+import { countAttendeesByDate } from "@/domain/academy-lesson-sheets";
 import { getFinanceToday } from "@/domain/finance-date";
 import type { PrivateLesson, PrivateLessonTicketSearchBalance } from "@/domain/private-lesson";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
@@ -38,13 +42,27 @@ type LessonWorkspaceEventRow = {
   starts_at: string;
   ends_at: string;
   status: string;
+  time_unspecified?: boolean | null;
+  source_lesson_event_id?: string | null;
   attendance_records:
     | Array<{
         status: string | null;
         absence_reason: string | null;
         marked_at: string | null;
+        /** 일대일 관계라 PostgREST가 객체 또는 배열로 준다. */
+        absence_resolutions?: AbsenceResolutionRow | AbsenceResolutionRow[] | null;
       }>
     | null;
+};
+
+type AbsenceResolutionRow = { resolved_as: string | null };
+
+/** 달 전체 조회가 아니라 날짜별 인원 집계에만 쓰는 최소 컬럼 */
+type AttendeeCountEventRow = {
+  student_id: string;
+  lesson_kind: string;
+  status: string;
+  starts_at: string;
 };
 
 type LessonTicketBalanceRow = {
@@ -53,6 +71,7 @@ type LessonTicketBalanceRow = {
   instrument_id: string;
   instrument_name: string;
   remaining_count: number;
+  total_granted_count?: number | null;
   valid_from?: string | null;
   valid_until?: string | null;
 };
@@ -72,14 +91,43 @@ export type CreateAcademyLessonEventInput = {
   reason: string;
 };
 
-export type CreateMakeupLessonEventInput = {
+export type ResolveAcademyLessonAbsenceInput = {
   academyId: string;
   sourceLessonEventId: string;
   studentId: string;
-  targetDate: string;
-  startTime: string;
-  endTime: string;
+  resolution: AbsenceResolutionKind;
+  /** 보강일(YYYY-MM-DD). 보강일 때 필수 */
+  targetDate?: string;
+  /** 보강 시작 시간. 없으면 DB가 원본 시간을 임시로 쓰고 시간 표시를 숨긴다. */
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+};
+
+export type ResolveAcademyLessonAbsenceResult = {
+  resolution: AbsenceResolutionKind;
+  makeupLessonEventId: string | null;
+  /** DB가 월별 포스트잇에 자동으로 남긴 한 줄 */
+  memoLine: string;
+  month: string;
+};
+
+type ResolveAcademyLessonAbsenceRpcRow = {
+  resolution: AbsenceResolutionKind;
+  makeup_lesson_event_id: string | null;
+  memo_line: string;
+  month: string;
+};
+
+export type DeleteAcademyLessonEventInput = {
+  academyId: string;
+  lessonEventId: string;
   reason: string;
+};
+
+export type FetchAcademyAttendeeCountsInput = {
+  academyId: string;
+  month: string;
 };
 
 export type MoveAcademyLessonEventInput = {
@@ -98,6 +146,12 @@ export type ResetAcademyLessonAttendanceInput = {
   reason?: string;
 };
 
+type PriorPrivateLessonRow = {
+  student_id: string;
+  instrument_id: string;
+  starts_at: string;
+};
+
 export type LessonWorkspaceSupabaseClient =
   PrivateLessonRegistrationOptionsSupabaseClient & {
     rpc(
@@ -108,17 +162,26 @@ export type LessonWorkspaceSupabaseClient =
       },
     ): PromiseLike<SupabaseResult<number>>;
     rpc(
-      functionName: "create_makeup_lesson_event",
+      functionName: "resolve_academy_lesson_absence",
       payload: {
         p_academy_id: string;
         p_source_lesson_event_id: string;
         p_student_id: string;
-        p_target_date: string;
-        p_start_time: string;
-        p_end_time: string;
+        p_resolution: AbsenceResolutionKind;
+        p_target_date: string | null;
+        p_start_time: string | null;
+        p_end_time: string | null;
+        p_reason: string | null;
+      },
+    ): PromiseLike<SupabaseResult<ResolveAcademyLessonAbsenceRpcRow>>;
+    rpc(
+      functionName: "delete_academy_lesson_event",
+      payload: {
+        p_academy_id: string;
+        p_lesson_event_id: string;
         p_reason: string;
       },
-    ): PromiseLike<SupabaseResult<string>>;
+    ): PromiseLike<SupabaseResult<null>>;
     rpc(
       functionName: "move_academy_lesson_event",
       payload: {
@@ -140,14 +203,24 @@ export type LessonWorkspaceSupabaseClient =
       },
     ): PromiseLike<SupabaseResult<null>>;
     from(table: "lesson_events"): {
-      select(select: string): {
+      select<TRow = LessonWorkspaceEventRow>(select: string): {
         eq(column: "academy_id", value: string): {
           gte(column: "starts_at", value: string): {
             lt(column: "starts_at", value: string): {
               order(
                 column: "starts_at",
                 options: { ascending: boolean },
-              ): PromiseLike<SupabaseResult<LessonWorkspaceEventRow[]>>;
+              ): PromiseLike<SupabaseResult<TRow[]>>;
+            };
+          };
+          eq(column: "lesson_kind", value: "private"): {
+            eq(column: "status", value: "scheduled"): {
+              gte(column: "starts_at", value: string): {
+                lt(
+                  column: "starts_at",
+                  value: string,
+                ): PromiseLike<SupabaseResult<PriorPrivateLessonRow[]>>;
+              };
             };
           };
         };
@@ -186,7 +259,8 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
+const ATTENDEE_COUNT_EVENTS_SELECT = "student_id, lesson_kind, status, starts_at";
 const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
   "id, academy_id, lesson_kind, memo_date, content, unread";
 
@@ -226,7 +300,7 @@ export async function fetchLessonWorkspaceData(
       supabase
         .from("lesson_ticket_grants")
         .select(
-          "academy_id, student_id, instrument_id, instrument_name, remaining_count, valid_from, valid_until",
+          "academy_id, student_id, instrument_id, instrument_name, remaining_count, total_granted_count, valid_from, valid_until",
         )
         .eq("academy_id", input.academyId),
       fetchLessonCalendarMemoRows(supabase, input.academyId, range),
@@ -258,7 +332,12 @@ export async function fetchLessonWorkspaceData(
     privateLessons: events
       .filter((event) => event.lesson_kind === "private")
       .map(toPrivateLesson),
-    ticketBalances: sumValidTicketBalances(ticketsResult.data ?? [], getFinanceToday()),
+    ticketBalances: await withPriorLessonCounts(
+      supabase,
+      input.academyId,
+      range.start,
+      sumValidTicketBalances(ticketsResult.data ?? [], getFinanceToday()),
+    ),
     registrationOptions,
     privateRegistrationOptions,
     calendarMemos: (memosResult.data ?? [])
@@ -307,23 +386,88 @@ export async function createAcademyLessonEvent(
   return toAcademyAttendanceRow(data);
 }
 
-export async function createMakeupLessonEvent(
+/** 결석을 보강 또는 패스로 확정한다. 이중 처리 방지와 월별 포스트잇 자동 기록은 DB 함수가 맡는다. */
+export async function resolveAcademyLessonAbsence(
   supabase: LessonWorkspaceSupabaseClient,
-  input: CreateMakeupLessonEventInput,
-) {
-  const { error } = await supabase.rpc("create_makeup_lesson_event", {
+  input: ResolveAcademyLessonAbsenceInput,
+): Promise<ResolveAcademyLessonAbsenceResult> {
+  const { data, error } = await supabase.rpc("resolve_academy_lesson_absence", {
     p_academy_id: input.academyId,
     p_source_lesson_event_id: input.sourceLessonEventId,
     p_student_id: input.studentId,
-    p_target_date: input.targetDate,
-    p_start_time: input.startTime,
-    p_end_time: input.endTime,
+    p_resolution: input.resolution,
+    p_target_date: input.targetDate || null,
+    p_start_time: input.startTime || null,
+    p_end_time: input.endTime || null,
+    p_reason: input.reason?.trim() || null,
+  });
+
+  if (error) {
+    throw new Error(`결석 사유서를 저장하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("결석 사유서를 저장했지만 반환된 데이터가 없습니다.");
+  }
+
+  return {
+    resolution: data.resolution,
+    makeupLessonEventId: data.makeup_lesson_event_id,
+    memoLine: data.memo_line,
+    month: data.month,
+  };
+}
+
+export async function deleteAcademyLessonEvent(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: DeleteAcademyLessonEventInput,
+) {
+  const { error } = await supabase.rpc("delete_academy_lesson_event", {
+    p_academy_id: input.academyId,
+    p_lesson_event_id: input.lessonEventId,
     p_reason: input.reason.trim(),
   });
 
   if (error) {
-    throw new Error(`보강 일정을 저장하지 못했습니다: ${error.message}`);
+    throw new Error(`학원 일정을 삭제하지 못했습니다: ${error.message}`);
   }
+}
+
+/**
+ * 보강일 추천에 쓸 날짜별 등원 인원을 센다. 화면이 보고 있지 않은 달(다음 달)용이다.
+ * 정기 일정이 아직 만들어지지 않았을 수 있어 그 달 일정을 먼저 준비한다.
+ */
+export async function fetchAcademyAttendeeCounts(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: FetchAcademyAttendeeCountsInput,
+): Promise<Record<string, number>> {
+  const { error: ensureError } = await supabase.rpc("ensure_monthly_academy_lesson_events", {
+    p_academy_id: input.academyId,
+    p_month: input.month,
+  });
+
+  if (ensureError) {
+    throw new Error(`다음 달 정기 일정을 준비하지 못했습니다: ${ensureError.message}`);
+  }
+
+  const range = toMonthRange(input.month);
+  const { data, error } = await supabase
+    .from("lesson_events")
+    .select<AttendeeCountEventRow>(ATTENDEE_COUNT_EVENTS_SELECT)
+    .eq("academy_id", input.academyId)
+    .gte("starts_at", range.start)
+    .lt("starts_at", range.end)
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`다음 달 등원 인원을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return countAttendeesByDate(
+    (data ?? [])
+      .filter((event) => event.lesson_kind === "academy" && event.status === "scheduled")
+      .map((event) => ({ studentId: event.student_id, date: toSeoulDate(event.starts_at) })),
+  );
 }
 
 export async function moveAcademyLessonEvent(
@@ -387,7 +531,7 @@ function groupAcademyRows(
   }
 
   return [...byDate.entries()].map(([date, sheetRows]) =>
-    toSheet(academyId, date, sheetRows),
+    toDailyAcademyAttendanceSheet(academyId, date, sheetRows),
   );
 }
 
@@ -457,37 +601,6 @@ function toTargetlessLessonCalendarMemoRow(
   };
 }
 
-function toSheet(
-  academyId: string,
-  date: string,
-  rows: DailyAcademyAttendanceRow[],
-): DailyAcademyAttendanceSheet {
-  return {
-    academyId,
-    date,
-    rows,
-    absenceQueue: rows
-      .filter((row) => row.status === "absent")
-      .map((row) => ({
-        academyId,
-        lessonEventId: row.lessonEventId,
-        studentId: row.studentId,
-        studentName: row.studentName,
-        instrumentId: row.instrumentId,
-        instrumentName: row.instrumentName,
-        originalDate: row.date,
-        reason: row.absenceReason ?? "",
-        markedAt: row.markedAt ?? "",
-      })),
-    summary: {
-      total: rows.length,
-      present: rows.filter((row) => row.status === "present").length,
-      absent: rows.filter((row) => row.status === "absent").length,
-      pending: rows.filter((row) => row.status === "pending").length,
-    },
-  };
-}
-
 function toAcademyAttendanceRow(
   row: LessonWorkspaceEventRow,
 ): DailyAcademyAttendanceRow {
@@ -508,16 +621,33 @@ function toAcademyAttendanceRow(
     endTime: toSeoulHourMinute(row.ends_at),
     status,
     origin: normalizeOrigin(row.origin, row.lesson_kind),
-    originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
+    originLabel: formatAcademyLessonOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
     absenceReason:
       status === "absent" ? attendance?.absence_reason?.trim() : undefined,
     markedAt: attendance?.marked_at ?? undefined,
+    absenceResolution:
+      status === "absent" ? readAbsenceResolution(attendance?.absence_resolutions) : undefined,
+    timeUnspecified: row.time_unspecified ? true : undefined,
+    sourceLessonEventId: row.source_lesson_event_id ?? undefined,
   };
 }
 
+function readAbsenceResolution(
+  embedded: AbsenceResolutionRow | AbsenceResolutionRow[] | null | undefined,
+): AbsenceResolutionKind | undefined {
+  const resolvedAs = (Array.isArray(embedded) ? embedded[0] : embedded)?.resolved_as;
+
+  return resolvedAs === "makeup" || resolvedAs === "pass" ? resolvedAs : undefined;
+}
+
+type ValidTicketBalance = PrivateLessonTicketSearchBalance & {
+  /** 유효한 회차권 중 가장 이른 유효 시작일. 회차를 이어서 셀 때의 시작점이다. */
+  validFrom?: string;
+};
+
 /** 오늘 유효한 회차권만 같은 원생·악기끼리 합산한다. 만료됐거나 아직 시작 전인 회차권은 쓸 수 없다. */
-function sumValidTicketBalances(rows: LessonTicketBalanceRow[], today: string) {
-  const balances = new Map<string, PrivateLessonTicketSearchBalance>();
+function sumValidTicketBalances(rows: LessonTicketBalanceRow[], today: string): ValidTicketBalance[] {
+  const balances = new Map<string, ValidTicketBalance>();
 
   for (const row of rows) {
     const isValidToday =
@@ -534,10 +664,76 @@ function sumValidTicketBalances(rows: LessonTicketBalanceRow[], today: string) {
       instrumentId: row.instrument_id,
       instrumentName: row.instrument_name,
       remainingCount: (current?.remainingCount ?? 0) + row.remaining_count,
+      totalGrantedCount: (current?.totalGrantedCount ?? 0) + (row.total_granted_count ?? 0),
+      validFrom: earliestDate(current?.validFrom, row.valid_from ?? undefined),
     });
   }
 
   return [...balances.values()];
+}
+
+function earliestDate(left: string | undefined, right: string | undefined) {
+  if (!left || !right) {
+    return left ?? right;
+  }
+
+  return left <= right ? left : right;
+}
+
+/**
+ * 개인레슨 회차(`현재/총`)를 달이 바뀌어도 이어서 세도록, 유효한 회차권 기간 안에서
+ * 조회한 달 이전에 잡힌 같은 원생·악기의 취소되지 않은 레슨 수를 센다.
+ */
+async function withPriorLessonCounts(
+  supabase: LessonWorkspaceSupabaseClient,
+  academyId: string,
+  monthStart: string,
+  balances: ValidTicketBalance[],
+): Promise<PrivateLessonTicketSearchBalance[]> {
+  const earliestValidFrom = balances.reduce<string | undefined>(
+    (earliest, balance) => earliestDate(earliest, balance.validFrom),
+    undefined,
+  );
+  const rangeStart = earliestValidFrom ? `${earliestValidFrom}T00:00:00+09:00` : undefined;
+
+  if (!rangeStart || rangeStart >= monthStart) {
+    return balances.map((balance) => toBalanceWithPriorCount(balance, 0));
+  }
+
+  const { data, error } = await supabase
+    .from("lesson_events")
+    .select("student_id, instrument_id, starts_at")
+    .eq("academy_id", academyId)
+    .eq("lesson_kind", "private")
+    .eq("status", "scheduled")
+    .gte("starts_at", rangeStart)
+    .lt("starts_at", monthStart);
+
+  if (error) {
+    throw new Error(`이전 레슨 회차를 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return balances.map((balance) => {
+    const validFromStart = balance.validFrom ? `${balance.validFrom}T00:00:00+09:00` : rangeStart;
+    const priorLessonCount = (data ?? []).filter(
+      (lesson) =>
+        lesson.student_id === balance.studentId &&
+        lesson.instrument_id === balance.instrumentId &&
+        lesson.starts_at >= validFromStart,
+    ).length;
+
+    return toBalanceWithPriorCount(balance, priorLessonCount);
+  });
+}
+
+function toBalanceWithPriorCount(
+  balance: ValidTicketBalance,
+  priorLessonCount: number,
+): PrivateLessonTicketSearchBalance {
+  const result: ValidTicketBalance = { ...balance, priorLessonCount };
+  delete result.validFrom;
+
+  return result;
 }
 
 /** 출석 여부는 lesson_events.status가 아니라 출결 기록(attendance_records)이 가진다. */

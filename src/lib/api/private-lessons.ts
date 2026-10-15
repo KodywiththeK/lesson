@@ -1,5 +1,6 @@
 import { compareKoreanNames } from "@/domain/common-list";
 import {
+  deriveLessonMinutes,
   findPrivateLessonRegistrationBlocker,
   type PrivateLesson,
 } from "@/domain/private-lesson";
@@ -20,6 +21,8 @@ export type PrivateLessonRegistrationStudentOption = {
     instrumentName: string;
     /** 원생이 이 악기를 배우는 담당 선생님. 등록 폼의 기본 선생님으로 쓴다. */
     teacherId?: string;
+    /** 원생관리에 입력된 레슨 시작·종료 시각의 차이(분). 개인레슨 옵션에만 있고 값이 없으면 기본 30분이다. */
+    lessonMinutes?: number;
   }>;
 };
 
@@ -48,6 +51,8 @@ export type PrivateLessonRegistrationStudentSupabaseRow = {
         lesson_type: string | null;
         active: boolean | null;
         teacher_id?: string | null;
+        start_time?: string | null;
+        end_time?: string | null;
       }>
     | null;
 };
@@ -144,6 +149,18 @@ export type MarkPrivateLessonAttendanceSupabaseClient = {
   ): PromiseLike<SupabaseQueryResult<null>>;
 };
 
+export type CancelPrivateLessonAttendanceSupabaseClient = {
+  rpc(
+    functionName: "cancel_private_lesson_attendance",
+    payload: {
+      p_academy_id: string;
+      p_lesson_event_id: string;
+      p_student_id: string;
+      p_instrument_id: string;
+    },
+  ): PromiseLike<SupabaseQueryResult<null>>;
+};
+
 export type RegisterPrivateLessonEventInput = {
   academyId: string;
   studentId: string;
@@ -157,6 +174,13 @@ export type RegisterPrivateLessonEventInput = {
   endAt: string;
 };
 
+export type CancelPrivateLessonAttendanceInput = {
+  academyId: string;
+  lessonEventId: string;
+  studentId: string;
+  instrumentId: string;
+};
+
 export type MarkPrivateLessonAttendanceInput = {
   academyId: string;
   lessonEventId: string;
@@ -168,7 +192,7 @@ export type MarkPrivateLessonAttendanceInput = {
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
-  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id)";
+  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, start_time, end_time)";
 const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part, status";
 const PRIVATE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin";
@@ -321,6 +345,23 @@ export async function markPrivateLessonAttendance(
   }
 }
 
+/** 등원 확인을 취소하고 차감했던 회차권 1회를 서버에서 복구한다. */
+export async function cancelPrivateLessonAttendance(
+  supabase: CancelPrivateLessonAttendanceSupabaseClient,
+  input: CancelPrivateLessonAttendanceInput,
+) {
+  const { error } = await supabase.rpc("cancel_private_lesson_attendance", {
+    p_academy_id: input.academyId,
+    p_lesson_event_id: input.lessonEventId,
+    p_student_id: input.studentId,
+    p_instrument_id: input.instrumentId,
+  });
+
+  if (error) {
+    throw new Error(`등원 확인을 취소하지 못했습니다: ${error.message}`);
+  }
+}
+
 async function fetchTeacherPrivateLessons(
   supabase: PrivateLessonRegistrationSupabaseClient,
   input: RegisterPrivateLessonEventInput,
@@ -363,6 +404,14 @@ function toLessonRegistrationStudentOption(
           instrumentId: instrument.instrument_id,
           instrumentName: instrument.instrument_name,
           teacherId: instrument.teacher_id ?? undefined,
+          ...(lessonType === "private"
+            ? {
+                lessonMinutes: deriveLessonMinutes(
+                  instrument.start_time,
+                  instrument.end_time,
+                ),
+              }
+            : {}),
         },
       ];
     }),
