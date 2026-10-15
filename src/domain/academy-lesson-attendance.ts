@@ -1,3 +1,4 @@
+import { compareKoreanNames } from "./common-list";
 import type { AcademyLessonEvent } from "./academy-lesson-schedule";
 
 export type AcademyLessonAttendanceStatus = "pending" | "present" | "absent";
@@ -219,7 +220,7 @@ function compareEventsForDailyAttendance(
 ) {
   return (
     left.startTime.localeCompare(right.startTime) ||
-    left.studentName.localeCompare(right.studentName, "ko-KR")
+    compareKoreanNames(left.studentName, right.studentName)
   );
 }
 

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   PRIVATE_LESSON_REGISTRATION_STEPS,
   buildPrivateLessonStudentSearchResults,
+  describePrivateAttendanceChange,
+  pickDefaultTeacherId,
   findPrivateLessonRegistrationBlocker,
   formatPrivateLessonScheduleMessage,
   getPrivateLessonRegistrationFlowState,
@@ -325,5 +327,53 @@ describe("formatPrivateLessonScheduleMessage", () => {
         "- 8월 21일(금) 15:00-15:50 김민지 / 피아노",
       ].join("\n"),
     );
+  });
+});
+
+describe("describePrivateAttendanceChange", () => {
+  it.each([
+    ["scheduled", "present", "출석 처리하고 회차권 1회를 차감했습니다."],
+    ["absent", "present", "출석 처리하고 회차권 1회를 차감했습니다."],
+    ["present", "absent", "결석으로 바꾸고 회차권 1회를 복구했습니다."],
+    ["scheduled", "absent", "결석 처리했습니다. 회차권은 차감되지 않습니다."],
+  ] as const)("%s에서 %s로 바꾸면 실제 회차권 변화를 안내한다", (previous, next, expected) => {
+    expect(describePrivateAttendanceChange(previous, next)).toBe(expected);
+  });
+
+  it("이미 같은 상태이면 변경이 없다고 안내한다", () => {
+    expect(describePrivateAttendanceChange("present", "present")).toBe("이미 출석 처리된 수업입니다.");
+    expect(describePrivateAttendanceChange("absent", "absent")).toBe("이미 결석 처리된 수업입니다.");
+  });
+});
+
+describe("pickDefaultTeacherId", () => {
+  const teachers = [
+    { teacherId: "teacher-piano-1", part: "피아노" },
+    { teacherId: "teacher-violin", part: "바이올린" },
+    { teacherId: "teacher-flute", part: "플루트" },
+  ];
+
+  it("원생의 악기별 담당 선생님이 재직 중이면 그 선생님을 기본값으로 쓴다", () => {
+    expect(
+      pickDefaultTeacherId({ instrumentName: "피아노", teacherId: "teacher-violin" }, teachers),
+    ).toBe("teacher-violin");
+  });
+
+  it("담당 선생님이 없으면 악기와 파트가 같은 선생님이 한 명일 때 그 선생님을 쓴다", () => {
+    expect(pickDefaultTeacherId({ instrumentName: "피아노" }, teachers)).toBe("teacher-piano-1");
+    expect(pickDefaultTeacherId({ instrumentName: "학원 바이올린" }, teachers)).toBe("teacher-violin");
+  });
+
+  it("담당 선생님이 재직 목록에 없으면 파트 기준으로 찾는다", () => {
+    expect(
+      pickDefaultTeacherId({ instrumentName: "플루트", teacherId: "teacher-resigned" }, teachers),
+    ).toBe("teacher-flute");
+  });
+
+  it("파트가 같은 선생님이 여럿이거나 없으면 임의로 고르지 않고 비워 둔다", () => {
+    const manyPiano = [...teachers, { teacherId: "teacher-piano-2", part: "피아노" }];
+
+    expect(pickDefaultTeacherId({ instrumentName: "피아노" }, manyPiano)).toBe("");
+    expect(pickDefaultTeacherId({ instrumentName: "첼로" }, teachers)).toBe("");
   });
 });

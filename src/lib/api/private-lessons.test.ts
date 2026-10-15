@@ -25,12 +25,12 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active)",
+          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id)",
         eq: ["academy_id", "academy-1"],
       },
       {
         table: "teachers",
-        select: "id, academy_id, name, part",
+        select: "id, academy_id, name, part, status",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -44,11 +44,18 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               studentInstrumentId: "student-instrument-1",
               instrumentId: "piano",
               instrumentName: "피아노",
+              teacherId: "teacher-1",
             },
           ],
         },
       ],
+      // 재직 중인 선생님만, 가나다순
       teachers: [
+        {
+          teacherId: "teacher-2",
+          teacherName: "가선생",
+          part: "바이올린",
+        },
         {
           teacherId: "teacher-1",
           teacherName: "박선생",
@@ -124,6 +131,7 @@ function createRegistrationOptionsClient(
                             instrument_name: "피아노",
                             lesson_type: "private",
                             active: true,
+                            teacher_id: "teacher-1",
                           },
                           {
                             id: "student-instrument-2",
@@ -158,6 +166,21 @@ function createRegistrationOptionsClient(
                         academy_id: "academy-1",
                         name: "박선생",
                         part: "피아노",
+                        status: "employed",
+                      },
+                      {
+                        id: "teacher-3",
+                        academy_id: "academy-1",
+                        name: "나선생",
+                        part: "첼로",
+                        status: "resigned",
+                      },
+                      {
+                        id: "teacher-2",
+                        academy_id: "academy-1",
+                        name: "가선생",
+                        part: "바이올린",
+                        status: "employed",
                       },
                     ],
                     error: null,

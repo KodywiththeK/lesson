@@ -1,3 +1,5 @@
+import { compareKoreanNames } from "./common-list";
+
 export type Weekday =
   | "sunday"
   | "monday"
@@ -192,7 +194,7 @@ function compareAcademyLessonEvents(
   return (
     left.date.localeCompare(right.date) ||
     left.startTime.localeCompare(right.startTime) ||
-    left.studentName.localeCompare(right.studentName, "ko-KR")
+    compareKoreanNames(left.studentName, right.studentName)
   );
 }
 

@@ -84,6 +84,9 @@ describe("integrated demo flow", () => {
       within(dialog).getByRole("button", { name: "한서아 개인레슨 출석" }),
     );
 
+    expect(within(dialog).getByRole("button", { name: "한서아 개인레슨 출석" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "한서아 개인레슨 결석" })).toBeEnabled();
+
     view.rerender(
       <AppProviders>
         <PassesPage />

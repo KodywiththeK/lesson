@@ -34,7 +34,19 @@ import {
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { ListPagination } from "@/components/management/list-pagination";
+import { useListPaging } from "@/components/management/use-list-paging";
 import { DateField, DateTimeField, MonthField, TimeField } from "@/components/operations/date-time-fields";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,12 +80,15 @@ import type {
   DailyAcademyAttendanceSheet,
   LessonEventOrigin,
 } from "@/domain/academy-lesson-attendance";
+import { compareKoreanNames, paginateItems } from "@/domain/common-list";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   markDailyAcademyLessonAttendance,
   type AcademyLessonAttendanceSupabaseClient,
 } from "@/lib/api/academy-lessons";
 import {
   buildPrivateLessonStudentSearchResults,
+  describePrivateAttendanceChange,
   type PrivateLesson,
   type PrivateLessonStudentSearchResult,
 } from "@/domain/private-lesson";
@@ -316,12 +331,7 @@ export function LessonManagementWorkspace({
     [academySheets],
   );
   const privateTableRows = useMemo(
-    () =>
-      [...privateLessons].sort(
-        (left, right) =>
-          left.startAt.localeCompare(right.startAt) ||
-          left.studentName.localeCompare(right.studentName, "ko-KR"),
-      ),
+    () => [...privateLessons].sort(comparePrivateLessonsByTime),
     [privateLessons],
   );
   const selectedAcademySheet =
@@ -329,7 +339,7 @@ export function LessonManagementWorkspace({
   const selectedAcademyEvents = [...selectedAcademySheet.rows].sort(
     (left, right) =>
       left.startTime.localeCompare(right.startTime) ||
-      left.studentName.localeCompare(right.studentName, "ko-KR"),
+      compareKoreanNames(left.studentName, right.studentName),
   );
   const selectedPrivateLessons = privateLessons
     .filter((lesson) => toSeoulDate(lesson.startAt) === selectedDate)
@@ -384,7 +394,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("학원 수업 출결 저장에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -418,7 +428,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("학원 수업 출결 초기화에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -438,7 +448,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("학원 일정 이동에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -467,15 +477,10 @@ export function LessonManagementWorkspace({
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
       });
-      toast.success(
-        input.status === "present"
-          ? "출석 처리하고 회차권을 차감했습니다."
-          : "결석 처리하고 회차권을 복구했습니다.",
-      );
     },
     onError: (error) => {
       toast.error("개인레슨 출결 저장에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -496,7 +501,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("메모 추가에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -521,7 +526,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("메모 수정에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -544,7 +549,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("메모 삭제에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -573,9 +578,9 @@ export function LessonManagementWorkspace({
     );
     toast.success("메모를 수정했습니다.");
   };
-  const deleteCalendarMemo = (memoId: string) => {
+  const deleteCalendarMemo = async (memoId: string) => {
     if (!demoData && supabaseClientState?.client) {
-      deleteMemoMutation.mutate({ academyId, memoId });
+      await deleteMemoMutation.mutateAsync({ academyId, memoId });
       return;
     }
 
@@ -603,7 +608,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("학원 일정 추가에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -622,7 +627,7 @@ export function LessonManagementWorkspace({
     },
     onError: (error) => {
       toast.error("보강 일정 저장에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -851,8 +856,8 @@ export function LessonManagementWorkspace({
   if (!hasInjectedData && supabaseClientState?.error) {
     return (
       <ListStatusAlert
-        message="Supabase 환경변수가 설정되면 레슨관리표를 불러올 수 있습니다."
-        detail={supabaseClientState.error.message}
+        message="레슨관리표를 불러오지 못했습니다."
+        detail={toUserMessage(supabaseClientState.error)}
       />
     );
   }
@@ -869,7 +874,7 @@ export function LessonManagementWorkspace({
     return (
       <ListStatusAlert
         message="레슨관리표를 불러오지 못했습니다."
-        detail={workspaceQuery.error.message}
+        detail={toUserMessage(workspaceQuery.error)}
       />
     );
   }
@@ -1103,21 +1108,23 @@ export function LessonManagementWorkspace({
                   : candidate,
               ),
             );
-            toast.success(
-              status === "present"
-                ? "출석 처리하고 회차권을 확인했습니다."
-                : "결석 처리했습니다.",
-            );
+            toast.success(describePrivateAttendanceChange(lesson.status, status));
           } else if (supabaseClientState?.client) {
-            savePrivateAttendanceMutation.mutate({
-              academyId,
-              lessonEventId: lesson.id,
-              studentId: lesson.studentId,
-              instrumentId: lesson.instrumentId,
-              instrumentName: lesson.instrumentName,
-              status,
-              markedAt,
-            });
+            savePrivateAttendanceMutation.mutate(
+              {
+                academyId,
+                lessonEventId: lesson.id,
+                studentId: lesson.studentId,
+                instrumentId: lesson.instrumentId,
+                instrumentName: lesson.instrumentName,
+                status,
+                markedAt,
+              },
+              {
+                onSuccess: () =>
+                  toast.success(describePrivateAttendanceChange(lesson.status, status)),
+              },
+            );
           }
         }}
       />
@@ -1454,6 +1461,7 @@ function LessonMonthControl({
         <MonthField
           id={`${toControlId(variantLabel)}-month`}
           aria-label={`${variantLabel} 월 선택`}
+          required
           value={selectedMonth}
           onValueChange={onChangeMonth}
           className="w-40"
@@ -1592,15 +1600,39 @@ function LessonMemoTabPanel({
   targets: LessonMemoTargetOptions;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
   onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
-  onDeleteMemo: (memoId: string) => void;
+  onDeleteMemo: (memoId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<LessonMemoDraft>(() =>
     createEmptyMemoDraft(),
   );
   const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const [memoToDelete, setMemoToDelete] = useState<LessonCalendarMemo | null>(null);
+  const [isDeletingMemo, setIsDeletingMemo] = useState(false);
   const editingMemo = memos.find((memo) => memo.id === editingMemoId) ?? null;
   const canSubmit = canSubmitLessonMemo(draft, targets);
   const submitLabel = editingMemo ? "메모 수정 저장" : "메모 등록";
+
+  const confirmDeleteMemo = async () => {
+    if (!memoToDelete || isDeletingMemo) {
+      return;
+    }
+
+    setIsDeletingMemo(true);
+    try {
+      await onDeleteMemo(memoToDelete.id);
+    } catch {
+      // 실패 안내는 삭제를 요청한 쪽에서 이미 보여 준다. 확인 창을 열어 둬서 다시 시도할 수 있게 한다.
+      return;
+    } finally {
+      setIsDeletingMemo(false);
+    }
+
+    if (editingMemoId === memoToDelete.id) {
+      setDraft(createEmptyMemoDraft());
+      setEditingMemoId(null);
+    }
+    setMemoToDelete(null);
+  };
 
   const submitMemo = () => {
     const resolvedTarget = resolveLessonMemoTarget(draft, targets);
@@ -1756,13 +1788,7 @@ function LessonMemoTabPanel({
                 variant="outline"
                 size="sm"
                 aria-label={`${memo.content} 메모 삭제`}
-                onClick={() => {
-                  onDeleteMemo(memo.id);
-                  if (editingMemoId === memo.id) {
-                    setDraft(createEmptyMemoDraft());
-                    setEditingMemoId(null);
-                  }
-                }}
+                onClick={() => setMemoToDelete(memo)}
               >
                 삭제
               </Button>
@@ -1770,6 +1796,39 @@ function LessonMemoTabPanel({
           </article>
         ))}
       </div>
+      <AlertDialog
+        open={Boolean(memoToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingMemo) {
+            setMemoToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>이 메모를 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              삭제한 메모는 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <p className="line-clamp-4 whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">
+            {memoToDelete?.content}
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingMemo}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeletingMemo}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteMemo();
+              }}
+            >
+              {isDeletingMemo ? "삭제 중" : "삭제"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1796,6 +1855,7 @@ function AcademyLessonTableView({
           <span>테이블 날짜</span>
           <DateField
             aria-label="학원 레슨 테이블 날짜 선택"
+            required
             value={selectedDate}
             onValueChange={onChangeDate}
           />
@@ -1872,82 +1932,97 @@ function PrivateLessonTableView({
   onChangeMonth: (month: string) => void;
   onOpenDay: (date: string) => void;
 }) {
+  const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const monthLessons = lessons.filter((lesson) =>
     toSeoulDate(lesson.startAt).startsWith(selectedMonth),
   );
+  const view = paginateItems(monthLessons, { page, pageSize });
+  const changeMonth = (month: string) => {
+    resetPage();
+    onChangeMonth(month);
+  };
 
   return (
-    <div className="grid gap-3 rounded-lg border border-border bg-card p-3">
-      <LessonMonthControl
-        variantLabel="개인레슨 테이블"
-        selectedMonth={selectedMonth}
-        onChangeMonth={onChangeMonth}
-      />
-      <Table
-        aria-label={`${formatMonthLabel(selectedMonth)} 개인레슨 테이블`}
-        className="min-w-[54rem]"
-      >
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">날짜</TableHead>
-            <TableHead className="px-4 py-3">시간</TableHead>
-            <TableHead className="px-4 py-3">원생</TableHead>
-            <TableHead className="px-4 py-3">악기</TableHead>
-            <TableHead className="px-4 py-3">선생님</TableHead>
-            <TableHead className="px-4 py-3">상태</TableHead>
-            <TableHead className="px-4 py-3 text-right">처리</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {monthLessons.length === 0 ? (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="grid gap-3 p-3">
+        <LessonMonthControl
+          variantLabel="개인레슨 테이블"
+          selectedMonth={selectedMonth}
+          onChangeMonth={changeMonth}
+        />
+        <Table
+          aria-label={`${formatMonthLabel(selectedMonth)} 개인레슨 테이블`}
+          className="min-w-[54rem]"
+        >
+          <TableHeader className="bg-muted text-muted-foreground">
             <TableRow>
-              <TableCell colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                해당 월에 등록된 개인레슨이 없습니다.
-              </TableCell>
+              <TableHead className="px-4 py-3">날짜</TableHead>
+              <TableHead className="px-4 py-3">시간</TableHead>
+              <TableHead className="px-4 py-3">원생</TableHead>
+              <TableHead className="px-4 py-3">악기</TableHead>
+              <TableHead className="px-4 py-3">선생님</TableHead>
+              <TableHead className="px-4 py-3">상태</TableHead>
+              <TableHead className="px-4 py-3 text-right">처리</TableHead>
             </TableRow>
-          ) : null}
-          {monthLessons.map((lesson) => {
-            const date = toSeoulDate(lesson.startAt);
-
-            return (
-              <TableRow
-                key={lesson.id}
-                data-state={date === selectedDate ? "selected" : undefined}
-              >
-                <TableCell className="px-4 py-3">{date}</TableCell>
-                <TableCell className="px-4 py-3">
-                  {toSeoulHourMinute(lesson.startAt)}-
-                  {toSeoulHourMinute(lesson.endAt)}
-                </TableCell>
-                <TableCell className="px-4 py-3 font-medium">
-                  {lesson.studentName}
-                </TableCell>
-                <TableCell className="px-4 py-3">{lesson.instrumentName}</TableCell>
-                <TableCell className="px-4 py-3">{lesson.teacherName}</TableCell>
-                <TableCell className="px-4 py-3">
-                  <Badge
-                    variant={lesson.status === "present" ? "default" : "outline"}
-                  >
-                    {formatPrivateLessonStatus(lesson.status)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="px-4 py-3 text-right">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${lesson.studentName} 개인레슨 출석 확인 열기`}
-                    onClick={() => onOpenDay(date)}
-                  >
-                    <ClipboardCheck aria-hidden="true" />
-                    출석 확인
-                  </Button>
+          </TableHeader>
+          <TableBody>
+            {view.items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  해당 월에 등록된 개인레슨이 없습니다.
                 </TableCell>
               </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+            ) : null}
+            {view.items.map((lesson) => {
+              const date = toSeoulDate(lesson.startAt);
+
+              return (
+                <TableRow
+                  key={lesson.id}
+                  data-state={date === selectedDate ? "selected" : undefined}
+                >
+                  <TableCell className="px-4 py-3">{date}</TableCell>
+                  <TableCell className="px-4 py-3">
+                    {toSeoulHourMinute(lesson.startAt)}-
+                    {toSeoulHourMinute(lesson.endAt)}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 font-medium">
+                    {lesson.studentName}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">{lesson.instrumentName}</TableCell>
+                  <TableCell className="px-4 py-3">{lesson.teacherName}</TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Badge
+                      variant={lesson.status === "present" ? "default" : "outline"}
+                    >
+                      {formatPrivateLessonStatus(lesson.status)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`${lesson.studentName} 개인레슨 출석 확인 열기`}
+                      onClick={() => onOpenDay(date)}
+                    >
+                      <ClipboardCheck aria-hidden="true" />
+                      출석 확인
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <ListPagination
+        itemLabel="개인레슨"
+        countUnit="건"
+        view={view}
+        onPageChange={goToPage}
+        onPageSizeChange={changePageSize}
+      />
     </div>
   );
 }
@@ -1977,7 +2052,7 @@ function AcademyDayAttendanceDialog({
   onOpenChange: (open: boolean) => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
   onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
-  onDeleteMemo: (memoId: string) => void;
+  onDeleteMemo: (memoId: string) => Promise<void>;
   onMark: (
     row: DailyAcademyAttendanceRow,
     status: "present" | "absent",
@@ -2109,7 +2184,7 @@ function AcademyDayAttendanceDialog({
                 disabled={filteredRows.length === 0}
               >
                 <Check aria-hidden="true" />
-                전체출석
+                현재 목록 {filteredRows.length}건 출석
               </Button>
               <Button
                 type="button"
@@ -2118,7 +2193,7 @@ function AcademyDayAttendanceDialog({
                 disabled={filteredRows.length === 0}
               >
                 <X aria-hidden="true" />
-                전체결석
+                현재 목록 {filteredRows.length}건 결석
               </Button>
               <Button
                 type="button"
@@ -2401,7 +2476,7 @@ function PrivateDayAttendanceDialog({
   onOpenChange: (open: boolean) => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
   onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
-  onDeleteMemo: (memoId: string) => void;
+  onDeleteMemo: (memoId: string) => Promise<void>;
   onMark: (lesson: PrivateLesson, status: "present" | "absent") => void;
 }) {
   return (
@@ -2449,6 +2524,7 @@ function PrivateDayAttendanceDialog({
                   <Button
                     type="button"
                     aria-label={`${lesson.studentName} 개인레슨 출석`}
+                    disabled={lesson.status === "present"}
                     onClick={() => onMark(lesson, "present")}
                   >
                     <Check aria-hidden="true" />
@@ -2458,6 +2534,7 @@ function PrivateDayAttendanceDialog({
                     type="button"
                     variant="outline"
                     aria-label={`${lesson.studentName} 개인레슨 결석`}
+                    disabled={lesson.status === "absent"}
                     onClick={() => onMark(lesson, "absent")}
                   >
                     <X aria-hidden="true" />
@@ -2691,9 +2768,15 @@ function ScheduleDialog({
           </Button>
           <Button
             type="button"
-            onClick={() => {
-              void navigator.clipboard?.writeText(scheduleText);
-              toast.success("시간표 내용을 준비했습니다.");
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(scheduleText);
+                toast.success("시간표를 복사했습니다. 메시지에 붙여넣어 보내세요.");
+              } catch {
+                toast.error("시간표를 복사하지 못했습니다.", {
+                  description: "시간표 내용을 직접 선택해 복사해 주세요.",
+                });
+              }
             }}
           >
             <Clipboard aria-hidden="true" />
@@ -3112,7 +3195,7 @@ function compareCalendarEvents(left: CalendarEvent, right: CalendarEvent) {
   return (
     left.date.localeCompare(right.date) ||
     left.startTime.localeCompare(right.startTime) ||
-    left.title.localeCompare(right.title, "ko-KR")
+    compareKoreanNames(left.title, right.title)
   );
 }
 
@@ -3123,10 +3206,19 @@ function compareAcademyAttendanceRows(
   return (
     left.date.localeCompare(right.date) ||
     left.startTime.localeCompare(right.startTime) ||
-    left.studentName.localeCompare(right.studentName, "ko-KR")
+    compareKoreanNames(left.studentName, right.studentName)
   );
 }
 
+function comparePrivateLessonsByTime(left: PrivateLesson, right: PrivateLesson) {
+  return (
+    left.startAt.localeCompare(right.startAt) ||
+    compareKoreanNames(left.studentName, right.studentName) ||
+    compareKoreanNames(left.id, right.id)
+  );
+}
+
+/** 시간순처럼 이미 정해진 순서를 바꾸지 않고 현재 페이지만 자른다. 이름순 목록은 buildListView를 쓴다. */
 function toRegisteredPrivateLesson(
   input: RegisterPrivateLessonEventInput,
 ): PrivateLesson {
@@ -3292,7 +3384,7 @@ function uniqueMemoTargets(targets: LessonMemoTargetOption[]) {
   }
 
   return [...targetMap.values()].sort((left, right) =>
-    left.name.localeCompare(right.name, "ko-KR"),
+    compareKoreanNames(left.name, right.name),
   );
 }
 

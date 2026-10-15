@@ -32,6 +32,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { DailyAcademyAttendanceSheet } from "@/domain/academy-lesson-attendance";
+import { getFinanceToday } from "@/domain/finance-date";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createDailyAcademyLessonAttendanceQueryOptions,
   markDailyAcademyLessonAttendance,
@@ -81,7 +83,7 @@ export function AcademyLessonAttendanceScreen({
   markAttendance,
 }: AcademyLessonAttendanceScreenProps) {
   const queryClient = useQueryClient();
-  const [date, setDate] = useState(() => initialDate ?? toTodayDateInputValue());
+  const [date, setDate] = useState(() => initialDate ?? getFinanceToday());
   const [open, setOpen] = useState(false);
   const hasInjectedQuery = Boolean(attendanceQueryFactory);
   const hasInjectedMutation = Boolean(markAttendance);
@@ -117,7 +119,7 @@ export function AcademyLessonAttendanceScreen({
     },
     onError: (error) => {
       toast.error("출결 저장에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -160,8 +162,8 @@ export function AcademyLessonAttendanceScreen({
 
       {!hasInjectedQuery && supabaseClientState?.error ? (
         <ListStatusAlert
-          message="Supabase 환경변수가 설정되면 학원 수업 출석표를 불러올 수 있습니다."
-          detail={supabaseClientState.error.message}
+          message="학원 수업 출석표를 불러오지 못했습니다."
+          detail={toUserMessage(supabaseClientState.error)}
         />
       ) : null}
 
@@ -235,7 +237,7 @@ function DailyAttendanceDialogBody({
     return (
       <ListStatusAlert
         message="학원 수업 출석표를 불러오지 못했습니다."
-        detail={error.message}
+        detail={toUserMessage(error)}
       />
     );
   }
@@ -408,16 +410,4 @@ function createMissingSupabaseClientState(): SupabaseClientState {
     client: null,
     error: new Error("Supabase client 상태를 만들지 못했습니다."),
   };
-}
-
-function toTodayDateInputValue() {
-  const now = new Date();
-
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(
-    now.getDate(),
-  )}`;
-}
-
-function pad2(value: number) {
-  return String(value).padStart(2, "0");
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAcademyLessonEvent,
@@ -10,6 +10,10 @@ import {
 } from "./lesson-workspace";
 
 describe("fetchLessonWorkspaceData", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("월간 레슨관리표 조회 전에 정기 학원 레슨 이벤트 생성을 요청한다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const client = createLessonWorkspaceClient(calls);
@@ -91,6 +95,83 @@ describe("fetchLessonWorkspaceData", () => {
     });
 
     expect(result.academySheets).toEqual([]);
+  });
+
+  it("개인레슨의 출석·결석 상태는 출결 기록에서 가져와 재조회 후에도 유지한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const privateRow = (id: string, attendanceStatus: string | null) => ({
+      id,
+      academy_id: "academy-1",
+      student_id: "student-1",
+      students: { name: "김민지" },
+      instrument_id: "piano",
+      instrument_name: "피아노",
+      teacher_id: "teacher-1",
+      teachers: { name: "박선생" },
+      lesson_kind: "private",
+      origin: "private",
+      starts_at: "2026-08-21T15:00:00+09:00",
+      ends_at: "2026-08-21T15:50:00+09:00",
+      status: "scheduled",
+      attendance_records: attendanceStatus
+        ? [{ status: attendanceStatus, absence_reason: null, marked_at: "2026-08-21T06:00:00Z" }]
+        : [],
+    });
+    const client = createLessonWorkspaceClient(calls, {
+      eventRows: [
+        privateRow("private-present", "present"),
+        privateRow("private-absent", "absent"),
+        privateRow("private-scheduled", null),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, {
+      academyId: "academy-1",
+      month: "2026-08",
+    });
+
+    expect(
+      Object.fromEntries(result.privateLessons.map((lesson) => [lesson.id, lesson.status])),
+    ).toEqual({
+      "private-present": "present",
+      "private-absent": "absent",
+      "private-scheduled": "scheduled",
+    });
+  });
+
+  it("회차권 잔여는 오늘 유효한 회차권만 같은 원생·악기끼리 합산한다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-10T03:00:00Z"));
+    const grant = (id: string, studentId: string, instrumentId: string, remaining: number, from: string, until: string) => ({
+      id,
+      academy_id: "academy-1",
+      student_id: studentId,
+      instrument_id: instrumentId,
+      instrument_name: instrumentId === "piano" ? "피아노" : "바이올린",
+      remaining_count: remaining,
+      valid_from: from,
+      valid_until: until,
+    });
+    const client = createLessonWorkspaceClient([], {
+      ticketRows: [
+        grant("g1", "student-1", "piano", 3, "2026-08-01", "2026-09-30"),
+        grant("g2", "student-1", "piano", 2, "2026-09-01", "2026-12-31"),
+        grant("g3", "student-1", "piano", 5, "2026-01-01", "2026-07-31"),
+        grant("g4", "student-2", "violin", 4, "2026-10-01", "2026-12-31"),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-09" });
+
+    expect(result.ticketBalances).toEqual([
+      {
+        academyId: "academy-1",
+        studentId: "student-1",
+        instrumentId: "piano",
+        instrumentName: "피아노",
+        remainingCount: 5,
+      },
+    ]);
   });
 
   it("정기 학원 레슨 이벤트 생성 실패를 레슨관리표 조회 오류로 전달한다", async () => {
@@ -278,6 +359,7 @@ function createLessonWorkspaceClient(
   options: {
     rpcError?: Error;
     eventRows?: Array<Record<string, unknown>>;
+    ticketRows?: Array<Record<string, unknown>>;
     lessonMemoMissingTargetColumns?: boolean;
   } = {},
 ): LessonWorkspaceSupabaseClient {
@@ -334,6 +416,7 @@ function createListBuilder(
   calls: Array<Record<string, unknown>>,
   options: {
     eventRows?: Array<Record<string, unknown>>;
+    ticketRows?: Array<Record<string, unknown>>;
     lessonMemoMissingTargetColumns?: boolean;
   } = {},
 ) {
@@ -520,7 +603,7 @@ function createListBuilder(
       if (table === "lesson_ticket_grants") {
         latestCall.result = "ticket-balances";
         resolve({
-          data: [],
+          data: options.ticketRows ?? [],
           error: null,
         });
         return;

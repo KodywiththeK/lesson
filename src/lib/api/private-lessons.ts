@@ -1,3 +1,4 @@
+import { compareKoreanNames } from "@/domain/common-list";
 import {
   findPrivateLessonRegistrationBlocker,
   type PrivateLesson,
@@ -17,6 +18,8 @@ export type PrivateLessonRegistrationStudentOption = {
     studentInstrumentId: string;
     instrumentId: string;
     instrumentName: string;
+    /** 원생이 이 악기를 배우는 담당 선생님. 등록 폼의 기본 선생님으로 쓴다. */
+    teacherId?: string;
   }>;
 };
 
@@ -44,6 +47,7 @@ export type PrivateLessonRegistrationStudentSupabaseRow = {
         instrument_name: string | null;
         lesson_type: string | null;
         active: boolean | null;
+        teacher_id?: string | null;
       }>
     | null;
 };
@@ -53,6 +57,7 @@ export type PrivateLessonRegistrationTeacherSupabaseRow = {
   academy_id: string;
   name: string;
   part: string | null;
+  status?: string | null;
 };
 
 export type PrivateLessonEventSupabaseRow = {
@@ -163,8 +168,8 @@ export type MarkPrivateLessonAttendanceInput = {
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
-  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active)";
-const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part";
+  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id)";
+const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part, status";
 const PRIVATE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin";
 
@@ -227,8 +232,13 @@ async function fetchLessonRegistrationOptionsByType(
       .map((student) =>
         toLessonRegistrationStudentOption(student, options.lessonType),
       )
-      .filter((student) => student.instruments.length > 0),
-    teachers: (teachersResult.data ?? []).map(toPrivateLessonTeacherOption),
+      .filter((student) => student.instruments.length > 0)
+      .sort((left, right) => compareKoreanNames(left.studentName, right.studentName)),
+    // 휴직·퇴사 선생님은 새 레슨 담당으로 고르지 못하게 재직 중인 선생님만 보여 준다.
+    teachers: (teachersResult.data ?? [])
+      .filter((teacher) => (teacher.status ?? "employed") === "employed")
+      .map(toPrivateLessonTeacherOption)
+      .sort((left, right) => compareKoreanNames(left.teacherName, right.teacherName)),
   };
 }
 
@@ -352,6 +362,7 @@ function toLessonRegistrationStudentOption(
           studentInstrumentId: instrument.id,
           instrumentId: instrument.instrument_id,
           instrumentName: instrument.instrument_name,
+          teacherId: instrument.teacher_id ?? undefined,
         },
       ];
     }),

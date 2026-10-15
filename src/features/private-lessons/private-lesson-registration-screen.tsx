@@ -30,9 +30,11 @@ import {
 } from "@/components/ui/native-select";
 import {
   getPrivateLessonRegistrationFlowState,
+  pickDefaultTeacherId,
   type PrivateLesson,
   type PrivateLessonTicketSearchBalance,
 } from "@/domain/private-lesson";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createPrivateLessonRegistrationOptionsQueryOptions,
   registerPrivateLessonEvent,
@@ -127,7 +129,7 @@ export function PrivateLessonRegistrationScreen({
     },
     onError: (error) => {
       toast.error("개인레슨 등록에 실패했습니다.", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toUserMessage(error),
       });
     },
   });
@@ -189,8 +191,8 @@ export function PrivateLessonRegistrationScreen({
 
       {!hasInjectedOptions && supabaseClientState?.error ? (
         <ListStatusAlert
-          message="Supabase 환경변수가 설정되면 개인레슨 등록 선택지를 불러올 수 있습니다."
-          detail={supabaseClientState.error.message}
+          message="개인레슨 등록 선택지를 불러오지 못했습니다."
+          detail={toUserMessage(supabaseClientState.error)}
         />
       ) : null}
     </section>
@@ -252,6 +254,14 @@ function PrivateLessonRegistrationForm({
     Boolean(endAt) &&
     !isSaving;
 
+  /** 악기를 고르면 그 악기의 담당(또는 같은 파트) 선생님을 기본 선생님으로 채운다. */
+  function selectInstrument(
+    instrument: PrivateLessonRegistrationOptions["students"][number]["instruments"][number] | undefined,
+  ) {
+    setInstrumentId(instrument?.instrumentId ?? "");
+    setTeacherId(instrument ? pickDefaultTeacherId(instrument, options.teachers) : "");
+  }
+
   return (
     <form
       className="grid gap-4"
@@ -289,7 +299,7 @@ function PrivateLessonRegistrationForm({
       {error ? (
         <ListStatusAlert
           message="개인레슨 등록 선택지를 불러오지 못했습니다."
-          detail={error.message}
+          detail={toUserMessage(error)}
         />
       ) : null}
 
@@ -310,9 +320,12 @@ function PrivateLessonRegistrationForm({
               (student) => student.studentId === nextStudentId,
             );
 
+            // 악기가 하나뿐일 때만 자동 선택한다. 여러 개면 직접 고르게 한다.
+            const onlyInstrument =
+              nextStudent?.instruments.length === 1 ? nextStudent.instruments[0] : undefined;
+
             setStudentId(nextStudentId);
-            setInstrumentId(nextStudent?.instruments[0]?.instrumentId ?? "");
-            setTeacherId("");
+            selectInstrument(onlyInstrument);
           }}
         >
           <NativeSelectOption value="">원생 선택</NativeSelectOption>
@@ -330,7 +343,13 @@ function PrivateLessonRegistrationForm({
           aria-label="악기"
           value={instrumentId}
           disabled={!selectedStudent}
-          onChange={(event) => setInstrumentId(event.target.value)}
+          onChange={(event) =>
+            selectInstrument(
+              selectedStudent?.instruments.find(
+                (instrument) => instrument.instrumentId === event.target.value,
+              ),
+            )
+          }
         >
           <NativeSelectOption value="">악기 선택</NativeSelectOption>
           {(selectedStudent?.instruments ?? []).map((instrument) => (
@@ -343,10 +362,7 @@ function PrivateLessonRegistrationForm({
           ))}
         </NativeSelect>
         {ticketBalances && selectedInstrument ? (
-          <p className="text-xs text-muted-foreground" aria-live="polite">
-            선택 악기 잔여 회차권{" "}
-            {selectedTicketBalance ? `${selectedTicketBalance.remainingCount}회` : "없음"}
-          </p>
+          <TicketBalanceNotice remainingCount={selectedTicketBalance?.remainingCount} />
         ) : null}
       </Label>
 
@@ -395,6 +411,23 @@ function PrivateLessonRegistrationForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function TicketBalanceNotice({ remainingCount }: { remainingCount: number | undefined }) {
+  if (!remainingCount) {
+    return (
+      <p className="text-xs font-medium text-destructive" role="status">
+        사용할 수 있는 회차권이 없습니다. 일정은 등록할 수 있지만, 출석 확인 전에 회차권 메뉴에서 먼저
+        등록해 주세요.
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-xs text-muted-foreground" aria-live="polite">
+      선택 악기 잔여 회차권 {remainingCount}회
+    </p>
   );
 }
 

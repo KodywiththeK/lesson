@@ -1,3 +1,5 @@
+import { compareKoreanNames } from "./common-list";
+
 export type LessonType = "academy" | "private";
 export type LessonEventOrigin =
   | "regular"
@@ -262,7 +264,7 @@ export function buildPrivateLessonStudentSearchResults(
         : true,
     )
     .sort((left, right) =>
-      left.studentName.localeCompare(right.studentName, "ko-KR"),
+      compareKoreanNames(left.studentName, right.studentName),
     )
     .flatMap((student) => {
       const remainingTickets = getStudentRemainingTickets(student, ticketBalances);
@@ -377,7 +379,7 @@ function getStudentRemainingTickets(
         ticket.studentId === student.studentId,
     )
     .sort((left, right) =>
-      left.instrumentName.localeCompare(right.instrumentName, "ko-KR"),
+      compareKoreanNames(left.instrumentName, right.instrumentName),
     )
     .map((ticket) => ({
       instrumentId: ticket.instrumentId,
@@ -455,4 +457,43 @@ function parseIsoLocalParts(dateTime: string) {
     hour: match[4],
     minute: match[5],
   };
+}
+
+/** 출석 처리 결과가 회차권에 준 실제 변화를 사용자에게 알리는 문구를 만든다. */
+export function describePrivateAttendanceChange(
+  previous: PrivateLessonStatus,
+  next: "present" | "absent",
+): string {
+  if (previous === next) {
+    return next === "present" ? "이미 출석 처리된 수업입니다." : "이미 결석 처리된 수업입니다.";
+  }
+
+  if (next === "present") {
+    return "출석 처리하고 회차권 1회를 차감했습니다.";
+  }
+
+  return previous === "present"
+    ? "결석으로 바꾸고 회차권 1회를 복구했습니다."
+    : "결석 처리했습니다. 회차권은 차감되지 않습니다.";
+}
+
+/**
+ * 원생이 선택한 악기에 맞는 선생님을 기본값으로 고른다.
+ * 악기별 담당 선생님이 재직 중이면 그 선생님, 아니면 파트가 악기와 같은 선생님이 정확히 한 명일 때만 고른다.
+ */
+export function pickDefaultTeacherId(
+  instrument: { instrumentName: string; teacherId?: string },
+  teachers: Array<{ teacherId: string; part: string }>,
+): string {
+  if (instrument.teacherId && teachers.some((teacher) => teacher.teacherId === instrument.teacherId)) {
+    return instrument.teacherId;
+  }
+
+  const samePartTeachers = teachers.filter(
+    (teacher) =>
+      teacher.part.trim() !== "" &&
+      (instrument.instrumentName.includes(teacher.part) || teacher.part.includes(instrument.instrumentName)),
+  );
+
+  return samePartTeachers.length === 1 ? samePartTeachers[0].teacherId : "";
 }

@@ -3,7 +3,8 @@ import type {
   DailyAcademyAttendanceSheet,
   LessonEventOrigin,
 } from "@/domain/academy-lesson-attendance";
-import type { PrivateLesson } from "@/domain/private-lesson";
+import { getFinanceToday } from "@/domain/finance-date";
+import type { PrivateLesson, PrivateLessonTicketSearchBalance } from "@/domain/private-lesson";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
 import {
   LESSON_CALENDAR_MEMO_SELECT,
@@ -52,6 +53,8 @@ type LessonTicketBalanceRow = {
   instrument_id: string;
   instrument_name: string;
   remaining_count: number;
+  valid_from?: string | null;
+  valid_until?: string | null;
 };
 
 export type CreateAcademyLessonEventInput = {
@@ -223,7 +226,7 @@ export async function fetchLessonWorkspaceData(
       supabase
         .from("lesson_ticket_grants")
         .select(
-          "academy_id, student_id, instrument_id, instrument_name, remaining_count",
+          "academy_id, student_id, instrument_id, instrument_name, remaining_count, valid_from, valid_until",
         )
         .eq("academy_id", input.academyId),
       fetchLessonCalendarMemoRows(supabase, input.academyId, range),
@@ -255,13 +258,7 @@ export async function fetchLessonWorkspaceData(
     privateLessons: events
       .filter((event) => event.lesson_kind === "private")
       .map(toPrivateLesson),
-    ticketBalances: (ticketsResult.data ?? []).map((ticket) => ({
-      academyId: ticket.academy_id,
-      studentId: ticket.student_id,
-      instrumentId: ticket.instrument_id,
-      instrumentName: ticket.instrument_name,
-      remainingCount: ticket.remaining_count,
-    })),
+    ticketBalances: sumValidTicketBalances(ticketsResult.data ?? [], getFinanceToday()),
     registrationOptions,
     privateRegistrationOptions,
     calendarMemos: (memosResult.data ?? [])
@@ -495,10 +492,7 @@ function toAcademyAttendanceRow(
   row: LessonWorkspaceEventRow,
 ): DailyAcademyAttendanceRow {
   const attendance = row.attendance_records?.[0];
-  const status =
-    attendance?.status === "present" || attendance?.status === "absent"
-      ? attendance.status
-      : "pending";
+  const status = readAttendanceStatus(row) ?? "pending";
 
   return {
     academyId: row.academy_id,
@@ -521,6 +515,38 @@ function toAcademyAttendanceRow(
   };
 }
 
+/** 오늘 유효한 회차권만 같은 원생·악기끼리 합산한다. 만료됐거나 아직 시작 전인 회차권은 쓸 수 없다. */
+function sumValidTicketBalances(rows: LessonTicketBalanceRow[], today: string) {
+  const balances = new Map<string, PrivateLessonTicketSearchBalance>();
+
+  for (const row of rows) {
+    const isValidToday =
+      (!row.valid_from || row.valid_from <= today) && (!row.valid_until || row.valid_until >= today);
+    if (!isValidToday) {
+      continue;
+    }
+
+    const key = `${row.academy_id}:${row.student_id}:${row.instrument_id}`;
+    const current = balances.get(key);
+    balances.set(key, {
+      academyId: row.academy_id,
+      studentId: row.student_id,
+      instrumentId: row.instrument_id,
+      instrumentName: row.instrument_name,
+      remainingCount: (current?.remainingCount ?? 0) + row.remaining_count,
+    });
+  }
+
+  return [...balances.values()];
+}
+
+/** 출석 여부는 lesson_events.status가 아니라 출결 기록(attendance_records)이 가진다. */
+function readAttendanceStatus(row: LessonWorkspaceEventRow): "present" | "absent" | undefined {
+  const status = row.attendance_records?.[0]?.status;
+
+  return status === "present" || status === "absent" ? status : undefined;
+}
+
 function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
   return {
     id: row.id,
@@ -533,10 +559,7 @@ function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
     teacherName: row.teachers?.name?.trim() || "선생님 없음",
     startAt: row.starts_at,
     endAt: row.ends_at,
-    status:
-      row.status === "present" || row.status === "absent"
-        ? row.status
-        : "scheduled",
+    status: readAttendanceStatus(row) ?? "scheduled",
     origin: normalizeOrigin(row.origin, row.lesson_kind),
     originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
   };
