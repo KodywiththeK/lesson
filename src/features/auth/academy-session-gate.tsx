@@ -9,6 +9,7 @@ import { ListStatusAlert } from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toUserMessage } from "@/lib/errors/user-message";
 import {
   AuthRequiredError,
   fetchCurrentAcademyContext,
@@ -78,8 +79,8 @@ function AcademySessionGateInner({ children }: AcademySessionGateProps) {
     return (
       <SessionShell>
         <ListStatusAlert
-          message="Supabase 연결 설정이 필요합니다."
-          detail={supabaseClientState.error.message}
+          message="서비스 연결 설정이 필요합니다."
+          detail={toUserMessage(supabaseClientState.error)}
         />
       </SessionShell>
     );
@@ -99,11 +100,27 @@ function AcademySessionGateInner({ children }: AcademySessionGateProps) {
     return <>{children(currentAcademyQuery.data)}</>;
   }
 
-  if (
-    currentAcademyQuery.error instanceof AuthRequiredError ||
-    currentAcademyQuery.isError
-  ) {
+  if (currentAcademyQuery.error instanceof AuthRequiredError) {
     return <SignInPanel supabaseClientState={supabaseClientState} />;
+  }
+
+  if (currentAcademyQuery.isError) {
+    return (
+      <SessionShell>
+        <ListStatusAlert
+          message="학원 정보를 불러오지 못했습니다."
+          detail={toUserMessage(currentAcademyQuery.error)}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="mx-4"
+          onClick={() => void currentAcademyQuery.refetch()}
+        >
+          다시 시도
+        </Button>
+      </SessionShell>
+    );
   }
 
   return null;
@@ -115,8 +132,8 @@ function SignInPanel({
   supabaseClientState: Extract<SupabaseClientState, { error: null }>;
 }) {
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState("owner@lesson.local");
-  const [password, setPassword] = useState("lesson1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   return (
@@ -138,7 +155,7 @@ function SignInPanel({
 
           if (error) {
             toast.error("로그인에 실패했습니다.", {
-              description: error.message,
+              description: toUserMessage(error),
             });
             return;
           }
@@ -151,7 +168,7 @@ function SignInPanel({
       >
         <div>
           <p className="text-sm font-medium text-muted-foreground">
-            Service Console
+            학원 운영
           </p>
           <h1 className="mt-1 text-2xl font-semibold">로그인</h1>
         </div>

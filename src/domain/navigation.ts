@@ -26,7 +26,7 @@ export const mainNavigation: NavigationItem[] = [
   {
     label: "대시보드",
     href: "/",
-    description: "오늘 운영 상태와 미처리 항목을 확인합니다.",
+    description: "자주 쓰는 메뉴로 바로 이동합니다.",
     icon: Gauge,
   },
   {

@@ -58,7 +58,7 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
   });
 
-  it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 본인 급여 메뉴를 보여준다", () => {
+  it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 아직 없는 내 급여 링크도 보여주지 않는다", () => {
     window.history.pushState(null, "", "/management/students");
 
     render(
@@ -80,7 +80,7 @@ describe("AppShell", () => {
     expect(labels).toContain("개인레슨표");
     expect(labels).toContain("인원·거래처");
     expect(labels).toContain("원생");
-    expect(labels).toContain("내 급여");
+    expect(labels).not.toContain("내 급여");
     expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute(
       "href",
       "/management/students",
@@ -91,6 +91,48 @@ describe("AppShell", () => {
     expect(labels).not.toContain("거래처");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
+  });
+
+  it("권한이 없는 화면 주소로 들어오면 내용을 불러오지 않고 안내 문구를 보여준다", () => {
+    window.history.pushState(null, "", "/finance/ledger");
+    const mounted = vi.fn();
+
+    function ProtectedContent() {
+      mounted();
+      return <p>입출금 내역 목록</p>;
+    }
+
+    render(
+      <AppShell
+        academyName="더 클래식"
+        permissionContext={{
+          role: "teacher",
+          teacherId: "teacher-1",
+          assignedStudentIds: [],
+        }}
+      >
+        <ProtectedContent />
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("이 화면을 볼 권한이 없습니다");
+    expect(screen.getByRole("alert")).toHaveTextContent("원장에게 문의해 주세요");
+    expect(screen.getByRole("link", { name: "홈으로 돌아가기" })).toHaveAttribute("href", "/");
+    expect(screen.queryByText("입출금 내역 목록")).not.toBeInTheDocument();
+    expect(mounted).not.toHaveBeenCalled();
+  });
+
+  it("권한이 있는 화면 주소에서는 내용을 그대로 보여준다", () => {
+    window.history.pushState(null, "", "/finance/ledger");
+
+    render(
+      <AppShell academyName="더 클래식" permissionContext={{ role: "owner" }}>
+        <p>입출금 내역 목록</p>
+      </AppShell>,
+    );
+
+    expect(screen.getByText("입출금 내역 목록")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("children 메뉴는 기본 펼침이고 toggle로 접고 펼친다", async () => {

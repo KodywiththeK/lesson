@@ -9,14 +9,11 @@ import {
   useState,
 } from "react";
 import {
-  AlertCircle,
-  CalendarCheck,
   ChevronDown,
   ChevronRight,
-  ClipboardCheck,
   Menu,
   MoreHorizontal,
-  ReceiptText,
+  ShieldAlert,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,11 +29,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { mainNavigation, type NavigationItem } from "@/domain/navigation";
-import {
-  type FeatureKey,
-  type PermissionContext,
-  canAccessFeature,
-} from "@/domain/permissions";
+import { type PermissionContext, canAccessFeature } from "@/domain/permissions";
 
 type AppShellProps = {
   academyName: string;
@@ -44,43 +37,6 @@ type AppShellProps = {
   pageTitle?: string;
   children?: ReactNode;
 };
-
-type WorkQueueItem = {
-  label: string;
-  value: string;
-  tone: string;
-  icon: typeof ClipboardCheck;
-  feature?: FeatureKey;
-};
-
-const workQueue: WorkQueueItem[] = [
-  {
-    label: "오늘 출석 확인",
-    value: "12건",
-    tone: "bg-accent text-accent-foreground",
-    icon: ClipboardCheck,
-  },
-  {
-    label: "회차권 임박",
-    value: "5명",
-    tone: "bg-secondary text-secondary-foreground",
-    icon: CalendarCheck,
-  },
-  {
-    label: "미납 확인",
-    value: "3건",
-    tone: "bg-destructive/10 text-destructive",
-    icon: AlertCircle,
-    feature: "income-management",
-  },
-];
-
-const nextMilestones = [
-  "Supabase tenant/RLS",
-  "역할별 권한 메뉴",
-  "shadcn 운영 화면",
-  "목록/검색/필터",
-];
 
 const compactHeaderMediaQuery = "(max-width: 767px)";
 
@@ -108,13 +64,7 @@ export function AppShell({
     () => ({ setHeaderActions }),
     [setHeaderActions],
   );
-  const visibleWorkQueue = workQueue.filter((item) => {
-    if (!item.feature) {
-      return true;
-    }
-
-    return canAccessFeature(permissionContext, item.feature);
-  });
+  const isAccessDenied = isForbiddenRoute(pathname, permissionContext);
 
   return (
     <PageHeaderActionsContext.Provider value={headerActionsContextValue}>
@@ -123,7 +73,6 @@ export function AppShell({
           <DesktopSidebar
             activeHref={activeRoute.item?.href}
             academyName={academyName}
-            permissionContext={permissionContext}
             visibleNavigation={visibleNavigation}
           />
 
@@ -135,7 +84,6 @@ export function AppShell({
                     activeHref={activeRoute.item?.href}
                     academyName={academyName}
                     isOpen={isMobileNavigationOpen}
-                    permissionContext={permissionContext}
                     setIsOpen={setIsMobileNavigationOpen}
                     visibleNavigation={visibleNavigation}
                   />
@@ -160,7 +108,11 @@ export function AppShell({
             </header>
 
             <div className="grid min-w-0 gap-6 px-5 py-6 md:px-8 [&>*]:min-w-0">
-              {children ?? <DashboardContent visibleWorkQueue={visibleWorkQueue} />}
+              {isAccessDenied ? (
+                <AccessDeniedNotice />
+              ) : (
+                (children ?? <DashboardContent visibleNavigation={visibleNavigation} />)
+              )}
             </div>
           </section>
         </div>
@@ -244,12 +196,10 @@ function matchesCompactHeader() {
 function DesktopSidebar({
   activeHref,
   academyName,
-  permissionContext,
   visibleNavigation,
 }: {
   activeHref?: string;
   academyName: string;
-  permissionContext: PermissionContext;
   visibleNavigation: VisibleNavigationItem[];
 }) {
   return (
@@ -258,7 +208,6 @@ function DesktopSidebar({
       <SidebarNavigation
         activeHref={activeHref}
         ariaLabel="주요 메뉴"
-        permissionContext={permissionContext}
         visibleNavigation={visibleNavigation}
       />
     </aside>
@@ -269,14 +218,12 @@ function MobileNavigationDrawer({
   activeHref,
   academyName,
   isOpen,
-  permissionContext,
   setIsOpen,
   visibleNavigation,
 }: {
   activeHref?: string;
   academyName: string;
   isOpen: boolean;
-  permissionContext: PermissionContext;
   setIsOpen: (isOpen: boolean) => void;
   visibleNavigation: VisibleNavigationItem[];
 }) {
@@ -301,7 +248,6 @@ function MobileNavigationDrawer({
           <SidebarNavigation
             activeHref={activeHref}
             ariaLabel="모바일 주요 메뉴"
-            permissionContext={permissionContext}
             visibleNavigation={visibleNavigation}
             onNavigate={() => setIsOpen(false)}
           />
@@ -314,9 +260,6 @@ function MobileNavigationDrawer({
 function SidebarBrand({ academyName }: { academyName: string }) {
   return (
     <div className="mb-6">
-      <p className="text-xs font-semibold text-muted-foreground">
-        Service Console
-      </p>
       <h2 className="text-lg font-semibold">학원 운영</h2>
       <p className="mt-2 text-sm font-medium text-muted-foreground">
         현재 학원: {academyName}
@@ -329,13 +272,11 @@ function SidebarNavigation({
   activeHref,
   ariaLabel,
   onNavigate,
-  permissionContext,
   visibleNavigation,
 }: {
   activeHref?: string;
   ariaLabel: string;
   onNavigate?: () => void;
-  permissionContext: PermissionContext;
   visibleNavigation: VisibleNavigationItem[];
 }) {
   return (
@@ -348,16 +289,6 @@ function SidebarNavigation({
           onNavigate={onNavigate}
         />
       ))}
-      {permissionContext.role === "teacher" ? (
-        <Link
-          href="/my/payroll"
-          onClick={onNavigate}
-          className="group flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:min-h-11 lg:gap-3"
-        >
-          <ReceiptText aria-hidden="true" className="size-4" />
-          <span>내 급여</span>
-        </Link>
-      ) : null}
     </nav>
   );
 }
@@ -397,6 +328,30 @@ function isNavigationItemVisible(
   return item.children?.some((child) =>
     isNavigationItemVisible(child, permissionContext),
   ) === true;
+}
+
+/**
+ * 메뉴에 있는 주소인데 현재 역할에게 숨겨진 메뉴면 접근 불가로 본다.
+ * 화면 안내용이며 보안 경계가 아니다. 실제 보호는 서버(RLS)가 한다.
+ */
+function isForbiddenRoute(pathname: string, permissionContext: PermissionContext) {
+  const matched = findRouteItem(mainNavigation, pathname);
+
+  return matched !== undefined && !isNavigationItemVisible(matched, permissionContext);
+}
+
+function findRouteItem(items: NavigationItem[], pathname: string): NavigationItem | undefined {
+  for (const item of items) {
+    const child = item.children?.find((candidate) => isActivePath(pathname, candidate.href));
+    if (child) {
+      return child;
+    }
+    if (item.href !== "/" && isActivePath(pathname, item.href)) {
+      return item;
+    }
+  }
+
+  return undefined;
 }
 
 function getActiveRoute(items: VisibleNavigationItem[], pathname: string) {
@@ -583,70 +538,56 @@ function HeaderSubNavigation({
   );
 }
 
-function DashboardContent({
-  visibleWorkQueue,
-}: {
-  visibleWorkQueue: WorkQueueItem[];
-}) {
+function AccessDeniedNotice() {
   return (
-    <>
-      <section aria-label="운영 대기열" className="grid gap-3 md:grid-cols-3">
-        {visibleWorkQueue.map((item) => {
-          const Icon = item.icon;
+    <div
+      role="alert"
+      className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card p-6"
+    >
+      <ShieldAlert aria-hidden="true" className="size-6 text-muted-foreground" />
+      <div>
+        <h2 className="text-base font-semibold">이 화면을 볼 권한이 없습니다</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          필요한 경우 원장에게 문의해 주세요.
+        </p>
+      </div>
+      <Button asChild variant="outline">
+        <Link href="/">홈으로 돌아가기</Link>
+      </Button>
+    </div>
+  );
+}
 
-          return (
-            <article
-              key={item.label}
-              className="rounded-lg border border-border bg-card p-4 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span
-                  className={`flex size-9 items-center justify-center rounded-md ${item.tone}`}
-                >
-                  <Icon aria-hidden="true" className="size-4" />
-                </span>
-                <p className="text-2xl font-semibold">{item.value}</p>
-              </div>
-              <h3 className="mt-4 text-sm font-medium">{item.label}</h3>
-            </article>
-          );
-        })}
-      </section>
+function DashboardContent({
+  visibleNavigation,
+}: {
+  visibleNavigation: VisibleNavigationItem[];
+}) {
+  const shortcuts = visibleNavigation.filter((item) => item.href !== "/");
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="rounded-lg border border-border bg-card">
-          <div className="border-b border-border p-4">
-            <h2 className="text-base font-semibold">우선 개발 흐름</h2>
-          </div>
-          <div className="divide-y divide-border">
-            {nextMilestones.map((milestone, index) => (
-              <div
-                key={milestone}
-                className="flex items-center justify-between gap-4 p-4"
-              >
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {index === 0 ? "진행 중" : `${index + 1}단계`}
-                  </p>
-                  <p className="mt-1 text-sm font-medium">{milestone}</p>
-                </div>
-                <ChevronRight
-                  aria-hidden="true"
-                  className="size-4 text-muted-foreground"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+  return (
+    <section aria-label="바로가기" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {shortcuts.map((item) => {
+        const Icon = item.icon;
 
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h2 className="text-base font-semibold">핵심 규칙</h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            레슨 일정 등록만으로 회차권을 차감하지 않고, 실제 등원 확인
-            시점에만 1회를 차감한다. 결석은 회차를 차감하지 않는다.
-          </p>
-        </div>
-      </section>
-    </>
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <span className="flex size-9 flex-none items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+              <Icon aria-hidden="true" className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">{item.label}</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                {item.description}
+              </span>
+            </span>
+          </Link>
+        );
+      })}
+    </section>
   );
 }

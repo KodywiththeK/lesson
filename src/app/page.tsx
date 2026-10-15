@@ -1,12 +1,18 @@
+"use client";
+
+import { AcademySessionGate } from "@/features/auth/academy-session-gate";
+
 import { AppShell } from "./app-shell";
 
 export default function Home() {
   return (
-    <AppShell
-      academyName="더 클래식"
-      permissionContext={{
-        role: "owner",
-      }}
-    />
+    <AcademySessionGate>
+      {(academy) => (
+        <AppShell
+          academyName={academy.academyName}
+          permissionContext={academy.permissionContext}
+        />
+      )}
+    </AcademySessionGate>
   );
 }

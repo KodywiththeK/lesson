@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// 홈의 바로가기 카드에도 같은 이름의 링크가 있어 사이드바 안에서만 찾는다.
+function mainNavigation(page: Page) {
+  return page.getByRole("navigation", { name: "주요 메뉴" });
+}
+
 test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있다", async ({
   page,
 }) => {
@@ -9,9 +14,10 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
     page.getByRole("heading", { level: 1, name: "음악학원 관리" }),
   ).toBeVisible();
   await expect(page.getByText("현재 학원: 더 클래식")).toBeVisible();
-  await expect(page.getByText("오늘 출석 확인")).toBeVisible();
-  await expect(page.getByText("회차권 임박")).toBeVisible();
-  await expect(page.getByText("미납 확인")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "바로가기" }).getByRole("link", { name: /수입 관리/ }),
+  ).toBeVisible();
+  await expect(page.getByText("우선 개발 흐름")).toHaveCount(0);
 
   const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
 
@@ -28,11 +34,11 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
 test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("link", { name: "인원·거래처" })).toHaveAttribute(
+  await expect(mainNavigation(page).getByRole("link", { name: "인원·거래처" })).toHaveAttribute(
     "href",
     "/management/students",
   );
-  await page.getByRole("link", { name: "원생" }).click();
+  await mainNavigation(page).getByRole("link", { name: "원생" }).click();
   await expect(page).toHaveURL(/\/management\/students$/);
 
   await expect(
@@ -47,7 +53,7 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   await page.clock.setFixedTime(new Date("2026-09-05T12:00:00+09:00"));
   await page.goto("/");
 
-  await page.getByRole("link", { name: "레슨 시간표" }).click();
+  await mainNavigation(page).getByRole("link", { name: "레슨 시간표" }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "레슨 시간표" }),
@@ -97,7 +103,7 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
 test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "회차권" }).click();
+  await mainNavigation(page).getByRole("link", { name: "회차권" }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "회차권 관리" }),
@@ -111,7 +117,7 @@ test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다"
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "선생님", exact: true }).click();
+  await mainNavigation(page).getByRole("link", { name: "선생님", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/teachers$/);
 
   await expect(
@@ -127,7 +133,7 @@ test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 
 }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "휴원/퇴원" }).click();
+  await mainNavigation(page).getByRole("link", { name: "휴원/퇴원" }).click();
   await expect(page).toHaveURL(/\/management\/status$/);
 
   await expect(
@@ -155,7 +161,7 @@ test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 
 test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "거래처", exact: true }).click();
+  await mainNavigation(page).getByRole("link", { name: "거래처", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/vendors$/);
 
   await expect(
@@ -169,7 +175,7 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
 test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "교재", exact: true }).click();
+  await mainNavigation(page).getByRole("link", { name: "교재", exact: true }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "교재 관리" }),
@@ -182,7 +188,7 @@ test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다
 test("수입 관리 메뉴에서 입출금 내역 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("link", { name: "수입 관리" }).click();
+  await mainNavigation(page).getByRole("link", { name: "수입 관리" }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "수입 관리" }),
