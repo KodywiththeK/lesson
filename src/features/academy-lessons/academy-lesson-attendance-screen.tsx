@@ -272,16 +272,16 @@ function DailyAttendanceDialogBody({
         <TableBody>
           {sheet.rows.map((row) => (
             <TableRow key={row.lessonEventId}>
-              <TableCell>
+              <TableCell label="시간">
                 {row.startTime}-{row.endTime}
               </TableCell>
-              <TableCell className="font-medium">{row.studentName}</TableCell>
-              <TableCell>{row.instrumentName}</TableCell>
-              <TableCell>
+              <TableCell label="원생" className="font-medium">{row.studentName}</TableCell>
+              <TableCell label="악기">{row.instrumentName}</TableCell>
+              <TableCell label="상태">
                 <AttendanceStatusBadge status={row.status} />
               </TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
+              <TableCell label="처리">
+                <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     aria-label={`${row.studentName} 출석`}
                     size="sm"

@@ -167,7 +167,7 @@
 - 짧은 목록 필터: `NativeSelect`를 사용한다.
 - 커스텀 팝오버 선택: `Select`를 사용한다.
 - 옵션이 많거나 검색이 필요한 필터: `Combobox` 또는 `Command` + `Popover`를 사용한다.
-- 목록 표: 단순 목록은 `Table`, 정렬/페이지/선택이 필요하면 `Table` + TanStack Table을 사용한다.
+- 목록 표: 단순 목록은 `Table`, 정렬/페이지/선택이 필요하면 `Table` + TanStack Table을 사용한다. 각 `TableCell`에는 헤더와 의미가 일치하는 `label`을 주어 공통 반응형 표가 태블릿 행·모바일 카드에서 항목명을 표시하게 한다. 폭별 기준은 `design-system.md`를 따른다.
 - Data Table: `@tanstack/react-table`로 상태를 계산하고, DOM은 shadcn `Table`로 렌더링한다.
 - Date Picker: `Calendar`는 날짜 선택 본체, `Popover`는 floating panel, `Button`은 trigger, `Field`는 label/error를 담당한다. 화면에서는 이 조합을 직접 만들지 않고 아래 공통 필드를 쓴다.
 - 빈 목록: `Empty`를 사용하고, 다음 액션이 명확하면 `Button`을 함께 둔다.

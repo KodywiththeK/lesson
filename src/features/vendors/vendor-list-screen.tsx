@@ -470,42 +470,40 @@ function VendorListTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="거래처 목록" className="min-w-[44rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">거래처</TableHead>
-            <TableHead className="px-4 py-3">연락처</TableHead>
-            <TableHead className="px-4 py-3">종류</TableHead>
-            <TableHead className="px-4 py-3">비고</TableHead>
-            <TableHead className="px-4 py-3">관리</TableHead>
+    <Table aria-label="거래처 목록">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">거래처</TableHead>
+          <TableHead className="px-4 py-3">연락처</TableHead>
+          <TableHead className="px-4 py-3">종류</TableHead>
+          <TableHead className="px-4 py-3">비고</TableHead>
+          <TableHead className="px-4 py-3">관리</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {vendors.map((vendor) => (
+          <TableRow key={vendor.vendorId}>
+            <TableCell label="거래처" className="px-4 py-3 font-medium">
+              {vendor.name}
+            </TableCell>
+            <TableCell label="연락처" className="px-4 py-3">{vendor.contact || "-"}</TableCell>
+            <TableCell label="종류" className="px-4 py-3">{vendor.kind || "-"}</TableCell>
+            <TableCell label="비고" className="px-4 py-3">{vendor.memo || "-"}</TableCell>
+            <TableCell label="관리" className="px-4 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`${vendor.name} 수정`}
+                onClick={() => onEdit(vendor)}
+              >
+                <Pencil aria-hidden="true" />
+                수정
+              </Button>
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {vendors.map((vendor) => (
-            <TableRow key={vendor.vendorId}>
-              <TableCell className="px-4 py-3 font-medium">
-                {vendor.name}
-              </TableCell>
-              <TableCell className="px-4 py-3">{vendor.contact || "-"}</TableCell>
-              <TableCell className="px-4 py-3">{vendor.kind || "-"}</TableCell>
-              <TableCell className="px-4 py-3">{vendor.memo || "-"}</TableCell>
-              <TableCell className="px-4 py-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={`${vendor.name} 수정`}
-                  onClick={() => onEdit(vendor)}
-                >
-                  <Pencil aria-hidden="true" />
-                  수정
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   );
 }

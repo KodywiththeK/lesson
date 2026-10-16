@@ -516,8 +516,7 @@ function BookPurchaseListTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="교재 구매 목록" className="min-w-[46rem]">
+    <Table aria-label="교재 구매 목록">
       <TableHeader className="bg-muted text-muted-foreground">
         <TableRow>
           <TableHead className="px-4 py-3">원생</TableHead>
@@ -530,15 +529,15 @@ function BookPurchaseListTable({
       <TableBody>
         {purchases.map((purchase) => (
           <TableRow key={purchase.saleId}>
-            <TableCell className="px-4 py-3 font-medium">
+            <TableCell label="원생" className="px-4 py-3 font-medium">
               {purchase.studentName}
             </TableCell>
-            <TableCell className="px-4 py-3">{purchase.bookTitle}</TableCell>
-            <TableCell className="px-4 py-3">
+            <TableCell label="교재명" className="px-4 py-3">{purchase.bookTitle}</TableCell>
+            <TableCell label="가격" className="px-4 py-3">
               {formatWon(purchase.autoFilledPrice)}
             </TableCell>
-            <TableCell className="px-4 py-3">{purchase.shippedAt}</TableCell>
-            <TableCell className="px-4 py-3">
+            <TableCell label="출고일" className="px-4 py-3">{purchase.shippedAt}</TableCell>
+            <TableCell label="결제 상태" className="px-4 py-3">
               <Badge
                 variant={
                   purchase.status === "paid" ? "secondary" : "outline"
@@ -550,8 +549,7 @@ function BookPurchaseListTable({
           </TableRow>
         ))}
       </TableBody>
-      </Table>
-    </div>
+    </Table>
   );
 }
 

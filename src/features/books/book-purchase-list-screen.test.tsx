@@ -96,6 +96,19 @@ function renderBookPurchaseListScreen(
 describe("BookPurchaseListScreen", () => {
   afterEach(() => vi.useRealTimers());
 
+  it("좁은 화면에서도 교재 구매 정보의 항목명을 제공한다", async () => {
+    renderBookPurchaseListScreen((options) => ({
+      queryKey: ["books", options.academyId],
+      queryFn: async () => buildBookPurchaseList(bookSales, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "교재 구매 목록" });
+    const row = within(table).getByRole("row", { name: /김민지/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "원생", "교재명", "가격", "출고일", "결제 상태",
+    ]);
+  });
+
   it("교재 출고일은 오늘로 시작하고 데스크는 결제 완료를 고를 수 없다", async () => {
     vi.setSystemTime(new Date("2026-10-15T12:00:00+09:00"));
     renderBookPurchaseListScreen((options) => ({

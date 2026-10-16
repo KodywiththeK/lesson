@@ -156,6 +156,19 @@ function createStudentsClient(rows: StudentSupabaseRow[]) {
 }
 
 describe("StudentListScreen", () => {
+  it("좁은 화면에서도 각 원생 정보와 관리 작업의 항목명을 제공한다", async () => {
+    renderStudentListScreen((options) => ({
+      queryKey: ["students", options.academyId],
+      queryFn: async () => buildStudentList(studentRows, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "원생 목록" });
+    const row = within(table).getByRole("row", { name: /김민지/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "원생", "선생님", "악기", "정기 요일", "관리",
+    ]);
+  });
+
   it("원생 목록을 표로 보여주고 선생님/악기/정기 요일을 함께 표시한다", async () => {
     renderStudentListScreen((options) => ({
       queryKey: ["students", options.academyId, options.search ?? ""],

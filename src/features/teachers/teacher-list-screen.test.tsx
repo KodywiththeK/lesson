@@ -100,6 +100,19 @@ function renderTeacherListScreen(
 }
 
 describe("TeacherListScreen", () => {
+  it("좁은 화면에서도 선생님 정보와 관리 작업의 항목명을 제공한다", async () => {
+    renderTeacherListScreen((options) => ({
+      queryKey: ["teachers", options.academyId],
+      queryFn: async () => buildTeacherList(teacherRows, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "선생님 목록" });
+    const row = within(table).getByRole("row", { name: /박선생/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "선생님", "상태", "담당 파트", "연락처", "계약기간", "근무시간", "급여", "관리",
+    ]);
+  });
+
   it("선생님 목록을 표로 보여주고 상태, 계약기간, 근무시간, 급여 상세를 표시한다", async () => {
     renderTeacherListScreen((options) => ({
       queryKey: ["teachers", options.academyId, options.search ?? ""],

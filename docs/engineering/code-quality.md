@@ -78,7 +78,7 @@
 
 - UI 기본 부품(input, select, popover, calendar, dialog 등)은 설치된 shadcn/ui(`src/components/ui/`)를 먼저 쓰고, 도메인에 맞춘 조합만 `src/components/operations/`·`management/`나 feature 안에 둔다. 기본 HTML 요소나 브라우저 기본 입력(`type="date|time|datetime-local|month"`)을 쓰는 예외는 이유를 evidence에 기록한다.
 - 날짜·월·시간·일시 입력은 `src/components/operations/date-time-fields.tsx`의 공통 필드를 쓴다. 필드는 형식만 책임지고 시작<종료 같은 의미 검증은 화면의 도메인 helper에 둔다.
-- 원 단위 금액 `type="number"`는 `min={1} step={1}`로 둔다. `step`은 허용 간격이 아니라 `min` 기준 유효값 격자라 `step={1000}`은 `140000`을 거부한다.
+- 원 단위 금액 `type="number"`는 `step={1}`을 사용하고 `min`은 도메인 정책에 맞춘다(필수 결제 `1`, 선택형 0원 등록 `0`). `step`은 허용 간격이 아니라 `min` 기준 유효값 격자라 `step={1000}`은 `140000`을 거부한다.
 - 단일 필드 검증은 필드 가까이에 둔다.
 - 여러 필드 조합 검증은 schema 또는 도메인 helper로 모은다.
 - submit handler는 입력 수집, 검증, mutation, toast/navigation을 읽기 쉬운 순서로 분리한다.
@@ -86,6 +86,8 @@
 
 ### 목록, 필터, 검색
 
+- 목록의 반응형 표는 `src/components/ui/table.tsx`의 shadcn `Table`과 `docs/engineering/design-system.md`의 표 규칙을 사용한다. 같은 row를 폭마다 다시 조회·변환·mutation하지 않고, `TableCell label`과 CSS로 표시만 바꾼다.
+- 데스크톱 표, 태블릿 세미테이블, 모바일 카드에서 필드·상태·액션이 동등한지 테스트한다. 숨긴 열이나 가로 스크롤 때문에 업무상 중요한 값이 사라지면 완료로 보지 않는다.
 - 검색/필터/정렬 규칙은 UI state가 아니라 테스트 가능한 pure function 또는 query adapter에서 표현한다.
 - query key는 학원 scope와 필터 값을 포함하고, 같은 종류의 query key 형태를 통일한다.
 - 페이지마다 다르게 발전할 가능성이 큰 목록 UI는 성급하게 공통화하지 않는다.

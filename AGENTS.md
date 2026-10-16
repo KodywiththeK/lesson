@@ -37,7 +37,7 @@
 - CLI를 사용할 때는 `pnpm supabase <command> --help`로 현재 옵션을 확인한 뒤 dry-run을 먼저 실행한다.
 - `.env.local`의 `NEXT_PUBLIC_*` 키는 앱 실행용이며 migration 권한으로 사용하지 않는다.
 - migration 적용 후에는 원격 migration history, 실제 schema SQL, 관련 테스트 결과를 evidence에 기록한다.
-- MCP 적용으로 원격 history timestamp와 로컬 migration 파일명이 달라지면 로컬 파일명을 원격 version에 맞춰 drift를 막는다.
+- MCP 적용으로 원격 history timestamp와 로컬 파일명이 달라지면 의존 migration 순서를 먼저 확인한다. 파일명 변경이 순서를 깨면 재적용하지 말고 runbook의 이력 정렬 절차를 따른다.
 
 ## 기본 스택
 
@@ -56,6 +56,7 @@
 - 사용자 수정 가능 metadata는 권한 판단에 사용하지 않는다.
 - 외부 노출 테이블은 RLS를 활성화하고 역할별 접근을 테스트한다.
 - UI 테스트는 접근 가능한 role, label, 사용자가 보는 텍스트를 우선한다. test id는 필요한 경우에만 사용한다.
+- 목록 표는 `docs/engineering/design-system.md`의 데스크톱 표·태블릿 행·모바일 카드 기준을 따르고, 폭별로 같은 데이터와 액션을 제공한다.
 - UI 기본 부품은 설치된 shadcn/ui를 우선하고 조합만 shared/feature 컴포넌트에 둔다. 날짜·월·시간 입력은 브라우저 기본 input 대신 `src/components/operations/date-time-fields.tsx`를 쓰며, 예외 사유는 evidence에 기록한다.
 
 ## 완료 증거

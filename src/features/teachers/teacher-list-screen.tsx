@@ -1003,67 +1003,65 @@ function TeacherListTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="선생님 목록" className="min-w-[72rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">선생님</TableHead>
-            <TableHead className="px-4 py-3">상태</TableHead>
-            <TableHead className="px-4 py-3">담당 파트</TableHead>
-            <TableHead className="px-4 py-3">연락처</TableHead>
-            <TableHead className="px-4 py-3">계약기간</TableHead>
-            <TableHead className="px-4 py-3">근무시간</TableHead>
-            <TableHead className="px-4 py-3">급여</TableHead>
-            <TableHead className="px-4 py-3 text-right">관리</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {teachers.map((teacher) => {
-            const currentStatus = teacher.status ?? "employed";
+    <Table aria-label="선생님 목록">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">선생님</TableHead>
+          <TableHead className="px-4 py-3">상태</TableHead>
+          <TableHead className="px-4 py-3">담당 파트</TableHead>
+          <TableHead className="px-4 py-3">연락처</TableHead>
+          <TableHead className="px-4 py-3">계약기간</TableHead>
+          <TableHead className="px-4 py-3">근무시간</TableHead>
+          <TableHead className="px-4 py-3">급여</TableHead>
+          <TableHead className="px-4 py-3 text-right">관리</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {teachers.map((teacher) => {
+          const currentStatus = teacher.status ?? "employed";
 
-            return (
-              <TableRow key={teacher.teacherId}>
-                <TableCell className="px-4 py-3 font-medium">
-                  {teacher.name}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  <Badge variant={currentStatus === "employed" ? "default" : "outline"}>
-                    {formatTeacherStatus(currentStatus)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="px-4 py-3">{teacher.part}</TableCell>
-                <TableCell className="px-4 py-3">
-                  {teacher.contact || "-"}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {teacher.contractStartOn && teacher.contractEndOn
-                    ? `${teacher.contractStartOn} - ${teacher.contractEndOn}`
-                    : "-"}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {teacher.workScheduleSummary ?? "-"}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {teacher.salarySummary ?? formatTeacherPayType(teacher.payType)}
-                </TableCell>
-                <TableCell className="px-4 py-3 text-right">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${teacher.name} 자세히보기`}
-                    onClick={() => onSelectTeacher(teacher)}
-                  >
-                    <Eye aria-hidden="true" />
-                    자세히보기
-                  </Button>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+          return (
+            <TableRow key={teacher.teacherId}>
+              <TableCell label="선생님" className="px-4 py-3 font-medium">
+                {teacher.name}
+              </TableCell>
+              <TableCell label="상태" className="px-4 py-3">
+                <Badge variant={currentStatus === "employed" ? "default" : "outline"}>
+                  {formatTeacherStatus(currentStatus)}
+                </Badge>
+              </TableCell>
+              <TableCell label="담당 파트" className="px-4 py-3">{teacher.part}</TableCell>
+              <TableCell label="연락처" className="px-4 py-3">
+                {teacher.contact || "-"}
+              </TableCell>
+              <TableCell label="계약기간" className="px-4 py-3">
+                {teacher.contractStartOn && teacher.contractEndOn
+                  ? `${teacher.contractStartOn} - ${teacher.contractEndOn}`
+                  : "-"}
+              </TableCell>
+              <TableCell label="근무시간" className="px-4 py-3">
+                {teacher.workScheduleSummary ?? "-"}
+              </TableCell>
+              <TableCell label="급여" className="px-4 py-3">
+                {teacher.salarySummary ?? formatTeacherPayType(teacher.payType)}
+              </TableCell>
+              <TableCell label="관리" className="px-4 py-3 text-right">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={`${teacher.name} 자세히보기`}
+                  onClick={() => onSelectTeacher(teacher)}
+                >
+                  <Eye aria-hidden="true" />
+                  자세히보기
+                </Button>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 

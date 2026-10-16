@@ -114,6 +114,92 @@ test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다"
   await expect(page.getByRole("dialog", { name: "회차권 등록" })).toBeVisible();
 });
 
+test("320px 화면에서 회차권 목록과 등록·수정 다이얼로그를 사용할 수 있다", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/passes");
+
+  const ticketTable = page.getByRole("table", { name: "회차권 목록" });
+  await expect(ticketTable).toBeVisible();
+  await expect(ticketTable.locator('[data-label="남은 일수"]').first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+  await ticketTable.getByRole("button", { name: /회차권 수정/ }).first().click();
+  const adjustDialog = page.getByRole("dialog", { name: "회차권 수정" });
+  await expect(adjustDialog).toBeVisible();
+  await adjustDialog.getByRole("button", { name: "저장" }).scrollIntoViewIfNeeded();
+  await expect(adjustDialog.getByRole("button", { name: "저장" })).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("lesson-tickets-320-adjust.png") });
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
+  await page.getByRole("dialog", { name: "페이지 작업" }).getByRole("button", { name: "회차권 등록" }).click();
+  const registrationDialog = page.getByRole("dialog", { name: "회차권 등록" });
+  await expect(registrationDialog).toBeVisible();
+  await expect(page.locator('[data-slot="sheet-content"][data-state="open"]')).toHaveCount(0);
+  await registrationDialog.getByRole("button", { name: "저장" }).scrollIntoViewIfNeeded();
+  await expect(registrationDialog.getByRole("button", { name: "저장" })).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath("lesson-tickets-320-register.png") });
+});
+
+test("회차권 표는 화면 폭에 따라 데스크톱 표·태블릿 행·모바일 카드로 바뀐다", async ({ page }, testInfo) => {
+  await page.goto("/passes");
+  const table = page.getByRole("table", { name: "회차권 목록" });
+  await expect(table).toBeVisible();
+
+  for (const width of [320, 480, 481, 767, 768, 1023, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    const layout = await table.evaluate((element) => ({
+      tableDisplay: getComputedStyle(element).display,
+      bodyColumns: getComputedStyle(element.querySelector("tbody")!).gridTemplateColumns.split(" ").length,
+    }));
+    expect(layout.tableDisplay).toBe(width >= 1024 ? "table" : "block");
+    if (width < 768) {
+      expect(layout.bodyColumns).toBe(width <= 480 ? 1 : 2);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const filterBox = await page.getByLabel("회차권 상태 필터").boundingBox();
+    expect(filterBox).not.toBeNull();
+    expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(width);
+    if ([320, 481, 768, 1024].includes(width)) {
+      await page.screenshot({ path: testInfo.outputPath(`lesson-tickets-${width}.png`) });
+    }
+  }
+});
+
+test("관리·재무 목록은 작은 화면에서도 항목명과 표 작업을 유지한다", async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
+  for (const route of [
+    "/management/students",
+    "/management/teachers",
+    "/management/vendors",
+    "/management/status",
+    "/books",
+    "/finance/ledger",
+    "/finance/lesson-income",
+    "/finance/books",
+    "/finance/payroll",
+  ]) {
+    for (const width of [320, 481, 768, 1024]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(route);
+      const table = page.locator("[data-responsive-table]").first();
+      await expect(table).toBeVisible();
+      const tableBox = await table.boundingBox();
+      expect(tableBox).not.toBeNull();
+      expect(tableBox!.x + tableBox!.width).toBeLessThanOrEqual(width);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      expect(await table.locator('[data-slot="table-cell"]:not([colspan]):not([data-label])').count()).toBe(0);
+      if (
+        (width === 320 && ["/management/teachers", "/management/status", "/finance/ledger"].includes(route)) ||
+        (width === 481 && route === "/finance/lesson-income")
+      ) {
+        await table.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath(`${route.replaceAll("/", "-")}-${width}.png`) });
+      }
+    }
+  }
+});
+
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
@@ -207,6 +293,17 @@ test("좁은 화면에서도 레슨수입과 수납 액션을 가로 잘림 없�
   await expect(page.getByRole("button", { name: "작업 메뉴 열기" })).toBeVisible();
   await expect(page.getByRole("button", { name: "김민지 수납 처리" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("모바일 작업 메뉴에서 미납인원 다이얼로그를 열 수 있다", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/finance/lesson-income");
+  await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
+  await page.getByRole("dialog", { name: "페이지 작업" })
+    .getByRole("button", { name: /미납인원/ }).click();
+  await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "미납인원" })).toBeVisible();
 });
 
 async function openPageAction(page: Page, name: string, isNarrow: boolean) {

@@ -1545,49 +1545,47 @@ function StudentListTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="원생 목록" className="min-w-[48rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">원생</TableHead>
-            <TableHead className="px-4 py-3">선생님</TableHead>
-            <TableHead className="px-4 py-3">악기</TableHead>
-            <TableHead className="px-4 py-3">정기 요일</TableHead>
-            <TableHead className="px-4 py-3 text-right">관리</TableHead>
+    <Table aria-label="원생 목록">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">원생</TableHead>
+          <TableHead className="px-4 py-3">선생님</TableHead>
+          <TableHead className="px-4 py-3">악기</TableHead>
+          <TableHead className="px-4 py-3">정기 요일</TableHead>
+          <TableHead className="px-4 py-3 text-right">관리</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {students.map((student) => (
+          <TableRow key={student.studentId}>
+            <TableCell label="원생" className="px-4 py-3 font-medium">
+              {student.name}
+            </TableCell>
+            <TableCell label="선생님" className="px-4 py-3">
+              {formatJoinedValue(student.teacherNames)}
+            </TableCell>
+            <TableCell label="악기" className="px-4 py-3">
+              {formatJoinedValue(student.instrumentNames)}
+            </TableCell>
+            <TableCell label="정기 요일" className="px-4 py-3">
+              {formatJoinedValue(student.weekdayLabels)}
+            </TableCell>
+            <TableCell label="관리" className="px-4 py-3 text-right">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`${student.name} 자세히보기`}
+                onClick={() => onOpenStudent(student)}
+              >
+                <Eye aria-hidden="true" />
+                자세히보기
+              </Button>
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {students.map((student) => (
-            <TableRow key={student.studentId}>
-              <TableCell className="px-4 py-3 font-medium">
-                {student.name}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatJoinedValue(student.teacherNames)}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatJoinedValue(student.instrumentNames)}
-              </TableCell>
-              <TableCell className="px-4 py-3">
-                {formatJoinedValue(student.weekdayLabels)}
-              </TableCell>
-              <TableCell className="px-4 py-3 text-right">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label={`${student.name} 자세히보기`}
-                  onClick={() => onOpenStudent(student)}
-                >
-                  <Eye aria-hidden="true" />
-                  자세히보기
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 

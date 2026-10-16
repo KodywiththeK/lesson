@@ -93,6 +93,10 @@ describe("AcademyLessonAttendanceScreen", () => {
     expect(within(dialog).getByText("김민지")).toBeInTheDocument();
     expect(within(dialog).getByText("이서윤")).toBeInTheDocument();
     expect(within(dialog).getByText("대기 2")).toBeInTheDocument();
+    const attendanceRow = within(dialog).getByRole("row", { name: /김민지/ });
+    expect(within(attendanceRow).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "시간", "원생", "악기", "상태", "처리",
+    ]);
     expect(
       within(dialog).getByRole("button", { name: "전체 출석" }),
     ).toBeInTheDocument();

@@ -47,7 +47,7 @@ export function AcademyLessonTableView({
       </div>
       <Table
         aria-label={`${selectedDate} 학원 레슨 테이블`}
-        className="min-w-[54rem]"
+        className="lg:min-w-[54rem]"
       >
         <TableHeader className="bg-muted text-muted-foreground">
           <TableRow>
@@ -69,21 +69,21 @@ export function AcademyLessonTableView({
           ) : null}
           {rows.map((row) => (
             <TableRow key={row.lessonEventId} data-state="selected">
-              <TableCell className="px-4 py-3">
+              <TableCell label="시간" className="px-4 py-3">
                 {formatLessonTimeRange(row)}
               </TableCell>
-              <TableCell className="px-4 py-3 font-medium">
+              <TableCell label="원생" className="px-4 py-3 font-medium">
                 {row.studentName}
               </TableCell>
-              <TableCell className="px-4 py-3">{row.instrumentName}</TableCell>
-              <TableCell className="px-4 py-3">{row.teacherName ?? "-"}</TableCell>
-              <TableCell className="px-4 py-3">
+              <TableCell label="악기" className="px-4 py-3">{row.instrumentName}</TableCell>
+              <TableCell label="선생님" className="px-4 py-3">{row.teacherName ?? "-"}</TableCell>
+              <TableCell label="상태" className="px-4 py-3">
                 <div className="flex flex-wrap gap-1">
                   <OriginBadge label={row.originLabel} />
                   <AttendanceBadge status={row.status} />
                 </div>
               </TableCell>
-              <TableCell className="px-4 py-3 text-right">
+              <TableCell label="처리" className="px-4 py-3 text-right">
                 <Button
                   type="button"
                   variant="outline"

@@ -129,7 +129,7 @@ export function AcademyAttendanceChecklist({
         </div>
       ) : null}
       <div className="max-h-[55vh] overflow-auto rounded-md border border-border">
-        <Table aria-label={`${date} 출석 확인 목록`} className="min-w-[56rem]">
+        <Table aria-label={`${date} 출석 확인 목록`} className="lg:min-w-[56rem]">
           <TableHeader className="sticky top-0 bg-muted text-muted-foreground">
             <TableRow>
               <TableHead className="px-4 py-3">원생</TableHead>
@@ -147,7 +147,7 @@ export function AcademyAttendanceChecklist({
           <TableBody>
             {visibleRows.map((row) => (
               <TableRow key={row.lessonEventId}>
-                <TableCell className="px-4 py-3">
+                <TableCell label="원생" className="px-4 py-3">
                   <div className="flex flex-col gap-1">
                     <strong className="text-sm">{row.studentName}</strong>
                     <span className="text-xs text-muted-foreground">
@@ -155,14 +155,14 @@ export function AcademyAttendanceChecklist({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell className="px-4 py-3">{formatLessonTimeRange(row)}</TableCell>
-                <TableCell className="px-4 py-3">
+                <TableCell label="시간" className="px-4 py-3">{formatLessonTimeRange(row)}</TableCell>
+                <TableCell label="수업" className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     <OriginBadge label={row.originLabel} />
                     <Badge variant="secondary">{row.instrumentName}</Badge>
                   </div>
                 </TableCell>
-                <TableCell className="px-4 py-3">
+                <TableCell label="상태" className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     <AttendanceBadge status={row.status} />
                     <ResolutionBadge resolution={row.absenceResolution} />
@@ -170,7 +170,7 @@ export function AcademyAttendanceChecklist({
                 </TableCell>
                 {canManage ? (
                   <>
-                    <TableCell className="px-4 py-3">
+                    <TableCell label="등원(O) / 결석(X)" className="px-4 py-3">
                       <ToggleGroup
                         type="single"
                         variant="outline"
@@ -189,7 +189,7 @@ export function AcademyAttendanceChecklist({
                         </ToggleGroupItem>
                       </ToggleGroup>
                     </TableCell>
-                    <TableCell className="px-4 py-3">
+                    <TableCell label="처리" className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button
                           type="button"

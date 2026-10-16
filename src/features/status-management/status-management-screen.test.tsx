@@ -121,6 +121,16 @@ function renderStatusManagementScreen(gate?: Gate) {
 }
 
 describe("StatusManagementScreen", () => {
+  it("좁은 화면에서도 처리 정보와 관리 작업의 항목명을 제공한다", async () => {
+    renderStatusManagementScreen();
+
+    const table = await screen.findByRole("table", { name: "휴원/퇴원 관리 목록" });
+    const row = within(table).getByRole("row", { name: /휴원생01/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "대상", "처리/보관", "처리 메모", "관리",
+    ]);
+  });
+
   it("휴원 원생이 10명을 넘으면 총 인원과 페이지 번호로 다음 페이지를 볼 수 있다", async () => {
     const user = userEvent.setup();
     const { seenStudentOptions } = renderStatusManagementScreen();

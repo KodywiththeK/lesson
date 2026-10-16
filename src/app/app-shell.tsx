@@ -136,27 +136,36 @@ function HeaderActions({
 
   if (isCompact) {
     return (
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="작업 메뉴 열기"
-          title="페이지 작업"
-          onClick={() => setIsOpen(true)}
-        >
-          <MoreHorizontal aria-hidden="true" className="size-4" />
-        </Button>
-        <SheetContent side="right" className="w-80 max-w-[85vw] gap-0 p-0">
-          <SheetHeader className="border-b border-border p-4 text-left">
-            <SheetTitle>페이지 작업</SheetTitle>
-            <SheetDescription>현재 화면에서 사용할 작업을 선택합니다.</SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-2 p-4 [&_button]:w-full [&_button]:justify-start">
-            {actions}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <>
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="작업 메뉴 열기"
+            title="페이지 작업"
+            onClick={() => setIsOpen(true)}
+          >
+            <MoreHorizontal aria-hidden="true" className="size-4" />
+          </Button>
+          <SheetContent side="right" className="w-80 max-w-[85vw] gap-0 p-0">
+            <SheetHeader className="border-b border-border p-4 text-left">
+              <SheetTitle>페이지 작업</SheetTitle>
+              <SheetDescription>현재 화면에서 사용할 작업을 선택합니다.</SheetDescription>
+            </SheetHeader>
+            <div
+              className="grid gap-2 p-4 [&_button]:w-full [&_button]:justify-start"
+              onClickCapture={(event) => {
+                if ((event.target as HTMLElement).closest("button")) setIsOpen(false);
+              }}
+            >
+              {actions}
+            </div>
+          </SheetContent>
+        </Sheet>
+        {/* 시트를 닫아도 액션이 소유한 Dialog는 계속 렌더한다. */}
+        {!isOpen ? <div className="hidden">{actions}</div> : null}
+      </>
     );
   }
 

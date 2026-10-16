@@ -456,42 +456,38 @@ function StatusManagementTable({
   }
 
   return (
-    <div className="overflow-hidden">
-      <Table aria-label="휴원/퇴원 관리 목록" className="w-full table-fixed">
-        <TableHeader className="hidden bg-muted text-muted-foreground md:table-header-group">
+    <>
+      <Table aria-label="휴원/퇴원 관리 목록" className="lg:table-fixed">
+        <TableHeader className="bg-muted text-muted-foreground">
           <TableRow>
-            <TableHead className="w-[28%] px-4 py-3">대상</TableHead>
-            <TableHead className="w-[24%] px-4 py-3">처리/보관</TableHead>
-            <TableHead className="w-[28%] px-4 py-3">처리 메모</TableHead>
-            <TableHead className="w-[20%] px-4 py-3 text-right">관리</TableHead>
+            <TableHead className="px-4 py-3 lg:w-[28%]">대상</TableHead>
+            <TableHead className="px-4 py-3 lg:w-[24%]">처리/보관</TableHead>
+            <TableHead className="px-4 py-3 lg:w-[28%]">처리 메모</TableHead>
+            <TableHead className="px-4 py-3 text-right lg:w-[20%]">관리</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((item) => (
-            <TableRow
-              key={`${item.entityType}-${item.entityId}`}
-              className="grid gap-3 border-b p-4 md:table-row md:p-0"
-            >
-              <TableCell className="block whitespace-normal p-0 md:table-cell md:px-4 md:py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{item.name}</span>
-                  <Badge variant="outline">{item.statusLabel}</Badge>
+            <TableRow key={`${item.entityType}-${item.entityId}`}>
+              <TableCell label="대상" className="px-4 py-3 whitespace-normal">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{item.name}</span>
+                    <Badge variant="outline">{item.statusLabel}</Badge>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                    <span>{item.primaryInfo || "-"}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{item.secondaryInfo || "-"}</span>
+                  </div>
+                  {item.detailSummary ? (
+                    <p className="mt-1 text-xs text-muted-foreground lg:hidden">
+                      {item.detailSummary}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                  <span>{item.primaryInfo || "-"}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{item.secondaryInfo || "-"}</span>
-                </div>
-                {item.detailSummary ? (
-                  <p className="mt-1 text-xs text-muted-foreground md:hidden">
-                    {item.detailSummary}
-                  </p>
-                ) : null}
               </TableCell>
-              <TableCell className="block whitespace-normal p-0 text-sm md:table-cell md:px-4 md:py-3">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground md:hidden">
-                  처리/보관
-                </span>
+              <TableCell label="처리/보관" className="px-4 py-3 text-sm whitespace-normal">
                 <div className="grid gap-1">
                   <span>처리일 {item.changedOn}</span>
                   <span className="text-muted-foreground">
@@ -499,16 +495,13 @@ function StatusManagementTable({
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="block whitespace-normal p-0 text-sm md:table-cell md:px-4 md:py-3">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground md:hidden">
-                  처리 메모
-                </span>
+              <TableCell label="처리 메모" className="px-4 py-3 text-sm whitespace-normal">
                 <span className="line-clamp-2 text-muted-foreground">
                   {item.statusReason || "-"}
                 </span>
               </TableCell>
-              <TableCell className="block whitespace-normal p-0 md:table-cell md:px-4 md:py-3">
-                <div className="flex flex-wrap justify-start gap-2 md:justify-end">
+              <TableCell label="관리" className="px-4 py-3 whitespace-normal">
+                <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -557,7 +550,7 @@ function StatusManagementTable({
           }
         }}
       />
-    </div>
+    </>
   );
 }
 

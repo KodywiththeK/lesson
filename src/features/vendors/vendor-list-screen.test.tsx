@@ -94,6 +94,19 @@ describe("VendorListScreen", () => {
     toastMock.error.mockClear();
   });
 
+  it("좁은 화면에서도 거래처 정보와 수정 작업의 항목명을 제공한다", async () => {
+    renderVendorListScreen((options) => ({
+      queryKey: ["vendors", options.academyId],
+      queryFn: async () => buildVendorList(vendorRows, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "거래처 목록" });
+    const row = within(table).getByRole("row", { name: /예음문구/ });
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "거래처", "연락처", "종류", "비고", "관리",
+    ]);
+  });
+
   it("거래처 목록을 표로 보여주고 연락처, 종류, 비고를 표시한다", async () => {
     renderVendorListScreen((options) => ({
       queryKey: ["vendors", options.academyId, options.search ?? ""],

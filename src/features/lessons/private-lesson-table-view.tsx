@@ -57,7 +57,7 @@ export function PrivateLessonTableView({
         />
         <Table
           aria-label={`${formatMonthLabel(selectedMonth)} 개인레슨 테이블`}
-          className="min-w-[54rem]"
+          className="lg:min-w-[54rem]"
         >
           <TableHeader className="bg-muted text-muted-foreground">
             <TableRow>
@@ -86,24 +86,24 @@ export function PrivateLessonTableView({
                   key={lesson.id}
                   data-state={date === selectedDate ? "selected" : undefined}
                 >
-                  <TableCell className="px-4 py-3">{date}</TableCell>
-                  <TableCell className="px-4 py-3">
+                  <TableCell label="날짜" className="px-4 py-3">{date}</TableCell>
+                  <TableCell label="시간" className="px-4 py-3">
                     {toSeoulHourMinute(lesson.startAt)}-
                     {toSeoulHourMinute(lesson.endAt)}
                   </TableCell>
-                  <TableCell className="px-4 py-3 font-medium">
+                  <TableCell label="원생" className="px-4 py-3 font-medium">
                     {lesson.studentName}
                   </TableCell>
-                  <TableCell className="px-4 py-3">{lesson.instrumentName}</TableCell>
-                  <TableCell className="px-4 py-3">{lesson.teacherName}</TableCell>
-                  <TableCell className="px-4 py-3">
+                  <TableCell label="악기" className="px-4 py-3">{lesson.instrumentName}</TableCell>
+                  <TableCell label="선생님" className="px-4 py-3">{lesson.teacherName}</TableCell>
+                  <TableCell label="상태" className="px-4 py-3">
                     <Badge
                       variant={lesson.status === "present" ? "default" : "outline"}
                     >
                       {formatPrivateLessonStatus(lesson.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right">
+                  <TableCell label="처리" className="px-4 py-3 text-right">
                     <Button
                       type="button"
                       variant="outline"
