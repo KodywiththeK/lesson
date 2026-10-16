@@ -19,7 +19,7 @@
 | 선생님 | 전체 관리(급여 설정·주민등록번호 원문 포함) | 기본 정보만 등록·수정(급여 설정과 주민등록번호 원문 불가) | 접근 불가 |
 | 상담 | 전체 관리 | 전체 관리 | 접근 불가 |
 | 거래처 | 전체 관리 | 전체 관리 | 접근 불가 |
-| 교재 | 전체 관리 | 전체 관리 | 접근 불가 |
+| 교재 | 전체 관리(결제 처리·취소 포함) | 교재·재고·출고(결제 전) 관리, 결제 완료 목록 조회 | 접근 불가 |
 | 수입 관리 | 전체 관리 | 접근 불가(허용 여부는 후속 질문) | 접근 불가(본인 급여 화면은 후속 질문) |
 
 ## RLS 규칙
@@ -65,3 +65,15 @@
 ## 수입 관리 RPC 권한 (2026-10-16 migration, 운영 적용)
 
 수납·미납·입금 취소(`mark_fixed_income_snapshot_paid`/`_unpaid`/`_overdue`), 급여 지급·취소(`mark_salary_settlement_paid`/`cancel_salary_settlement_paid`), 교재 결제 완료(`complete_book_release_payment`)는 모두 `array['owner']`만 허용한다. 원장 ledger의 owner 전용 RLS·trigger(`require_finance_owner_for_ledger`)와 같은 기준이라, 데스크가 호출해도 한 곳에서 한국어 권한 오류로 끝난다. UI에서 버튼을 숨기는 것(`canRecordPayment` 등)은 편의일 뿐 권한 검증이 아니다.
+
+## 교재 관리 RPC 권한 (2026-10-17 migration, 운영 적용)
+
+`books`·`book_releases`는 브라우저에서 직접 insert/update/delete하지 못하고(권한 회수, select만 유지) 아래 RPC로만 바꾼다. 데스크가 `book_releases.status`를 `paid`로 직접 바꾸는 우회로를 막기 위한 것이다. 화면에서 버튼을 숨기는 것은 편의일 뿐이고 역할 검사는 서버 `private.assert_book_role`이 한다.
+
+| RPC | 허용 역할 | 비고 |
+| --- | --- | --- |
+| `register_book_stock`, `update_book`, `delete_book` | owner, desk | 같은 도서명 재입고는 권수 합산, 삭제는 보관(`active=false`) |
+| `register_book_release` | owner, desk | 재원 원생·보관하지 않은 교재만, 재고 차감. `p_status='paid'`(바로 결제 완료)는 owner만 |
+| `update_book_release`, `delete_book_release` | owner, desk | 결제 대기만. 재고 복원·재차감, 삭제는 감사 기록 |
+| `complete_book_release_payment` | owner | 입금일 ≥ 출고일, 입출입내역 수입 행 생성(owner 전용 원장 RLS와 같은 기준) |
+| `cancel_book_release_payment` | owner | 사유 필수, 연결 수입 행 삭제, 대기 복귀, 감사 기록(개인정보 제외) |

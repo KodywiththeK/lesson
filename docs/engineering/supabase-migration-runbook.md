@@ -175,6 +175,25 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
   - 컬럼: `students.age_as_of_year`, `student_instruments.discount_kinds`·`referral_discount_month`·`referral_discount_amount`, `consultations` 표. 나이가 있는 원생 3명이 모두 backfill됐다.
 - 한계: 운영 데이터 행은 읽지 않았고, 선생님·데스크 계정으로 직접 확인하지 못했다. **실제 동작 검증(재원 복귀 일정 재생성, 시급 서버 재계산, 주민번호 저장·열람, 상담 만료 삭제, 선생님 화면, 소개 할인 snapshot)은 앱에서 직접 확인해야 한다.**
 
+## 교재 관리 migration (20261019090000~20261019090100) — 2026-10-17 적용 완료
+
+`docs/product/book-management-spec.md` 반영분이다. 사용자 요청으로 2026-10-17 운영 DB에 적용했다. 앱 코드가 새 컬럼·RPC를 쓰므로 **적용된 상태에서만 새 앱이 동작한다.** 반대로 옛 앱(옛 7인자 `register_book_release` 호출)은 적용 즉시 출고 등록이 실패하므로 앱 배포를 바로 이어서 한다.
+
+| 순서 | 파일 | 내용 | 적용 후 확인 |
+| --- | --- | --- | --- |
+| 1 | `20261019090000_book_stock_schema.sql` | `books.quantity·stocked_on·title_key`(+active 교재 부분 unique), `book_releases.quantity`, 같은 도서명 교재 병합 이행(재고 0), 원생 삭제 시 판매 기록 보존 FK, `books`·`book_releases` 직접 쓰기 권한 회수 | 병합 결과(같은 학원·도서명 중복 없음, 출고 기록의 `book_id`가 합쳐진 교재를 가리킴), `book_releases_student_id_fkey`가 없고 복합 FK가 `on delete set null (student_id)`인지, `authenticated`의 insert/update/delete 회수 |
+| 2 | `20261019090100_book_stock_rpcs.sql` | 교재·출고 RPC 8개, 내부 함수 3개, 옛 7인자 `register_book_release` 삭제 | 새 시그니처만 남았는지(오버로드), anon 실행 불가, `private.*`는 앱 사용자 실행 불가 |
+
+적용 전 절차: `pnpm supabase migration list`로 원격 history가 직전 migration까지인지 확인하고 `pnpm supabase db push --dry-run`으로 대상이 위 2개뿐인지 본다. 병합 이행은 운영 데이터를 바꾸므로(교재 행 삭제, 출고 `book_id` 재연결) 적용 전에 `books`·`book_releases` 행 수와 도서명 중복 현황을 카탈로그가 아니라 사용자가 확인하도록 안내한다. 적용 직후 모든 교재 재고는 0권이라 원장이 실제 권수를 직접 입력해야 출고할 수 있다. SQL은 로컬에서 실제 Postgres에 적용해 보지 못했고 계약 테스트(SQL 문자열)까지만 검증했다.
+
+실패 시: 1번만 적용되고 2번이 실패하면 옛 출고 등록(7인자, security invoker)이 쓰기 권한 회수로 `permission denied`가 나고 새 앱도 아직 못 쓰는 중간 상태가 된다. 2번은 `create or replace`·`drop … if exists` 위주라 원인을 고친 뒤 2번부터 다시 적용하면 된다(1번도 다시 돌려도 병합이 no-op이다). 적용 전에 `select count(*) from books where not active`(보관 교재), `book_inventory_batches` 행 수를 확인한다(병합은 보관 교재를 활성 교재와 묶지 않고, 입고 이력은 대표 교재로 옮긴다). 운영 DB의 collation은 확인하지 않았다(도서명 정규화가 소문자 변환을 DB에 맡기므로 한글·영문 위주 도서명이면 문제없다).
+
+적용 기록 (2026-10-17):
+- 적용 전 확인(집계만, 행은 읽지 않음): 교재 2행(보관 0, 도서명 중복 그룹 0), 입고 이력 2행, 출고 2행. 병합할 중복이 없어 이행은 컬럼 채우기만 일어났다.
+- 방법: `pnpm supabase migration list`(대기 2개) → `pnpm supabase db push --dry-run`(대상이 위 2개뿐) → `pnpm supabase db push --yes`. 2개 모두 오류 없이 적용됐고 원격 history가 로컬 파일명과 일치한다. NOTICE는 `books_title_key_check` "존재하지 않아 건너뜀"(drop if exists) 1건뿐이다.
+- 적용 후 읽기 전용 카탈로그 확인: 공개 RPC 8개가 새 시그니처로만 존재(옛 7인자 `register_book_release` 없음, 오버로드 없음), anon 실행 불가, `private.apply_book_stock_delta`·`mark_book_release_paid`·`assert_book_role`은 앱 사용자 실행 불가. `books`·`book_releases`에서 anon·authenticated는 SELECT만 남았다. `books_title_key_check`, `book_releases_academy_student_fk`(`on delete set null (student_id)`), 인덱스 `books_academy_title_key_active_key`·`book_releases_academy_status_paid_idx`, `book_releases.student_id` nullable 확인. 두 교재의 `title_key`는 모두 채워졌고 재고는 0권, 출고 수량은 1로 이전됐다.
+- 한계: 운영 데이터 행은 읽지 않았다. **재고 잠금·동시성, 결제 취소의 원장 삭제, 데스크 거부, 병합 이행(이번에는 중복이 없어 실행되지 않음)은 앱에서 직접 확인해야 한다.**
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

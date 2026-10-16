@@ -26,7 +26,7 @@
 - 원생 휴원, 퇴원, 재원, 삭제
 - 급여 계산과 지급
 - 수동 ledger 생성/수정/삭제
-- 교재 결제 완료
+- 교재 결제 완료와 결제 취소(`book.payment_cancelled`, 사유·삭제된 입출입 행 금액 기록), 교재 출고 삭제(`book.release_deleted`)
 - 학원 멤버 권한 변경
 
 ## Supabase 확인
