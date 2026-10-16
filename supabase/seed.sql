@@ -277,23 +277,18 @@ set
   vendor_type = excluded.vendor_type,
   note = excluded.note;
 
-insert into public.books (id, academy_id, title, price) values
-  ('12121212-1212-4212-8212-121212121201', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '바이엘 상', 12000),
-  ('12121212-1212-4212-8212-121212121202', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '스즈키 바이올린 1', 18000)
+-- 교재 한 줄 = 현재 재고 권수. 출고 2건(바이엘 상 1권 대기, 스즈키 바이올린 1 1권 결제 완료)이 이미 차감된 값이다.
+insert into public.books (id, academy_id, title, price, quantity, stocked_on, title_key) values
+  ('12121212-1212-4212-8212-121212121201', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '바이엘 상', 12000, 9, '2026-08-01', '바이엘 상'),
+  ('12121212-1212-4212-8212-121212121202', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '스즈키 바이올린 1', 18000, 7, '2026-08-01', '스즈키 바이올린 1')
 on conflict (id) do update
 set
   title = excluded.title,
   price = excluded.price,
-  active = true;
-
-insert into public.book_inventory_batches (id, academy_id, book_id, quantity, stocked_at, created_by) values
-  ('16161616-1616-4616-8616-161616161601', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121201', 12, '2026-08-01', '11111111-1111-1111-1111-111111111111'),
-  ('16161616-1616-4616-8616-161616161602', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121202', 8, '2026-08-01', '11111111-1111-1111-1111-111111111111')
-on conflict (id) do update
-set
   quantity = excluded.quantity,
-  stocked_at = excluded.stocked_at,
-  created_by = excluded.created_by;
+  stocked_on = excluded.stocked_on,
+  title_key = excluded.title_key,
+  active = true;
 
 insert into public.book_releases (
   id,
@@ -303,18 +298,20 @@ insert into public.book_releases (
   student_name,
   book_title,
   price,
+  quantity,
   shipped_at,
   status,
   paid_at,
   created_by
 ) values
-  ('17171717-1717-4717-8717-171717171701', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121201', 'dddddddd-dddd-dddd-dddd-ddddddddddd1', '김민지', '바이엘 상', 12000, '2026-08-18', 'payment-pending', null, '11111111-1111-1111-1111-111111111111'),
-  ('17171717-1717-4717-8717-171717171702', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121202', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', '한서아', '스즈키 바이올린 1', 18000, '2026-08-12', 'paid', '2026-08-14', '11111111-1111-1111-1111-111111111111')
+  ('17171717-1717-4717-8717-171717171701', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121201', 'dddddddd-dddd-dddd-dddd-ddddddddddd1', '김민지', '바이엘 상', 12000, 1, '2026-08-18', 'payment-pending', null, '11111111-1111-1111-1111-111111111111'),
+  ('17171717-1717-4717-8717-171717171702', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '12121212-1212-4212-8212-121212121202', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', '한서아', '스즈키 바이올린 1', 18000, 1, '2026-08-12', 'paid', '2026-08-14', '11111111-1111-1111-1111-111111111111')
 on conflict (id) do update
 set
   student_name = excluded.student_name,
   book_title = excluded.book_title,
   price = excluded.price,
+  quantity = excluded.quantity,
   shipped_at = excluded.shipped_at,
   status = excluded.status,
   paid_at = excluded.paid_at,
