@@ -23,6 +23,7 @@
 - `teachers`: 학원별 선생님 정보와 민감 필드
 - `teacher_salary_settings`: 월급제/시급제/비율제 급여 설정
 - `vendors`: 학원별 거래처 정보
+- `consultations`: 전화·문자 상담 기록(이름·나이·악기·전화·학교·특이사항, 접수 1년 후 삭제). 원장·데스크 전용
 
 ## Lessons
 

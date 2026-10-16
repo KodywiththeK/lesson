@@ -145,6 +145,36 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 적용 후 `notify pgrst, 'reload schema'`로 스키마 캐시를 갱신했다.
 - 실제 데이터로 보강 멱등·차감 복구·병합 동작을 확인하는 스모크 테스트는 운영 데이터 읽기 권한이 거부되어 실행하지 못했다.
 
+## 원생·선생님·상담 명세 migration (20261018080000~20261018120000) — 2026-10-17 적용 완료
+
+2026-10-17 `원생_선생님_거래처관리_기능명세서` 반영분이다. 사용자 요청으로 같은 날 운영 DB에 적용했다. 앱 코드가 새 컬럼·RPC를 이미 쓰므로 **이 migration이 적용된 상태에서만 새 앱이 동작한다**(앱을 먼저 배포하면 원생 목록·선생님 목록 조회가 실패한다).
+
+| 순서 | 파일 | 내용 | 적용 후 확인 |
+| --- | --- | --- | --- |
+| 1 | `20261018080000_student_status_and_edit_fixes.sql` | 재원 복귀 시 정기 일정 재생성, 같은 상태 재처리 거부(서버 시각), 원생 수정 RPC(요일별 시간·악기별 배정·서버 검증), 예전 4인자 `update_student_status`·`update_teacher_status` 삭제, `archive_expired_people` 앱 사용자 실행 회수 | `pg_get_functiondef`로 5인자 상태 함수 본문 확인, 4인자 오버로드가 없는지 |
+| 2 | `20261018090000_hourly_payroll_from_work_schedule.sql` | `mark_salary_settlement_paid` 시급 분기를 출근 일정 기준 재계산으로 교체 | 시급제 선생님으로 지급 확정 시 화면 금액과 서버 검증이 일치하는지 |
+| 3 | `20261018090100_teacher_profile_owner_only_salary.sql` | 선생님 등록·수정 RPC가 급여 인자를 원장에게만 허용 | 데스크 계정으로 급여 없이 등록·수정이 되는지 |
+| 4 | `20261018090200_teacher_resident_registration.sql` | 주민등록번호 암호화 저장·원장 전용 열람·audit, 직접 쓰기 차단 트리거 | **Vault에 `teacher_rrn_key`가 실제로 만들어졌는지**(NOTICE만 남기고 넘어갈 수 있음), 함수 소유자의 Vault 읽기 권한, 키 백업 |
+| 5 | `20261018100000_consultations.sql` | `consultations` 표·RLS(원장·데스크 전용, 컬럼 단위 grant), 1년 만료 삭제 함수, pg_cron 등록 | `cron.job`에 `lesson-delete-expired-consultations` 존재, 함수 실행, `\dp`로 권한 |
+| 6 | `20261018110000_student_pricing_age_discount.sql` | `students.age_as_of_year`, 할인 종류·소개 달 컬럼, 등록·수정 RPC 서버 검증, `update_student_basic_info`, 월 snapshot 생성 시 소개 할인 차감 | 17인자 수정 RPC가 없고 21인자만 남았는지, backfill 결과, 월 snapshot 새로 생성 시 금액 |
+| 7 | `20261018120000_teacher_student_roster.sql` | `list_students_for_teacher`, 선생님의 수강 정보 표 직접 조회 차단 | 선생님 계정으로 원생 화면·레슨표·개인레슨 검색이 동작하는지 |
+
+적용 전 절차:
+- `pnpm supabase migration list`로 원격 history가 `20261017090000`까지인지 확인하고 `pnpm supabase db push --dry-run`으로 대상이 위 7개뿐인지 본다.
+- 6번이 5번(선생님 원생 조회)·1번의 함수를 다시 만들므로 순서를 바꾸지 않는다. 6번은 1번이 만든 17인자 수정 RPC를 `drop`한다.
+- 독립 SQL 리뷰(2026-10-17)에서 Critical 2건(선생님 개인레슨 검색 회귀, 담당 선생님 A→B→A unique 위반)을 지적받아 고쳤고, 6번 파일은 리뷰 범위 밖이므로 적용 전에 한 번 더 읽는다.
+- 이 SQL들은 로컬에서 실제 Postgres에 적용해 보지 못했다(주민번호·시급 재계산은 PGlite stub으로만 확인). 적용 후 위 확인 항목으로 실제 동작을 검증한다.
+
+적용 기록 (2026-10-17):
+- 방법: `.env.local`의 `SUPABASE_ACCESS_TOKEN`으로 `pnpm supabase migration list`(대기 7개 확인) → `pnpm supabase db push --dry-run`(대상이 위 7개뿐) → `pnpm supabase db push --yes`. 7개 모두 오류 없이 적용됐고 NOTICE는 "존재하지 않아 건너뜀"(drop if exists) 5건뿐이다.
+- 적용 후 읽기 전용 카탈로그 확인:
+  - 함수: 이전 오버로드가 모두 사라졌다(`update_student_status`·`update_teacher_status`는 5인자만, `update_student_profile_from_date`는 21인자만). `list_students_for_teacher`·`set/reveal_teacher_resident_registration`·`update_student_basic_info`는 anon 실행 불가, `archive_expired_people`·`delete_expired_consultations`는 service_role만 실행 가능.
+  - Vault: `teacher_rrn_key`가 만들어졌다(값은 읽지 않음). **키 백업 절차는 아직 없다.**
+  - pg_cron: `lesson-delete-expired-consultations`(`0 18 * * *`), `lesson-archive-expired-people`이 활성이다.
+  - 정책: `consultations` 4개(select·insert·update·delete), `student_instruments`·`student_instrument_weekly_schedules` select는 `*_select_owner_desk` 하나뿐이다. `teachers`에 `teachers_guard_resident_registration` 트리거가 있다.
+  - 컬럼: `students.age_as_of_year`, `student_instruments.discount_kinds`·`referral_discount_month`·`referral_discount_amount`, `consultations` 표. 나이가 있는 원생 3명이 모두 backfill됐다.
+- 한계: 운영 데이터 행은 읽지 않았고, 선생님·데스크 계정으로 직접 확인하지 못했다. **실제 동작 검증(재원 복귀 일정 재생성, 시급 서버 재계산, 주민번호 저장·열람, 상담 만료 삭제, 선생님 화면, 소개 할인 snapshot)은 앱에서 직접 확인해야 한다.**
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.
