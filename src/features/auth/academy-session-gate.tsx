@@ -132,8 +132,10 @@ function SignInPanel({
   supabaseClientState: Extract<SupabaseClientState, { error: null }>;
 }) {
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // MVP 편의: 환경변수가 있으면 로그인 정보를 미리 채운다. 값은 소스에 두지 않고 로컬 `.env.local`에만 둔다.
+  // NEXT_PUBLIC 값은 빌드 결과(브라우저 코드)에 그대로 들어가므로 배포 환경에는 설정하지 않는다.
+  const [email, setEmail] = useState(process.env.NEXT_PUBLIC_PREFILL_LOGIN_EMAIL ?? "");
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_PREFILL_LOGIN_PASSWORD ?? "");
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   return (

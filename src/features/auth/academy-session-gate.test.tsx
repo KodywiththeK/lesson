@@ -50,6 +50,27 @@ describe("AcademySessionGate", () => {
     expect(screen.queryByText("Service Console")).not.toBeInTheDocument();
   });
 
+  it("MVP 자동채움 환경변수가 있으면 로그인 폼에 이메일과 비밀번호를 미리 채운다", async () => {
+    vi.stubEnv("NEXT_PUBLIC_PREFILL_LOGIN_EMAIL", "owner@example.test");
+    vi.stubEnv("NEXT_PUBLIC_PREFILL_LOGIN_PASSWORD", "mvp-password");
+    fetchCurrentAcademyContext.mockRejectedValue(new AuthRequiredError());
+    renderGate();
+
+    await screen.findByRole("form", { name: "로그인" });
+    expect(screen.getByLabelText("이메일")).toHaveValue("owner@example.test");
+    expect(screen.getByLabelText("비밀번호")).toHaveValue("mvp-password");
+  });
+
+  it("자동채움 값은 일부만 있어도 있는 칸만 채운다", async () => {
+    vi.stubEnv("NEXT_PUBLIC_PREFILL_LOGIN_EMAIL", "owner@example.test");
+    fetchCurrentAcademyContext.mockRejectedValue(new AuthRequiredError());
+    renderGate();
+
+    await screen.findByRole("form", { name: "로그인" });
+    expect(screen.getByLabelText("이메일")).toHaveValue("owner@example.test");
+    expect(screen.getByLabelText("비밀번호")).toHaveValue("");
+  });
+
   it("로그인했지만 학원 정보를 못 불러오면 로그인 폼 대신 원인과 다시 시도를 안내한다", async () => {
     fetchCurrentAcademyContext.mockRejectedValue(new Error("활성 학원 멤버십이 없습니다."));
     renderGate();
