@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildBookPurchaseList, type BookSale } from "@/domain/book-sale";
 
@@ -9,6 +11,15 @@ import {
   BookPurchaseListScreen,
   type BookPurchaseListQueryOptionsFactory,
 } from "./book-purchase-list-screen";
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+const supabaseMock = vi.hoisted(() => ({
+  client: { from: vi.fn(), rpc: vi.fn() },
+}));
+vi.mock("@/lib/supabase/client", () => ({
+  createSupabaseBrowserClient: () => supabaseMock.client,
+}));
 
 const bookSales: BookSale[] = [
   {
@@ -69,9 +80,12 @@ const pagedQueryOptionsFactory: BookPurchaseListQueryOptionsFactory = (options) 
   queryFn: async () => buildBookPurchaseList(manyBookSales, options),
 });
 
+type BookPurchaseListScreenProps = ComponentProps<typeof BookPurchaseListScreen>;
+
 function renderBookPurchaseListScreen(
-  queryOptionsFactory: BookPurchaseListQueryOptionsFactory,
+  queryOptionsFactory: BookPurchaseListQueryOptionsFactory | undefined,
   canRecordPayment = true,
+  props: Partial<BookPurchaseListScreenProps> = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -81,17 +95,28 @@ function renderBookPurchaseListScreen(
     },
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <BookPurchaseListScreen
-        academyId="academy-1"
-        academyName="더 클래식"
-        canRecordPayment={canRecordPayment}
-        queryOptionsFactory={queryOptionsFactory}
-      />
-    </QueryClientProvider>,
-  );
+  const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <BookPurchaseListScreen
+          academyId="academy-1"
+          academyName="더 클래식"
+          canRecordPayment={canRecordPayment}
+          queryOptionsFactory={queryOptionsFactory}
+          {...props}
+        />
+      </QueryClientProvider>,
+    ),
+    invalidateQueries,
+  };
 }
+
+const pendingBookQueryOptionsFactory: BookPurchaseListQueryOptionsFactory = (options) => ({
+  queryKey: ["books", options.academyId],
+  queryFn: async () => buildBookPurchaseList(bookSales, options),
+});
 
 describe("BookPurchaseListScreen", () => {
   afterEach(() => vi.useRealTimers());
@@ -140,9 +165,8 @@ describe("BookPurchaseListScreen", () => {
     expect(
       within(table).getByRole("cell", { name: "2026-08-21" }),
     ).toBeInTheDocument();
-    expect(
-      within(table).getByRole("cell", { name: "결제 대기" }),
-    ).toBeInTheDocument();
+    // 결제 상태 칸에는 원장용 "결제 완료 처리" 버튼이 함께 있어 셀 이름이 아닌 배지 글자로 확인한다.
+    expect(within(table).getByText("결제 대기")).toBeInTheDocument();
   });
 
   it("검색어와 결제 상태 필터 변경을 TanStack Query 입력으로 반영한다", async () => {
@@ -308,5 +332,183 @@ describe("BookPurchaseListScreen 페이지 이동", () => {
 
     expect(await screen.findByText("조건에 맞는 교재 구매 내역이 없습니다.")).toBeInTheDocument();
     expect(screen.getByText("총 0건")).toBeInTheDocument();
+  });
+});
+
+describe("BookPurchaseListScreen 결제 완료 처리", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T12:00:00+09:00"));
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function openPaymentDialog(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "김민지 바이엘 2 결제 완료 처리" }));
+
+    return screen.findByRole("dialog", { name: "결제 완료 처리" });
+  }
+
+  it("원장에게는 결제 대기 행에만 결제 완료 처리 버튼을 보여 준다", async () => {
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory);
+
+    const table = await screen.findByRole("table", { name: "교재 구매 목록" });
+    expect(within(within(table).getByRole("row", { name: /김민지/ })).getByRole("button", { name: "김민지 바이엘 2 결제 완료 처리" })).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /이서윤/ })).queryByRole("button", { name: /결제 완료 처리/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("결제 완료 처리는 원장만 할 수 있습니다.")).not.toBeInTheDocument();
+  });
+
+  it("원장이 아니면 버튼 대신 원장만 할 수 있다는 안내 한 줄을 보여 준다", async () => {
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory, false);
+
+    await screen.findByRole("table", { name: "교재 구매 목록" });
+    expect(screen.queryByRole("button", { name: /결제 완료 처리/ })).not.toBeInTheDocument();
+    expect(screen.getByText("결제 완료 처리는 원장만 할 수 있습니다.")).toBeInTheDocument();
+  });
+
+  it("입금일을 받아 결제 완료 처리하고 교재 목록과 재무 쿼리를 새로 불러온다", async () => {
+    const user = userEvent.setup();
+    const completeBookPayment = vi.fn().mockResolvedValue(undefined);
+    const { invalidateQueries } = renderBookPurchaseListScreen(pendingBookQueryOptionsFactory, true, {
+      completeBookPayment,
+    });
+
+    const dialog = await openPaymentDialog(user);
+    expect(within(dialog).getByText("확인하면 입출입내역에 교재 수입이 기록됩니다.")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("입금일")).toHaveValue("2026-10-15");
+
+    fireEvent.change(within(dialog).getByLabelText("입금일"), { target: { value: "2026-10-14" } });
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(completeBookPayment).toHaveBeenCalledWith({ releaseId: "sale-1", paidAt: "2026-10-14" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(toast.success).toHaveBeenCalledWith("교재 결제를 완료 처리했습니다.");
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["academy", "academy-1", "books"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["academy", "academy-1", "finance"] });
+  });
+
+  it("처리하는 동안에는 확인 버튼을 막고 처리 중으로 알린다", async () => {
+    const user = userEvent.setup();
+    let finish: () => void = () => undefined;
+    const completeBookPayment = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory, true, { completeBookPayment });
+
+    const dialog = await openPaymentDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    expect(await within(dialog).findByRole("button", { name: "처리 중" })).toBeDisabled();
+    expect(completeBookPayment).toHaveBeenCalledTimes(1);
+
+    finish();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("실패하면 사용자 문구로 알리고 성공 안내는 하지 않는다", async () => {
+    const user = userEvent.setup();
+    const completeBookPayment = vi.fn().mockRejectedValue(new Error("permission denied"));
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory, true, { completeBookPayment });
+
+    const dialog = await openPaymentDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("교재 결제 완료 처리에 실패했습니다.", {
+        description: "이 작업을 할 권한이 없습니다. 원장에게 문의해 주세요.",
+      }),
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("처리 핸들러도 서버 연결도 없는 환경에서는 처리할 수 없다고 알린다", async () => {
+    const user = userEvent.setup();
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory);
+
+    const dialog = await openPaymentDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("교재 결제 완료 처리에 실패했습니다.", {
+        description: "이 화면에서는 처리할 수 없습니다.",
+      }),
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("서버에 연결된 화면에서는 결제 완료 RPC로 처리한다", async () => {
+    const user = userEvent.setup();
+    const releaseRows = bookSales.map((sale) => ({
+      id: sale.saleId,
+      academy_id: sale.academyId,
+      book_id: sale.bookId,
+      student_id: sale.studentId,
+      student_name: sale.studentName,
+      book_title: sale.bookTitle,
+      price: sale.price,
+      shipped_at: sale.shippedAt,
+      status: sale.status,
+      paid_at: sale.status === "paid" ? sale.paidAt : null,
+    }));
+    // 목록 조회는 eq → order → range 순으로 이어 붙이고 마지막 range에서 결과를 돌려준다.
+    const pagedQuery = {
+      eq: () => pagedQuery,
+      order: () => pagedQuery,
+      range: async () => ({ data: releaseRows, error: null }),
+    };
+    supabaseMock.client.from.mockReturnValue({ select: () => pagedQuery });
+    supabaseMock.client.rpc.mockResolvedValue({
+      data: { ...releaseRows[0], status: "paid", paid_at: "2026-10-15" },
+      error: null,
+    });
+    renderBookPurchaseListScreen(undefined, true, {
+      students: [{ studentId: "student-1", name: "김민지" } as never],
+    });
+
+    const dialog = await openPaymentDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(supabaseMock.client.rpc).toHaveBeenCalledWith("complete_book_release_payment", {
+        p_academy_id: "academy-1",
+        p_release_id: "sale-1",
+        p_paid_at: "2026-10-15",
+      }),
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("교재 결제를 완료 처리했습니다."));
+  });
+});
+
+describe("BookPurchaseListScreen 교재 출고 저장", () => {
+  async function fillReleaseForm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "교재 출고" }));
+    const dialog = await screen.findByRole("dialog", { name: "교재 출고" });
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await user.type(within(dialog).getByLabelText("교재명"), "체르니 40");
+    fireEvent.change(within(dialog).getByLabelText("가격"), { target: { value: "14000" } });
+
+    return dialog;
+  }
+
+  it("저장하는 동안에는 저장 버튼을 막아 같은 출고가 두 번 등록되지 않게 한다", async () => {
+    const user = userEvent.setup();
+    let finish: () => void = () => undefined;
+    const registerBookRelease = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderBookPurchaseListScreen(pendingBookQueryOptionsFactory, true, {
+      registerBookRelease,
+      students: [{ studentId: "student-1", name: "김민지" } as never],
+    });
+
+    const dialog = await fillReleaseForm(user);
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    const savingButton = await within(dialog).findByRole("button", { name: "저장 중" });
+    expect(savingButton).toBeDisabled();
+    fireEvent.submit(within(dialog).getByRole("form", { name: "교재 출고 입력" }));
+    expect(registerBookRelease).toHaveBeenCalledTimes(1);
+
+    finish();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });

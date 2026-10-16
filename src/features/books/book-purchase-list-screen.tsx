@@ -60,6 +60,7 @@ import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createBookPurchaseListQueryKey,
   createBookPurchaseListQueryOptions,
+  completeBookReleasePayment,
   registerBookRelease as registerBookReleaseApi,
   type BookReleaseMutationSupabaseClient,
   type BookPurchaseListSupabaseClient,
@@ -72,6 +73,7 @@ import {
 } from "@/lib/api/students";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getFinanceToday } from "@/domain/finance-date";
+import { PaymentDialog } from "@/components/management/payment-dialog";
 
 type BookPurchaseListQueryOptions = {
   queryKey: QueryKey;
@@ -96,7 +98,11 @@ type BookPurchaseListScreenProps = {
     shippedAt: string;
     status: BookSaleStatus;
   }) => void | Promise<void>;
+  /** 결제 대기 교재를 결제 완료로 바꾼다. 없으면 서버에 연결된 화면에서만 처리된다. */
+  completeBookPayment?: (input: { releaseId: string; paidAt: string }) => void | Promise<void>;
 };
+
+const UNSUPPORTED_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
 
 type BookPurchaseSupabaseClient = BookPurchaseListSupabaseClient &
   BookReleaseMutationSupabaseClient &
@@ -126,11 +132,13 @@ export function BookPurchaseListScreen({
   queryOptionsFactory,
   students = [],
   registerBookRelease,
+  completeBookPayment,
 }: BookPurchaseListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<BookSaleStatus | "">("");
   const [isReleaseOpen, setIsReleaseOpen] = useState(false);
+  const [paymentTarget, setPaymentTarget] = useState<BookPurchaseListRow | null>(null);
   const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
@@ -202,12 +210,7 @@ export function BookPurchaseListScreen({
     onSuccess: () => {
       setIsReleaseOpen(false);
       toast.success("교재 출고를 등록했습니다.");
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), "books"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.finance.all(academyId),
-      });
+      invalidateBookAndFinanceQueries();
     },
     onError: (error) => {
       toast.error("교재 출고 등록에 실패했습니다.", {
@@ -215,7 +218,32 @@ export function BookPurchaseListScreen({
       });
     },
   });
+  const completePaymentMutation = useMutation({
+    mutationFn: async (input: { releaseId: string; paidAt: string }) => {
+      if (completeBookPayment) {
+        await completeBookPayment(input);
+        return;
+      }
+
+      if (!supabaseClientState?.client) {
+        throw new Error(UNSUPPORTED_MESSAGE);
+      }
+
+      await completeBookReleasePayment(supabaseClientState.client, { academyId, ...input });
+    },
+    onSuccess: () => {
+      setPaymentTarget(null);
+      toast.success("교재 결제를 완료 처리했습니다.");
+      invalidateBookAndFinanceQueries();
+    },
+    onError: (error) => {
+      toast.error("교재 결제 완료 처리에 실패했습니다.", {
+        description: toUserMessage(error),
+      });
+    },
+  });
   const purchaseListView = bookPurchaseListQuery.data;
+  const hasPendingPurchase = purchaseListView?.items.some(isPaymentPending) ?? false;
   const releaseAction = useMemo(
     () => (
       <Dialog open={isReleaseOpen} onOpenChange={setIsReleaseOpen}>
@@ -235,6 +263,7 @@ export function BookPurchaseListScreen({
           <BookReleaseForm
             canRecordPayment={canRecordPayment}
             students={studentOptions}
+            isSaving={registerMutation.isPending}
             onSubmit={(input) => {
               registerMutation.mutate(input);
             }}
@@ -245,6 +274,13 @@ export function BookPurchaseListScreen({
     [canRecordPayment, isReleaseOpen, registerMutation, studentOptions],
   );
   const isHeaderActionMounted = usePageHeaderActions(releaseAction);
+
+  function invalidateBookAndFinanceQueries() {
+    void queryClient.invalidateQueries({
+      queryKey: [...queryKeys.academy(academyId), "books"],
+    });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
+  }
 
   function changeSearch(nextSearch: string) {
     setSearch(nextSearch);
@@ -317,7 +353,16 @@ export function BookPurchaseListScreen({
 
         {purchaseListView && !bookPurchaseListQuery.isError ? (
           <>
-            <BookPurchaseListTable purchases={purchaseListView.items} />
+            <BookPurchaseListTable
+              purchases={purchaseListView.items}
+              canRecordPayment={canRecordPayment}
+              onCompletePayment={setPaymentTarget}
+            />
+            {!canRecordPayment && hasPendingPurchase ? (
+              <p className="px-4 pb-4 text-sm text-muted-foreground">
+                결제 완료 처리는 원장만 할 수 있습니다.
+              </p>
+            ) : null}
             <ListPagination
               itemLabel="교재 구매"
               countUnit="건"
@@ -328,6 +373,19 @@ export function BookPurchaseListScreen({
           </>
         ) : null}
       </div>
+      <PaymentDialog
+        open={Boolean(paymentTarget)}
+        title="결제 완료 처리"
+        description="확인하면 입출입내역에 교재 수입이 기록됩니다."
+        dateLabel="입금일"
+        pending={completePaymentMutation.isPending}
+        onConfirm={(paidAt) => {
+          if (paymentTarget) {
+            completePaymentMutation.mutate({ releaseId: paymentTarget.saleId, paidAt });
+          }
+        }}
+        onOpenChange={(open) => !open && setPaymentTarget(null)}
+      />
     </section>
   );
 }
@@ -335,10 +393,12 @@ export function BookPurchaseListScreen({
 function BookReleaseForm({
   canRecordPayment,
   students,
+  isSaving,
   onSubmit,
 }: {
   canRecordPayment: boolean;
   students: StudentListRow[];
+  isSaving: boolean;
   onSubmit: (input: {
     studentId: string;
     studentName?: string;
@@ -355,6 +415,7 @@ function BookReleaseForm({
   const [status, setStatus] = useState<BookSaleStatus>("payment-pending");
   const selectedStudent = students.find((student) => student.studentId === studentId);
   const canSubmit =
+    !isSaving &&
     Boolean(selectedStudent) &&
     Boolean(bookTitle.trim()) &&
     price > 0 &&
@@ -440,7 +501,7 @@ function BookReleaseForm({
       </div>
       <DialogFooter>
         <Button type="submit" disabled={!canSubmit}>
-          저장
+          {isSaving ? "저장 중" : "저장"}
         </Button>
       </DialogFooter>
     </form>
@@ -502,10 +563,18 @@ function createMissingSupabaseClientState(): SupabaseClientState {
   };
 }
 
+function isPaymentPending(purchase: BookPurchaseListRow) {
+  return purchase.status === "payment-pending";
+}
+
 function BookPurchaseListTable({
   purchases,
+  canRecordPayment,
+  onCompletePayment,
 }: {
   purchases: BookPurchaseListRow[];
+  canRecordPayment: boolean;
+  onCompletePayment: (purchase: BookPurchaseListRow) => void;
 }) {
   if (purchases.length === 0) {
     return (
@@ -538,13 +607,25 @@ function BookPurchaseListTable({
             </TableCell>
             <TableCell label="출고일" className="px-4 py-3">{purchase.shippedAt}</TableCell>
             <TableCell label="결제 상태" className="px-4 py-3">
-              <Badge
-                variant={
-                  purchase.status === "paid" ? "secondary" : "outline"
-                }
-              >
-                {formatBookSaleStatus(purchase.status)}
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    purchase.status === "paid" ? "secondary" : "outline"
+                  }
+                >
+                  {formatBookSaleStatus(purchase.status)}
+                </Badge>
+                {canRecordPayment && isPaymentPending(purchase) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    aria-label={`${purchase.studentName} ${purchase.bookTitle} 결제 완료 처리`}
+                    onClick={() => onCompletePayment(purchase)}
+                  >
+                    결제 완료 처리
+                  </Button>
+                ) : null}
+              </div>
             </TableCell>
           </TableRow>
         ))}

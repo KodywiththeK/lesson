@@ -22,7 +22,7 @@ describe("Home", () => {
     ]);
     expect(within(shortcuts).getByRole("link", { name: /수입 관리/ })).toHaveAttribute(
       "href",
-      "/finance/ledger",
+      "/finance/lesson-income",
     );
     expect(screen.queryByText("오늘 출석 확인")).not.toBeInTheDocument();
     expect(screen.queryByText("우선 개발 흐름")).not.toBeInTheDocument();
@@ -48,11 +48,11 @@ describe("Home", () => {
       "거래처",
       "교재",
       "수입 관리",
-      "입출금 내역",
-      "학원 레슨수입",
-      "교재내역",
+      "학원 고정 수입",
+      "입출입내역",
+      "교재 내역",
       "선생님 월급",
-      "전체수입",
+      "전체 수입",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
@@ -62,6 +62,6 @@ describe("Home", () => {
     ).toHaveAttribute("href", "/lessons/academy");
     expect(
       within(navigation).getByRole("link", { name: "수입 관리" }),
-    ).toHaveAttribute("href", "/finance/ledger");
+    ).toHaveAttribute("href", "/finance/lesson-income");
   });
 });

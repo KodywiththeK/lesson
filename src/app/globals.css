@@ -19,6 +19,10 @@
   --accent: oklch(0.9 0.04 157);
   --accent-foreground: oklch(0.24 0.035 156);
   --destructive: oklch(0.58 0.18 28);
+  /* 수입 관리 금액 의미 색: 합계=파랑, 수입=초록, 지출=빨강 */
+  --total: oklch(0.5 0.16 255);
+  --income: oklch(0.5 0.14 150);
+  --expense: oklch(0.55 0.19 27);
   --border: oklch(0.89 0.012 264);
   --input: var(--border);
   --ring: oklch(0.58 0.08 252);
@@ -49,6 +53,9 @@
   --accent: oklch(0.34 0.055 157);
   --accent-foreground: var(--foreground);
   --destructive: oklch(0.66 0.17 28);
+  --total: oklch(0.74 0.12 255);
+  --income: oklch(0.76 0.15 150);
+  --expense: oklch(0.72 0.17 27);
   --border: oklch(0.31 0.018 264);
   --input: var(--border);
   --ring: oklch(0.72 0.1 252);
@@ -78,6 +85,9 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-total: var(--total);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

@@ -21,6 +21,8 @@ type FieldProps = {
   disabled?: boolean;
   id?: string;
   required?: boolean;
+  /** 이 값 이후는 고르거나 입력할 수 없다(저장 형식 문자열 비교). 현재는 월 필드의 선택 패널이 반영한다. */
+  max?: string;
 };
 
 const DATE_FORMAT = "yyyy-MM-dd";
@@ -155,13 +157,17 @@ function PickerField({
   disabled,
   id,
   required,
+  max,
   "aria-label": label,
 }: FieldProps & { kind: FieldKind; panel: (api: PickerApi) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(value);
   const [syncedValue, setSyncedValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { icon: Icon, triggerName, placeholder, invalidMessage, isValid: isValidValue } = FIELD_KINDS[kind];
+  const { icon: Icon, triggerName, placeholder, invalidMessage, isValid: isValidKind } = FIELD_KINDS[kind];
+  // max는 월 필드만 반영한다. 날짜·시간 문자열과 비교하면 형식이 달라 잘못 막힌다.
+  const monthMax = kind === "month" ? max : undefined;
+  const isValidValue = (candidate: string) => isValidKind(candidate) && (!monthMax || candidate <= monthMax);
   const invalid = text !== "" && !isValidValue(text);
 
   if (value !== syncedValue) {
@@ -286,13 +292,24 @@ function DateTimePanel({ value, onValueChange }: { value: string; onValueChange:
   );
 }
 
-function MonthPanel({ value, onSelect }: { value: string; onSelect: (month: string) => void }) {
+function MonthPanel({
+  value,
+  max,
+  onSelect,
+}: {
+  value: string;
+  max?: string;
+  onSelect: (month: string) => void;
+}) {
   const match = MONTH_PATTERN.exec(value);
   const selectedYear = match ? Number(match[1]) : undefined;
   const selectedMonth = match?.[2];
   const baseYear = selectedYear ?? Number(getFinanceToday().slice(0, 4));
   const [year, setYear] = useState(baseYear);
-  const years = Array.from({ length: YEAR_RANGE * 2 + 1 }, (_, index) => baseYear - YEAR_RANGE + index);
+  const maxYear = max ? Number(max.slice(0, 4)) : undefined;
+  const years = Array.from({ length: YEAR_RANGE * 2 + 1 }, (_, index) => baseYear - YEAR_RANGE + index).filter(
+    (item) => maxYear === undefined || item <= maxYear,
+  );
 
   return (
     <div className="w-64 max-w-full p-3">
@@ -309,6 +326,7 @@ function MonthPanel({ value, onSelect }: { value: string; onSelect: (month: stri
               variant={isSelected ? "secondary" : "ghost"}
               aria-label={`${Number(month)}월`}
               aria-pressed={isSelected}
+              disabled={Boolean(max) && `${year}-${month}` > (max ?? "")}
               onClick={() => onSelect(`${year}-${month}`)}
             >
               {Number(month)}월
@@ -366,6 +384,7 @@ export function MonthField(props: FieldProps) {
       panel={({ commit, close }) => (
         <MonthPanel
           value={props.value}
+          max={props.max}
           onSelect={(month) => {
             commit(month);
             close();

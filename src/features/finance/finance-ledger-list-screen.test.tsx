@@ -15,6 +15,7 @@ import {
   FinancePayrollScreen,
   type FinanceLedgerListQueryOptionsFactory,
 } from "./finance-ledger-list-screen";
+import { resetFinanceMonthForTest } from "./finance-shared";
 
 const ledgerEntries: LedgerEntry[] = [
   {
@@ -88,7 +89,10 @@ const financeData: FinanceManagementData = {
   ],
 };
 
-beforeEach(() => vi.setSystemTime(new Date("2026-08-21T12:00:00+09:00")));
+beforeEach(() => {
+  resetFinanceMonthForTest();
+  vi.setSystemTime(new Date("2026-08-21T12:00:00+09:00"));
+});
 afterEach(() => vi.useRealTimers());
 
 describe("FinanceLedgerListScreen", () => {
@@ -99,9 +103,12 @@ describe("FinanceLedgerListScreen", () => {
       queryFn: async () => buildFinanceLedgerList(ledgerEntries, options),
     }));
 
+    const user = userEvent.setup();
+
     expect(screen.getByLabelText("입출금 월 선택")).toHaveValue("2026-10");
+    await user.click(screen.getByRole("button", { name: "상세 필터" }));
     expect(screen.getByLabelText("입출금 시작일")).toHaveValue("2026-10-01");
-    await userEvent.setup().click(screen.getByRole("button", { name: "수동 입출금 등록" }));
+    await user.click(screen.getByRole("button", { name: "수동 입출금 등록" }));
     expect(screen.getByLabelText("발생일")).toHaveValue("2026-10-15");
   });
 
@@ -150,13 +157,15 @@ describe("FinanceLedgerListScreen", () => {
       "조율",
     );
     await user.selectOptions(screen.getByLabelText("유형 필터"), "expense");
+    await user.click(screen.getByRole("button", { name: "상세 필터" }));
     await user.selectOptions(screen.getByLabelText("출처 필터"), "manual");
 
     expect(await screen.findByRole("cell", { name: "조율비" })).toBeInTheDocument();
     expect(
       screen.queryByRole("cell", { name: "교재 판매: 바이엘 2 / 김민지" }),
     ).not.toBeInTheDocument();
-    expect(seenOptions.at(-1)).toMatchObject({
+    // 월 합계 조회는 검색·필터 없이 따로 호출되므로, 목록 조회 입력만 골라 확인한다.
+    expect(seenOptions.filter((options) => options.search === "조율").at(-1)).toMatchObject({
       academyId: "academy-1",
       search: "조율",
       filters: {
@@ -173,7 +182,7 @@ describe("FinanceLedgerListScreen", () => {
     });
 
     async function openDeleteConfirmation(user: ReturnType<typeof userEvent.setup>) {
-      await user.click(await screen.findByRole("button", { name: "조율비 삭제" }));
+      await user.click(await screen.findByRole("button", { name: "2026-08-21 조율비 30,000원 삭제" }));
 
       return screen.findByRole("alertdialog", { name: "이 입출금 내역을 삭제할까요?" });
     }
@@ -275,7 +284,7 @@ describe("FinanceLedgerListScreen", () => {
     expect(screen.getByRole("alert")).not.toHaveTextContent("permission denied");
   });
 
-  it("월수강료 수납 확인 시 수납 mutation을 호출한다", async () => {
+  it("월수강료 입금 확인 시 입금 mutation을 호출한다", async () => {
     const user = userEvent.setup();
     const markTuitionPaid = vi.fn().mockResolvedValue({
       tuitionId: "snapshot-1",
@@ -312,9 +321,9 @@ describe("FinanceLedgerListScreen", () => {
     );
 
     const incomeTable = screen.getByRole("table", { name: "학원 레슨수입" });
-    await user.click(await within(incomeTable).findByRole("button", { name: "김민지 수납 처리" }));
-    const dialog = await screen.findByRole("dialog", { name: "수납 처리" });
-    fireEvent.change(within(dialog).getByLabelText("수납일"), {
+    await user.click(await within(incomeTable).findByRole("button", { name: "김민지 피아노 입금 처리" }));
+    const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
+    fireEvent.change(within(dialog).getByLabelText("입금일"), {
       target: { value: "2026-08-25" },
     });
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
@@ -328,7 +337,7 @@ describe("FinanceLedgerListScreen", () => {
     );
   });
 
-  it("월수강료 조회 실패 시 임시 항목으로 수납하지 않는다", async () => {
+  it("월수강료 조회 실패 시 임시 항목으로 입금하지 않는다", async () => {
     renderWithQueryClient(
       <FinanceLessonIncomeScreen
         academyId="academy-1"
@@ -349,10 +358,10 @@ describe("FinanceLedgerListScreen", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("조회 실패");
-    expect(screen.queryByRole("button", { name: /수납 처리/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /입금 처리/ })).not.toBeInTheDocument();
   });
 
-  it("월별 미납인원은 같은 원생의 여러 수강 항목을 한 명으로 센다", async () => {
+  it("월별 미납 인원은 같은 원생의 여러 수강 항목을 한 명으로 센다", async () => {
     const user = userEvent.setup();
     renderWithQueryClient(
       <FinanceLessonIncomeScreen
@@ -366,19 +375,19 @@ describe("FinanceLedgerListScreen", () => {
             enrollmentId: `enrollment-${instrumentId}`, instrumentId,
             instrumentName: instrumentId === "piano" ? "피아노" : "바이올린",
             progress: "신규", lessonFee: 140000, discountTotal: 0,
-            amount: 140000, dueOn: "2026-08-06", status: "unpaid" as const,
+            amount: 140000, dueOn: "2026-08-06", status: "overdue" as const,
           })),
         })}
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: "미납인원 1명" }));
-    const dialog = screen.getByRole("dialog", { name: "미납인원" });
+    await user.click(await screen.findByRole("button", { name: "미납 인원 1명" }));
+    const dialog = screen.getByRole("dialog", { name: "미납 인원" });
     expect(within(dialog).getByText("김민지 · 피아노")).toBeInTheDocument();
     expect(within(dialog).getByText("김민지 · 바이올린")).toBeInTheDocument();
   });
 
-  it("월수강료 미수납 확인 시 미수납 mutation을 호출한다", async () => {
+  it("월수강료 입금 취소 확인 시 미입금 mutation을 호출한다", async () => {
     const user = userEvent.setup();
     const markTuitionUnpaid = vi.fn().mockResolvedValue({
       tuitionId: "snapshot-1",
@@ -416,9 +425,9 @@ describe("FinanceLedgerListScreen", () => {
     );
 
     const incomeTable = screen.getByRole("table", { name: "학원 레슨수입" });
-    await user.click(await within(incomeTable).findByRole("button", { name: "김민지 미수납 처리" }));
-    const dialog = await screen.findByRole("dialog", { name: "미수납 처리" });
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(await within(incomeTable).findByRole("button", { name: "김민지 피아노 입금 취소" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "입금을 취소할까요?" });
+    await user.click(within(dialog).getByRole("button", { name: "입금 취소" }));
 
     await waitFor(() =>
       expect(markTuitionUnpaid).toHaveBeenCalledWith({
@@ -486,7 +495,7 @@ describe("FinanceLedgerListScreen", () => {
     expect(screen.queryByRole("button", { name: "박선생 급여 지급 확정" })).not.toBeInTheDocument();
   });
 
-  it("발주 기록이 없는 교재는 출고일을 발주일로 표시하지 않는다", () => {
+  it("결제 대기 교재는 출고일이 이번 달이어도 교재내역에 보이지 않는다", () => {
     renderWithQueryClient(
       <FinanceBooksScreen academyId="academy-1" financeData={{
         ...financeData,
@@ -498,13 +507,13 @@ describe("FinanceLedgerListScreen", () => {
       }} />,
     );
 
-    const row = screen.getByRole("row", { name: /김민지/ });
-    expect(within(row).getAllByRole("cell")[3]).toHaveTextContent("-");
+    expect(screen.queryByRole("row", { name: /김민지/ })).not.toBeInTheDocument();
+    expect(screen.getByText("결제 완료된 교재 내역이 없습니다.")).toBeInTheDocument();
   });
 });
 
 describe("FinanceLessonIncomeScreen 회차권 수입", () => {
-  it("등록 건별 원장 금액을 보여주고 0원·삭제된 원장을 수납 완료와 구분한다", async () => {
+  it("등록 건별 원장 금액을 보여주고 0원·삭제된 원장을 입금 완료와 구분한다", async () => {
     const ticket = {
       academyId: "academy-1", ticketId: "ticket-1", studentId: "student-1",
       studentName: "김민지", instrumentId: "piano", instrumentName: "피아노",
@@ -557,7 +566,7 @@ describe("FinanceLessonIncomeScreen 회차권 수입", () => {
     expect(within(table).queryByText("240,000원")).not.toBeInTheDocument();
     expect(within(table).getByText("0원 등록")).toBeInTheDocument();
     expect(within(table).getByText("원장 기록 없음")).toBeInTheDocument();
-    expect(within(table).getAllByText("수납 완료")).toHaveLength(1);
+    expect(within(table).getAllByText("입금 완료")).toHaveLength(1);
   });
 });
 
@@ -589,10 +598,10 @@ describe("재무 목록 반응형 표", () => {
 
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
     const row = await within(table).findByRole("row", { name: /김민지/ });
-    expectRowLabels(row, ["이름", "레슨종류", "악기", "진도", "레슨비", "할인", "최종금액", "수납"]);
+    expectRowLabels(row, ["이름", "레슨종류", "악기", "진도", "레슨비", "할인", "최종금액", "입금 상태"]);
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("학원 레슨수입 간략 목록")).not.toBeInTheDocument();
-    expect(within(table).getByRole("button", { name: "김민지 수납 처리" })).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "김민지 피아노 입금 처리" })).toBeInTheDocument();
   });
 
   it("교재내역의 모든 값에 항목명을 제공한다", () => {
@@ -602,15 +611,15 @@ describe("재무 목록 반응형 표", () => {
         bookSales: [{
           academyId: "academy-1", saleId: "sale-responsive", bookId: "book-1",
           bookTitle: "바이엘", studentId: "student-1", studentName: "김민지",
-          price: 12000, shippedAt: "2026-08-20", status: "payment-pending",
+          price: 12000, shippedAt: "2026-08-20", status: "paid",
+          paidAt: "2026-08-21", permanent: true,
         }],
       }} />,
     );
 
     const table = screen.getByRole("table", { name: "교재내역" });
     expectRowLabels(within(table).getByRole("row", { name: /김민지/ }),
-      ["원생", "교재명", "금액", "발주일", "출고일", "입금일", "상태"]);
-    expect(within(table).getByText("입금 대기")).toBeInTheDocument();
+      ["이름", "도서명", "가격", "출고일", "입금일"]);
   });
 
   it("선생님 월급의 모든 값에 항목명을 제공하고 지급 동작을 유지한다", () => {
@@ -618,7 +627,7 @@ describe("재무 목록 반응형 표", () => {
 
     const table = screen.getByRole("table", { name: "선생님 월급" });
     expectRowLabels(within(table).getByRole("row", { name: /박선생/ }),
-      ["선생님", "급여유형", "기본급여", "원천징수", "최종지급액", "지급"]);
+      ["선생님", "담당 파트", "급여 형태·설정", "기본급여(세전)", "원천징수(3.3%)", "최종지급액(세후)", "산출 근거", "지급 상태", "관리"]);
     expect(within(table).getByRole("button", { name: "박선생 급여 지급 확정" })).toBeInTheDocument();
   });
 
@@ -631,7 +640,7 @@ describe("재무 목록 반응형 표", () => {
     const table = await screen.findByRole("table", { name: "입출금 내역" });
     const row = within(table).getByRole("row", { name: /조율비/ });
     expectRowLabels(row, ["발생일", "유형", "출처", "분류", "금액", "설명", "관리"]);
-    expect(within(row).getByRole("button", { name: "조율비 수정" })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "조율비 삭제" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "2026-08-21 조율비 30,000원 수정" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "2026-08-21 조율비 30,000원 삭제" })).toBeInTheDocument();
   });
 });

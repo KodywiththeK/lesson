@@ -13,10 +13,16 @@ import {
   FinancePayrollScreen,
   type FinanceManagementData,
 } from "@/features/finance/finance-management-screens";
+import { readFreshData, useFinanceMonth } from "@/features/finance/finance-shared";
 import { toUserMessage } from "@/lib/errors/user-message";
+import { createFinanceLedgerListQueryOptions } from "@/lib/api/finance";
 import {
-  fetchFinanceManagementData,
+  cancelPayrollSettlementPaid,
+  clearMonthlyTuitionOverdue,
   createMonthlyTuitionSnapshotsQueryOptions,
+  createYearlyTuitionSnapshotsQueryOptions,
+  fetchFinanceManagementData,
+  markMonthlyTuitionAsOverdue,
   markMonthlyTuitionAsPaid,
   markMonthlyTuitionAsUnpaid,
   markPayrollSettlementAsPaid,
@@ -119,6 +125,16 @@ function renderFinanceScreen(
                 ? (input) => markMonthlyTuitionAsUnpaid(client, input)
                 : undefined
             }
+            markTuitionOverdue={
+              client
+                ? (input) => markMonthlyTuitionAsOverdue(client, input)
+                : undefined
+            }
+            clearTuitionOverdue={
+              client
+                ? (input) => clearMonthlyTuitionOverdue(client, input)
+                : undefined
+            }
             tuitionSnapshotsQueryOptionsFactory={
               client
                 ? (month) =>
@@ -158,13 +174,19 @@ function renderFinanceScreen(
         fallbackData={fallbackData}
         useTestDemo={context.useTestDemo}
       >
-        {(financeData, client) => (
+        {(financeData, client, refetchFinanceData) => (
           <FinancePayrollScreen
             academyId={context.academyId}
             financeData={financeData}
+            refetchFinanceData={refetchFinanceData}
             markPayrollPaid={
               client
                 ? (input) => markPayrollSettlementAsPaid(client, input)
+                : undefined
+            }
+            cancelPayrollPaid={
+              client
+                ? (input) => cancelPayrollSettlementPaid(client, input)
                 : undefined
             }
           />
@@ -177,36 +199,82 @@ function renderFinanceScreen(
     <FinanceDataScreen
       academyId={context.academyId}
       fallbackData={fallbackData}
+      needsManagementData={false}
       useTestDemo={context.useTestDemo}
     >
-      {(financeData) => (
+      {(financeData, client) => (
         <FinanceOverviewScreen
           academyId={context.academyId}
           financeData={financeData}
+          tuitionSnapshotsQueryOptionsFactory={
+            client
+              ? (month) =>
+                  createMonthlyTuitionSnapshotsQueryOptions(client, {
+                    academyId: context.academyId,
+                    month,
+                  })
+              : undefined
+          }
+          yearlyLedgerQueryOptionsFactory={
+            client
+              ? (year) =>
+                  createFinanceLedgerListQueryOptions(client, {
+                    academyId: context.academyId,
+                    dateRange: { from: `${year}-01-01`, to: `${year}-12-31` },
+                  })
+              : undefined
+          }
+          yearlyTuitionQueryOptionsFactory={
+            client
+              ? (year) =>
+                  createYearlyTuitionSnapshotsQueryOptions(client, {
+                    academyId: context.academyId,
+                    year,
+                    status: "paid",
+                  })
+              : undefined
+          }
         />
       )}
     </FinanceDataScreen>
   );
 }
 
+const EMPTY_FINANCE_DATA: FinanceManagementData = {
+  ledgerEntries: [],
+  enrollments: [],
+  tickets: [],
+  bookSales: [],
+  teachers: [],
+};
+
+/**
+ * 수입 관리 화면의 월 단위 데이터를 읽는다. 조회 월이 바뀌면 그 달 범위만 다시 읽는다(서버 1000행 절단 방지).
+ * `needsManagementData`가 false인 화면(전체 수입)은 자기 쿼리로 읽으므로 이 데이터를 읽지 않는다.
+ */
 function FinanceDataScreen({
   academyId,
   children,
   fallbackData,
+  needsManagementData = true,
   useTestDemo,
 }: {
   academyId: string;
   children: (
     data: FinanceManagementData,
     client: FinanceManagementSupabaseClient | null,
+    refetch: () => Promise<FinanceManagementData | undefined>,
   ) => ReactNode;
   fallbackData: FinanceManagementData;
+  needsManagementData?: boolean;
   useTestDemo: boolean;
 }) {
+  const { month } = useFinanceMonth();
   const supabaseClientState = useMemo(
     () => (useTestDemo ? null : createFinanceManagementSupabaseClient()),
     [useTestDemo],
   );
+  const shouldRead = needsManagementData && (useTestDemo || !supabaseClientState?.error);
   const dataQuery = useQuery<FinanceManagementData, Error>({
     queryKey: [
       "academy",
@@ -214,16 +282,19 @@ function FinanceDataScreen({
       "finance",
       "management-data",
       useTestDemo ? "demo" : "remote",
+      month,
     ] as const,
     queryFn: async () => {
       if (useTestDemo || !supabaseClientState?.client) {
         return fallbackData;
       }
 
-      return fetchFinanceManagementData(supabaseClientState.client, academyId);
+      return fetchFinanceManagementData(supabaseClientState.client, academyId, { month });
     },
-    enabled: useTestDemo || !supabaseClientState?.error,
+    // 월을 바꾸면 이전 월 데이터를 새 월에 섞어 보여 주지 않고 로딩 표시를 거친다(월별로 캐시되어 다시 열면 바로 보인다).
+    enabled: shouldRead,
   });
+  const refetch = () => readFreshData(() => dataQuery.refetch());
 
   if (!useTestDemo && supabaseClientState?.error) {
     return (
@@ -232,6 +303,10 @@ function FinanceDataScreen({
         detail={toUserMessage(supabaseClientState.error)}
       />
     );
+  }
+
+  if (!needsManagementData) {
+    return <>{children(useTestDemo ? fallbackData : EMPTY_FINANCE_DATA, supabaseClientState?.client ?? null, refetch)}</>;
   }
 
   if (dataQuery.isLoading) {
@@ -247,11 +322,14 @@ function FinanceDataScreen({
       <ListStatusAlert
         message="수입 관리 데이터를 불러오지 못했습니다."
         detail={toUserMessage(dataQuery.error)}
+        onRetry={() => void dataQuery.refetch()}
       />
     );
   }
 
-  return <>{children(dataQuery.data ?? fallbackData, supabaseClientState?.client ?? null)}</>;
+  return (
+    <>{children(dataQuery.data ?? fallbackData, supabaseClientState?.client ?? null, refetch)}</>
+  );
 }
 
 function createFinanceManagementSupabaseClient() {

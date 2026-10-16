@@ -271,7 +271,7 @@ test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다
   ).toBeVisible();
 });
 
-test("수입 관리 메뉴에서 입출금 내역 화면으로 이동할 수 있다", async ({ page }) => {
+test("수입 관리 메뉴는 학원 고정 수입을 기본으로 열고 입출입내역 탭으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
   await mainNavigation(page).getByRole("link", { name: "수입 관리" }).click();
@@ -279,31 +279,37 @@ test("수입 관리 메뉴에서 입출금 내역 화면으로 이동할 수 있
   await expect(
     page.getByRole("heading", { level: 1, name: "수입 관리" }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/\/finance\/lesson-income/);
+  await expect(
+    page.getByRole("heading", { name: "학원 고정 수입 (원생 레슨 수입)" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "수입 관리 하위 메뉴" })
+    .getByRole("link", { name: "입출입내역" })
+    .click();
+
   await expect(page).toHaveURL(/\/finance\/ledger/);
   await expect(
     page.getByRole("searchbox", { name: "입출금 내역 검색" }),
   ).toBeVisible();
 });
 
-test("좁은 화면에서도 레슨수입과 수납 액션을 가로 잘림 없이 확인한다", async ({ page }) => {
+test("좁은 화면에서도 고정 수입과 입금 액션을 가로 잘림 없이 확인한다", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/finance/lesson-income");
 
   await expect(page.getByRole("heading", { level: 1, name: "수입 관리" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "작업 메뉴 열기" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "김민지 수납 처리" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "김민지 피아노 입금 처리" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test("모바일 작업 메뉴에서 미납인원 다이얼로그를 열 수 있다", async ({ page }) => {
+test("모바일에서도 미납 인원 다이얼로그를 열 수 있다", async ({ page }) => {
   await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/finance/lesson-income");
-  await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
-  await page.getByRole("dialog", { name: "페이지 작업" })
-    .getByRole("button", { name: /미납인원/ }).click();
-  await expect(page.locator('[data-slot="sheet-content"]')).toHaveCount(0);
-  await expect(page.getByRole("dialog", { name: "미납인원" })).toBeVisible();
+  await page.getByRole("button", { name: /미납 인원/ }).click();
+  await expect(page.getByRole("dialog", { name: "미납 인원" })).toBeVisible();
 });
 
 async function openPageAction(page: Page, name: string, isNarrow: boolean) {

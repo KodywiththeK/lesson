@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -93,14 +94,24 @@ export function ListFilterSelect({
 export function ListStatusAlert({
   message,
   detail,
+  onRetry,
 }: {
   message: string;
   detail: string;
+  /** 있으면 "다시 불러오기" 버튼을 보여 준다. */
+  onRetry?: () => void;
 }) {
   return (
     <Alert variant="destructive" className="m-4">
       <AlertTitle>{message}</AlertTitle>
-      <AlertDescription>{detail}</AlertDescription>
+      <AlertDescription>
+        <p>{detail}</p>
+        {onRetry ? (
+          <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+            다시 불러오기
+          </Button>
+        ) : null}
+      </AlertDescription>
     </Alert>
   );
 }

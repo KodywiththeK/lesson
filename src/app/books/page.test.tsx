@@ -96,4 +96,22 @@ describe("BooksPage", () => {
     expect(await screen.findByText("체르니 40")).toBeInTheDocument();
     expect(screen.getByText("140,000원")).toBeInTheDocument();
   });
+
+  it("결제 대기 교재는 원장 화면에서 결제 완료 처리 입금일 창을 열 수 있다", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppProviders>
+        <BooksPage />
+      </AppProviders>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "김민지 바이엘 상 결제 완료 처리" }));
+    const dialog = await screen.findByRole("dialog", { name: "결제 완료 처리" });
+
+    expect(within(dialog).getByLabelText("입금일")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "한서아 스즈키 바이올린 1 결제 완료 처리" }),
+    ).not.toBeInTheDocument();
+  });
 });

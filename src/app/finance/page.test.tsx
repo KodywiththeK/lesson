@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppProviders } from "../providers";
 import { expectWholeWonInput } from "@/test/expect-whole-won-input";
 import { nextRedirectMock } from "@/test/setup";
+import { resetFinanceMonthForTest } from "@/features/finance/finance-shared";
 import FinancePage from "./page";
 import FinanceBooksPage from "./books/page";
 import FinanceLedgerPage from "./ledger/page";
@@ -15,12 +16,13 @@ import FinancePayrollPage from "./payroll/page";
 describe("Finance routes", () => {
   afterEach(() => {
     vi.useRealTimers();
+    resetFinanceMonthForTest();
   });
 
 
-  it("/finance는 입출금 내역으로 redirect한다", () => {
+  it("/finance는 기본 탭인 학원 고정 수입으로 redirect한다", () => {
     expect(() => FinancePage()).toThrow("NEXT_REDIRECT");
-    expect(nextRedirectMock).toHaveBeenCalledWith("/finance/ledger");
+    expect(nextRedirectMock).toHaveBeenCalledWith("/finance/lesson-income");
   });
 
   it("입출금 내역 하위 탭과 캘린더뷰, CSV action을 제공한다", async () => {
@@ -39,7 +41,7 @@ describe("Finance routes", () => {
       name: "수입 관리 하위 메뉴",
     });
     expect(
-      within(subNavigation).getByRole("link", { name: "입출금 내역" }),
+      within(subNavigation).getByRole("link", { name: "입출입내역" }),
     ).toHaveAttribute("href", "/finance/ledger");
     expect(
       screen.getByRole("button", { name: "CSV 내보내기" }),
@@ -71,7 +73,7 @@ describe("Finance routes", () => {
     });
     await user.selectOptions(within(createDialog).getByLabelText("유형"), "expense");
     await user.selectOptions(
-      within(createDialog).getByLabelText("고정 분류"),
+      within(createDialog).getByLabelText("분류"),
       "supplies",
     );
     fireEvent.change(within(createDialog).getByLabelText("금액"), {
@@ -84,7 +86,7 @@ describe("Finance routes", () => {
 
     expect(await screen.findByText("현악기 줄 교체비")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("button", { name: "현악기 줄 교체비 수정" }),
+      screen.getByRole("button", { name: /^\d{4}-\d{2}-\d{2} 현악기 줄 교체비 45,000원 수정$/ }),
     );
     const editDialog = await screen.findByRole("dialog", {
       name: "입출금 내역 수정",
@@ -97,7 +99,7 @@ describe("Finance routes", () => {
     expect(await screen.findByText("피아노 조율비 수정")).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: "피아노 조율비 수정 삭제" }),
+      screen.getByRole("button", { name: /^\d{4}-\d{2}-\d{2} 피아노 조율비 수정 45,000원 삭제$/ }),
     );
     const confirmDialog = await screen.findByRole("alertdialog", {
       name: "이 입출금 내역을 삭제할까요?",
@@ -125,7 +127,7 @@ describe("Finance routes", () => {
     expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "금액" }));
   });
 
-  it("수납 다이얼로그의 수납일은 열 때마다 학원 기준 오늘 날짜로 시작한다", async () => {
+  it("입금 다이얼로그의 입금일은 열 때마다 학원 기준 오늘 날짜로 시작한다", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-15T01:00:00Z"));
     const user = userEvent.setup();
@@ -137,30 +139,31 @@ describe("Finance routes", () => {
       </AppProviders>,
     );
 
-    fireEvent.change(await screen.findByLabelText("월별 전체 레슨수입 월 선택"), {
+    fireEvent.change(await screen.findByLabelText("전체 금액 합산 월 선택"), {
       target: { value: "2026-08" },
     });
     const openPaymentDialog = async () => {
+      // 월을 바꾸면 이전 월 데이터를 보여 주지 않고 새로 읽으므로 행이 나타날 때까지 기다린다.
       await user.click(
-        within(await screen.findByRole("table", { name: "학원 레슨수입" })).getByRole("button", {
-          name: /김민지 수납 처리/,
+        await within(await screen.findByRole("table", { name: "학원 레슨수입" })).findByRole("button", {
+          name: /김민지 .+ 입금 처리/,
         }),
       );
-      return screen.findByRole("dialog", { name: "수납 처리" });
+      return screen.findByRole("dialog", { name: "입금 처리" });
     };
 
     const firstDialog = await openPaymentDialog();
-    expect(within(firstDialog).getByLabelText("수납일")).toHaveValue("2026-10-15");
+    expect(within(firstDialog).getByLabelText("입금일")).toHaveValue("2026-10-15");
 
-    await user.clear(within(firstDialog).getByLabelText("수납일"));
-    await user.type(within(firstDialog).getByLabelText("수납일"), "2026-09-01");
+    await user.clear(within(firstDialog).getByLabelText("입금일"));
+    await user.type(within(firstDialog).getByLabelText("입금일"), "2026-09-01");
     await user.click(within(firstDialog).getByRole("button", { name: "취소" }));
 
     const secondDialog = await openPaymentDialog();
-    expect(within(secondDialog).getByLabelText("수납일")).toHaveValue("2026-10-15");
+    expect(within(secondDialog).getByLabelText("입금일")).toHaveValue("2026-10-15");
   });
 
-  it("학원 레슨수입은 통합 표와 수납 dialog를 제공한다", async () => {
+  it("학원 레슨수입은 통합 표와 입금 dialog를 제공한다", async () => {
     const user = userEvent.setup();
     window.history.pushState(null, "", "/finance/lesson-income");
 
@@ -170,7 +173,7 @@ describe("Finance routes", () => {
       </AppProviders>,
     );
 
-    fireEvent.change(await screen.findByLabelText("월별 전체 레슨수입 월 선택"), {
+    fireEvent.change(await screen.findByLabelText("전체 금액 합산 월 선택"), {
       target: { value: "2026-08" },
     });
 
@@ -183,12 +186,12 @@ describe("Finance routes", () => {
       within(table).getAllByRole("cell", { name: "개인레슨 회차권" }).length,
     ).toBeGreaterThan(0);
 
-    await user.click(within(screen.getByRole("table", { name: "학원 레슨수입" })).getByRole("button", { name: /김민지 수납 처리/ }));
-    const dialog = await screen.findByRole("dialog", { name: "수납 처리" });
-    expect(within(dialog).getByLabelText("수납일")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("table", { name: "학원 레슨수입" })).getByRole("button", { name: /김민지 .+ 입금 처리/ }));
+    const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
+    expect(within(dialog).getByLabelText("입금일")).toBeInTheDocument();
   });
 
-  it("교재내역은 발주일, 출고일, 입금일을 보여준다", async () => {
+  it("교재내역은 결제 완료된 건의 출고일과 입금일만 보여준다", async () => {
     window.history.pushState(null, "", "/finance/books");
 
     render(
@@ -197,10 +200,17 @@ describe("Finance routes", () => {
       </AppProviders>,
     );
 
+    fireEvent.change(await screen.findByLabelText("교재 수입 총합 월 선택"), {
+      target: { value: "2026-08" },
+    });
+
     const table = await screen.findByRole("table", { name: "교재내역" });
-    expect(within(table).getByRole("columnheader", { name: "발주일" })).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "발주일" })).not.toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "상태" })).not.toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "출고일" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "입금일" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "한서아" })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: "김민지" })).not.toBeInTheDocument();
   });
 
   it("선생님 월급은 월별 급여와 지급 확정 action을 보여준다", async () => {
@@ -213,14 +223,14 @@ describe("Finance routes", () => {
     );
 
     const table = await screen.findByRole("table", { name: "선생님 월급" });
-    expect(within(table).getByRole("columnheader", { name: "기본급여" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "원천징수" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "기본급여(세전)" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "원천징수(3.3%)" })).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: /급여 지급 확정/ }).length,
     ).toBeGreaterThan(0);
   });
 
-  it("전체수입은 월별 수입·지출 그래프와 수입 분류별 합계를 보여준다", async () => {
+  it("전체수입은 월별 그래프와 월별 수입·지출·순수익 표, 수입 분류별 합계를 보여준다", async () => {
     window.history.pushState(null, "", "/finance/overview");
 
     render(
@@ -229,7 +239,8 @@ describe("Finance routes", () => {
       </AppProviders>,
     );
 
-    expect(await screen.findByRole("figure", { name: "월별 수입·지출 그래프" })).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "월별 수입·지출·순수익" })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: /학원 수입 월별 그래프$/ })).toBeInTheDocument();
     expect(screen.getByText("분류별 수입")).toBeInTheDocument();
     expect(screen.queryByText("피아노 조율비")).not.toBeInTheDocument();
   });

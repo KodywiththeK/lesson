@@ -138,6 +138,42 @@ describe("날짜와 시간 선택 필드", () => {
     expect(onValueChange).toHaveBeenLastCalledWith("");
   });
 
+  it("월 필드에 최대 월을 두면 그 이후 월은 고를 수 없고 직접 입력해도 전달하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<MonthField aria-label="조회 월" value="2026-10" max="2026-10" required onValueChange={onValueChange} />);
+
+    await user.click(screen.getByRole("button", { name: "조회 월 월 선택 열기" }));
+
+    expect(screen.getByRole("button", { name: "10월" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "11월" })).toBeDisabled();
+    expect(screen.queryByRole("option", { name: "2027년" })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    const input = screen.getByRole("textbox", { name: "조회 월" });
+    await user.clear(input);
+    await user.type(input, "2026-11");
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(input).toBeInvalid();
+
+    await user.tab();
+    expect(input).toHaveValue("2026-10");
+  });
+
+  it("max는 월 필드에만 적용되고 날짜 필드의 값은 제한하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<DateField aria-label="날짜" value="2026-10-15" max="2026-10" required onValueChange={onValueChange} />);
+    const input = screen.getByRole("textbox", { name: "날짜" });
+
+    await user.clear(input);
+    await user.type(input, "2026-11-20");
+
+    expect(onValueChange).toHaveBeenLastCalledWith("2026-11-20");
+    expect(input).toBeValid();
+  });
+
   it("필수 필드를 지워도 빈 값은 전달하지 않고 포커스를 잃으면 마지막 값으로 되돌린다", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();

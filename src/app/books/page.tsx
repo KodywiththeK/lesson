@@ -31,6 +31,9 @@ export default function BooksPage() {
             registerBookRelease={
               useTestDemo ? demo.registerBookRelease : undefined
             }
+            completeBookPayment={
+              useTestDemo ? demo.completeBookPayment : undefined
+            }
           />
         </AppShell>
       )}

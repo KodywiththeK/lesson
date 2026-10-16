@@ -17,6 +17,7 @@ import {
   type FinanceLedgerListQueryOptionsFactory,
   type FinanceManagementData,
 } from "./finance-ledger-list-screen";
+import { resetFinanceMonthForTest } from "./finance-shared";
 
 /** 가나다순으로 이미 정렬된 이름 12개. 10건 단위 페이지가 2페이지로 나뉘는 최소 규모다. */
 const SORTED_NAMES = [
@@ -72,6 +73,13 @@ function expectCurrentPage(page: number) {
 }
 
 describe("입출금 내역 목록 나누기", () => {
+  beforeEach(resetFinanceMonthForTest);
+
+  /** 출처·분류·기간·정렬은 접힌 "상세 필터" 안에 있어 먼저 펼친다. */
+  function openDetailFilters() {
+    fireEvent.click(screen.getByRole("button", { name: "상세 필터" }));
+  }
+
   function buildLedgerEntries(
     month: string,
     count: number,
@@ -203,34 +211,44 @@ describe("입출금 내역 목록 나누기", () => {
     },
     {
       name: "출처 필터",
-      change: () =>
-        fireEvent.change(screen.getByLabelText("출처 필터"), { target: { value: "manual" } }),
+      change: () => {
+        openDetailFilters();
+        fireEvent.change(screen.getByLabelText("출처 필터"), { target: { value: "manual" } });
+      },
     },
     {
       name: "분류 필터",
-      change: () =>
-        fireEvent.change(screen.getByLabelText("분류 필터"), { target: { value: "other" } }),
+      change: () => {
+        openDetailFilters();
+        fireEvent.change(screen.getByLabelText("분류 필터"), { target: { value: "other" } });
+      },
     },
     {
       name: "정렬",
-      change: () =>
+      change: () => {
+        openDetailFilters();
         fireEvent.change(screen.getByLabelText("입출금 정렬"), {
           target: { value: "occurredOn-asc" },
-        }),
+        });
+      },
     },
     {
       name: "시작일",
-      change: () =>
+      change: () => {
+        openDetailFilters();
         fireEvent.change(screen.getByLabelText("입출금 시작일"), {
           target: { value: "2026-07-31" },
-        }),
+        });
+      },
     },
     {
       name: "종료일",
-      change: () =>
+      change: () => {
+        openDetailFilters();
         fireEvent.change(screen.getByLabelText("입출금 종료일"), {
           target: { value: "2026-09-01" },
-        }),
+        });
+      },
     },
     {
       name: "초기화 버튼",
@@ -257,8 +275,8 @@ describe("입출금 내역 목록 나누기", () => {
     await user.click(screen.getByRole("tab", { name: "캘린더" }));
 
     const calendar = screen.getByRole("grid", { name: "2026년 8월 입출금 캘린더" });
-    expect(within(calendar).getByText("+1,000원")).toBeInTheDocument();
-    expect(within(calendar).getByText("+25,000원")).toBeInTheDocument();
+    expect(within(calendar).getByText("1,000원")).toBeInTheDocument();
+    expect(within(calendar).getByText("25,000원")).toBeInTheDocument();
   });
 
   it("CSV 내보내기는 현재 페이지가 아니라 필터 결과 전체를 담는다", async () => {
@@ -296,6 +314,8 @@ describe("입출금 내역 목록 나누기", () => {
 });
 
 describe("학원 레슨수입 목록 나누기", () => {
+  beforeEach(resetFinanceMonthForTest);
+
   function buildTuition(
     name: string,
     index: number,
@@ -438,7 +458,7 @@ describe("학원 레슨수입 목록 나누기", () => {
     await screen.findByText("총 12건");
 
     await user.click(screen.getByRole("button", { name: "다음 페이지" }));
-    fireEvent.change(screen.getByLabelText("월별 전체 레슨수입 월 선택"), {
+    fireEvent.change(screen.getByLabelText("전체 금액 합산 월 선택"), {
       target: { value: "2026-07" },
     });
 
@@ -474,7 +494,7 @@ describe("학원 레슨수입 목록 나누기", () => {
     expect(screen.queryByText("조건에 맞는 레슨수입이 없습니다.")).not.toBeInTheDocument();
   });
 
-  it("수납 처리는 다음 페이지의 원생도 할 수 있다", async () => {
+  it("입금 처리는 다음 페이지의 원생도 할 수 있다", async () => {
     const user = userEvent.setup();
     const markTuitionPaid = vi.fn().mockResolvedValue({ status: "paid" });
     renderWithQueryClient(
@@ -492,8 +512,8 @@ describe("학원 레슨수입 목록 나누기", () => {
 
     await user.click(screen.getByRole("button", { name: "다음 페이지" }));
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
-    await user.click(within(table).getByRole("button", { name: "한서아 수납 처리" }));
-    const dialog = await screen.findByRole("dialog", { name: "수납 처리" });
+    await user.click(within(table).getByRole("button", { name: "한서아 피아노 입금 처리" }));
+    const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
 
     await waitFor(() =>
@@ -505,6 +525,9 @@ describe("학원 레슨수입 목록 나누기", () => {
 });
 
 describe("교재내역 목록 나누기", () => {
+  beforeEach(resetFinanceMonthForTest);
+
+  /** 교재내역은 결제 완료 건만 보여 주므로 기본값은 이번 달에 입금된 결제 완료 건이다. */
   function buildSale(overrides: Partial<BookSale> & { saleId: string }): BookSale {
     return {
       academyId: "academy-1",
@@ -514,7 +537,9 @@ describe("교재내역 목록 나누기", () => {
       studentName: "김민지",
       price: 12000,
       shippedAt: "2026-08-10",
-      status: "payment-pending",
+      status: "paid",
+      paidAt: "2026-08-12",
+      permanent: true,
       ...overrides,
     } as BookSale;
   }
@@ -579,7 +604,7 @@ describe("교재내역 목록 나누기", () => {
 
     const table = screen.getByRole("table", { name: "교재내역" });
     expect(columnTexts(table, 0)).toEqual(["김민지", "김민지", "한서아"]);
-    expect(columnTexts(table, 4)).toEqual(["2026-08-05", "2026-08-20", "2026-08-01"]);
+    expect(columnTexts(table, 3)).toEqual(["2026-08-05", "2026-08-20", "2026-08-01"]);
   });
 
   it("페이지당 20건을 고르면 1페이지로 돌아가 12건을 모두 보여준다", async () => {
@@ -630,6 +655,8 @@ describe("교재내역 목록 나누기", () => {
 });
 
 describe("선생님 월급 목록 나누기", () => {
+  beforeEach(resetFinanceMonthForTest);
+
   const MONTHLY_SALARY = 1_000_000;
   const NET_PAY_PER_TEACHER = 967_000;
   const NET_PAY_OF_ALL_TWELVE = 11_604_000;
@@ -758,7 +785,7 @@ describe("선생님 월급 목록 나누기", () => {
     renderPayroll();
 
     await user.click(screen.getByRole("button", { name: "다음 페이지" }));
-    fireEvent.change(screen.getByLabelText("월별 지급 예정 급여 월 선택"), {
+    fireEvent.change(screen.getByLabelText("지급 예정 급여 월 선택"), {
       target: { value: "2026-07" },
     });
 
