@@ -122,6 +122,22 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 원격 migration history와 로컬 파일명 timestamp 일치 여부, 실제 함수 정의 SQL, `pnpm vitest run src/lib/supabase/schema-contract.test.ts` 결과.
 - 현재 계약 테스트는 SQL 문자열 확인만 하므로 실제 DB 동작(보강 멱등, 차감 복구, 합산)은 적용 후 수동 또는 DB 테스트로 확인한다.
 
+## 수입 관리 명세 migration (20261017090000) — 2026-10-16 적용 완료
+
+`supabase/migrations/20261017090000_finance_income_spec.sql`을 적용했다. 이 migration 없이는 3상태·급여 지급/취소·교재 결제 완료·원장 연결이 실패하므로 **migration을 먼저 적용한 뒤 앱을 배포한다.**
+
+포함 내용:
+- `fixed_income_snapshots.status`에 `overdue`(미납) 추가, `mark_fixed_income_snapshot_overdue`(미납), `clear_fixed_income_snapshot_overdue`(미납 해제, 미납만), `mark_fixed_income_snapshot_paid`(미입금·미납에서만, 0원 거부), `mark_fixed_income_snapshot_unpaid`(입금 취소, 입금 완료만, 연결 id가 비어도 ref로 원장 삭제). 모두 owner 전용.
+- `mark_salary_settlement_paid`: 선생님·월 advisory lock, 같은 달 중복 지급 거부, 보낸 등원 수업 목록이 그 선생님·그 달(한국 시간)의 실제 등원 수업 전체와 같은지 검증, 월급제·시급제 서버 재계산, 세금(3.3% 내림) 검증, 비율제는 등원 기록 존재 확인. `cancel_salary_settlement_paid`: 같은 달 지급 완료가 여러 건이어도 모두 되돌림.
+- 교재: `book_releases.paid_ledger_entry_id`(FK, 기존 결제 완료 건 backfill), `complete_book_release_payment`(신규), `register_book_release`(같은 시그니처 재정의).
+
+적용 전에 확인한 것: 원격 카탈로그로 함수 시그니처·반환 타입, `fixed_income_snapshots_status_check` 정의(`unpaid, paid`뿐), `salary_settlements` unique, `book_releases` 컬럼·trigger를 확인했고, 별도 독립 SQL 리뷰(Critical 1·Warning 3 지적을 모두 반영)를 거쳤다.
+
+적용 기록:
+- 방법: `pnpm supabase db push --dry-run`(대상이 이 파일 하나뿐) 후 `pnpm supabase db push --yes`. 원격 history `20261017090000`이 로컬 파일명과 일치한다.
+- 스키마 검증(읽기 전용 카탈로그 조회): status check가 `unpaid, paid, overdue`, 함수 8종 모두 anon 실행 불가·authenticated 실행 가능, `book_releases.paid_ledger_entry_id` 컬럼과 `book_releases_paid_ledger_fk`(`on delete set null`) 존재, `mark_salary_settlement_paid`에 advisory lock·`Asia/Seoul`·비율제 가드 포함. 이어서 `notify pgrst, 'reload schema'`로 스키마 캐시를 갱신했다.
+- 한계: 운영 데이터 행은 읽지 않았다(분류기 거부 선례). 동시 지급 락, 서버 재계산 일치, 교재 backfill 결과 같은 **실제 DB 동작은 계약 테스트(SQL 문자열)와 문법 검사까지만** 검증했다.
+
 ### 적용 기록 (2026-10-15)
 
 - 방법: `.env.local`의 `SUPABASE_ACCESS_TOKEN`으로 `pnpm supabase db push --dry-run` 후 `pnpm supabase db push --yes`(MCP는 이 세션에서 인증되지 않아 CLI fallback 사용).

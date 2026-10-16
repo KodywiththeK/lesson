@@ -125,3 +125,10 @@
 - 보이는 focus state
 - nested card 없음
 - 장식용 gradient orb/bokeh 없음
+
+## 금액 의미 색 (수입 관리)
+
+- 금액의 의미 색은 `src/app/globals.css`의 `--total`(합계, 파랑)·`--income`(수입, 초록)·`--expense`(지출, 빨강) 토큰과 Tailwind `text-total`/`text-income`/`text-expense`로만 쓰고, `src/features/finance/finance-shared.tsx`의 `FinanceAmount`로 한 곳에서 입힌다. 화면에 `text-blue-600` 같은 색을 직접 쓰지 않는다.
+- 색만으로 뜻을 전하지 않는다. 금액 앞뒤 라벨("월별 총 수입 (입금)", "월별 총 출금")이나 스크린리더용 텍스트를 함께 둔다.
+- 활성 탭 색과 `primary`는 그대로이며(레슨 시간표와 같은 선례), 명세의 보라/청회색 탭 색은 적용하지 않았다.
+- 차트는 shadcn `ChartContainer`(recharts)를 쓰고, jsdom에서 그려지지 않으므로 같은 값을 담은 접근성 대체 표를 항상 함께 렌더한다. 그래프 시각 확인(라벨 겹침, 좁은 화면 스크롤)은 브라우저 확인이 필요하다.

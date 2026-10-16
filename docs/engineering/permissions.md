@@ -19,7 +19,7 @@
 | 선생님 | 전체 관리 | 확인 필요 | 본인 정보만 |
 | 거래처 | 전체 관리 | 전체 관리 | 접근 불가 |
 | 교재 | 전체 관리 | 전체 관리 | 접근 불가 |
-| 수입 관리 | 전체 관리 | 확인 필요 | 본인 급여만 |
+| 수입 관리 | 전체 관리 | 접근 불가(허용 여부는 후속 질문) | 접근 불가(본인 급여 화면은 후속 질문) |
 
 ## RLS 규칙
 
@@ -34,7 +34,7 @@
 
 - 현재 역할에게 숨겨진 메뉴 주소로 직접 들어오면 `AppShell`이 내용을 마운트하지 않고 "이 화면을 볼 권한이 없습니다" 안내와 홈 링크를 보여준다(`src/app/app-shell.tsx`의 `isForbiddenRoute`). 원문 RLS 오류를 노출하지 않기 위한 화면 편의다.
 - 이 안내는 권한 검증이 아니다. 민감 데이터 보호는 계속 Supabase RLS와 서버 경계가 책임지고, 메뉴 숨김·안내 화면에 의존하지 않는다.
-- teacher의 "내 급여" 링크는 화면(`/my/payroll`)과 teacher용 select 정책이 생길 때까지 숨긴다. `allowDeskFinance` 플래그는 세션에서 채워지지 않아 실제로는 꺼져 있다. 회차권 수동 수정은 원장·데스크 모두 허용하며 별도 desk 플래그를 쓰지 않는다.
+- teacher의 "내 급여" 링크는 화면(`/my/payroll`)과 teacher용 select 정책이 생길 때까지 숨긴다. `allowDeskFinance` 플래그는 제거했다(수입 관리는 원장 전용이라 데스크는 어떤 설정으로도 열 수 없다). 회차권 수동 수정은 원장·데스크 모두 허용하며 별도 desk 플래그를 쓰지 않는다.
 - `lesson_ticket_grants`·`lesson_ticket_usages`·`lesson_ticket_adjustments`에 브라우저 직접 쓰기를 허용하지 않는다. 등록·수정·출석 RPC가 학원 역할과 범위를 검사하고, 선생님 전용 조회 RPC는 담당 악기의 잔여·만료일만 반환한다. 2026-10-16 운영 DB에서 직접 쓰기 권한 회수와 등록 이력 owner 조회 정책을 확인했다.
 
 ## 레슨 시간표 화면의 선생님 UI 규칙 (UX, 보안 경계 아님)
@@ -59,3 +59,7 @@
 - 급여와 결제 기록은 owner-only 기본값을 따른다.
 - 원생 보호자 연락처는 기본적으로 owner/desk 전용이다. 선생님 노출은 사용자 확인 후 별도 정책과 column exposure로 확장한다.
 - service-role 접근은 브라우저 코드에서 절대 사용하지 않는다.
+
+## 수입 관리 RPC 권한 (2026-10-16 migration, 미적용)
+
+수납·미납·입금 취소(`mark_fixed_income_snapshot_paid`/`_unpaid`/`_overdue`), 급여 지급·취소(`mark_salary_settlement_paid`/`cancel_salary_settlement_paid`), 교재 결제 완료(`complete_book_release_payment`)는 모두 `array['owner']`만 허용한다. 원장 ledger의 owner 전용 RLS·trigger(`require_finance_owner_for_ledger`)와 같은 기준이라, 데스크가 호출해도 한 곳에서 한국어 권한 오류로 끝난다. UI에서 버튼을 숨기는 것(`canRecordPayment` 등)은 편의일 뿐 권한 검증이 아니다.
