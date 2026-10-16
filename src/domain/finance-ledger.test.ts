@@ -5,81 +5,20 @@ import {
   buildFinanceCalendarDays,
   buildFinanceLedgerList,
   buildFinanceLedgerPage,
+  buildFinanceLedgerCsvFileName,
   buildIncomeExpenseGraph,
-  createManualLedgerEntry,
+  buildLedgerMonthTotals,
+  escapeCsvCell,
   exportFinanceLedgerCsv,
   formatLedgerEntrySource,
   formatLedgerEntryType,
+  getLedgerCategoryOptions,
+  getLedgerDraftBlockReason,
+  isLedgerCategoryAllowed,
   ledgerCategoryOptions,
+  LEDGER_AMOUNT_LIMIT,
+  toDefaultLedgerCategoryForType,
 } from "./finance-ledger";
-
-describe("createManualLedgerEntry", () => {
-  it("권한 있는 사용자는 수동 수입 또는 지출을 입력할 수 있다", () => {
-    const entry = createManualLedgerEntry(
-      {
-        academyId: "academy-1",
-        ledgerId: "manual-1",
-        occurredOn: "2026-08-21",
-        type: "expense",
-        amount: 30000,
-        description: "조율비",
-        createdBy: "user-owner",
-      },
-      {
-        canCreateManualLedger: true,
-      },
-    );
-
-    expect(entry).toEqual({
-      academyId: "academy-1",
-      ledgerId: "manual-1",
-      occurredOn: "2026-08-21",
-      type: "expense",
-      source: "manual",
-      category: "other",
-      amount: 30000,
-      description: "조율비",
-      refId: "manual-1",
-      createdBy: "user-owner",
-    });
-  });
-
-  it("권한이 없거나 금액이 0 이하이면 수동 입력을 막는다", () => {
-    expect(() =>
-      createManualLedgerEntry(
-        {
-          academyId: "academy-1",
-          ledgerId: "manual-1",
-          occurredOn: "2026-08-21",
-          type: "income",
-          amount: 10000,
-          description: "대관료",
-          createdBy: "teacher-1",
-        },
-        {
-          canCreateManualLedger: false,
-        },
-      ),
-    ).toThrow("수동 입출입 입력 권한이 없습니다.");
-
-    expect(() =>
-      createManualLedgerEntry(
-        {
-          academyId: "academy-1",
-          ledgerId: "manual-1",
-          occurredOn: "2026-08-21",
-          type: "income",
-          amount: 0,
-          description: "대관료",
-          createdBy: "user-owner",
-        },
-        {
-          canCreateManualLedger: true,
-        },
-      ),
-    ).toThrow("금액은 1 이상의 정수여야 합니다.");
-  });
-});
 
 describe("buildIncomeExpenseGraph", () => {
   it("연도/월 기준 전체 악기, 개별 악기, 학원 수입, 지출 비교 데이터를 만든다", () => {
@@ -242,12 +181,11 @@ describe("finance ledger filters and export", () => {
   it("현재 필터 결과를 엑셀에서 열 수 있는 CSV로 내보낸다", () => {
     const csv = exportFinanceLedgerCsv(entries);
 
-    expect(csv).toContain(
-      "발생일,유형,출처,분류,금액,설명,참조 ID",
-    );
-    expect(csv).toContain(
-      "2026-08-06,수입,수강료,수강료,140000,김민지 8월 피아노 수강료,tuition-1",
-    );
+    // 내부 식별자(참조 ID)는 사용자가 열어 보는 파일에 넣지 않는다.
+    expect(csv).toContain("발생일,유형,출처,분류,금액,설명");
+    expect(csv).not.toContain("참조 ID");
+    expect(csv).toContain("2026-08-06,수입,수강료,수강료,140000,김민지 8월 피아노 수강료");
+    expect(csv).not.toContain("tuition-1");
   });
 });
 
@@ -424,5 +362,143 @@ describe("buildFinanceLedgerPage", () => {
       hasPreviousPage: false,
       hasNextPage: false,
     });
+  });
+});
+
+describe("buildLedgerMonthTotals", () => {
+  const base: LedgerEntry = {
+    academyId: "academy-1",
+    ledgerId: "ledger-1",
+    occurredOn: "2026-08-10",
+    type: "income",
+    source: "manual",
+    category: "other",
+    amount: 100000,
+    description: "추가 수강료",
+    refId: "manual-1",
+  };
+
+  it("선택한 월의 입금과 출금을 각각 합산하고 다른 달은 제외한다", () => {
+    const entries: LedgerEntry[] = [
+      base,
+      { ...base, ledgerId: "ledger-2", occurredOn: "2026-08-31", amount: 50000 },
+      { ...base, ledgerId: "ledger-3", type: "expense", amount: 30000 },
+      { ...base, ledgerId: "ledger-4", type: "expense", occurredOn: "2026-08-01", amount: 20000 },
+      { ...base, ledgerId: "ledger-5", occurredOn: "2026-07-31", amount: 999999 },
+      { ...base, ledgerId: "ledger-6", type: "expense", occurredOn: "2026-09-01", amount: 888888 },
+    ];
+
+    expect(buildLedgerMonthTotals(entries, "2026-08")).toEqual({ income: 150000, expense: 50000 });
+  });
+
+  it("내역이 없으면 0원으로 계산한다", () => {
+    expect(buildLedgerMonthTotals([], "2026-08")).toEqual({ income: 0, expense: 0 });
+  });
+});
+
+describe("입출금 분류 후보", () => {
+  it("수입이면 수입 분류만, 지출이면 지출 분류만 보여 준다", () => {
+    expect(getLedgerCategoryOptions("income").map((option) => option.value)).toEqual([
+      "tuition",
+      "lesson-ticket",
+      "book-sale",
+      "other",
+    ]);
+    expect(getLedgerCategoryOptions("expense").map((option) => option.value)).toEqual([
+      "payroll",
+      "book-order",
+      "rent",
+      "utilities",
+      "tuning-repair",
+      "supplies",
+      "tax",
+      "other",
+    ]);
+  });
+
+  it("유형을 바꾸면 그 유형의 기본 분류는 기타다", () => {
+    expect(toDefaultLedgerCategoryForType("income")).toBe("other");
+    expect(toDefaultLedgerCategoryForType("expense")).toBe("other");
+  });
+
+  it("수입+임대료 같은 모순 조합을 허용하지 않는다", () => {
+    expect(isLedgerCategoryAllowed("income", "rent")).toBe(false);
+    expect(isLedgerCategoryAllowed("expense", "tuition")).toBe(false);
+    expect(isLedgerCategoryAllowed("expense", "rent")).toBe(true);
+    expect(isLedgerCategoryAllowed("income", "other")).toBe(true);
+  });
+
+  it("이미 저장된 분류가 후보에 없어도 수정 화면에서 보이도록 현재 분류를 후보에 더한다", () => {
+    expect(
+      getLedgerCategoryOptions("income", "rent").map((option) => option.value),
+    ).toEqual(["tuition", "lesson-ticket", "book-sale", "other", "rent"]);
+  });
+});
+
+describe("getLedgerDraftBlockReason", () => {
+  const valid = { occurredOn: "2026-08-14", amountText: "70000", description: "조율비" };
+
+  it("모두 채워지면 막을 이유가 없다", () => {
+    expect(getLedgerDraftBlockReason(valid)).toBeNull();
+  });
+
+  it("비어 있거나 잘못된 입력은 다음 행동을 알려 준다", () => {
+    expect(getLedgerDraftBlockReason({ ...valid, occurredOn: "" })).toBe("날짜를 입력해 주세요.");
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "" })).toBe("금액을 입력해 주세요.");
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "0" })).toBe(
+      "금액은 1원 이상의 정수로 입력해 주세요.",
+    );
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "1.5" })).toBe(
+      "금액은 1원 이상의 정수로 입력해 주세요.",
+    );
+    expect(getLedgerDraftBlockReason({ ...valid, description: "  " })).toBe("설명을 입력해 주세요.");
+  });
+
+  it("20억 원 미만만 허용한다", () => {
+    expect(LEDGER_AMOUNT_LIMIT).toBe(2_000_000_000);
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "1999999999" })).toBeNull();
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "2000000000" })).toBe(
+      "금액은 20억 원 미만으로 입력해 주세요.",
+    );
+  });
+});
+
+describe("CSV 내보내기 안전장치", () => {
+  it("수식으로 읽힐 수 있는 =, +, -, @ 시작 값 앞에 작은따옴표를 붙인다", () => {
+    expect(escapeCsvCell("=SUM(A1:A2)")).toBe("'=SUM(A1:A2)");
+    expect(escapeCsvCell("+82 10")).toBe("'+82 10");
+    expect(escapeCsvCell("-1")).toBe("'-1");
+    expect(escapeCsvCell("@cmd")).toBe("'@cmd");
+  });
+
+  it("일반 값은 그대로 두고 쉼표나 따옴표가 있으면 감싼다", () => {
+    expect(escapeCsvCell("조율비")).toBe("조율비");
+    expect(escapeCsvCell("가, 나")).toBe('"가, 나"');
+    expect(escapeCsvCell('"인용"')).toBe('"""인용"""');
+    expect(escapeCsvCell("=1,2")).toBe('"\'=1,2"');
+  });
+
+  it("내보내기 행에도 수식 방어를 적용한다", () => {
+    const csv = exportFinanceLedgerCsv([
+      {
+        academyId: "academy-1",
+        ledgerId: "ledger-1",
+        occurredOn: "2026-08-14",
+        type: "expense",
+        source: "manual",
+        category: "other",
+        amount: 1000,
+        description: "=HYPERLINK(\"x\")",
+        refId: "manual-1",
+      },
+    ]);
+
+    expect(csv).toContain("'=HYPERLINK");
+  });
+
+  it("파일명에 조회 기간을 넣는다", () => {
+    expect(buildFinanceLedgerCsvFileName({ from: "2026-08-01", to: "2026-08-31" })).toBe(
+      "입출입내역_2026-08-01_2026-08-31.csv",
+    );
   });
 });

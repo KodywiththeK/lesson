@@ -7,6 +7,7 @@ import {
   type LessonTicketListRow,
 } from "@/domain/lesson-ticket";
 
+import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -30,15 +31,8 @@ export type LessonTicketGrantSupabaseRow = {
   } | null;
 };
 
-type LessonTicketListSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<SupabaseQueryResult<LessonTicketGrantSupabaseRow[]>>;
-};
-
 type LessonTicketListFromBuilder = {
-  select(select: string): LessonTicketListSelectBuilder;
+  select(select: string): PagedSelectQuery<LessonTicketGrantSupabaseRow>;
 };
 
 export type LessonTicketListSupabaseClient = {
@@ -72,17 +66,8 @@ export type LessonTicketRegistrationOptionsSupabaseRow = {
     | null;
 };
 
-type LessonTicketRegistrationOptionsSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<
-    SupabaseQueryResult<LessonTicketRegistrationOptionsSupabaseRow[]>
-  >;
-};
-
 type LessonTicketRegistrationOptionsFromBuilder = {
-  select(select: string): LessonTicketRegistrationOptionsSelectBuilder;
+  select(select: string): PagedSelectQuery<LessonTicketRegistrationOptionsSupabaseRow>;
 };
 
 export type LessonTicketRegistrationOptionsSupabaseClient = {
@@ -199,16 +184,16 @@ export async function fetchAllLessonTickets(
   supabase: LessonTicketListSupabaseClient,
   academyId: string,
 ): Promise<LessonTicketListItem[]> {
-  const { data, error } = await supabase
-    .from("lesson_ticket_grants")
-    .select(LESSON_TICKET_LIST_SELECT)
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("회차권 목록을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("lesson_ticket_grants")
+      .select(LESSON_TICKET_LIST_SELECT)
+      .eq("academy_id", academyId)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`회차권 목록을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).map(toLessonTicketListItem);
+  return rows.map(toLessonTicketListItem);
 }
 
 export async function fetchLessonTicketList(
@@ -225,18 +210,18 @@ export async function fetchLessonTicketRegistrationOptions(
   supabase: LessonTicketRegistrationOptionsSupabaseClient,
   academyId: string,
 ): Promise<LessonTicketRegistrationStudentOption[]> {
-  const { data, error } = await supabase
-    .from("students")
-    .select(
-      "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_id, instrument_name, lesson_type, active)",
-    )
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("회차권 등록 선택지를 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("students")
+      .select(
+        "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_id, instrument_name, lesson_type, active)",
+      )
+      .eq("academy_id", academyId)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`회차권 등록 선택지를 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? [])
+  return rows
     .map(toLessonTicketRegistrationStudentOption)
     .filter((student) => student.instruments.length > 0)
     .sort(

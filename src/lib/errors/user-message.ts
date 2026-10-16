@@ -26,6 +26,30 @@ const MESSAGE_RULES: Array<{ pattern: RegExp; message: string }> = [
     message: "이미 등록된 내용입니다. 목록을 확인해 주세요.",
   },
   {
+    pattern: /PGRST202|PGRST204|Could not find the function|does not exist in the schema cache|column [\w.]+ does not exist/i,
+    message: "이 기능에 필요한 데이터베이스 변경이 아직 적용되지 않았습니다. 관리자에게 문의해 주세요.",
+  },
+  {
+    pattern: /ledger_entries_amount_check/,
+    message: "금액은 1원 이상이어야 합니다.",
+  },
+  {
+    pattern: /integer out of range|is out of range for type integer/i,
+    message: "금액이 너무 큽니다. 21억 원 미만으로 입력해 주세요.",
+  },
+  {
+    pattern: /invalid input syntax for type date/i,
+    message: "날짜를 확인해 주세요.",
+  },
+  {
+    pattern: /JSON object requested|PGRST116/i,
+    message: "대상을 찾을 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.",
+  },
+  {
+    pattern: /수입 관리 권한이 없습니다/,
+    message: "수입 관리 권한이 없습니다. 원장에게 문의해 주세요.",
+  },
+  {
     pattern: /사용 가능한 .+ 회차권이 없습니다/,
     message: "사용할 수 있는 회차권이 없습니다. 회차권 메뉴에서 등록하거나 유효기간을 확인해 주세요.",
   },

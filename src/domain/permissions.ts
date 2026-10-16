@@ -14,15 +14,10 @@ export type ResolveSessionRoleInput = {
   memberships: AcademyMembership[];
 };
 
-export type PermissionFlags = {
-  allowDeskFinance?: boolean;
-};
-
 export type PermissionContext = {
   role: SessionRole;
   teacherId?: string;
   assignedStudentIds?: string[];
-  flags?: PermissionFlags;
 };
 
 export type FeatureKey =
@@ -102,10 +97,6 @@ export function canAccessFeature(
   }
 
   if (context.role === "desk") {
-    if (feature === "income-management" || feature === "manual-ledger") {
-      return context.flags?.allowDeskFinance === true;
-    }
-
     return DESK_FEATURES.includes(feature);
   }
 

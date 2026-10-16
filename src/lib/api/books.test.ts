@@ -4,10 +4,12 @@ import {
   createBookPurchaseListQueryKey,
   createBookPurchaseListQueryOptions,
   fetchBookPurchaseList,
+  completeBookReleasePayment,
   registerBookRelease,
   type BookPurchaseListSupabaseClient,
   type BookReleaseSupabaseRow,
 } from "./books";
+import { createFakeSupabase } from "./test-support/fake-supabase";
 
 function createReleaseRows(count: number): BookReleaseSupabaseRow[] {
   return Array.from({ length: count }, (_, index) => {
@@ -32,32 +34,15 @@ function createSupabaseStub(
   rows: BookReleaseSupabaseRow[],
   error: Error | null = null,
 ) {
-  const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-    [];
-  const client: BookPurchaseListSupabaseClient = {
-    from(table) {
-      calls.push({ table });
+  const fake = createFakeSupabase(
+    { book_releases: rows },
+    error ? { errors: { book_releases: error } } : {},
+  );
 
-      return {
-        select(select) {
-          calls[calls.length - 1].select = select;
-
-          return {
-            async eq(column, value) {
-              calls[calls.length - 1].eq = [column, value];
-
-              return {
-                data: error ? null : rows,
-                error,
-              };
-            },
-          };
-        },
-      };
-    },
+  return {
+    client: fake.client as unknown as BookPurchaseListSupabaseClient,
+    calls: fake.queries,
   };
-
-  return { client, calls };
 }
 
 describe("fetchBookPurchaseList", () => {
@@ -83,12 +68,17 @@ describe("fetchBookPurchaseList", () => {
     });
 
     expect(calls).toEqual([
-      {
+      expect.objectContaining({
         table: "book_releases",
         select:
-          "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at",
-        eq: ["academy_id", "academy-1"],
-      },
+          "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at, paid_ledger_entry_id",
+        eq: [["academy_id", "academy-1"]],
+        order: [
+          ["shipped_at", { ascending: false }],
+          ["id", undefined],
+        ],
+        range: [[0, 999]],
+      }),
     ]);
     expect(result.items).toEqual([
       {
@@ -122,6 +112,15 @@ describe("fetchBookPurchaseList", () => {
     expect(result).toMatchObject({ page: 3, pageSize: 10, totalItems: 25, totalPages: 3 });
   });
 
+  it("1000건을 넘는 교재 출고도 range를 이어 끝까지 읽어 조용히 잘리지 않는다", async () => {
+    const { client, calls } = createSupabaseStub(createReleaseRows(1200));
+
+    const result = await fetchBookPurchaseList(client, { academyId: "academy-1" });
+
+    expect(result.totalItems).toBe(1200);
+    expect(calls.map((call) => call.range[0])).toEqual([[0, 999], [1000, 1999]]);
+  });
+
   it("Supabase 오류는 사용자에게 전달 가능한 오류로 변환한다", async () => {
     const { client } = createSupabaseStub([], new Error("permission denied"));
 
@@ -153,6 +152,33 @@ describe("registerBookRelease", () => {
       p_book_title: "바이엘 2", p_price: 12000, p_shipped_at: "2026-08-21",
       p_status: "paid",
     });
+  });
+});
+
+describe("completeBookReleasePayment", () => {
+  it("결제 대기 교재를 결제 완료로 바꾸는 일을 입금일과 함께 RPC 하나에 맡긴다", async () => {
+    const row: BookReleaseSupabaseRow = {
+      id: "release-1", academy_id: "academy-1", book_id: "book-1",
+      student_id: "student-1", student_name: "김민지", book_title: "바이엘 2",
+      price: 12000, shipped_at: "2026-08-21", status: "paid", paid_at: "2026-08-25",
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: row, error: null });
+
+    await expect(completeBookReleasePayment({ rpc }, {
+      academyId: "academy-1", releaseId: "release-1", paidAt: "2026-08-25",
+    })).resolves.toMatchObject({ saleId: "release-1", status: "paid" });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith("complete_book_release_payment", {
+      p_academy_id: "academy-1", p_release_id: "release-1", p_paid_at: "2026-08-25",
+    });
+  });
+
+  it("RPC 오류는 안내 문구로 감싸 전달한다", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: new Error("이미 결제 완료된 교재입니다.") });
+
+    await expect(completeBookReleasePayment({ rpc }, {
+      academyId: "academy-1", releaseId: "release-1", paidAt: "2026-08-25",
+    })).rejects.toThrow("교재 결제 완료 처리에 실패했습니다: 이미 결제 완료된 교재입니다.");
   });
 });
 

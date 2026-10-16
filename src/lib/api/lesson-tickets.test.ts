@@ -12,8 +12,10 @@ import {
   type AdjustLessonTicketSupabaseClient,
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
+  type LessonTicketRegistrationOptionsSupabaseClient,
   type RegisterLessonTicketSupabaseClient,
 } from "./lesson-tickets";
+import { createFakeSupabase } from "./test-support/fake-supabase";
 
 function createGrantRow(
   overrides: Partial<LessonTicketGrantSupabaseRow> = {},
@@ -50,32 +52,15 @@ function createSupabaseStub(
   rows: LessonTicketGrantSupabaseRow[],
   error: Error | null = null,
 ) {
-  const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-    [];
-  const client: LessonTicketListSupabaseClient = {
-    from(table) {
-      calls.push({ table });
+  const fake = createFakeSupabase(
+    { lesson_ticket_grants: rows },
+    error ? { errors: { lesson_ticket_grants: error } } : {},
+  );
 
-      return {
-        select(select) {
-          calls[calls.length - 1].select = select;
-
-          return {
-            async eq(column, value) {
-              calls[calls.length - 1].eq = [column, value];
-
-              return {
-                data: error ? null : rows,
-                error,
-              };
-            },
-          };
-        },
-      };
-    },
+  return {
+    client: fake.client as unknown as LessonTicketListSupabaseClient,
+    calls: fake.queries,
   };
-
-  return { client, calls };
 }
 
 describe("fetchLessonTicketList", () => {
@@ -106,12 +91,14 @@ describe("fetchLessonTicketList", () => {
     });
 
     expect(calls).toEqual([
-      {
+      expect.objectContaining({
         table: "lesson_ticket_grants",
         select:
           "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)",
-        eq: ["academy_id", "academy-1"],
-      },
+        eq: [["academy_id", "academy-1"]],
+        order: [["id", undefined]],
+        range: [[0, 999]],
+      }),
     ]);
     expect(result.items[0]).toMatchObject({
       academyId: "academy-1",
@@ -217,7 +204,15 @@ describe("fetchAllLessonTickets", () => {
 
     expect(tickets).toHaveLength(25);
     expect(tickets[0]).toMatchObject({ ticketId: "ticket-01", studentName: "원생01" });
-    expect(calls[0].eq).toEqual(["academy_id", "academy-1"]);
+    expect(calls[0].eq).toEqual([["academy_id", "academy-1"]]);
+  });
+
+  it("1000건을 넘는 회차권도 id순으로 range를 이어 끝까지 읽는다", async () => {
+    const { client, calls } = createSupabaseStub(createGrantRows(1200));
+
+    await expect(fetchAllLessonTickets(client, "academy-1")).resolves.toHaveLength(1200);
+    expect(calls.map((call) => call.range[0])).toEqual([[0, 999], [1000, 1999]]);
+    expect(calls.every((call) => call.order[0]?.[0] === "id")).toBe(true);
   });
 
   it("조회 오류는 회차권 목록을 불러오지 못했다는 오류로 바꾼다", async () => {
@@ -231,69 +226,35 @@ describe("fetchAllLessonTickets", () => {
 
 describe("fetchLessonTicketRegistrationOptions", () => {
   it("원생과 활성 개인레슨 악기를 회차권 등록 선택지로 만든다", async () => {
-    const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-      [];
-    const client = {
-      from(table: "students") {
-        calls.push({ table });
-
-        return {
-          select(select: string) {
-            calls[calls.length - 1].select = select;
-
-            return {
-              async eq(column: "academy_id", value: string) {
-                calls[calls.length - 1].eq = [column, value];
-
-                return {
-                  data: [
-                    {
-                      id: "student-1",
-                      academy_id: "academy-1",
-                      name: "김민지",
-                      student_instruments: [
-                        {
-                          instrument_id: "piano",
-                          instrument_name: "피아노",
-                          lesson_type: "private",
-                          active: true,
-                        },
-                        {
-                          instrument_id: "cello",
-                          instrument_name: "첼로",
-                          lesson_type: "private",
-                          active: false,
-                        },
-                        {
-                          instrument_id: "academy-piano",
-                          instrument_name: "학원 피아노",
-                          lesson_type: "academy",
-                          active: true,
-                        },
-                      ],
-                    },
-                  ],
-                  error: null,
-                };
-              },
-            };
-          },
-        };
-      },
-    };
+    const { client, queries } = createFakeSupabase({
+      students: [
+        {
+          id: "student-1",
+          academy_id: "academy-1",
+          name: "김민지",
+          student_instruments: [
+            { instrument_id: "piano", instrument_name: "피아노", lesson_type: "private", active: true },
+            { instrument_id: "cello", instrument_name: "첼로", lesson_type: "private", active: false },
+            { instrument_id: "academy-piano", instrument_name: "학원 피아노", lesson_type: "academy", active: true },
+          ],
+        },
+      ],
+    });
 
     const result = await fetchLessonTicketRegistrationOptions(
-      client,
+      client as unknown as LessonTicketRegistrationOptionsSupabaseClient,
       "academy-1",
     );
 
-    expect(calls).toEqual([
-      {
+    expect(queries).toEqual([
+      expect.objectContaining({
         table: "students",
         select:
           "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(instrument_id, instrument_name, lesson_type, active)",
-        eq: ["academy_id", "academy-1"],
-      },
+        eq: [["academy_id", "academy-1"]],
+        order: [["id", undefined]],
+        range: [[0, 999]],
+      }),
     ]);
     expect(result).toEqual([
       {
@@ -312,32 +273,22 @@ describe("fetchLessonTicketRegistrationOptions", () => {
 
 describe("fetchLessonTicketRegistrationOptions 정렬", () => {
   it("등록할 원생 선택지를 이름 가나다순으로 준다", async () => {
-    const client = {
-      from() {
-        return {
-          select() {
-            return {
-              async eq() {
-                return {
-                  data: ["한서아", "원생10", "김민지", "원생2"].map((name, index) => ({
-                    id: `student-${index}`,
-                    academy_id: "academy-1",
-                    name,
-                    student_instruments: [{
-                      instrument_id: "piano", instrument_name: "피아노",
-                      lesson_type: "private", active: true,
-                    }],
-                  })),
-                  error: null,
-                };
-              },
-            };
-          },
-        };
-      },
-    };
+    const { client } = createFakeSupabase({
+      students: ["한서아", "원생10", "김민지", "원생2"].map((name, index) => ({
+        id: `student-${index}`,
+        academy_id: "academy-1",
+        name,
+        student_instruments: [{
+          instrument_id: "piano", instrument_name: "피아노",
+          lesson_type: "private", active: true,
+        }],
+      })),
+    });
 
-    const result = await fetchLessonTicketRegistrationOptions(client, "academy-1");
+    const result = await fetchLessonTicketRegistrationOptions(
+      client as unknown as LessonTicketRegistrationOptionsSupabaseClient,
+      "academy-1",
+    );
 
     expect(result.map((option) => option.studentName)).toEqual(["김민지", "원생2", "원생10", "한서아"]);
   });

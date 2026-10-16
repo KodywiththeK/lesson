@@ -1,5 +1,3 @@
-import type { LedgerEntry } from "./book-sale";
-
 export type FixedIncomeSource = {
   academyId: string;
   studentId: string;
@@ -22,7 +20,8 @@ export type TuitionSnapshotOptions = {
   month: string;
 };
 
-export type TuitionStatus = "unpaid" | "paid";
+/** 미입금(매달 기본) / 입금 완료 / 미납(미납 인원에 기록). DB 값은 unpaid / paid / overdue. */
+export type TuitionStatus = "unpaid" | "paid" | "overdue";
 
 export type TuitionRecord = {
   academyId: string;
@@ -41,35 +40,8 @@ export type TuitionRecord = {
   dueOn: string;
   status: TuitionStatus;
   paidAt?: string;
-};
-
-export type MarkTuitionAsPaidInput = {
-  academyId: string;
-  paidAt: string;
-};
-
-export type MarkTuitionAsPaidResult = {
-  record: TuitionRecord & {
-    status: "paid";
-    paidAt: string;
-  };
-  ledgerEntry: LedgerEntry;
-};
-
-export type MarkTuitionAsUnpaidInput = {
-  academyId: string;
-  markedAt: string;
-};
-
-export type UnpaidTuitionItem = {
-  academyId: string;
-  tuitionId: string;
-  studentId: string;
-  studentName: string;
-  month: string;
-  amount: number;
-  markedAt: string;
-  reason: "tuition-unpaid";
+  /** 입금 때 만든 입출입내역(원장) 행. DB에서 읽었는데 null이면 원장 기록이 사라진 입금 건이다. */
+  paidLedgerEntryId?: string | null;
 };
 
 export function createMonthlyTuitionSnapshot(
@@ -102,36 +74,6 @@ export function createMonthlyTuitionSnapshot(
     }));
 }
 
-export function markTuitionAsPaid(
-  record: TuitionRecord,
-  input: MarkTuitionAsPaidInput,
-): MarkTuitionAsPaidResult {
-  assertSameAcademy(record.academyId, input.academyId);
-
-  if (record.status === "paid") {
-    throw new Error("이미 수납 완료된 수강료입니다.");
-  }
-
-  return {
-    record: {
-      ...record,
-      status: "paid",
-      paidAt: input.paidAt,
-    },
-    ledgerEntry: {
-      academyId: record.academyId,
-      ledgerId: `tuition:${record.tuitionId}`,
-      occurredOn: input.paidAt,
-      type: "income",
-      source: "tuition",
-      category: "tuition",
-      amount: record.amount,
-      description: `수강료 수납: ${record.month} ${record.studentName} ${record.instrumentName}`,
-      refId: record.tuitionId,
-    },
-  };
-}
-
 function calculateTuitionDueOn(month: string, registeredOn: string) {
   const [year, monthIndex] = month.split("-").map(Number);
   const dueDay = Number(registeredOn.slice(-2));
@@ -150,26 +92,57 @@ function calculateTuitionDueOn(month: string, registeredOn: string) {
   ].join("-");
 }
 
-export function markTuitionAsUnpaid(
-  record: TuitionRecord,
-  input: MarkTuitionAsUnpaidInput,
-): UnpaidTuitionItem {
-  assertSameAcademy(record.academyId, input.academyId);
-
-  return {
-    academyId: record.academyId,
-    tuitionId: record.tuitionId,
-    studentId: record.studentId,
-    studentName: record.studentName,
-    month: record.month,
-    amount: record.amount,
-    markedAt: input.markedAt,
-    reason: "tuition-unpaid",
+export function formatTuitionStatus(status: TuitionStatus) {
+  const labels: Record<TuitionStatus, string> = {
+    unpaid: "미입금",
+    paid: "입금 완료",
+    overdue: "미납",
   };
+
+  return labels[status];
 }
 
-function assertSameAcademy(leftAcademyId: string, rightAcademyId: string) {
-  if (leftAcademyId !== rightAcademyId) {
-    throw new Error("학원 범위가 일치하지 않습니다.");
+/** 미납 인원: 미납을 누른 원생만. 아직 처리하지 않은 미입금은 포함하지 않고, 입금하면 상태가 바뀌어 자동으로 빠진다. */
+export function selectOverdueTuitions(records: TuitionRecord[]) {
+  return records.filter((record) => record.status === "overdue");
+}
+
+export type TuitionAction =
+  | { action: "pay"; disabledReason?: string }
+  | { action: "overdue" }
+  | { action: "clear-overdue" }
+  | { action: "cancel-payment" };
+
+/** 상태별로 할 수 있는 동작. 0원 수강료는 입금 처리가 막히고 이유를 함께 돌려준다. */
+export function getTuitionActions(record: TuitionRecord): TuitionAction[] {
+  if (record.status === "paid") {
+    return [{ action: "cancel-payment" }];
   }
+
+  const pay: TuitionAction =
+    record.amount > 0
+      ? { action: "pay" }
+      : { action: "pay", disabledReason: "결제 금액이 0원이어서 입금 처리할 수 없습니다." };
+
+  return [pay, record.status === "overdue" ? { action: "clear-overdue" } : { action: "overdue" }];
+}
+
+export type TuitionStatusSummary = Record<"total" | TuitionStatus, { count: number; amount: number }>;
+
+export function summarizeTuitionStatus(records: TuitionRecord[]): TuitionStatusSummary {
+  const summary: TuitionStatusSummary = {
+    total: { count: 0, amount: 0 },
+    paid: { count: 0, amount: 0 },
+    unpaid: { count: 0, amount: 0 },
+    overdue: { count: 0, amount: 0 },
+  };
+
+  for (const record of records) {
+    for (const key of ["total", record.status] as const) {
+      summary[key].count += 1;
+      summary[key].amount += record.amount;
+    }
+  }
+
+  return summary;
 }

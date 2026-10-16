@@ -110,35 +110,24 @@ export const ledgerCategoryOptions: LedgerCategoryOption[] = [
   { value: "other", label: "기타" },
 ];
 
-export function createManualLedgerEntry(
-  input: ManualLedgerInput,
-  options: ManualLedgerOptions,
-): ManualLedgerEntry {
-  if (!options.canCreateManualLedger) {
-    throw new Error("수동 입출입 입력 권한이 없습니다.");
-  }
+const FORMULA_PREFIX_PATTERN = /^[=+\-@\t\r]/;
 
-  assertPositiveMoney(input.amount);
+/** 수입 유형에서 고를 수 있는 분류. 나머지 분류는 지출에만 쓴다. */
+const INCOME_LEDGER_CATEGORIES: LedgerCategory[] = ["tuition", "lesson-ticket", "book-sale", "other"];
 
-  const description = input.description.trim();
+/** 입출금 한 건의 금액 상한(미만). DB integer 범위(약 21억)보다 낮게 둬서 합계가 넘치지 않게 한다. */
+export const LEDGER_AMOUNT_LIMIT = 2_000_000_000;
 
-  if (!description) {
-    throw new Error("입출입 설명은 필수입니다.");
-  }
+export type LedgerMonthTotals = {
+  income: number;
+  expense: number;
+};
 
-  return {
-    academyId: input.academyId,
-    ledgerId: input.ledgerId,
-    occurredOn: input.occurredOn,
-    type: input.type,
-    source: "manual",
-    amount: input.amount,
-    description,
-    refId: input.ledgerId,
-    createdBy: input.createdBy,
-    category: input.category ?? "other",
-  };
-}
+export type LedgerDraftInput = {
+  occurredOn: string;
+  amountText: string;
+  description: string;
+};
 
 export function buildFinanceLedgerList(
   entries: LedgerEntry[],
@@ -200,6 +189,65 @@ export function toDefaultLedgerCategory(
   return categoryBySource[source];
 }
 
+/** 선택한 월 전체의 입금·출금 합계. 검색·필터·페이지와 무관하게 받은 내역의 해당 월만 더한다. */
+export function buildLedgerMonthTotals(entries: LedgerEntry[], month: string): LedgerMonthTotals {
+  const monthEntries = entries.filter((entry) => entry.occurredOn.startsWith(`${month}-`));
+
+  return {
+    income: sumAmounts(monthEntries.filter((entry) => entry.type === "income")),
+    expense: sumAmounts(monthEntries.filter((entry) => entry.type === "expense")),
+  };
+}
+
+/**
+ * 유형에 맞는 분류 후보. 이미 저장된 분류가 후보에 없으면(예전 데이터) 수정 화면에서
+ * 값이 사라지지 않도록 끝에 더한다.
+ */
+export function getLedgerCategoryOptions(
+  type: LedgerEntry["type"],
+  currentCategory?: LedgerCategory,
+): LedgerCategoryOption[] {
+  const options = ledgerCategoryOptions.filter((option) => isLedgerCategoryAllowed(type, option.value));
+  const current = ledgerCategoryOptions.find((option) => option.value === currentCategory);
+
+  return current && !options.includes(current) ? [...options, current] : options;
+}
+
+export function isLedgerCategoryAllowed(type: LedgerEntry["type"], category: LedgerCategory) {
+  if (category === "other") {
+    return true;
+  }
+
+  const isIncomeCategory = INCOME_LEDGER_CATEGORIES.includes(category);
+
+  return type === "income" ? isIncomeCategory : !isIncomeCategory;
+}
+
+/** 유형을 바꿀 때 분류를 되돌릴 기본값. 어느 유형에서나 허용되는 "기타"다. */
+export function toDefaultLedgerCategoryForType(type: LedgerEntry["type"]): LedgerCategory {
+  const categoryByType: Record<LedgerEntry["type"], LedgerCategory> = {
+    income: "other",
+    expense: "other",
+  };
+
+  return categoryByType[type];
+}
+
+/** 등록·수정 폼을 저장할 수 없는 이유. 저장할 수 있으면 null. */
+export function getLedgerDraftBlockReason(draft: LedgerDraftInput): string | null {
+  if (!draft.occurredOn) {
+    return "날짜를 입력해 주세요.";
+  }
+
+  const amountReason = getLedgerAmountBlockReason(draft.amountText);
+
+  if (amountReason) {
+    return amountReason;
+  }
+
+  return draft.description.trim() ? null : "설명을 입력해 주세요.";
+}
+
 export function buildFinanceCalendarDays(
   entries: LedgerEntry[],
   options: {
@@ -234,7 +282,7 @@ export function buildFinanceCalendarDays(
 
 export function exportFinanceLedgerCsv(entries: LedgerEntry[]) {
   const rows = [
-    ["발생일", "유형", "출처", "분류", "금액", "설명", "참조 ID"],
+    ["발생일", "유형", "출처", "분류", "금액", "설명"],
     ...entries.map((entry) => [
       entry.occurredOn,
       formatLedgerEntryType(entry.type),
@@ -242,7 +290,6 @@ export function exportFinanceLedgerCsv(entries: LedgerEntry[]) {
       formatLedgerCategory(entry.category ?? toDefaultLedgerCategory(entry.source)),
       String(entry.amount),
       entry.description,
-      entry.refId,
     ]),
   ];
 
@@ -423,18 +470,33 @@ function buildMonthDates(month: string) {
   return dates;
 }
 
-function escapeCsvCell(value: string) {
-  if (!/[",\n]/.test(value)) {
-    return value;
+/** 엑셀이 수식으로 실행하지 못하도록 `=`, `+`, `-`, `@` 등으로 시작하는 값 앞에 작은따옴표를 붙인다. */
+export function escapeCsvCell(value: string) {
+  const safeValue = FORMULA_PREFIX_PATTERN.test(value) ? `'${value}` : value;
+
+  if (!/[",\n]/.test(safeValue)) {
+    return safeValue;
   }
 
-  return `"${value.replaceAll("\"", "\"\"")}"`;
+  return `"${safeValue.replaceAll("\"", "\"\"")}"`;
 }
 
-function assertPositiveMoney(amount: number) {
-  if (!Number.isInteger(amount) || amount <= 0) {
-    throw new Error("금액은 1 이상의 정수여야 합니다.");
+export function buildFinanceLedgerCsvFileName(range: { from: string; to: string }) {
+  return `입출입내역_${range.from}_${range.to}.csv`;
+}
+
+function getLedgerAmountBlockReason(amountText: string) {
+  if (!amountText.trim()) {
+    return "금액을 입력해 주세요.";
   }
+
+  const amount = Number(amountText);
+
+  if (!Number.isInteger(amount) || amount < 1) {
+    return "금액은 1원 이상의 정수로 입력해 주세요.";
+  }
+
+  return amount < LEDGER_AMOUNT_LIMIT ? null : "금액은 20억 원 미만으로 입력해 주세요.";
 }
 
 function formatMonth(year: number, month: number) {

@@ -4,6 +4,7 @@ import {
   createTeacherListQueryOptions,
   createTeacherStatusManagementQueryOptions,
   deleteResignedTeacher,
+  fetchPayrollTeachers,
   fetchTeacherOptions,
   fetchTeacherStatusManagementList,
   fetchTeacherList,
@@ -14,6 +15,7 @@ import {
   type TeacherListSupabaseClient,
   type TeacherSupabaseRow,
 } from "./teachers";
+import { createFakeSupabase } from "./test-support/fake-supabase";
 
 function createSupabaseStub(
   rows:
@@ -21,75 +23,15 @@ function createSupabaseStub(
     | Record<string, TeacherSupabaseRow[] | Array<Record<string, unknown>>>,
   error: Error | null = null,
 ) {
-  const calls: Array<{
-    table: string;
-    select?: string;
-    eq?: Array<[string, string]>;
-    is?: Array<[string, null]>;
-    order?: Array<[string, { ascending?: boolean } | undefined]>;
-  }> = [];
   const rowsByTable: Record<string, Array<Record<string, unknown>>> = Array.isArray(rows)
     ? { teachers: rows as Array<Record<string, unknown>> }
     : rows;
-  const client = {
-    from(table) {
-      calls.push({ table });
+  const fake = createFakeSupabase(rowsByTable, error ? { errors: { teachers: error } } : {});
 
-      return {
-        select(select) {
-          calls[calls.length - 1].select = select;
-
-          const builder = {
-            eq(column: string, value: string) {
-              calls[calls.length - 1].eq = [
-                ...(calls[calls.length - 1].eq ?? []),
-                [column, value],
-              ];
-
-              return builder;
-            },
-            is(column: string, value: null) {
-              calls[calls.length - 1].is = [
-                ...(calls[calls.length - 1].is ?? []),
-                [column, value],
-              ];
-
-              return builder;
-            },
-            order(column: string, options?: { ascending?: boolean }) {
-              calls[calls.length - 1].order = [
-                ...(calls[calls.length - 1].order ?? []),
-                [column, options],
-              ];
-
-              return builder;
-            },
-            then<TResult1 = { data: Array<Record<string, unknown>> | null; error: Error | null }>(
-              resolve?: (
-                value: {
-                  data: Array<Record<string, unknown>> | null;
-                  error: Error | null;
-                },
-              ) => TResult1 | PromiseLike<TResult1>,
-            ) {
-              const value = {
-                data: error
-                  ? null
-                  : (rowsByTable[table] ?? []),
-                error,
-              };
-
-              return Promise.resolve(resolve ? resolve(value) : (value as TResult1));
-            },
-          };
-
-          return builder;
-        },
-      };
-    },
-  } as TeacherListSupabaseClient;
-
-  return { client, calls };
+  return {
+    client: fake.client as unknown as TeacherListSupabaseClient,
+    calls: fake.queries,
+  };
 }
 
 describe("fetchTeacherList", () => {
@@ -133,7 +75,7 @@ describe("fetchTeacherList", () => {
     });
 
     expect(calls).toEqual([
-      {
+      expect.objectContaining({
         table: "teachers",
         select:
           "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)",
@@ -142,7 +84,9 @@ describe("fetchTeacherList", () => {
           ["status", "employed"],
         ],
         is: [["archived_at", null]],
-      },
+        order: [["id", undefined]],
+        range: [[0, 999]],
+      }),
     ]);
     expect(calls[0].select).not.toContain("resident_registration");
     expect(result.items[0]).toMatchObject({
@@ -200,6 +144,62 @@ describe("fetchTeacherOptions", () => {
       ["academy_id", "academy-1"],
       ["status", "employed"],
     ]);
+  });
+});
+
+describe("fetchPayrollTeachers", () => {
+  const teacherRow = (id: string, name: string, status: string) => ({
+    id,
+    academy_id: "academy-1",
+    name,
+    part: "피아노",
+    phone: null,
+    registered_on: "2026-01-01",
+    salary_type: "monthly" as const,
+    status,
+    archived_at: null,
+    teacher_work_schedules: [],
+    teacher_salary_settings: [],
+  });
+
+  it("급여 계산용으로 재직·휴직·퇴사·보관 선생님을 모두 가나다순으로 읽는다(보관 선생님도 지급 기록이 있을 수 있다)", async () => {
+    const { client, calls } = createSupabaseStub([
+      teacherRow("teacher-3", "다선생", "resigned"),
+      teacherRow("teacher-1", "가선생", "employed"),
+      teacherRow("teacher-2", "나선생", "on_leave"),
+    ] as TeacherSupabaseRow[]);
+
+    const teachers = await fetchPayrollTeachers(client, "academy-1");
+
+    expect(teachers.map((teacher) => [teacher.name, teacher.status])).toEqual([
+      ["가선생", "employed"],
+      ["나선생", "on_leave"],
+      ["다선생", "resigned"],
+    ]);
+    expect(calls[0]).toMatchObject({
+      table: "teachers",
+      eq: [["academy_id", "academy-1"]],
+      order: [["id", undefined]],
+    });
+    expect(calls[0].is ?? []).toEqual([]);
+  });
+
+  it("1000명을 넘는 응답도 range로 끝까지 읽는다", async () => {
+    const rows = Array.from({ length: 1100 }, (_, index) =>
+      teacherRow(`teacher-${String(index).padStart(4, "0")}`, `선생${index}`, "employed"),
+    );
+    const { client, calls } = createSupabaseStub(rows as TeacherSupabaseRow[]);
+
+    await expect(fetchPayrollTeachers(client, "academy-1")).resolves.toHaveLength(1100);
+    expect(calls.map((call) => call.range[0])).toEqual([[0, 999], [1000, 1999]]);
+  });
+
+  it("조회 오류는 선생님 목록을 불러오지 못했다는 오류로 바꾼다", async () => {
+    const { client } = createSupabaseStub([], new Error("permission denied"));
+
+    await expect(fetchPayrollTeachers(client, "academy-1")).rejects.toThrow(
+      "선생님 목록을 불러오지 못했습니다: permission denied",
+    );
   });
 });
 
@@ -351,6 +351,7 @@ describe("teacher mutations", () => {
         ["status", "resigned"],
       ],
       is: [["archived_at", null]],
+      order: [["id", undefined]],
     });
     expect(
       calls.find((call) => call.table === "entity_status_transitions"),
@@ -361,7 +362,10 @@ describe("teacher mutations", () => {
         ["entity_type", "teacher"],
         ["to_status", "resigned"],
       ],
-      order: [["changed_at", { ascending: false }]],
+      order: [
+        ["changed_at", { ascending: false }],
+        ["id", undefined],
+      ],
     });
     expect(result.items[0]).toMatchObject({
       entityType: "teacher",

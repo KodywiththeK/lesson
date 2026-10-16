@@ -57,22 +57,22 @@ describe("mainNavigation", () => {
     ]);
   });
 
-  it("수입 관리 메뉴는 입출금 내역, 학원 레슨수입, 교재내역, 선생님 월급, 전체수입 하위 메뉴를 가진다", () => {
+  it("수입 관리 메뉴는 학원 고정 수입, 입출입내역, 교재 내역, 선생님 월급, 전체 수입 순서의 하위 메뉴를 가진다", () => {
     const financeNavigation = mainNavigation.find(
       (item) => item.label === "수입 관리",
     );
 
-    expect(financeNavigation?.href).toBe("/finance/ledger");
+    expect(financeNavigation?.href).toBe("/finance/lesson-income");
     expect(financeNavigation?.children?.map((item) => item.label)).toEqual([
-      "입출금 내역",
-      "학원 레슨수입",
-      "교재내역",
+      "학원 고정 수입",
+      "입출입내역",
+      "교재 내역",
       "선생님 월급",
-      "전체수입",
+      "전체 수입",
     ]);
     expect(financeNavigation?.children?.map((item) => item.href)).toEqual([
-      "/finance/ledger",
       "/finance/lesson-income",
+      "/finance/ledger",
       "/finance/books",
       "/finance/payroll",
       "/finance/overview",

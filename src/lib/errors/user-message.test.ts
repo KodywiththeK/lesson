@@ -26,6 +26,26 @@ describe("toUserMessage", () => {
       "Supabase client 상태를 만들지 못했습니다.",
       "서비스 연결 설정이 아직 완료되지 않았습니다. 관리자에게 문의해 주세요.",
     ],
+    [
+      'new row for relation "ledger_entries" violates check constraint "ledger_entries_amount_check"',
+      "금액은 1원 이상이어야 합니다.",
+    ],
+    ["integer out of range", "금액이 너무 큽니다. 21억 원 미만으로 입력해 주세요."],
+    [
+      'value "3000000000" is out of range for type integer',
+      "금액이 너무 큽니다. 21억 원 미만으로 입력해 주세요.",
+    ],
+    ['invalid input syntax for type date: "2026-13-45"', "날짜를 확인해 주세요."],
+    [
+      "JSON object requested, multiple (or no) rows returned",
+      "대상을 찾을 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.",
+    ],
+    ["PGRST116", "대상을 찾을 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요."],
+    ["수입 관리 권한이 없습니다.", "수입 관리 권한이 없습니다. 원장에게 문의해 주세요."],
+    [
+      "입출금 내역을 수정하지 못했습니다: 수입 관리 권한이 없습니다.",
+      "수입 관리 권한이 없습니다. 원장에게 문의해 주세요.",
+    ],
   ])("영문·내부 오류 '%s'를 사용자 문구로 바꾼다", (raw, expected) => {
     expect(toUserMessage(new Error(raw))).toBe(expected);
   });
@@ -40,6 +60,22 @@ describe("toUserMessage", () => {
     expect(
       toUserMessage(new Error("개인레슨 출결을 저장하지 못했습니다: 사용 가능한 violin 회차권이 없습니다.")),
     ).toBe("사용할 수 있는 회차권이 없습니다. 회차권 메뉴에서 등록하거나 유효기간을 확인해 주세요.");
+  });
+
+  it("아직 적용되지 않은 DB 함수를 부르면 영문 원문 대신 적용이 필요하다고 안내한다", () => {
+    expect(
+      toUserMessage(
+        new Error(
+          "수강료 미납 처리에 실패했습니다: Could not find the function public.mark_fixed_income_snapshot_overdue(p_academy_id, p_snapshot_id) in the schema cache",
+        ),
+      ),
+    ).toBe("이 기능에 필요한 데이터베이스 변경이 아직 적용되지 않았습니다. 관리자에게 문의해 주세요.");
+    expect(toUserMessage(new Error("PGRST202"))).toBe(
+      "이 기능에 필요한 데이터베이스 변경이 아직 적용되지 않았습니다. 관리자에게 문의해 주세요.",
+    );
+    expect(toUserMessage(new Error("column lesson_events.time_unspecified does not exist"))).toBe(
+      "이 기능에 필요한 데이터베이스 변경이 아직 적용되지 않았습니다. 관리자에게 문의해 주세요.",
+    );
   });
 
   it("이미 사용자에게 읽히는 한글 검증 메시지는 그대로 보여 준다", () => {

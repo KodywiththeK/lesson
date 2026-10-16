@@ -59,18 +59,10 @@ describe("canAccessFeature", () => {
     expect(canAccessFeature({ role: "desk" }, "income-management")).toBe(false);
   });
 
-  it("desk 재무 권한은 학원 설정으로 명시적으로 열 때만 허용한다", () => {
-    expect(
-      canAccessFeature(
-        {
-          role: "desk",
-          flags: {
-            allowDeskFinance: true,
-          },
-        },
-        "manual-ledger",
-      ),
-    ).toBe(true);
+  it("수입 관리는 원장 전용이라 데스크는 어떤 설정으로도 열 수 없다", () => {
+    // 화면만 열리고 DB(RLS)가 빈 결과를 돌려주는 반쪽 상태를 만들지 않는다.
+    expect(canAccessFeature({ role: "desk", flags: { allowDeskFinance: true } } as never, "manual-ledger")).toBe(false);
+    expect(canAccessFeature({ role: "desk", flags: { allowDeskFinance: true } } as never, "income-management")).toBe(false);
   });
 
   it("회차권 수동 수정은 원장과 데스크에 허용하고 선생님에게는 허용하지 않는다", () => {

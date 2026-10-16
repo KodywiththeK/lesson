@@ -20,6 +20,7 @@ import {
   type StatusManagementListItem,
 } from "@/domain/status-management";
 
+import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -62,12 +63,6 @@ export type TeacherSupabaseRow = {
   teacher_salary_settings?: TeacherSalarySettingRow[] | null;
 };
 
-type TeacherListSelectBuilder =
-  PromiseLike<SupabaseQueryResult<TeacherSupabaseRow[]>> & {
-    eq(column: string, value: string): TeacherListSelectBuilder;
-    is(column: string, value: null): TeacherListSelectBuilder;
-  };
-
 type EntityStatusTransitionSupabaseRow = {
   entity_type: string | null;
   entity_id: string | null;
@@ -76,21 +71,12 @@ type EntityStatusTransitionSupabaseRow = {
   changed_at: string | null;
 };
 
-type EntityStatusTransitionSelectBuilder =
-  PromiseLike<SupabaseQueryResult<EntityStatusTransitionSupabaseRow[]>> & {
-    eq(column: string, value: string): EntityStatusTransitionSelectBuilder;
-    order(
-      column: string,
-      options?: { ascending?: boolean },
-    ): EntityStatusTransitionSelectBuilder;
-  };
-
 type TeacherListFromBuilder = {
-  select(select: string): TeacherListSelectBuilder;
+  select(select: string): PagedSelectQuery<TeacherSupabaseRow>;
 };
 
 type EntityStatusTransitionFromBuilder = {
-  select(select: string): EntityStatusTransitionSelectBuilder;
+  select(select: string): PagedSelectQuery<EntityStatusTransitionSupabaseRow>;
 };
 
 export type TeacherListSupabaseClient = {
@@ -171,22 +157,38 @@ const WEEKDAY_LABELS: Record<string, string> = {
   일: "일",
 };
 
+/**
+ * 선생님을 id순으로 끝까지 읽는다. `status`가 없으면 재직·휴직·퇴사를 모두 읽는다.
+ * 기본은 보관 처리되지 않은 선생님만이고, `includeArchived`면 보관된 선생님도 읽는다.
+ */
+function fetchTeacherRows(
+  supabase: TeacherListSupabaseClient,
+  input: { academyId: string; status?: TeacherStatus; failureMessage: string; includeArchived?: boolean },
+): Promise<TeacherSupabaseRow[]> {
+  return fetchAllRows(input.failureMessage, (from, to) => {
+    const query = supabase
+      .from("teachers")
+      .select(TEACHER_LIST_SELECT)
+      .eq("academy_id", input.academyId);
+    const filtered = input.status ? query.eq("status", input.status) : query;
+
+    const scoped = input.includeArchived ? filtered : filtered.is("archived_at", null);
+
+    return scoped.order("id").range(from, to);
+  });
+}
+
 async function fetchEmployedTeacherRows(
   supabase: TeacherListSupabaseClient,
   academyId: string,
 ): Promise<TeacherListRow[]> {
-  const { data, error } = await supabase
-    .from("teachers")
-    .select(TEACHER_LIST_SELECT)
-    .eq("academy_id", academyId)
-    .eq("status", "employed")
-    .is("archived_at", null);
+  const rows = await fetchTeacherRows(supabase, {
+    academyId,
+    status: "employed",
+    failureMessage: "선생님 목록을 불러오지 못했습니다",
+  });
 
-  if (error) {
-    throw new Error(`선생님 목록을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).map(toTeacherListRow);
+  return rows.map(toTeacherListRow);
 }
 
 export async function fetchTeacherList(
@@ -201,9 +203,26 @@ export async function fetchTeacherOptions(
   supabase: TeacherListSupabaseClient,
   academyId: string,
 ): Promise<TeacherListRow[]> {
-  const rows = await fetchEmployedTeacherRows(supabase, academyId);
+  return sortTeachersByName(await fetchEmployedTeacherRows(supabase, academyId));
+}
 
-  return rows.sort(
+/** 급여 계산용. 과거 달 급여에는 지금 휴직·퇴사한 선생님도 포함되므로 보관 처리되지 않은 모든 상태를 가나다순으로 준다. */
+export async function fetchPayrollTeachers(
+  supabase: TeacherListSupabaseClient,
+  academyId: string,
+): Promise<TeacherListRow[]> {
+  // 보관된 선생님도 그 달 지급 기록이 있을 수 있어 포함한다. 활동·정산 기록이 없는 선생님은 급여 도메인이 걸러 낸다.
+  const rows = await fetchTeacherRows(supabase, {
+    academyId,
+    failureMessage: "선생님 목록을 불러오지 못했습니다",
+    includeArchived: true,
+  });
+
+  return sortTeachersByName(rows.map(toTeacherListRow));
+}
+
+function sortTeachersByName(teachers: TeacherListRow[]) {
+  return teachers.sort(
     (left, right) =>
       compareKoreanNames(left.name, right.name) || compareKoreanNames(left.teacherId, right.teacherId),
   );
@@ -227,16 +246,11 @@ export async function fetchTeacherStatusManagementList(
   supabase: TeacherListSupabaseClient,
   options: TeacherStatusManagementOptions,
 ): Promise<ListView<StatusManagementListItem>> {
-  const { data, error } = await supabase
-    .from("teachers")
-    .select(TEACHER_LIST_SELECT)
-    .eq("academy_id", options.academyId)
-    .eq("status", options.status)
-    .is("archived_at", null);
-
-  if (error) {
-    throw new Error(`휴직/퇴사 선생님 목록을 불러오지 못했습니다: ${error.message}`);
-  }
+  const rows = await fetchTeacherRows(supabase, {
+    academyId: options.academyId,
+    status: options.status,
+    failureMessage: "휴직/퇴사 선생님 목록을 불러오지 못했습니다",
+  });
 
   const statusReasons = await fetchLatestStatusReasonMap(supabase, {
     academyId: options.academyId,
@@ -245,7 +259,7 @@ export async function fetchTeacherStatusManagementList(
   });
 
   return buildStatusManagementList(
-    (data ?? []).map((row) => {
+    rows.map((row) => {
       const teacher = toTeacherListRow(row);
 
       return {
@@ -281,19 +295,19 @@ async function fetchLatestStatusReasonMap(
     status: "on_leave" | "resigned";
   },
 ) {
-  const { data, error } = await supabase
-    .from("entity_status_transitions")
-    .select(STATUS_TRANSITION_SELECT)
-    .eq("academy_id", options.academyId)
-    .eq("entity_type", options.entityType)
-    .eq("to_status", options.status)
-    .order("changed_at", { ascending: false });
+  const rows = await fetchAllRows("선생님 상태 변경 메모를 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("entity_status_transitions")
+      .select(STATUS_TRANSITION_SELECT)
+      .eq("academy_id", options.academyId)
+      .eq("entity_type", options.entityType)
+      .eq("to_status", options.status)
+      .order("changed_at", { ascending: false })
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`선생님 상태 변경 메모를 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return buildLatestReasonMap(data ?? []);
+  return buildLatestReasonMap(rows);
 }
 
 export function createTeacherListQueryOptions(

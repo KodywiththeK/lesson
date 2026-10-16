@@ -1059,6 +1059,53 @@ export function registerDemoBookRelease(
   };
 }
 
+/** 결제 대기 교재를 결제 완료로 바꾸고 수입 ledger를 만든다(DB `complete_book_release_payment`와 같은 규칙). */
+export function completeDemoBookRelease(
+  state: DemoAcademyState,
+  input: { releaseId: string; paidAt: string },
+): DemoAcademyState {
+  const sale = state.bookSales.find((candidate) => candidate.saleId === input.releaseId);
+
+  if (!sale) {
+    throw new Error("결제 완료 처리할 교재 출고를 찾지 못했습니다.");
+  }
+
+  if (sale.status === "paid") {
+    throw new Error("이미 결제 완료된 교재입니다.");
+  }
+
+  const paidSale: BookSale = {
+    ...sale,
+    status: "paid",
+    paidAt: input.paidAt,
+    permanent: true,
+  };
+
+  return {
+    ...state,
+    bookSales: state.bookSales.map((candidate) =>
+      candidate.saleId === sale.saleId ? paidSale : candidate,
+    ),
+    ledgerEntries: buildFinanceLedgerList(
+      [
+        ...state.ledgerEntries,
+        {
+          academyId: state.academyId,
+          ledgerId: `ledger-book-${sale.saleId}`,
+          occurredOn: input.paidAt,
+          type: "income",
+          source: "book-sale",
+          category: "book-sale",
+          amount: sale.price,
+          description: `교재 판매: ${sale.bookTitle} / ${sale.studentName}`,
+          refId: sale.saleId,
+        },
+      ],
+      { academyId: state.academyId },
+    ),
+  };
+}
+
 export function updateDemoLedgerEntry(
   state: DemoAcademyState,
   input: LedgerEntry,

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   createMonthlyTuitionSnapshot,
-  markTuitionAsPaid,
-  markTuitionAsUnpaid,
+  formatTuitionStatus,
+  getTuitionActions,
+  selectOverdueTuitions,
+  summarizeTuitionStatus,
+  type TuitionRecord,
 } from "./tuition-income";
 
 describe("createMonthlyTuitionSnapshot", () => {
@@ -111,25 +114,6 @@ describe("createMonthlyTuitionSnapshot", () => {
 
     expect(snapshot).toEqual([]);
   });
-});
-
-describe("markTuitionAsPaid", () => {
-  const unpaidRecord = {
-    academyId: "academy-1",
-    tuitionId: "2026-08:student-1:piano",
-    month: "2026-08",
-    studentId: "student-1",
-    studentName: "김민지",
-    enrollmentId: "student-1:piano",
-    instrumentId: "piano",
-    instrumentName: "피아노",
-    progress: "바이엘 2",
-    lessonFee: 150000,
-    discountTotal: 0,
-    amount: 150000,
-    dueOn: "2026-08-06",
-    status: "unpaid" as const,
-  };
 
   it("31일 등록 원생의 2월 수강료 납부 발생일은 다음달 1일로 계산한다", () => {
     const snapshot = createMonthlyTuitionSnapshot(
@@ -158,75 +142,77 @@ describe("markTuitionAsPaid", () => {
 
     expect(snapshot[0].dueOn).toBe("2026-03-01");
   });
-
-  it("수납 완료 시 상태를 paid로 바꾸고 수강료 수입 ledger를 만든다", () => {
-    const result = markTuitionAsPaid(unpaidRecord, {
-      academyId: "academy-1",
-      paidAt: "2026-08-25",
-    });
-
-    expect(result.record).toEqual({
-      ...unpaidRecord,
-      status: "paid",
-      paidAt: "2026-08-25",
-    });
-    expect(result.ledgerEntry).toEqual({
-      academyId: "academy-1",
-      ledgerId: "tuition:2026-08:student-1:piano",
-      occurredOn: "2026-08-25",
-      type: "income",
-      source: "tuition",
-      category: "tuition",
-      amount: 150000,
-      description: "수강료 수납: 2026-08 김민지 피아노",
-      refId: "2026-08:student-1:piano",
-    });
-  });
-
-  it("다른 학원의 수납 처리는 막는다", () => {
-    expect(() =>
-      markTuitionAsPaid(unpaidRecord, {
-        academyId: "academy-2",
-        paidAt: "2026-08-25",
-      }),
-    ).toThrow("학원 범위가 일치하지 않습니다.");
-  });
 });
 
-describe("markTuitionAsUnpaid", () => {
-  it("미납 버튼을 누르면 미납 목록 항목을 만든다", () => {
-    const unpaid = markTuitionAsUnpaid(
-      {
-        academyId: "academy-1",
-        tuitionId: "2026-08:student-1:piano",
-        month: "2026-08",
-        studentId: "student-1",
-        studentName: "김민지",
-        enrollmentId: "student-1:piano",
-        instrumentId: "piano",
-        instrumentName: "피아노",
-        progress: "바이엘 2",
-        lessonFee: 150000,
-        discountTotal: 0,
-        amount: 150000,
-        dueOn: "2026-08-06",
-        status: "unpaid",
-      },
-      {
-        academyId: "academy-1",
-        markedAt: "2026-08-26",
-      },
-    );
+function tuition(overrides: Partial<TuitionRecord>): TuitionRecord {
+  return {
+    academyId: "academy-1",
+    tuitionId: "2026-08:student-1:piano",
+    month: "2026-08",
+    studentId: "student-1",
+    studentName: "김민지",
+    enrollmentId: "student-1:piano",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    progress: "바이엘 2",
+    lessonFee: 150000,
+    discountTotal: 0,
+    amount: 150000,
+    dueOn: "2026-08-06",
+    status: "unpaid",
+    ...overrides,
+  };
+}
 
-    expect(unpaid).toEqual({
-      academyId: "academy-1",
-      tuitionId: "2026-08:student-1:piano",
-      studentId: "student-1",
-      studentName: "김민지",
-      month: "2026-08",
-      amount: 150000,
-      markedAt: "2026-08-26",
-      reason: "tuition-unpaid",
+describe("입금 상태 3상태", () => {
+  it("상태 이름은 미입금·입금 완료·미납이다", () => {
+    expect(formatTuitionStatus("unpaid")).toBe("미입금");
+    expect(formatTuitionStatus("paid")).toBe("입금 완료");
+    expect(formatTuitionStatus("overdue")).toBe("미납");
+  });
+
+  it("미납 인원은 미납을 누른 원생만이다(미입금은 아직 처리 전이라 포함하지 않는다)", () => {
+    const records = [
+      tuition({ tuitionId: "a", status: "unpaid" }),
+      tuition({ tuitionId: "b", status: "overdue" }),
+      tuition({ tuitionId: "c", status: "paid" }),
+    ];
+
+    expect(selectOverdueTuitions(records).map((record) => record.tuitionId)).toEqual(["b"]);
+  });
+
+  it("미입금은 입금·미납, 미납은 입금·미납 해제, 입금 완료는 입금 취소만 할 수 있다", () => {
+    expect(getTuitionActions(tuition({ status: "unpaid" }))).toEqual([
+      { action: "pay" },
+      { action: "overdue" },
+    ]);
+    expect(getTuitionActions(tuition({ status: "overdue" }))).toEqual([
+      { action: "pay" },
+      { action: "clear-overdue" },
+    ]);
+    expect(getTuitionActions(tuition({ status: "paid" }))).toEqual([{ action: "cancel-payment" }]);
+  });
+
+  it("0원 수강료는 입금 처리할 수 없고 이유를 알려 준다", () => {
+    expect(getTuitionActions(tuition({ amount: 0, status: "unpaid" }))).toEqual([
+      { action: "pay", disabledReason: "결제 금액이 0원이어서 입금 처리할 수 없습니다." },
+      { action: "overdue" },
+    ]);
+  });
+
+  it("상태별 인원과 금액, 전체 합계를 센다", () => {
+    const summary = summarizeTuitionStatus([
+      tuition({ tuitionId: "a", status: "unpaid", amount: 100000 }),
+      tuition({ tuitionId: "b", status: "overdue", amount: 150000 }),
+      tuition({ tuitionId: "c", status: "paid", amount: 200000 }),
+      tuition({ tuitionId: "d", status: "paid", amount: 50000 }),
+    ]);
+
+    expect(summary).toEqual({
+      total: { count: 4, amount: 500000 },
+      paid: { count: 2, amount: 250000 },
+      unpaid: { count: 1, amount: 100000 },
+      overdue: { count: 1, amount: 150000 },
     });
   });
 });

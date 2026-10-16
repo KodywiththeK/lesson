@@ -41,6 +41,7 @@ import {
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
+  completeDemoBookRelease,
   registerDemoBookRelease,
   registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
@@ -92,6 +93,7 @@ type DemoAcademyContextValue = {
       studentName?: string;
     },
   ) => void;
+  completeBookPayment: (input: { releaseId: string; paidAt: string }) => void;
   createStudentListQueryOptions: (options: Parameters<typeof buildStudentList>[1]) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
@@ -246,6 +248,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
               "이름 없음",
           }),
         );
+      },
+      completeBookPayment(input) {
+        commitState((current) => completeDemoBookRelease(current, input));
       },
       createStudentListQueryOptions(options) {
         return {

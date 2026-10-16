@@ -5,6 +5,7 @@ import {
   type BuildFinanceLedgerListOptions,
 } from "@/domain/finance-ledger";
 
+import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -24,15 +25,8 @@ export type LedgerEntrySupabaseRow = {
   ref_id: string | null;
 };
 
-type FinanceLedgerListSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<SupabaseQueryResult<LedgerEntrySupabaseRow[]>>;
-};
-
 type FinanceLedgerListFromBuilder = {
-  select(select: string): FinanceLedgerListSelectBuilder;
+  select(select: string): PagedSelectQuery<LedgerEntrySupabaseRow>;
 };
 
 export type FinanceLedgerListSupabaseClient = {
@@ -100,7 +94,9 @@ export type FinanceLedgerDeleteSupabaseClient = {
         eq(
           column: "id" | "academy_id",
           value: string,
-        ): PromiseLike<SupabaseQueryResult<null>>;
+        ): {
+          select(select: "id"): PromiseLike<SupabaseQueryResult<Array<{ id: string }>>>;
+        };
       };
     };
   };
@@ -118,16 +114,37 @@ export async function fetchFinanceLedgerList(
   supabase: FinanceLedgerListSupabaseClient,
   options: FetchFinanceLedgerListOptions,
 ): Promise<LedgerEntry[]> {
-  const { data, error } = await supabase
-    .from("ledger_entries")
-    .select(FINANCE_LEDGER_LIST_SELECT)
-    .eq("academy_id", options.academyId);
+  // 기간은 서버에서 거르고(월 합계가 1000행 제한에 잘리지 않게), 화면 필터는 buildFinanceLedgerList가 한 번 더 건다.
+  const rows = await fetchAllRows("입출입 내역을 불러오지 못했습니다", (from, to) => {
+    const query = supabase
+      .from("ledger_entries")
+      .select(FINANCE_LEDGER_LIST_SELECT)
+      .eq("academy_id", options.academyId);
+    const ranged = options.dateRange
+      ? query.gte("occurred_on", options.dateRange.from).lte("occurred_on", options.dateRange.to)
+      : query;
+    // 출처 필터도 서버에서 건다(가져올 행 수를 줄이고, 월과 무관하게 한 출처만 읽을 수 있다).
+    const sourced = options.filters?.source ? ranged.eq("source", options.filters.source) : ranged;
 
-  if (error) {
-    throw new Error(`입출입 내역을 불러오지 못했습니다: ${error.message}`);
-  }
+    return sourced
+      .order("occurred_on", { ascending: false })
+      .order("id")
+      .range(from, to);
+  });
 
-  return buildFinanceLedgerList((data ?? []).map(toLedgerEntry), options);
+  return buildFinanceLedgerList(rows.map(toLedgerEntry), options);
+}
+
+export function buildFinanceLedgerListQueryKey(options: FetchFinanceLedgerListOptions) {
+  return queryKeys.finance.ledgerList(options.academyId, {
+    q: options.search,
+    type: options.filters?.type,
+    source: options.filters?.source,
+    category: options.filters?.category,
+    from: options.dateRange?.from,
+    to: options.dateRange?.to,
+    sort: options.sort ? `${options.sort.field}-${options.sort.direction}` : "",
+  });
 }
 
 export function createFinanceLedgerListQueryOptions(
@@ -135,15 +152,7 @@ export function createFinanceLedgerListQueryOptions(
   options: FetchFinanceLedgerListOptions,
 ) {
   return {
-    queryKey: queryKeys.finance.ledgerList(options.academyId, {
-      q: options.search,
-      type: options.filters?.type,
-      source: options.filters?.source,
-      category: options.filters?.category,
-      from: options.dateRange?.from,
-      to: options.dateRange?.to,
-      sort: options.sort ? `${options.sort.field}-${options.sort.direction}` : "",
-    }),
+    queryKey: buildFinanceLedgerListQueryKey(options),
     queryFn: () => fetchFinanceLedgerList(supabase, options),
   };
 }
@@ -211,14 +220,20 @@ export async function deleteFinanceLedgerEntry(
   supabase: FinanceLedgerDeleteSupabaseClient,
   input: DeleteFinanceLedgerEntryInput,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("ledger_entries")
     .delete()
     .eq("id", input.ledgerId)
-    .eq("academy_id", input.academyId);
+    .eq("academy_id", input.academyId)
+    .select("id");
 
   if (error) {
     throw new Error(`입출금 내역을 삭제하지 못했습니다: ${error.message}`);
+  }
+
+  // RLS나 이미 지워진 행은 오류 없이 0건 삭제로 끝나므로, 지워진 행이 있는지 확인한다.
+  if (!data?.length) {
+    throw new Error("이미 삭제되었거나 찾을 수 없는 내역입니다.");
   }
 }
 

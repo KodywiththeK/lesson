@@ -5,6 +5,7 @@ import type { TeacherListRow } from "@/domain/teacher-list";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
 import type { TuitionRecord } from "@/domain/tuition-income";
+import { toMonthDateRange } from "@/domain/finance-date";
 
 import {
   fetchFinanceLedgerList,
@@ -14,7 +15,8 @@ import {
   fetchAllLessonTickets,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
-import { fetchTeacherOptions, type TeacherListSupabaseClient } from "./teachers";
+import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
+import { fetchPayrollTeachers, type TeacherListSupabaseClient } from "./teachers";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -26,7 +28,10 @@ type FinancePaymentRpcName =
   | "ensure_monthly_fixed_income_snapshots"
   | "mark_fixed_income_snapshot_paid"
   | "mark_fixed_income_snapshot_unpaid"
-  | "mark_salary_settlement_paid";
+  | "mark_fixed_income_snapshot_overdue"
+  | "clear_fixed_income_snapshot_overdue"
+  | "mark_salary_settlement_paid"
+  | "cancel_salary_settlement_paid";
 
 export type FinancePaymentSupabaseClient = {
   rpc(
@@ -45,38 +50,22 @@ export type FinanceManagementSupabaseClient = FinanceLedgerListSupabaseClient &
   TeacherListSupabaseClient &
   FinancePaymentSupabaseClient & {
     from(table: "students"): {
-      select(select: string): {
-        eq(
-          column: "academy_id",
-          value: string,
-        ): PromiseLike<SupabaseQueryResult<StudentFinanceRow[]>>;
-      };
+      select(select: string): PagedSelectQuery<StudentFinanceRow>;
     };
     from(table: "book_releases"): {
-      select(select: string): {
-        eq(
-          column: "academy_id",
-          value: string,
-        ): PromiseLike<SupabaseQueryResult<BookReleaseFinanceRow[]>>;
-      };
+      select(select: string): PagedSelectQuery<BookReleaseFinanceRow>;
     };
     from(table: "lesson_events"): {
-      select(select: string): {
-        eq(
-          column: "academy_id",
-          value: string,
-        ): PromiseLike<SupabaseQueryResult<LessonEventFinanceRow[]>>;
-      };
+      select(select: string): PagedSelectQuery<LessonEventFinanceRow>;
     };
     from(table: "salary_settlements"): {
-      select(select: string): {
-        eq(column: "academy_id", value: string): PromiseLike<SupabaseQueryResult<SalarySettlementFinanceRow[]>>;
-      };
+      select(select: string): PagedSelectQuery<SalarySettlementFinanceRow>;
+    };
+    from(table: "fixed_income_snapshots"): {
+      select(select: string): PagedSelectQuery<FixedIncomeSnapshotFinanceRow>;
     };
     from(table: "lesson_ticket_registrations"): {
-      select(select: string): {
-        eq(column: "academy_id", value: string): PromiseLike<SupabaseQueryResult<LessonTicketRegistrationFinanceRow[]>>;
-      };
+      select(select: string): PagedSelectQuery<LessonTicketRegistrationFinanceRow>;
     };
   };
 
@@ -128,6 +117,7 @@ type BookReleaseFinanceRow = {
   shipped_at: string;
   status: "payment-pending" | "paid";
   paid_at: string | null;
+  paid_ledger_entry_id?: string | null;
 };
 
 type LessonEventFinanceRow = {
@@ -135,7 +125,8 @@ type LessonEventFinanceRow = {
   academy_id: string;
   student_id: string;
   teacher_id: string | null;
-  lesson_kind: PayrollLessonSource["lessonKind"];
+  lesson_kind: Exclude<PayrollLessonSource["lessonKind"], "makeup">;
+  origin?: string | null;
   instrument_id: string;
   instrument_name: string;
   starts_at: string;
@@ -182,6 +173,7 @@ type SalarySettlementFinanceRow = {
   status: PayrollRecord["status"];
   paid_at: string | null;
   lesson_event_ids: string[] | null;
+  paid_ledger_entry_id?: string | null;
 };
 
 export type FinanceManagementQueryData = {
@@ -193,34 +185,61 @@ export type FinanceManagementQueryData = {
   teachers: TeacherListRow[];
   payrollLessonSources: PayrollLessonSource[];
   salarySettlements: PayrollRecord[];
+  /** 그 달 월 수강료 snapshot(읽기 전용). 급여의 월 수강료 계산에 쓴다. */
+  monthTuitionSnapshots: TuitionRecord[];
+};
+
+export type FetchFinanceManagementDataOptions = {
+  /** 조회할 달 `YYYY-MM`. 월 합계·급여 계산이 그 달 데이터만 서버에서 읽게 한다. */
+  month: string;
 };
 
 const FINANCE_STUDENT_SELECT =
   "id, academy_id, name, registered_on, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, teacher_id, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, teachers!student_instruments_academy_teacher_fk(name))";
 const FINANCE_BOOK_RELEASE_SELECT =
-  "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at";
+  "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at, paid_ledger_entry_id";
 const FINANCE_LESSON_EVENT_SELECT =
-  "id, academy_id, student_id, teacher_id, lesson_kind, instrument_id, instrument_name, starts_at, ends_at, students!lesson_events_academy_student_fk(name), student_instruments!lesson_events_academy_student_instrument_fk(final_monthly_fee), attendance_records!attendance_records_academy_lesson_event_fk(status)";
+  "id, academy_id, student_id, teacher_id, lesson_kind, origin, instrument_id, instrument_name, starts_at, ends_at, students!lesson_events_academy_student_fk(name), student_instruments!lesson_events_academy_student_instrument_fk(final_monthly_fee), attendance_records!attendance_records_academy_lesson_event_fk(status)";
 const FINANCE_SALARY_SETTLEMENT_SELECT =
-  "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids";
+  "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids, paid_ledger_entry_id";
+const FINANCE_TUITION_SNAPSHOT_SELECT =
+  "id, academy_id, month, student_id, student_instrument_id, student_name, instrument_id, instrument_name, progress, lesson_fee, discount_total, discount_label, amount, due_on, status, paid_at, paid_ledger_entry_id";
 const FINANCE_TICKET_REGISTRATION_SELECT =
   "id, academy_id, lesson_ticket_grant_id, registered_at, granted_count, valid_until, original_paid_amount, ledger_entry_id";
 
 export async function fetchFinanceManagementData(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
+  { month }: FetchFinanceManagementDataOptions,
 ): Promise<FinanceManagementQueryData> {
-  const [ledgerEntries, enrollments, tickets, ticketRegistrations, bookSales, teachers, payrollLessonSources, salarySettlements] =
-    await Promise.all([
-      fetchFinanceLedgerList(supabase, { academyId }),
-      fetchFinanceEnrollments(supabase, academyId),
-      fetchAllLessonTickets(supabase, academyId),
-      fetchLessonTicketIncomeRegistrations(supabase, academyId),
-      fetchFinanceBookSales(supabase, academyId),
-      fetchTeacherOptions(supabase, academyId),
-      fetchPayrollLessonSources(supabase, academyId),
-      fetchSalarySettlements(supabase, academyId),
-    ]);
+  const [
+    monthLedgerEntries,
+    lessonTicketLedgerEntries,
+    enrollments,
+    tickets,
+    ticketRegistrations,
+    bookSales,
+    teachers,
+    payrollLessonSources,
+    salarySettlements,
+    monthTuitionSnapshots,
+  ] = await Promise.all([
+    fetchFinanceLedgerList(supabase, { academyId, dateRange: toMonthDateRange(month) }),
+    // 회차권 등록의 원장은 다른 달로 옮겨졌을 수 있어 월과 무관하게 읽는다(누락으로 오해하지 않게).
+    fetchFinanceLedgerList(supabase, { academyId, filters: { source: "lesson-ticket" } }),
+    fetchFinanceEnrollments(supabase, academyId),
+    fetchAllLessonTickets(supabase, academyId),
+    fetchLessonTicketIncomeRegistrations(supabase, academyId),
+    fetchFinanceBookSales(supabase, academyId, month),
+    fetchPayrollTeachers(supabase, academyId),
+    fetchPayrollLessonSources(supabase, academyId, month),
+    fetchSalarySettlements(supabase, academyId, month),
+    fetchMonthTuitionSnapshotRows(supabase, { academyId, month }),
+  ]);
+
+  const ledgerEntries = [
+    ...new Map([...monthLedgerEntries, ...lessonTicketLedgerEntries].map((entry) => [entry.ledgerId, entry])).values(),
+  ];
 
   return {
     ledgerEntries,
@@ -231,6 +250,7 @@ export async function fetchFinanceManagementData(
     teachers,
     payrollLessonSources,
     salarySettlements,
+    monthTuitionSnapshots,
   };
 }
 
@@ -238,16 +258,16 @@ export async function fetchLessonTicketIncomeRegistrations(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
 ): Promise<LessonTicketIncomeRegistration[]> {
-  const { data, error } = await supabase
-    .from("lesson_ticket_registrations")
-    .select(FINANCE_TICKET_REGISTRATION_SELECT)
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("회차권 등록 내역을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("lesson_ticket_registrations")
+      .select(FINANCE_TICKET_REGISTRATION_SELECT)
+      .eq("academy_id", academyId)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`회차권 등록 내역을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).map((row) => ({
+  return rows.map((row) => ({
     registrationId: row.id,
     academyId: row.academy_id,
     ticketId: row.lesson_ticket_grant_id,
@@ -259,14 +279,22 @@ export async function fetchLessonTicketIncomeRegistrations(
   }));
 }
 
-export function createFinanceManagementDataQueryOptions(
+/** 그 달 월 수강료 snapshot을 읽기만 한다. 월 snapshot 생성(`ensure_…` RPC)은 호출하지 않는다. */
+export async function fetchMonthTuitionSnapshotRows(
   supabase: FinanceManagementSupabaseClient,
-  academyId: string,
-) {
-  return {
-    queryKey: [...queryKeys.finance.all(academyId), "management-data"] as const,
-    queryFn: () => fetchFinanceManagementData(supabase, academyId),
-  };
+  input: { academyId: string; month: string },
+): Promise<TuitionRecord[]> {
+  const rows = await fetchAllRows("월별 수강료를 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("fixed_income_snapshots")
+      .select(FINANCE_TUITION_SNAPSHOT_SELECT)
+      .eq("academy_id", input.academyId)
+      .eq("month", input.month)
+      .order("id")
+      .range(from, to),
+  );
+
+  return rows.map(toTuitionRecord);
 }
 
 export async function fetchMonthlyTuitionSnapshots(
@@ -324,11 +352,11 @@ export async function markMonthlyTuitionAsPaid(
   );
 
   if (error) {
-    throw new Error(`수강료 수납 처리에 실패했습니다: ${error.message}`);
+    throw new Error(`수강료 입금 처리에 실패했습니다: ${error.message}`);
   }
 
   if (!data || Array.isArray(data)) {
-    throw new Error("수강료 수납 처리 후 반환된 데이터가 없습니다.");
+    throw new Error("수강료 입금 처리 후 반환된 데이터가 없습니다.");
   }
 
   return toTuitionRecord(data as FixedIncomeSnapshotFinanceRow);
@@ -350,14 +378,107 @@ export async function markMonthlyTuitionAsUnpaid(
   );
 
   if (error) {
-    throw new Error(`수강료 미수납 처리에 실패했습니다: ${error.message}`);
+    throw new Error(`수강료 입금 취소에 실패했습니다: ${error.message}`);
   }
 
   if (!data || Array.isArray(data)) {
-    throw new Error("수강료 미수납 처리 후 반환된 데이터가 없습니다.");
+    throw new Error("수강료 입금 취소 후 반환된 데이터가 없습니다.");
   }
 
   return toTuitionRecord(data as FixedIncomeSnapshotFinanceRow);
+}
+
+export async function markMonthlyTuitionAsOverdue(
+  supabase: FinancePaymentSupabaseClient,
+  input: {
+    academyId: string;
+    tuitionId: string;
+  },
+): Promise<TuitionRecord> {
+  const { data, error } = await supabase.rpc("mark_fixed_income_snapshot_overdue", {
+    p_academy_id: input.academyId,
+    p_snapshot_id: input.tuitionId,
+  });
+
+  if (error) {
+    throw new Error(`수강료 미납 처리에 실패했습니다: ${error.message}`);
+  }
+
+  if (!data || Array.isArray(data)) {
+    throw new Error("수강료 미납 처리 후 반환된 데이터가 없습니다.");
+  }
+
+  return toTuitionRecord(data as FixedIncomeSnapshotFinanceRow);
+}
+
+/** 미납으로 기록한 수강료를 미입금으로 되돌린다. 원장은 건드리지 않는다. */
+export async function clearMonthlyTuitionOverdue(
+  supabase: FinancePaymentSupabaseClient,
+  input: {
+    academyId: string;
+    tuitionId: string;
+  },
+): Promise<TuitionRecord> {
+  const { data, error } = await supabase.rpc("clear_fixed_income_snapshot_overdue", {
+    p_academy_id: input.academyId,
+    p_snapshot_id: input.tuitionId,
+  });
+
+  if (error) {
+    throw new Error(`수강료 미납 해제에 실패했습니다: ${error.message}`);
+  }
+
+  if (!data || Array.isArray(data)) {
+    throw new Error("수강료 미납 해제 후 반환된 데이터가 없습니다.");
+  }
+
+  return toTuitionRecord(data as FixedIncomeSnapshotFinanceRow);
+}
+
+export type YearlyTuitionSnapshotsInput = {
+  academyId: string;
+  year: number;
+  /** 입금 완료분만 필요한 악기별 그래프처럼 서버에서 상태를 걸러야 할 때. */
+  status?: "paid";
+};
+
+/** 선택한 연도 1~12월의 월 수강료 snapshot. 전체 수입 그래프의 악기별 수입 집계에 쓴다. */
+export async function fetchYearlyTuitionSnapshots(
+  supabase: FinanceManagementSupabaseClient,
+  input: YearlyTuitionSnapshotsInput,
+): Promise<TuitionRecord[]> {
+  const rows = await fetchAllRows("연간 수강료를 불러오지 못했습니다", (from, to) => {
+    const query = supabase
+      .from("fixed_income_snapshots")
+      .select(FINANCE_TUITION_SNAPSHOT_SELECT)
+      .eq("academy_id", input.academyId);
+    const filtered = input.status ? query.eq("status", input.status) : query;
+
+    return filtered
+      .gte("month", `${input.year}-01`)
+      .lte("month", `${input.year}-12`)
+      .order("month")
+      .order("id")
+      .range(from, to);
+  });
+
+  return rows.map(toTuitionRecord);
+}
+
+export function createYearlyTuitionSnapshotsQueryOptions(
+  supabase: FinanceManagementSupabaseClient,
+  input: YearlyTuitionSnapshotsInput,
+) {
+  return {
+    queryKey: [
+      ...queryKeys.finance.all(input.academyId),
+      "tuition-snapshots",
+      "year",
+      input.year,
+      input.status ?? "all",
+    ] as const,
+    queryFn: () => fetchYearlyTuitionSnapshots(supabase, input),
+  };
 }
 
 export async function markPayrollSettlementAsPaid(
@@ -392,68 +513,119 @@ export async function markPayrollSettlementAsPaid(
   return toPayrollRecord(data as SalarySettlementFinanceRow);
 }
 
+export async function cancelPayrollSettlementPaid(
+  supabase: FinancePaymentSupabaseClient,
+  input: {
+    academyId: string;
+    teacherId: string;
+    month: string;
+  },
+): Promise<PayrollRecord> {
+  const { data, error } = await supabase.rpc("cancel_salary_settlement_paid", {
+    p_academy_id: input.academyId,
+    p_teacher_id: input.teacherId,
+    p_month: input.month,
+  });
+
+  if (error) {
+    throw new Error(`급여 지급 취소에 실패했습니다: ${error.message}`);
+  }
+
+  if (!data || Array.isArray(data)) {
+    throw new Error("급여 지급 취소 후 반환된 데이터가 없습니다.");
+  }
+
+  return toPayrollRecord(data as SalarySettlementFinanceRow);
+}
+
 async function fetchFinanceEnrollments(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
 ) {
-  const { data, error } = await supabase
-    .from("students")
-    .select(FINANCE_STUDENT_SELECT)
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("수강 정보를 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("students")
+      .select(FINANCE_STUDENT_SELECT)
+      .eq("academy_id", academyId)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`수강 정보를 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).flatMap(toStudentEnrollments);
+  return rows.flatMap(toStudentEnrollments);
 }
 
+/** 그 달에 결제 완료된 교재 판매만 읽는다(수입은 결제일 기준). */
 async function fetchFinanceBookSales(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
+  month: string,
 ) {
-  const { data, error } = await supabase
-    .from("book_releases")
-    .select(FINANCE_BOOK_RELEASE_SELECT)
-    .eq("academy_id", academyId);
+  const paidRange = toMonthDateRange(month);
+  const rows = await fetchAllRows("교재 내역을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("book_releases")
+      .select(FINANCE_BOOK_RELEASE_SELECT)
+      .eq("academy_id", academyId)
+      .eq("status", "paid")
+      .gte("paid_at", paidRange.from)
+      .lte("paid_at", paidRange.to)
+      .order("paid_at")
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`교재 내역을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).map(toBookSale);
+  return rows.map(toBookSale);
 }
 
+/** 그 달(한국 시간) 예정 수업만 읽는다. 취소·삭제·이동으로 대체된 일정은 급여 계산의 예정 수업 수에서 뺀다. */
 async function fetchPayrollLessonSources(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
+  month: string,
 ) {
-  const { data, error } = await supabase
-    .from("lesson_events")
-    .select(FINANCE_LESSON_EVENT_SELECT)
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("급여 계산용 수업을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("lesson_events")
+      .select(FINANCE_LESSON_EVENT_SELECT)
+      .eq("academy_id", academyId)
+      .eq("status", "scheduled")
+      .gte("starts_at", toKoreanMonthStart(month))
+      .lt("starts_at", toKoreanMonthStart(toNextMonth(month)))
+      .order("starts_at")
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`급여 계산용 수업을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return (data ?? []).map(toPayrollLessonSource);
+  return rows.map(toPayrollLessonSource);
 }
 
 async function fetchSalarySettlements(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
+  month: string,
 ): Promise<PayrollRecord[]> {
-  const { data, error } = await supabase
-    .from("salary_settlements")
-    .select(FINANCE_SALARY_SETTLEMENT_SELECT)
-    .eq("academy_id", academyId);
+  const rows = await fetchAllRows("급여 지급 내역을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("salary_settlements")
+      .select(FINANCE_SALARY_SETTLEMENT_SELECT)
+      .eq("academy_id", academyId)
+      .eq("month", month)
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`급여 지급 내역을 불러오지 못했습니다: ${error.message}`);
-  }
+  return rows.map(toPayrollRecord);
+}
 
-  return (data ?? []).map(toPayrollRecord);
+function toKoreanMonthStart(month: string) {
+  return `${month}-01T00:00:00+09:00`;
+}
+
+function toNextMonth(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const next = new Date(Date.UTC(year, monthNumber, 1));
+
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function toStudentEnrollments(row: StudentFinanceRow): StudentEnrollment[] {
@@ -513,6 +685,7 @@ function toBookSale(row: BookReleaseFinanceRow): BookSale {
       ...common,
       status: "paid",
       paidAt: row.paid_at ?? "",
+      paidLedgerEntryId: row.paid_ledger_entry_id,
       permanent: true,
     };
   }
@@ -531,7 +704,8 @@ function toPayrollLessonSource(row: LessonEventFinanceRow): PayrollLessonSource 
     studentId: row.student_id,
     studentName: row.students?.name?.trim() || "이름 없음",
     instrumentName: row.instrument_name,
-    lessonKind: row.lesson_kind,
+    lessonKind: row.origin === "makeup" ? "makeup" : row.lesson_kind,
+    origin: row.origin ?? undefined,
     status: row.attendance_records?.[0]?.status ?? "scheduled",
     startedAt: row.starts_at,
     endedAt: row.ends_at,
@@ -557,6 +731,7 @@ function toTuitionRecord(row: FixedIncomeSnapshotFinanceRow): TuitionRecord {
     dueOn: row.due_on ?? `${row.month}-01`,
     status: row.status,
     paidAt: row.paid_at ?? undefined,
+    paidLedgerEntryId: row.paid_ledger_entry_id,
   };
 }
 
@@ -574,5 +749,6 @@ function toPayrollRecord(row: SalarySettlementFinanceRow): PayrollRecord {
     status: row.status,
     paidAt: row.paid_at ?? undefined,
     lessonEventIds: row.lesson_event_ids ?? [],
+    ledgerEntryId: row.paid_ledger_entry_id,
   };
 }
