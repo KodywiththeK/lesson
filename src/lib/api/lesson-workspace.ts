@@ -19,6 +19,7 @@ import {
 import {
   fetchAcademyLessonRegistrationOptions,
   fetchPrivateLessonRegistrationOptions,
+  type PrivateLessonRegistrationOptions,
   type PrivateLessonRegistrationOptionsSupabaseClient,
 } from "./private-lessons";
 import { queryKeys } from "./query-keys";
@@ -162,6 +163,12 @@ export type LessonWorkspaceSupabaseClient =
       },
     ): PromiseLike<SupabaseResult<number>>;
     rpc(
+      functionName: "list_students_for_teacher",
+      payload: { p_academy_id: string },
+    ): PromiseLike<
+      SupabaseResult<Array<{ student_id: string; student_name: string }>>
+    >;
+    rpc(
       functionName: "resolve_academy_lesson_absence",
       payload: {
         p_academy_id: string;
@@ -256,6 +263,11 @@ export type LessonWorkspaceSupabaseClient =
 export type FetchLessonWorkspaceInput = {
   academyId: string;
   month: string;
+  /**
+   * 원장·데스크는 true(기본). 선생님(false)은 수강료·할인이 있는 수강 정보 표를 읽을 수 없으므로
+   * 레슨원생 검색 대상을 담당 원생 명단 RPC에서 받는다.
+   */
+  canManage?: boolean;
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
@@ -263,6 +275,29 @@ const LESSON_WORKSPACE_EVENTS_SELECT =
 const ATTENDEE_COUNT_EVENTS_SELECT = "student_id, lesson_kind, status, starts_at";
 const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
   "id, academy_id, lesson_kind, memo_date, content, unread";
+
+/** 선생님의 레슨원생 검색용 선택지. 이름만 필요하고 등록 폼(악기·선생님 선택)은 선생님에게 열리지 않는다. */
+async function fetchTeacherStudentSearchOptions(
+  supabase: LessonWorkspaceSupabaseClient,
+  academyId: string,
+): Promise<PrivateLessonRegistrationOptions> {
+  const { data, error } = await supabase.rpc("list_students_for_teacher", {
+    p_academy_id: academyId,
+  });
+
+  if (error) {
+    throw new Error(`담당 원생 명단을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return {
+    students: (data ?? []).map((row) => ({
+      studentId: row.student_id,
+      studentName: row.student_name,
+      instruments: [],
+    })),
+    teachers: [],
+  };
+}
 
 export async function fetchLessonWorkspaceData(
   supabase: LessonWorkspaceSupabaseClient,
@@ -282,6 +317,7 @@ export async function fetchLessonWorkspaceData(
     );
   }
 
+  const canManage = input.canManage ?? true;
   const range = toMonthRange(input.month);
   const [
     eventsResult,
@@ -305,7 +341,9 @@ export async function fetchLessonWorkspaceData(
         .eq("academy_id", input.academyId),
       fetchLessonCalendarMemoRows(supabase, input.academyId, range),
       fetchAcademyLessonRegistrationOptions(supabase, input.academyId),
-      fetchPrivateLessonRegistrationOptions(supabase, input.academyId),
+      canManage
+        ? fetchPrivateLessonRegistrationOptions(supabase, input.academyId)
+        : fetchTeacherStudentSearchOptions(supabase, input.academyId),
     ]);
 
   if (eventsResult.error) {

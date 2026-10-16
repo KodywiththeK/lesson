@@ -235,6 +235,7 @@ export function LessonManagementWorkspace({
       ? createLessonWorkspaceQueryOptions(supabaseClientState.client, {
           academyId,
           month: selectedMonth,
+          canManage,
         })
       : null;
   const workspaceQuery = useQuery({

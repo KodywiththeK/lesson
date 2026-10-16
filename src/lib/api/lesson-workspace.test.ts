@@ -293,6 +293,46 @@ describe("fetchLessonWorkspaceData", () => {
     expect(priorCall?.lt).toEqual(["starts_at", "2026-10-01T00:00:00+09:00"]);
   });
 
+  it("선생님 계정은 수강 정보 표를 읽지 않고 담당 원생 명단 RPC로 레슨원생 검색 대상을 만든다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls, {
+      teacherRosterRows: [
+        { student_id: "student-1", student_name: "김민지", instrument_names: ["피아노"], weekdays: ["월"] },
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, {
+      academyId: "academy-1",
+      month: "2026-08",
+      canManage: false,
+    });
+
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        functionName: "list_students_for_teacher",
+        payload: { p_academy_id: "academy-1" },
+      }),
+    );
+    // 개인레슨 선택지는 student_instruments(선생님은 직접 읽을 수 없음)를 embed하지 않고 RPC로만 만든다.
+    // 학원 일정 선택지 조회 1건만 남는다(선생님 목록 용도).
+    expect(
+      calls.filter((call) => call.table === "students" && String(call.select).includes("student_instruments")),
+    ).toHaveLength(1);
+    expect(result.privateRegistrationOptions.students).toEqual([
+      { studentId: "student-1", studentName: "김민지", instruments: [] },
+    ]);
+    expect(result.privateRegistrationOptions.teachers).toEqual([]);
+  });
+
+  it("원장·데스크는 기존처럼 수강 정보가 있는 원생만 레슨 등록 선택지로 받는다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls);
+
+    await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-08" });
+
+    expect(calls.some((call) => call.functionName === "list_students_for_teacher")).toBe(false);
+  });
+
   it("정기 학원 레슨 이벤트 생성 실패를 레슨관리표 조회 오류로 전달한다", async () => {
     const client = createLessonWorkspaceClient([], {
       rpcError: new Error("permission denied"),
@@ -620,11 +660,16 @@ function createLessonWorkspaceClient(
     priorLessonRows?: Array<Record<string, unknown>>;
     lessonMemoMissingTargetColumns?: boolean;
     resolveResult?: Record<string, unknown>;
+    teacherRosterRows?: Array<Record<string, unknown>>;
   } = {},
 ): LessonWorkspaceSupabaseClient {
   return {
     async rpc(functionName: string, payload: Record<string, unknown>) {
       calls.push({ functionName, payload });
+
+      if (functionName === "list_students_for_teacher") {
+        return { data: options.teacherRosterRows ?? [], error: null };
+      }
 
       if (functionName === "resolve_academy_lesson_absence" && !options.rpcError) {
         return {
