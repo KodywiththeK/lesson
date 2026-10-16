@@ -16,7 +16,6 @@ export type ResolveSessionRoleInput = {
 
 export type PermissionFlags = {
   allowDeskFinance?: boolean;
-  allowDeskTicketAdjustment?: boolean;
 };
 
 export type PermissionContext = {
@@ -68,6 +67,7 @@ const DESK_FEATURES: FeatureKey[] = [
   "vendors",
   "books",
   "tickets",
+  "ticket-manual-adjustment",
   "assigned-student",
 ];
 
@@ -104,10 +104,6 @@ export function canAccessFeature(
   if (context.role === "desk") {
     if (feature === "income-management" || feature === "manual-ledger") {
       return context.flags?.allowDeskFinance === true;
-    }
-
-    if (feature === "ticket-manual-adjustment") {
-      return context.flags?.allowDeskTicketAdjustment === true;
     }
 
     return DESK_FEATURES.includes(feature);

@@ -9,7 +9,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { CalendarPlus, Search, Send, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -55,6 +55,11 @@ import {
   cancelPrivateLessonAttendance,
   markPrivateLessonAttendance,
 } from "@/lib/api/private-lessons";
+import {
+  createAssignedLessonTicketBalancesQueryOptions,
+  type AssignedLessonTicketBalance,
+  type AssignedLessonTicketBalanceSupabaseClient,
+} from "@/lib/api/lesson-tickets";
 import {
   createAcademyLessonEvent,
   createLessonWorkspaceQueryOptions,
@@ -148,12 +153,17 @@ type LessonManagementWorkspaceProps = {
   ) => void;
   /** 등원 확인을 취소해 예정 상태로 되돌리고 회차권 1회를 복구한다. */
   onCancelPrivateLessonAttendance?: (lessonId: string) => void;
+  assignedTicketBalancesQueryFactory?: (academyId: string) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<AssignedLessonTicketBalance[]>;
+  };
 };
 
 type LessonWorkspaceClient = LessonWorkspaceSupabaseClient &
   AcademyLessonAttendanceSupabaseClient &
   MarkPrivateLessonAttendanceSupabaseClient &
   CancelPrivateLessonAttendanceSupabaseClient &
+  AssignedLessonTicketBalanceSupabaseClient &
   LessonMemoSupabaseClient &
   LessonMonthlyNoteSupabaseClient;
 
@@ -195,9 +205,22 @@ export function LessonManagementWorkspace({
   onRegisterPrivateLesson,
   onMarkPrivateLessonAttendance,
   onCancelPrivateLessonAttendance,
+  assignedTicketBalancesQueryFactory,
 }: LessonManagementWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState(initialDate);
+  const pendingLessonIdsRef = useRef(new Set<string>());
+  const [pendingLessonIds, setPendingLessonIds] = useState<ReadonlySet<string>>(new Set());
+  const beginPrivateAttendanceRequest = (lessonId: string) => {
+    if (pendingLessonIdsRef.current.has(lessonId)) return false;
+    pendingLessonIdsRef.current.add(lessonId);
+    setPendingLessonIds(new Set(pendingLessonIdsRef.current));
+    return true;
+  };
+  const finishPrivateAttendanceRequest = (lessonId: string) => {
+    pendingLessonIdsRef.current.delete(lessonId);
+    setPendingLessonIds(new Set(pendingLessonIdsRef.current));
+  };
   const [academyView, setAcademyView] = useState<LessonView>("calendar");
   const [privateView, setPrivateView] = useState<LessonView>("calendar");
   const selectedMonth = selectedDate.slice(0, 7);
@@ -220,6 +243,16 @@ export function LessonManagementWorkspace({
       queryKeys.lessonWorkspace.month(academyId, selectedMonth),
     queryFn: workspaceQueryOptions?.queryFn ?? (async () => emptyWorkspaceData),
     enabled: Boolean(workspaceQueryOptions),
+  });
+  const assignedTicketQueryOptions = assignedTicketBalancesQueryFactory?.(academyId) ??
+    (!canManage && !hasInjectedData && supabaseClientState?.client
+      ? createAssignedLessonTicketBalancesQueryOptions(supabaseClientState.client, academyId)
+      : null);
+  const assignedTicketBalancesQuery = useQuery({
+    queryKey: assignedTicketQueryOptions?.queryKey ??
+      queryKeys.lessonTickets.assignedBalances(academyId),
+    queryFn: assignedTicketQueryOptions?.queryFn ?? (async () => []),
+    enabled: !canManage && Boolean(assignedTicketQueryOptions),
   });
   const monthlyNote = useLessonMonthlyNote({
     academyId,
@@ -262,6 +295,7 @@ export function LessonManagementWorkspace({
   const [academyDayOpen, setAcademyDayOpen] = useState(false);
   const [privateDayOpen, setPrivateDayOpen] = useState(false);
   const [privateRegisterOpen, setPrivateRegisterOpen] = useState(false);
+  const [headerPrivateRegisterOpen, setHeaderPrivateRegisterOpen] = useState(false);
   const [privateStudentSearchOpen, setPrivateStudentSearchOpen] =
     useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -381,6 +415,7 @@ export function LessonManagementWorkspace({
         description: toUserMessage(error),
       });
     },
+    onSettled: (_data, _error, input) => finishPrivateAttendanceRequest(input.lessonEventId),
   });
   const setPrivateLessonStatus = (lessonId: string, status: PrivateLessonStatus) => {
     setPrivateLessonsOverride((current) =>
@@ -397,21 +432,24 @@ export function LessonManagementWorkspace({
 
       return cancelPrivateLessonAttendance(supabaseClientState.client, input);
     },
-    onSuccess: (_data, input) => {
-      setPrivateLessonStatus(input.lessonEventId, "scheduled");
+    onSuccess: (result, input) => {
+      if (result.cancelled) {
+        setPrivateLessonStatus(input.lessonEventId, "scheduled");
+      }
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "lesson-tickets"],
       });
-      toast.success(describePrivateAttendanceCancellation());
+      toast.success(describePrivateAttendanceCancellation(result));
     },
     onError: (error) => {
       toast.error("등원 확인 취소에 실패했습니다.", {
         description: toUserMessage(error),
       });
     },
+    onSettled: (_data, _error, input) => finishPrivateAttendanceRequest(input.lessonEventId),
   });
   const createMemoMutation = useMutation({
     mutationFn: (input: LessonCalendarMemoPayload) => {
@@ -685,6 +723,7 @@ export function LessonManagementWorkspace({
 
   const markPrivateLesson = (lesson: PrivateLesson, status: "present" | "absent") => {
     if (!onMarkPrivateLessonAttendance && supabaseClientState?.client) {
+      if (!beginPrivateAttendanceRequest(lesson.id)) return;
       savePrivateAttendanceMutation.mutate(
         {
           academyId,
@@ -710,6 +749,7 @@ export function LessonManagementWorkspace({
 
   const cancelPrivateLessonCheckIn = (lesson: PrivateLesson) => {
     if (!onCancelPrivateLessonAttendance && supabaseClientState?.client) {
+      if (!beginPrivateAttendanceRequest(lesson.id)) return;
       cancelPrivateAttendanceMutation.mutate({
         academyId,
         lessonEventId: lesson.id,
@@ -721,7 +761,10 @@ export function LessonManagementWorkspace({
 
     onCancelPrivateLessonAttendance?.(lesson.id);
     setPrivateLessonStatus(lesson.id, "scheduled");
-    toast.success(describePrivateAttendanceCancellation());
+    toast.success(describePrivateAttendanceCancellation({
+      cancelled: true,
+      restoredTicket: lesson.status === "present",
+    }));
   };
 
   const registerPrivateLessonLocally = useCallback(
@@ -791,6 +834,8 @@ export function LessonManagementWorkspace({
           <PrivateLessonRegistrationScreen
             {...privateRegistrationProps}
             displayMode="button"
+            open={headerPrivateRegisterOpen}
+            onOpenChange={setHeaderPrivateRegisterOpen}
           />
         ) : null}
         <Button
@@ -813,6 +858,7 @@ export function LessonManagementWorkspace({
     ),
     [
       canManage,
+      headerPrivateRegisterOpen,
       privateRegistrationProps,
       setPrivateStudentSearchOpen,
       setScheduleOpen,
@@ -1105,6 +1151,8 @@ export function LessonManagementWorkspace({
         memos={selectedPrivateMemos}
         memoTargets={selectedPrivateMemoTargets}
         canManage={canManage}
+        pendingLessonIds={pendingLessonIds}
+        assignedTicketBalances={assignedTicketBalancesQuery.data ?? []}
         onOpenChange={setPrivateDayOpen}
         onCreateMemo={(input) => createCalendarMemo(input)}
         onUpdateMemo={(input) => updateCalendarMemo(input)}

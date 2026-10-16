@@ -158,7 +158,7 @@ export type CancelPrivateLessonAttendanceSupabaseClient = {
       p_student_id: string;
       p_instrument_id: string;
     },
-  ): PromiseLike<SupabaseQueryResult<null>>;
+  ): PromiseLike<SupabaseQueryResult<{ cancelled: boolean; restored_ticket: boolean }>>;
 };
 
 export type RegisterPrivateLessonEventInput = {
@@ -350,7 +350,7 @@ export async function cancelPrivateLessonAttendance(
   supabase: CancelPrivateLessonAttendanceSupabaseClient,
   input: CancelPrivateLessonAttendanceInput,
 ) {
-  const { error } = await supabase.rpc("cancel_private_lesson_attendance", {
+  const { data, error } = await supabase.rpc("cancel_private_lesson_attendance", {
     p_academy_id: input.academyId,
     p_lesson_event_id: input.lessonEventId,
     p_student_id: input.studentId,
@@ -360,6 +360,10 @@ export async function cancelPrivateLessonAttendance(
   if (error) {
     throw new Error(`등원 확인을 취소하지 못했습니다: ${error.message}`);
   }
+  if (!data) {
+    throw new Error("등원 확인 취소 결과를 확인하지 못했습니다. 다시 조회해 주세요.");
+  }
+  return { cancelled: data.cancelled, restoredTicket: data.restored_ticket };
 }
 
 async function fetchTeacherPrivateLessons(

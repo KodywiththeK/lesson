@@ -3,6 +3,7 @@ import type { PayrollLessonSource, PayrollRecord } from "@/domain/payroll";
 import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
+import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
 import type { TuitionRecord } from "@/domain/tuition-income";
 
 import {
@@ -72,7 +73,23 @@ export type FinanceManagementSupabaseClient = FinanceLedgerListSupabaseClient &
         eq(column: "academy_id", value: string): PromiseLike<SupabaseQueryResult<SalarySettlementFinanceRow[]>>;
       };
     };
+    from(table: "lesson_ticket_registrations"): {
+      select(select: string): {
+        eq(column: "academy_id", value: string): PromiseLike<SupabaseQueryResult<LessonTicketRegistrationFinanceRow[]>>;
+      };
+    };
   };
+
+type LessonTicketRegistrationFinanceRow = {
+  id: string;
+  academy_id: string;
+  lesson_ticket_grant_id: string;
+  registered_at: string;
+  granted_count: number;
+  valid_until: string;
+  original_paid_amount: number;
+  ledger_entry_id: string | null;
+};
 
 type StudentFinanceRow = {
   id: string;
@@ -171,6 +188,7 @@ export type FinanceManagementQueryData = {
   ledgerEntries: LedgerEntry[];
   enrollments: StudentEnrollment[];
   tickets: LessonTicketListItem[];
+  ticketRegistrations: LessonTicketIncomeRegistration[];
   bookSales: BookSale[];
   teachers: TeacherListRow[];
   payrollLessonSources: PayrollLessonSource[];
@@ -185,16 +203,19 @@ const FINANCE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, teacher_id, lesson_kind, instrument_id, instrument_name, starts_at, ends_at, students!lesson_events_academy_student_fk(name), student_instruments!lesson_events_academy_student_instrument_fk(final_monthly_fee), attendance_records!attendance_records_academy_lesson_event_fk(status)";
 const FINANCE_SALARY_SETTLEMENT_SELECT =
   "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids";
+const FINANCE_TICKET_REGISTRATION_SELECT =
+  "id, academy_id, lesson_ticket_grant_id, registered_at, granted_count, valid_until, original_paid_amount, ledger_entry_id";
 
 export async function fetchFinanceManagementData(
   supabase: FinanceManagementSupabaseClient,
   academyId: string,
 ): Promise<FinanceManagementQueryData> {
-  const [ledgerEntries, enrollments, tickets, bookSales, teachers, payrollLessonSources, salarySettlements] =
+  const [ledgerEntries, enrollments, tickets, ticketRegistrations, bookSales, teachers, payrollLessonSources, salarySettlements] =
     await Promise.all([
       fetchFinanceLedgerList(supabase, { academyId }),
       fetchFinanceEnrollments(supabase, academyId),
       fetchAllLessonTickets(supabase, academyId),
+      fetchLessonTicketIncomeRegistrations(supabase, academyId),
       fetchFinanceBookSales(supabase, academyId),
       fetchTeacherOptions(supabase, academyId),
       fetchPayrollLessonSources(supabase, academyId),
@@ -205,11 +226,37 @@ export async function fetchFinanceManagementData(
     ledgerEntries,
     enrollments,
     tickets,
+    ticketRegistrations,
     bookSales,
     teachers,
     payrollLessonSources,
     salarySettlements,
   };
+}
+
+export async function fetchLessonTicketIncomeRegistrations(
+  supabase: FinanceManagementSupabaseClient,
+  academyId: string,
+): Promise<LessonTicketIncomeRegistration[]> {
+  const { data, error } = await supabase
+    .from("lesson_ticket_registrations")
+    .select(FINANCE_TICKET_REGISTRATION_SELECT)
+    .eq("academy_id", academyId);
+
+  if (error) {
+    throw new Error(`회차권 등록 내역을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    registrationId: row.id,
+    academyId: row.academy_id,
+    ticketId: row.lesson_ticket_grant_id,
+    registeredAt: row.registered_at,
+    grantedCount: row.granted_count,
+    validUntil: row.valid_until,
+    originalPaidAmount: row.original_paid_amount,
+    ledgerEntryId: row.ledger_entry_id,
+  }));
 }
 
 export function createFinanceManagementDataQueryOptions(

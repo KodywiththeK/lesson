@@ -179,6 +179,8 @@ describe("LessonManagementWorkspace", () => {
     });
     expect(within(table).getByRole("cell", { name: "김민지" })).toBeInTheDocument();
     expect(within(table).queryByRole("cell", { name: "정하린" })).not.toBeInTheDocument();
+    expect(within(table).getByRole("row", { name: /김민지/ }).querySelectorAll("td[data-label]")).toHaveLength(6);
+    expect(within(table).getByRole("cell", { name: "김민지" })).toHaveAttribute("data-label", "원생");
 
     await user.click(
       within(table).getByRole("button", { name: "김민지 출석 확인 열기" }),
@@ -203,6 +205,11 @@ describe("LessonManagementWorkspace", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "2026-08-21 출석 확인",
     });
+    const checklist = within(dialog).getByRole("table", { name: "2026-08-21 출석 확인 목록" });
+    const checklistRow = within(checklist).getByRole("row", { name: /김민지/ });
+    expect(within(checklistRow).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+      "원생", "시간", "수업", "상태", "등원(O) / 결석(X)", "처리",
+    ]);
 
     await user.type(within(dialog).getByRole("searchbox", { name: "원생 검색" }), "이서윤");
     expect(within(dialog).getByText("이서윤")).toBeInTheDocument();
@@ -333,6 +340,8 @@ describe("LessonManagementWorkspace", () => {
     const table = screen.getByRole("table", { name: "2026년 8월 개인레슨 테이블" });
     expect(within(table).getByRole("cell", { name: "최도윤" })).toBeInTheDocument();
     expect(within(table).getByRole("cell", { name: "오유진" })).toBeInTheDocument();
+    expect(within(table).getByRole("row", { name: /최도윤/ }).querySelectorAll("td[data-label]")).toHaveLength(7);
+    expect(within(table).getByRole("cell", { name: "최도윤" })).toHaveAttribute("data-label", "원생");
 
     await user.click(
       within(table).getByRole("button", { name: "최도윤 개인레슨 출석 확인 열기" }),

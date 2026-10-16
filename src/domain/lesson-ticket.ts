@@ -255,6 +255,9 @@ export function applyLessonTicketRegistration(
   }
 
   assertSameTicketScope(existingTicket, registration);
+  if (toUtcDayNumber(registration.registeredAt) < toUtcDayNumber(existingTicket.registeredAt)) {
+    throw new Error("등록일은 직전 등록일보다 앞설 수 없습니다.");
+  }
 
   return {
     ticket: {
@@ -262,7 +265,7 @@ export function applyLessonTicketRegistration(
       totalGrantedCount:
         existingTicket.totalGrantedCount + registration.grantedCount,
       remainingCount: existingTicket.remainingCount + registration.grantedCount,
-      validFrom: minDate(existingTicket.validFrom, registration.registeredAt),
+      validFrom: existingTicket.validFrom,
       validUntil,
       registeredAt: registration.registeredAt,
     },
@@ -294,6 +297,13 @@ export function summarizeLessonTicketStatus(
   return { statuses };
 }
 
+export function describeLessonTicketRemainingDays(validUntil: string, today: string) {
+  const remainingDays = toUtcDayNumber(validUntil) - toUtcDayNumber(today);
+  if (remainingDays < 0) return `${Math.abs(remainingDays)}일 지남`;
+  if (remainingDays === 0) return "0일 남음 · 오늘까지 사용 가능";
+  return `${remainingDays}일 남음`;
+}
+
 export function validateLessonTicketAdjustment(
   ticket: LessonTicket,
   input: LessonTicketAdjustmentInput,
@@ -314,8 +324,8 @@ export function validateLessonTicketAdjustment(
     return invalidAdjustment("만료일을 입력해 주세요.");
   }
 
-  if (toUtcDayNumber(input.validUntil) < toUtcDayNumber(ticket.validFrom)) {
-    return invalidAdjustment("만료일은 유효 시작일 이후여야 합니다.");
+  if (toUtcDayNumber(input.validUntil) < toUtcDayNumber(ticket.registeredAt)) {
+    return invalidAdjustment("만료일은 마지막 등록일 이후여야 합니다.");
   }
 
   if (!input.reason.trim()) {
@@ -408,10 +418,6 @@ function assertPositiveValidDays(validDays: number) {
 
 function invalidAdjustment(reason: string): LessonTicketAdjustmentValidation {
   return { ok: false, reason };
-}
-
-function minDate(left: string, right: string) {
-  return toUtcDayNumber(left) <= toUtcDayNumber(right) ? left : right;
 }
 
 function toDateString(utcDayNumber: number) {

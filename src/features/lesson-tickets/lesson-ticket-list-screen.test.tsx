@@ -54,10 +54,10 @@ type ScreenProps = ComponentProps<typeof LessonTicketListScreen>;
 
 function renderLessonTicketListScreen(
   queryOptionsFactory: LessonTicketListQueryOptionsFactory,
-  extraProps: Pick<
+  extraProps: Partial<Pick<
     ScreenProps,
-    "registrationOptionsQueryFactory" | "registerLessonTicket" | "adjustLessonTicket"
-  > = {},
+    "registrationOptionsQueryFactory" | "registerLessonTicket" | "adjustLessonTicket" | "canRecordPayment"
+  >> = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -71,8 +71,8 @@ function renderLessonTicketListScreen(
     <QueryClientProvider client={queryClient}>
       <LessonTicketListScreen
         academyId="academy-1"
-        academyName="더 클래식"
         today="2026-09-01"
+        canRecordPayment={extraProps.canRecordPayment ?? true}
         queryOptionsFactory={queryOptionsFactory}
         {...extraProps}
       />
@@ -159,6 +159,7 @@ describe("LessonTicketListScreen", () => {
       "잔여",
       "등록일",
       "만료일",
+      "남은 일수",
       "상태",
       "관리",
     ]);
@@ -172,12 +173,26 @@ describe("LessonTicketListScreen", () => {
       "2회",
       "2026-08-01",
       "2026-09-07",
+      "6일 남음",
       "잔여 부족",
       "수정",
     ]);
     expect(
       within(row).getByRole("button", { name: "김민지 피아노 회차권 수정" }),
     ).toBeInTheDocument();
+    expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual(headers);
+    expect(screen.queryByRole("list", { name: "모바일 회차권 목록" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "김민지 피아노 회차권 수정" })).toHaveLength(1);
+  });
+
+  it("만료 당일은 0일 남음과 오늘까지 사용 가능을, 지난 회차권은 만료를 보여준다", async () => {
+    renderLessonTicketListScreen(listLessonTickets([
+      { ...lessonTickets[0], validUntil: "2026-09-01", remainingCount: 3 },
+      { ...lessonTickets[1], validUntil: "2026-08-31" },
+    ]));
+    const table = await screen.findByRole("table", { name: "회차권 목록" });
+    expect(within(within(table).getByRole("row", { name: /김민지/ })).getByText("0일 남음 · 오늘까지 사용 가능")).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /이서윤/ })).getByText("만료")).toBeInTheDocument();
   });
 
   it("잔여가 부족하거나 소진된 회차권은 눈에 띄는 배지로, 만료일이 다가오는 것만으로는 강조하지 않는다", async () => {
@@ -302,10 +317,10 @@ describe("회차권 등록 폼", () => {
     return { user, dialog };
   }
 
-  it("부여 회수 1회, 사용 기한 30일, 등록일 오늘로 시작하고 유효 시작일·만료일 입력칸은 없다", async () => {
+  it("부여 회수 4회, 사용 기한 30일, 등록일 오늘로 시작하고 유효 시작일·만료일 입력칸은 없다", async () => {
     const { user, dialog } = await openRegistrationDialog();
 
-    expect(within(dialog).getByRole("spinbutton", { name: "부여 회수" })).toHaveValue(1);
+    expect(within(dialog).getByRole("spinbutton", { name: "부여 회수" })).toHaveValue(4);
     expect(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" })).toHaveValue(30);
     expect(within(dialog).getByLabelText("등록일")).toHaveValue("2026-09-01");
     expect(within(dialog).queryByLabelText("유효 시작일")).not.toBeInTheDocument();
@@ -319,25 +334,41 @@ describe("회차권 등록 폼", () => {
     expect(within(dialog).getByLabelText("악기")).toHaveValue("");
   });
 
+  it("데스크 등록에서는 결제 입력을 숨기고 개인레슨 악기가 없는 원생을 후보에서 제외한다", async () => {
+    const { dialog } = await openRegistrationDialog({
+      canRecordPayment: false,
+      registrationOptionsQueryFactory: (academyId) => ({
+        queryKey: ["options", academyId],
+        queryFn: async () => [
+          { studentId: "student-1", studentName: "김민지", instruments: [{ instrumentId: "piano", instrumentName: "피아노" }] },
+          { studentId: "student-3", studentName: "악기 없음", instruments: [] },
+        ],
+      }),
+    });
+    expect(within(dialog).queryByRole("spinbutton", { name: "결제 금액" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: "악기 없음" })).not.toBeInTheDocument();
+  });
+
   it("만료일은 등록일 + 사용 기한으로 계산해 미리 보여주고 입력이 바뀌면 다시 계산한다", async () => {
     const { dialog } = await openRegistrationDialog();
 
-    expect(within(dialog).getByText("만료일: 2026-10-01")).toBeInTheDocument();
+    expect(within(dialog).getByText("입력 기준 만료일: 2026-10-01")).toBeInTheDocument();
+    expect(within(dialog).getByText("기존 회차권 만료일이 더 늦으면 그 날짜를 유지합니다.")).toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
       target: { value: "60" },
     });
-    expect(within(dialog).getByText("만료일: 2026-10-31")).toBeInTheDocument();
+    expect(within(dialog).getByText("입력 기준 만료일: 2026-10-31")).toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByLabelText("등록일"), {
       target: { value: "2026-09-15" },
     });
-    expect(within(dialog).getByText("만료일: 2026-11-14")).toBeInTheDocument();
+    expect(within(dialog).getByText("입력 기준 만료일: 2026-11-14")).toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
       target: { value: "0" },
     });
-    expect(within(dialog).getByText("만료일: 사용 기한을 1~3650일로 입력해 주세요")).toBeInTheDocument();
+    expect(within(dialog).getByText("입력 기준 만료일: 사용 기한을 1~3650일로 입력해 주세요")).toBeInTheDocument();
   });
 
   it("결제 금액은 선택 입력이고 0원과 1원 단위 정수를 허용하며 음수·소수는 거절한다", async () => {
@@ -570,7 +601,7 @@ describe("회차권 직접 수정", () => {
     fireEvent.change(within(dialog).getByLabelText("만료일"), {
       target: { value: "2026-07-31" },
     });
-    expect(within(dialog).getByText("만료일은 유효 시작일 이후여야 합니다.")).toBeInTheDocument();
+    expect(within(dialog).getByText("만료일은 마지막 등록일 이후여야 합니다.")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
   });
 

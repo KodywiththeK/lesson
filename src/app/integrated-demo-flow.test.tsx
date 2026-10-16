@@ -49,10 +49,8 @@ describe("integrated demo flow", () => {
       target: { value: "2026-08" },
     });
 
-    expect(
-      await screen.findByText("한서아 바이올린 회차권 4회 구매"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("160,000원")).toBeInTheDocument();
+    const purchase = await screen.findByText("한서아 바이올린 회차권 4회 구매");
+    expect(within(purchase.closest("tr")!).getByText("160,000원")).toBeInTheDocument();
   });
 
   it("같은 원생·악기로 다시 등록하면 기존 회차권에 회수가 더해지고 만료일이 새로 계산된다", async () => {

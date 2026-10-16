@@ -73,24 +73,11 @@ describe("canAccessFeature", () => {
     ).toBe(true);
   });
 
-  it("회차권 수동 수정은 owner에게 허용하고 desk는 명시 설정이 필요하다", () => {
+  it("회차권 수동 수정은 원장과 데스크에 허용하고 선생님에게는 허용하지 않는다", () => {
     expect(canAccessFeature({ role: "owner" }, "ticket-manual-adjustment")).toBe(
       true,
     );
-    expect(canAccessFeature({ role: "desk" }, "ticket-manual-adjustment")).toBe(
-      false,
-    );
-    expect(
-      canAccessFeature(
-        {
-          role: "desk",
-          flags: {
-            allowDeskTicketAdjustment: true,
-          },
-        },
-        "ticket-manual-adjustment",
-      ),
-    ).toBe(true);
+    expect(canAccessFeature({ role: "desk" }, "ticket-manual-adjustment")).toBe(true);
     expect(
       canAccessFeature({ role: "teacher" }, "ticket-manual-adjustment"),
     ).toBe(false);

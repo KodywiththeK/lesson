@@ -110,3 +110,110 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans, system-ui), sans-serif;
 }
+
+/* 표의 데스크톱 최소 너비가 목록 필터까지 밀어내지 않도록 한다. */
+div:has(> [data-responsive-table]) {
+  min-width: 0;
+}
+
+@media (max-width: 1023px) {
+  [data-responsive-table] {
+    overflow-x: visible;
+  }
+
+  [data-responsive-table] [data-slot="table"] {
+    display: block;
+    min-width: 0;
+  }
+
+  [data-responsive-table] [data-slot="table-header"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  [data-responsive-table] [data-slot="table-body"] {
+    display: grid;
+  }
+
+  [data-responsive-table] [data-slot="table-row"] {
+    display: grid;
+    min-width: 0;
+  }
+
+  [data-responsive-table] [data-slot="table-cell"] {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  [data-responsive-table] [data-slot="table-cell"][data-label]::before {
+    content: attr(data-label);
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  [data-responsive-table] [data-slot="table-cell"][colspan] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-responsive-table] [data-slot="table-row"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem 0.75rem;
+    padding: 0.5rem 0;
+  }
+}
+
+@media (max-width: 767px) {
+  div:has(> [data-responsive-table]) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  [data-responsive-table] {
+    margin-block: 0.75rem;
+  }
+
+  [data-responsive-table] [data-slot="table-body"] {
+    gap: 0.75rem;
+  }
+
+  [data-responsive-table] [data-slot="table-row"] {
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 767px) {
+  [data-responsive-table] [data-slot="table-body"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  [data-responsive-table] [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-responsive-table] [data-slot="table-cell"][data-label] {
+    display: grid;
+    grid-template-columns: minmax(5rem, 38%) minmax(0, 1fr);
+    align-items: start;
+  }
+}

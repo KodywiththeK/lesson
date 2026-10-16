@@ -45,8 +45,8 @@ MCP 도구가 보이면 이 경로를 먼저 사용한다.
 
 5. 원격 history 확인
    - MCP `list_migrations`로 적용된 migration 이름과 version을 확인한다.
-   - MCP가 원격 history에 기록한 timestamp가 로컬 파일명과 다르면 로컬 migration 파일명을 원격 version에 맞춘다.
-   - 이 정렬을 하지 않으면 이후 CLI `db push`에서 migration drift가 생길 수 있다.
+   - MCP가 원격 history에 기록한 timestamp가 로컬 파일명과 다르면 먼저 **의존 migration의 순서**를 대조한다. 이름만 바꾸면 선행 migration보다 앞서 실행되는 경우에는 로컬 파일을 이동하지 않는다.
+   - 순서가 유지되는 경우에는 로컬 파일명을 원격 version에 맞춘다. 순서가 깨지는 경우에는 적용된 SQL과 원격 이력 한 건을 검증한 뒤 공식 CLI `migration repair --help` 절차로 **이력 버전만** 정렬한다. 이력 복구가 승인·검증되기 전에는 `db push`로 같은 SQL을 재적용하지 않는다.
 
 6. SQL 검증
    - MCP `execute_sql`로 실제 schema를 확인한다.
@@ -101,6 +101,10 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 인증 실패가 나면 비밀번호가 틀린 것이므로 반복하지 않고 사용자에게 새 URL이나 CLI 로그인을 요청한다.
 
 ## 레슨 시간표 migration 체크리스트 (2026-10-16 시리즈)
+
+후속 `20261016090200_lesson_ticket_registration_history.sql`은 회차권 등록 이력, 범위 유일성, 역할별 권한, 기간 공백 방어를 추가한다. **2026-10-16에 운영 DB에 SQL 적용 완료**했다. 적용 전 학원·원생·악기 중복, `registered_at <> valid_from`, 등록 감사 이벤트가 2회 이상인 회차권, 연결 원장이 2건 이상인 회차권을 확인했고 모두 0건이었다. MCP가 임시 버전 `20261015224536`으로 기록했으나, 적용 SQL·기존 4건 backfill을 확인한 뒤 사용자 승인을 받아 공식 CLI `migration repair`로 `20261016090200`을 applied로 표시하고 임시 버전을 reverted로 제거했다. 순서가 깨지므로 로컬 파일명을 임시 버전으로 바꾸거나 SQL을 재적용하지 않았다. 격리 DB 역할별 실행 검증은 Docker 부재로 수행하지 못했다.
+
+`20261016090300_preserve_lesson_ticket_expiry_on_reregistration.sql`은 재등록 시 기존 만료일을 앞당기지 않도록 등록 RPC만 재정의한다. 2026-10-16 운영 DB에 CLI `db push --dry-run`으로 이 파일 하나만 대상임을 확인한 뒤 적용했고, 원격 함수 정의에 `greatest`와 등록 이력의 최종 만료일 사용이 반영됐음을 확인했다.
 
 **2026-10-15에 적용 완료**(CLI `db push`, 아래 기록 참고). 새 환경에 적용할 때는 아래 순서와 확인 항목을 그대로 따른다.
 

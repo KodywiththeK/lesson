@@ -19,6 +19,7 @@ import {
   type LessonCalendarMemoPayload,
   type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
+import type { AssignedLessonTicketBalance } from "@/lib/api/lesson-tickets";
 import { OriginBadge } from "@/features/lessons/lesson-badges";
 import { LessonMemoTabPanel } from "@/features/lessons/lesson-memo-tab-panel";
 import {
@@ -36,6 +37,8 @@ export function PrivateDayAttendanceDialog({
   memos,
   memoTargets,
   canManage,
+  pendingLessonIds,
+  assignedTicketBalances = [],
   onOpenChange,
   onCreateMemo,
   onUpdateMemo,
@@ -54,6 +57,8 @@ export function PrivateDayAttendanceDialog({
   memoTargets: LessonMemoTargetOptions;
   /** 날짜 메모는 원장·데스크 전용이라 false면 메모 탭을 숨긴다. */
   canManage: boolean;
+  pendingLessonIds: ReadonlySet<string>;
+  assignedTicketBalances?: AssignedLessonTicketBalance[];
   onOpenChange: (open: boolean) => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
   onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
@@ -111,6 +116,12 @@ export function PrivateDayAttendanceDialog({
                       </>
                     ) : null}
                   </p>
+                  {!canManage ? (
+                    <AssignedTicketBalance
+                      lesson={lesson}
+                      balances={assignedTicketBalances}
+                    />
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {lesson.status === "present" ? (
@@ -118,6 +129,7 @@ export function PrivateDayAttendanceDialog({
                       type="button"
                       variant="outline"
                       aria-label={`${lesson.studentName} 개인레슨 등원 확인 취소`}
+                      disabled={pendingLessonIds.has(lesson.id)}
                       onClick={() => onCancelAttendance(lesson)}
                     >
                       <RotateCcw aria-hidden="true" />
@@ -127,6 +139,7 @@ export function PrivateDayAttendanceDialog({
                     <Button
                       type="button"
                       aria-label={`${lesson.studentName} 개인레슨 등원 확인`}
+                      disabled={pendingLessonIds.has(lesson.id)}
                       onClick={() => onMark(lesson, "present")}
                     >
                       <Check aria-hidden="true" />
@@ -137,7 +150,7 @@ export function PrivateDayAttendanceDialog({
                     type="button"
                     variant="outline"
                     aria-label={`${lesson.studentName} 개인레슨 결석`}
-                    disabled={lesson.status === "absent"}
+                    disabled={lesson.status === "absent" || pendingLessonIds.has(lesson.id)}
                     onClick={() => onMark(lesson, "absent")}
                   >
                     <X aria-hidden="true" />
@@ -179,5 +192,23 @@ export function PrivateDayAttendanceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AssignedTicketBalance({
+  lesson,
+  balances,
+}: {
+  lesson: PrivateLesson;
+  balances: AssignedLessonTicketBalance[];
+}) {
+  const balance = balances.find(
+    (row) => row.studentId === lesson.studentId && row.instrumentId === lesson.instrumentId,
+  );
+  if (!balance) return null;
+  return (
+    <p className="mt-1 text-sm text-muted-foreground">
+      잔여 {balance.remainingCount}회 · 만료일 {balance.validUntil}
+    </p>
   );
 }

@@ -4,6 +4,7 @@ import type { PayrollRecord } from "@/domain/payroll";
 
 import {
   fetchFinanceManagementData,
+  fetchLessonTicketIncomeRegistrations,
   fetchMonthlyTuitionSnapshots,
   markMonthlyTuitionAsPaid,
   markMonthlyTuitionAsUnpaid,
@@ -36,6 +37,70 @@ function createRpcClient(
 }
 
 describe("finance management payment API", () => {
+  it("회차권 등록 이력 조회 실패를 빈 수입으로 숨기지 않는다", async () => {
+    const client = {
+      from(table: string) {
+        expect(table).toBe("lesson_ticket_registrations");
+        return {
+          select() {
+            return {
+              async eq() {
+                return { data: null, error: new Error("permission denied") };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as FinanceManagementSupabaseClient;
+
+    await expect(fetchLessonTicketIncomeRegistrations(client, "academy-1"))
+      .rejects.toThrow("회차권 등록 내역을 불러오지 못했습니다");
+  });
+
+  it("회차권 등록 이력을 학원 단위로 읽고 각 등록 원장 ID를 보존한다", async () => {
+    const calls: Array<{ table: string; select: string; academyId: string }> = [];
+    const client = {
+      from(table: string) {
+        return {
+          select(select: string) {
+            const builder = {
+              eq(_column: string, academyId: string) {
+                calls.push({ table, select, academyId });
+                return builder;
+              },
+              is() { return builder; },
+              order() { return builder; },
+              then(onFulfilled: (value: unknown) => unknown) {
+                return Promise.resolve({
+                  data: table === "lesson_ticket_registrations" ? [{
+                    id: "registration-1", academy_id: "academy-1",
+                    lesson_ticket_grant_id: "ticket-1", registered_at: "2026-08-05",
+                    granted_count: 4, valid_until: "2026-09-04",
+                    original_paid_amount: 140000, ledger_entry_id: "ledger-1",
+                  }] : [],
+                  error: null,
+                }).then(onFulfilled);
+              },
+            };
+            return builder;
+          },
+        };
+      },
+    } as unknown as FinanceManagementSupabaseClient;
+
+    const result = await fetchFinanceManagementData(client, "academy-1");
+
+    expect(calls).toContainEqual(expect.objectContaining({
+      table: "lesson_ticket_registrations", academyId: "academy-1",
+    }));
+    expect(result.ticketRegistrations).toEqual([{
+      registrationId: "registration-1", academyId: "academy-1",
+      ticketId: "ticket-1", registeredAt: "2026-08-05", grantedCount: 4,
+      validUntil: "2026-09-04", originalPaidAmount: 140000,
+      ledgerEntryId: "ledger-1",
+    }]);
+  });
+
   it("지급 완료된 급여 정산을 수업 원천 데이터와 함께 읽는다", async () => {
     const calls: string[] = [];
     const client = {

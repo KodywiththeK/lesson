@@ -162,6 +162,7 @@ describe("queryKeys", () => {
       "academy-1",
       "lesson-tickets",
       "list",
+      "",
       "피아노",
       "low-remaining",
       "2",

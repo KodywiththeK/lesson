@@ -44,6 +44,7 @@ type FinanceLedgerListFilters = {
 };
 
 type LessonTicketListFilters = {
+  today?: string;
   page?: string;
   pageSize?: string;
   q?: string;
@@ -156,6 +157,7 @@ export const queryKeys = {
         ...queryKeys.academy(academyId),
         "lesson-tickets",
         "list",
+        filters.today ?? "",
         filters.q ?? "",
         filters.status ?? "",
         filters.page ?? "",
@@ -169,6 +171,8 @@ export const queryKeys = {
       ] as const,
     summary: (academyId: string) =>
       [...queryKeys.academy(academyId), "lesson-tickets", "summary"] as const,
+    assignedBalances: (academyId: string) =>
+      [...queryKeys.academy(academyId), "lesson-tickets", "assigned-balances"] as const,
   },
   privateLessons: {
     registrationOptions: (academyId: string) =>

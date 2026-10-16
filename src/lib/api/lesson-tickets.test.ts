@@ -6,6 +6,7 @@ import {
   fetchAllLessonTickets,
   fetchLessonTicketRegistrationOptions,
   fetchLessonTicketList,
+  fetchAssignedLessonTicketBalances,
   adjustLessonTicket,
   registerLessonTicket,
   type AdjustLessonTicketSupabaseClient,
@@ -108,7 +109,7 @@ describe("fetchLessonTicketList", () => {
       {
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)",
         eq: ["academy_id", "academy-1"],
       },
     ]);
@@ -173,6 +174,7 @@ describe("createLessonTicketListQueryOptions", () => {
       "academy-1",
       "lesson-tickets",
       "list",
+      "2026-09-01",
       "피아노",
       "low-remaining",
       "",
@@ -196,6 +198,13 @@ describe("createLessonTicketListQueryOptions", () => {
     expect(secondPage.queryKey).not.toEqual(firstPage.queryKey);
     expect(createLessonTicketListQueryKey({ ...baseOptions, page: 2, pageSize: 20 })).toEqual(
       secondPage.queryKey,
+    );
+  });
+
+  it("서울 날짜가 바뀌면 상태 목록을 새로 조회한다", () => {
+    const base = { academyId: "academy-1", today: "2026-09-01", lowRemainingThreshold: 2 };
+    expect(createLessonTicketListQueryKey(base)).not.toEqual(
+      createLessonTicketListQueryKey({ ...base, today: "2026-09-02" }),
     );
   });
 });
@@ -314,7 +323,10 @@ describe("fetchLessonTicketRegistrationOptions 정렬", () => {
                     id: `student-${index}`,
                     academy_id: "academy-1",
                     name,
-                    student_instruments: [],
+                    student_instruments: [{
+                      instrument_id: "piano", instrument_name: "피아노",
+                      lesson_type: "private", active: true,
+                    }],
                   })),
                   error: null,
                 };
@@ -328,6 +340,22 @@ describe("fetchLessonTicketRegistrationOptions 정렬", () => {
     const result = await fetchLessonTicketRegistrationOptions(client, "academy-1");
 
     expect(result.map((option) => option.studentName)).toEqual(["김민지", "원생2", "원생10", "한서아"]);
+  });
+});
+
+describe("담당 선생님 회차권 조회", () => {
+  it("담당 악기의 잔여 횟수와 만료일만 RPC 결과로 돌려준다", async () => {
+    const calls: unknown[] = [];
+    const client = {
+      async rpc(name: string, payload: Record<string, string>) {
+        calls.push({ name, payload });
+        return { data: [{ student_id: "s1", instrument_id: "piano", remaining_count: 2, valid_until: "2026-11-01" }], error: null };
+      },
+    };
+    await expect(fetchAssignedLessonTicketBalances(client, "academy-1")).resolves.toEqual([
+      { studentId: "s1", instrumentId: "piano", remainingCount: 2, validUntil: "2026-11-01" },
+    ]);
+    expect(calls).toEqual([{ name: "get_assigned_lesson_ticket_balances", payload: { p_academy_id: "academy-1" } }]);
   });
 });
 

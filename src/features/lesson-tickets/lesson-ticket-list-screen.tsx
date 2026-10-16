@@ -43,6 +43,7 @@ import {
 import type { ListView } from "@/domain/common-list";
 import {
   DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
+  describeLessonTicketRemainingDays,
   formatLessonTicketStatus,
   type BuildLessonTicketListOptions,
   type LessonTicketListRow,
@@ -91,8 +92,8 @@ export type LessonTicketRegistrationOptionsQueryFactory = (
 
 type LessonTicketListScreenProps = {
   academyId: string;
-  academyName: string;
   today: string;
+  canRecordPayment: boolean;
   queryOptionsFactory?: LessonTicketListQueryOptionsFactory;
   registrationOptionsQueryFactory?: LessonTicketRegistrationOptionsQueryFactory;
   registerLessonTicket?: (
@@ -130,6 +131,7 @@ const statusFilterOptions: Array<{
 export function LessonTicketListScreen({
   academyId,
   today,
+  canRecordPayment,
   queryOptionsFactory,
   registrationOptionsQueryFactory,
   registerLessonTicket,
@@ -256,7 +258,7 @@ export function LessonTicketListScreen({
             회차권 등록
           </Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-h-[min(90dvh,42rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>회차권 등록</DialogTitle>
             <DialogDescription>
@@ -274,6 +276,7 @@ export function LessonTicketListScreen({
                 : null
             }
             isSaving={registerMutation.isPending}
+            canRecordPayment={canRecordPayment}
             onSubmit={(input) => registerMutation.mutate(input)}
           />
         </DialogContent>
@@ -281,6 +284,7 @@ export function LessonTicketListScreen({
     ),
     [
       academyId,
+      canRecordPayment,
       isRegistrationOpen,
       registerMutation,
       registrationOptionsQuery.data,
@@ -365,6 +369,7 @@ export function LessonTicketListScreen({
           <>
             <LessonTicketTable
               tickets={ticketListView.items}
+              today={today}
               isAdjusting={adjustMutation.isPending}
               onAdjust={(ticket, input, onSaved) =>
                 adjustMutation.mutate(
@@ -482,10 +487,12 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 
 function LessonTicketTable({
   tickets,
+  today,
   isAdjusting,
   onAdjust,
 }: {
   tickets: LessonTicketListRow[];
+  today: string;
   isAdjusting: boolean;
   onAdjust: ComponentProps<typeof LessonTicketAdjustDialog>["onAdjust"];
 }) {
@@ -498,87 +505,89 @@ function LessonTicketTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table aria-label="회차권 목록" className="min-w-[60rem]">
-        <TableHeader className="bg-muted text-muted-foreground">
-          <TableRow>
-            <TableHead className="px-4 py-3">원생</TableHead>
-            <TableHead className="px-4 py-3">악기</TableHead>
-            <TableHead className="px-4 py-3">총 부여</TableHead>
-            <TableHead className="px-4 py-3">사용</TableHead>
-            <TableHead className="px-4 py-3">잔여</TableHead>
-            <TableHead className="px-4 py-3">등록일</TableHead>
-            <TableHead className="px-4 py-3">만료일</TableHead>
-            <TableHead className="px-4 py-3">상태</TableHead>
-            <TableHead className="px-4 py-3">관리</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tickets.map((ticket) => {
-            const needsAttention = hasLowOrNoRemaining(ticket);
+    <Table aria-label="회차권 목록" className="lg:min-w-[60rem]">
+      <TableHeader className="bg-muted text-muted-foreground">
+        <TableRow>
+          <TableHead className="px-4 py-3">원생</TableHead>
+          <TableHead className="px-4 py-3">악기</TableHead>
+          <TableHead className="px-4 py-3">총 부여</TableHead>
+          <TableHead className="px-4 py-3">사용</TableHead>
+          <TableHead className="px-4 py-3">잔여</TableHead>
+          <TableHead className="px-4 py-3">등록일</TableHead>
+          <TableHead className="px-4 py-3">만료일</TableHead>
+          <TableHead className="px-4 py-3">남은 일수</TableHead>
+          <TableHead className="px-4 py-3">상태</TableHead>
+          <TableHead className="px-4 py-3">관리</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {tickets.map((ticket) => {
+          const needsAttention = hasLowOrNoRemaining(ticket);
 
-            return (
-              <TableRow
-                key={ticket.ticketId}
-                className={needsAttention ? "bg-destructive/5" : undefined}
+          return (
+            <TableRow
+              key={ticket.ticketId}
+              className={needsAttention ? "bg-destructive/5" : undefined}
+            >
+              <TableCell label="원생" className="px-4 py-3 font-medium">
+                {ticket.studentName}
+              </TableCell>
+              <TableCell label="악기" className="px-4 py-3">
+                {ticket.instrumentName}
+              </TableCell>
+              <TableCell label="총 부여" className="px-4 py-3">
+                {formatCount(ticket.totalGrantedCount)}
+              </TableCell>
+              <TableCell label="사용" className="px-4 py-3">
+                {formatCount(ticket.totalGrantedCount - ticket.remainingCount)}
+              </TableCell>
+              <TableCell
+                label="잔여"
+                className={
+                  needsAttention
+                    ? "px-4 py-3 font-semibold text-destructive"
+                    : "px-4 py-3"
+                }
               >
-                <TableCell className="px-4 py-3 font-medium">
-                  {ticket.studentName}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {ticket.instrumentName}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {formatCount(ticket.totalGrantedCount)}
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  {formatCount(ticket.totalGrantedCount - ticket.remainingCount)}
-                </TableCell>
-                <TableCell
-                  className={
-                    needsAttention
-                      ? "px-4 py-3 font-semibold text-destructive"
-                      : "px-4 py-3"
-                  }
-                >
-                  {formatCount(ticket.remainingCount)}
-                </TableCell>
-                <TableCell className="px-4 py-3">{ticket.registeredAt}</TableCell>
-                <TableCell className="px-4 py-3">{ticket.validUntil}</TableCell>
-                <TableCell className="px-4 py-3">
-                  <span className="flex flex-wrap gap-1">
-                    {ticket.statuses.length > 0 ? (
-                      ticket.statuses.map((status) => (
-                        <Badge key={status} variant={getStatusVariant(status)}>
-                          {formatLessonTicketStatus(status)}
-                        </Badge>
-                      ))
-                    ) : (
-                      <Badge variant="secondary">정상</Badge>
-                    )}
-                  </span>
-                </TableCell>
-                <TableCell className="px-4 py-3">
-                  <LessonTicketAdjustDialog
-                    ticket={ticket}
-                    isSaving={isAdjusting}
-                    onAdjust={onAdjust}
-                  />
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                {formatCount(ticket.remainingCount)}
+              </TableCell>
+              <TableCell label="등록일" className="px-4 py-3">{ticket.registeredAt}</TableCell>
+              <TableCell label="만료일" className="px-4 py-3">{ticket.validUntil}</TableCell>
+              <TableCell label="남은 일수" className="px-4 py-3">{describeLessonTicketRemainingDays(ticket.validUntil, today)}</TableCell>
+              <TableCell label="상태" className="px-4 py-3">
+                <span className="flex flex-wrap gap-1">
+                  {ticket.statuses.length > 0 ? (
+                    ticket.statuses.map((status) => (
+                      <Badge key={status} variant={getStatusVariant(status)}>
+                        {formatLessonTicketStatus(status)}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge variant="secondary">정상</Badge>
+                  )}
+                </span>
+              </TableCell>
+              <TableCell label="관리" className="px-4 py-3">
+                <LessonTicketAdjustDialog
+                  ticket={ticket}
+                  isSaving={isAdjusting}
+                  onAdjust={onAdjust}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 
-/** 잔여 부족과 소진은 운영자가 바로 알아보도록 강조한다. 만료일 기준 강조는 하지 않는다. */
+/** 잔여 부족·소진·이미 만료된 회차권만 강조한다. */
 function hasLowOrNoRemaining(ticket: LessonTicketListRow) {
   return (
     ticket.statuses.includes("low-remaining") ||
-    ticket.statuses.includes("exhausted")
+    ticket.statuses.includes("exhausted") ||
+    ticket.statuses.includes("expired")
   );
 }
 

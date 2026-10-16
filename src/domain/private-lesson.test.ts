@@ -562,8 +562,11 @@ describe("formatKoreanTimeLabel", () => {
 
 describe("describePrivateAttendanceCancellation", () => {
   it("등원 확인을 취소하고 회차권 1회를 복구했다고 안내한다", () => {
-    expect(describePrivateAttendanceCancellation()).toBe(
+    expect(describePrivateAttendanceCancellation({ cancelled: true, restoredTicket: true })).toBe(
       "등원 확인을 취소하고 회차권 1회를 복구했습니다.",
+    );
+    expect(describePrivateAttendanceCancellation({ cancelled: true, restoredTicket: false })).toBe(
+      "등원 확인을 취소했습니다. 복구할 회차권 사용 기록은 없었습니다.",
     );
   });
 });

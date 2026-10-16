@@ -707,8 +707,14 @@ export function describePrivateAttendanceChange(
 }
 
 /** 등원 확인을 취소했을 때 회차권에 생긴 변화를 알리는 문구다. */
-export function describePrivateAttendanceCancellation(): string {
-  return "등원 확인을 취소하고 회차권 1회를 복구했습니다.";
+export function describePrivateAttendanceCancellation(result: {
+  cancelled: boolean;
+  restoredTicket: boolean;
+}): string {
+  if (!result.cancelled) return "취소할 등원 확인 기록이 없습니다.";
+  return result.restoredTicket
+    ? "등원 확인을 취소하고 회차권 1회를 복구했습니다."
+    : "등원 확인을 취소했습니다. 복구할 회차권 사용 기록은 없었습니다.";
 }
 
 /**

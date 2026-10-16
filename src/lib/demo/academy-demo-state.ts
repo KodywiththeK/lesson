@@ -7,6 +7,7 @@ import {
   type Weekday,
 } from "@/domain/academy-lesson-schedule";
 import type { BookSale, LedgerCategory, LedgerEntry } from "@/domain/book-sale";
+import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
   adjustLessonTicket,
@@ -65,6 +66,7 @@ export type DemoAcademyState = {
   teachers: TeacherListRow[];
   enrollments: StudentEnrollment[];
   tickets: LessonTicketListItem[];
+  ticketRegistrations: LessonTicketIncomeRegistration[];
   ticketUsages: LessonTicketUsage[];
   ledgerEntries: LedgerEntry[];
   academySheets: Record<string, DailyAcademyAttendanceSheet>;
@@ -294,6 +296,29 @@ const initialEnrollments: StudentEnrollment[] = [
 ];
 
 export function createInitialDemoAcademyState(): DemoAcademyState {
+  const initialTicketRegistrations = demoTickets.map((ticket) => ({
+    registrationId: `registration-${ticket.ticketId}`,
+    academyId: ticket.academyId,
+    ticketId: ticket.ticketId,
+    registeredAt: ticket.registeredAt,
+    grantedCount: ticket.totalGrantedCount,
+    validUntil: ticket.validUntil,
+    originalPaidAmount: ticket.paidAmount ?? 0,
+    ledgerEntryId: ticket.paidAmount ? `ledger-${ticket.ticketId}` : null,
+  }));
+  const initialTicketLedgerEntries: LedgerEntry[] = demoTickets
+    .filter((ticket) => (ticket.paidAmount ?? 0) > 0)
+    .map((ticket) => ({
+      academyId: ticket.academyId,
+      ledgerId: `ledger-${ticket.ticketId}`,
+      occurredOn: ticket.registeredAt,
+      type: "income",
+      source: "lesson-ticket",
+      category: "lesson-ticket",
+      amount: ticket.paidAmount!,
+      description: `${ticket.studentName} ${ticket.instrumentName} 회차권`,
+      refId: ticket.ticketId,
+    }));
   return {
     academyId: demoAcademyId,
     academyName: "더 클래식",
@@ -301,8 +326,9 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     teachers: [...demoTeachers],
     enrollments: [...initialEnrollments],
     tickets: [...demoTickets],
+    ticketRegistrations: initialTicketRegistrations,
     ticketUsages: [],
-    ledgerEntries: [...demoLedgerEntries],
+    ledgerEntries: [...demoLedgerEntries, ...initialTicketLedgerEntries],
     academySheets: mergeSheets(
       buildAcademySheets(initialEnrollments, demoAcademyId, "2026-08"),
       indexSheets(demoLessonWorkspaceData.academySheets),
@@ -702,6 +728,9 @@ export function registerDemoLessonTicket(
         candidate.ticketId === existingTicket.ticketId ? ticket : candidate,
       )
     : [...state.tickets, ticket];
+  const ledgerId = paidAmount > 0
+    ? `ledger-ticket-${ticket.ticketId}-${state.ticketRegistrations.length + 1}`
+    : null;
   const ledgerEntries =
     paidAmount > 0
       ? buildFinanceLedgerList(
@@ -709,7 +738,7 @@ export function registerDemoLessonTicket(
             ...state.ledgerEntries,
             {
               academyId: state.academyId,
-              ledgerId: `ledger-ticket-${ticket.ticketId}-${state.ledgerEntries.length + 1}`,
+              ledgerId: ledgerId!,
               occurredOn: input.registeredAt,
               type: "income",
               source: "lesson-ticket",
@@ -724,7 +753,24 @@ export function registerDemoLessonTicket(
       : state.ledgerEntries;
 
   return {
-    state: { ...state, tickets, ledgerEntries },
+    state: {
+      ...state,
+      tickets,
+      ledgerEntries,
+      ticketRegistrations: [
+        ...state.ticketRegistrations,
+        {
+          registrationId: `registration-${ticket.ticketId}-${state.ticketRegistrations.length + 1}`,
+          academyId: state.academyId,
+          ticketId: ticket.ticketId,
+          registeredAt: input.registeredAt,
+          grantedCount: input.grantedCount,
+          validUntil: ticket.validUntil,
+          originalPaidAmount: paidAmount,
+          ledgerEntryId: ledgerId,
+        },
+      ],
+    },
     result: {
       ticketId: ticket.ticketId,
       merged: Boolean(existingTicket),

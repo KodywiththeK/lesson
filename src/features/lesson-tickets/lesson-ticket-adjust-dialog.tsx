@@ -27,6 +27,7 @@ import { parseNumberInput } from "./parse-number-input";
 type LessonTicketAdjustDialogProps = {
   ticket: LessonTicketListRow;
   isSaving: boolean;
+  ariaLabel?: string;
   /** 저장에 성공하면 `onSaved`를 불러 다이얼로그를 닫는다. */
   onAdjust: (
     ticket: LessonTicketListRow,
@@ -39,6 +40,7 @@ type LessonTicketAdjustDialogProps = {
 export function LessonTicketAdjustDialog({
   ticket,
   isSaving,
+  ariaLabel,
   onAdjust,
 }: LessonTicketAdjustDialogProps) {
   const [open, setOpen] = useState(false);
@@ -50,13 +52,13 @@ export function LessonTicketAdjustDialog({
           type="button"
           variant="outline"
           size="sm"
-          aria-label={`${ticket.studentName} ${ticket.instrumentName} 회차권 수정`}
+          aria-label={ariaLabel ?? `${ticket.studentName} ${ticket.instrumentName} 회차권 수정`}
         >
           <Pencil aria-hidden="true" />
           수정
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[min(90dvh,42rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>회차권 수정</DialogTitle>
           <DialogDescription>

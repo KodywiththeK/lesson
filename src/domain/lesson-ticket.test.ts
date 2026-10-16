@@ -9,6 +9,7 @@ import {
   calculateLessonTicketValidUntil,
   MAX_LESSON_TICKET_VALID_DAYS,
   formatLessonTicketStatus,
+  describeLessonTicketRemainingDays,
   summarizeLessonTicketStatus,
   validateLessonTicketAdjustment,
   type LessonTicketListItem,
@@ -206,6 +207,13 @@ describe("applyLessonTicketRegistration", () => {
         registeredAt: "2026-09-20",
       }),
     ).toThrow("학원 범위가 일치하지 않습니다.");
+  });
+
+  it("기존 마지막 등록일보다 과거 날짜로 재등록하지 못한다", () => {
+    expect(() => applyLessonTicketRegistration(activeTicket, {
+      academyId: "academy-1", studentId: "student-1", instrumentId: "piano",
+      grantedCount: 4, validDays: 30, registeredAt: "2026-07-31",
+    })).toThrow("등록일은 직전 등록일보다 앞설 수 없습니다.");
   });
 
   it("부여 회수나 사용 기한이 1 미만이면 등록을 막는다", () => {
@@ -594,7 +602,7 @@ describe("회차권 직접 수정", () => {
     [{ totalGrantedCount: 1.5 }, "부여 회수는 1회 이상의 정수여야 합니다."],
     [{ remainingCount: -1 }, "잔여 회수는 0회 이상의 정수여야 합니다."],
     [{ remainingCount: 11 }, "잔여 회수는 부여 회수보다 많을 수 없습니다."],
-    [{ validUntil: "2026-07-31" }, "만료일은 유효 시작일 이후여야 합니다."],
+    [{ validUntil: "2026-07-31" }, "만료일은 마지막 등록일 이후여야 합니다."],
     [{ validUntil: "" }, "만료일을 입력해 주세요."],
     [{ reason: "   " }, "수정 사유를 입력해 주세요."],
   ])("잘못된 입력 %j은 이유와 함께 막는다", (override, reason) => {
@@ -608,5 +616,20 @@ describe("회차권 직접 수정", () => {
     expect(
       validateLessonTicketAdjustment(ticket, { ...validInput, remainingCount: 0 }),
     ).toEqual({ ok: true });
+  });
+
+  it("재등록 후 만료일을 마지막 등록일보다 앞으로 당길 수 없다", () => {
+    expect(validateLessonTicketAdjustment(
+      { ...ticket, registeredAt: "2026-09-01" },
+      { ...validInput, validUntil: "2026-08-31" },
+    )).toEqual({ ok: false, reason: "만료일은 마지막 등록일 이후여야 합니다." });
+  });
+});
+
+describe("회차권 남은 일수", () => {
+  it("만료 당일과 지난 날짜를 서울 기준 날짜 문자열로 구분한다", () => {
+    expect(describeLessonTicketRemainingDays("2026-09-01", "2026-09-01")).toBe("0일 남음 · 오늘까지 사용 가능");
+    expect(describeLessonTicketRemainingDays("2026-09-02", "2026-09-01")).toBe("1일 남음");
+    expect(describeLessonTicketRemainingDays("2026-08-31", "2026-09-01")).toBe("1일 지남");
   });
 });

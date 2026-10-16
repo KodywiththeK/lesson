@@ -88,6 +88,11 @@ import {
 } from "@/domain/finance-ledger";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import {
+  buildPrivateLessonIncomeRows,
+  type LessonTicketIncomeRegistration,
+  type PrivateLessonIncomeRow,
+} from "@/domain/lesson-ticket-income";
+import {
   buildCompletedLessonRevenues,
   calculateHourlyPayroll,
   calculateMonthlyPayroll,
@@ -127,6 +132,7 @@ export type FinanceManagementData = {
   ledgerEntries: LedgerEntry[];
   enrollments: StudentEnrollment[];
   tickets: LessonTicketListItem[];
+  ticketRegistrations?: LessonTicketIncomeRegistration[];
   bookSales: BookSale[];
   teachers: TeacherListRow[];
   academySheets?: FinanceManagementAttendanceSheets;
@@ -214,17 +220,16 @@ type LedgerDraft = {
 type LessonIncomeRow = {
   id: string;
   studentId: string;
-  source: "tuition" | "lesson-ticket";
   studentName: string;
-  lessonKindLabel: "학원레슨 월수강료" | "개인레슨 회차권";
   instrumentName: string;
   progress: string;
   lessonFee: number;
   discountTotal: number;
   finalAmount: number;
-  status: "paid" | "unpaid";
-  paidAt?: string;
-};
+} & (
+  | { source: "tuition"; lessonKindLabel: "학원레슨 월수강료"; status: "paid" | "unpaid" }
+  | { source: "lesson-ticket"; lessonKindLabel: "개인레슨 회차권"; status: PrivateLessonIncomeRow["status"] }
+);
 
 type BookFinanceRow = {
   id: string;
@@ -489,7 +494,7 @@ export function FinanceLedgerListScreen({
   }
 
   return (
-    <section className="grid gap-4" aria-label="입출금 내역">
+    <section className="grid min-w-0 grid-cols-1 gap-4" aria-label="입출금 내역">
       <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
         {headerActions}
       </PageHeaderActionFallback>
@@ -540,12 +545,12 @@ export function FinanceLedgerListScreen({
         />
       ) : null}
 
-      <Tabs defaultValue="list" className="gap-3">
+      <Tabs defaultValue="list" className="min-w-0 gap-3">
         <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
           <TabsTrigger value="list">목록</TabsTrigger>
           <TabsTrigger value="calendar">캘린더</TabsTrigger>
         </TabsList>
-        <TabsContent value="list">
+        <TabsContent value="list" className="min-w-0">
           {ledgerListQuery.isLoading ? (
             <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
               입출금 내역을 불러오는 중입니다.
@@ -623,6 +628,7 @@ export function FinanceLessonIncomeScreen({
     action: "paid" | "unpaid";
     row: LessonIncomeRow;
   } | null>(null);
+  const [isUnpaidOpen, setIsUnpaidOpen] = useState(false);
   const tuitionSnapshotsQuery = useQuery(
     tuitionSnapshotsQueryOptionsFactory?.(month) ??
       createFallbackTuitionSnapshotsQueryOptions(financeData, academyId, month),
@@ -651,7 +657,7 @@ export function FinanceLessonIncomeScreen({
   );
   const unpaidStudentCount = new Set(unpaidRows.map((row) => row.studentId)).size;
   const unpaidAction = useMemo(() => tuitionSnapshotsQuery.isSuccess ? (
-    <Dialog>
+    <Dialog open={isUnpaidOpen} onOpenChange={setIsUnpaidOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline">
           <UsersRound aria-hidden="true" />
@@ -677,7 +683,7 @@ export function FinanceLessonIncomeScreen({
         )}
       </DialogContent>
     </Dialog>
-  ) : null, [month, tuitionSnapshotsQuery.isSuccess, unpaidRows, unpaidStudentCount]);
+  ) : null, [isUnpaidOpen, month, tuitionSnapshotsQuery.isSuccess, unpaidRows, unpaidStudentCount]);
   const isHeaderActionMounted = usePageHeaderActions(unpaidAction);
   const totalAmount = rows.reduce((total, row) => total + row.finalAmount, 0);
   const markTuitionPaidMutation = useMutation({
@@ -756,67 +762,41 @@ export function FinanceLessonIncomeScreen({
         <p className="text-sm text-muted-foreground">월별 수강료를 불러오는 중입니다.</p>
       ) : null}
       <div className="rounded-lg border border-border bg-card">
-        {rowsView.items.length > 0 ? (
-          <div className="grid gap-2 p-3 xl:hidden" aria-label="학원 레슨수입 간략 목록">
+        <Table aria-label="학원 레슨수입">
+          <TableHeader className="bg-muted text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-4 py-3">이름</TableHead>
+              <TableHead className="px-4 py-3">레슨종류</TableHead>
+              <TableHead className="px-4 py-3">악기</TableHead>
+              <TableHead className="px-4 py-3">진도</TableHead>
+              <TableHead className="px-4 py-3">레슨비</TableHead>
+              <TableHead className="px-4 py-3">할인</TableHead>
+              <TableHead className="px-4 py-3">최종금액</TableHead>
+              <TableHead className="px-4 py-3 text-right">수납</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rowsView.items.map((row) => (
-              <article key={row.id} className="rounded-md border border-border bg-card p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">{row.studentName} · {row.instrumentName}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{row.lessonKindLabel} · {row.progress}</p>
-                  </div>
-                  <p className="font-semibold">{formatWon(row.finalAmount)}</p>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
-                  <span className="text-muted-foreground">
-                    레슨비 {formatWon(row.lessonFee)} · 할인 {formatWon(row.discountTotal)}
-                  </span>
+              <TableRow key={row.id}>
+                <TableCell label="이름" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
+                <TableCell label="레슨종류" className="px-4 py-3">{row.lessonKindLabel}</TableCell>
+                <TableCell label="악기" className="px-4 py-3">{row.instrumentName}</TableCell>
+                <TableCell label="진도" className="px-4 py-3">{row.progress}</TableCell>
+                <TableCell label="레슨비" className="px-4 py-3">{formatWon(row.lessonFee)}</TableCell>
+                <TableCell label="할인" className="px-4 py-3">{formatWon(row.discountTotal)}</TableCell>
+                <TableCell label="최종금액" className="px-4 py-3 font-semibold">
+                  {formatWon(row.finalAmount)}
+                </TableCell>
+                <TableCell label="수납" className="px-4 py-3 text-right">
                   <LessonIncomePaymentAction
                     row={row}
                     onClick={(action) => setPaymentTarget({ action, row })}
                   />
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
-        <div className="hidden overflow-x-auto xl:block">
-          <Table aria-label="학원 레슨수입" className="min-w-[60rem]">
-            <TableHeader className="bg-muted text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-3">이름</TableHead>
-                <TableHead className="px-4 py-3">레슨종류</TableHead>
-                <TableHead className="px-4 py-3">악기</TableHead>
-                <TableHead className="px-4 py-3">진도</TableHead>
-                <TableHead className="px-4 py-3">레슨비</TableHead>
-                <TableHead className="px-4 py-3">할인</TableHead>
-                <TableHead className="px-4 py-3">최종금액</TableHead>
-                <TableHead className="px-4 py-3 text-right">수납</TableHead>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rowsView.items.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                  <TableCell className="px-4 py-3">{row.lessonKindLabel}</TableCell>
-                  <TableCell className="px-4 py-3">{row.instrumentName}</TableCell>
-                  <TableCell className="px-4 py-3">{row.progress}</TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(row.lessonFee)}</TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(row.discountTotal)}</TableCell>
-                  <TableCell className="px-4 py-3 font-semibold">
-                    {formatWon(row.finalAmount)}
-                  </TableCell>
-                  <TableCell className="px-4 py-3 text-right">
-                    <LessonIncomePaymentAction
-                      row={row}
-                      onClick={(action) => setPaymentTarget({ action, row })}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
         {tuitionSnapshotsQuery.isSuccess ? (
           <>
             {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 레슨수입이 없습니다.</EmptyListMessage> : null}
@@ -886,38 +866,36 @@ export function FinanceBooksScreen({
         onChange={changeSearch}
       />
       <div className="rounded-lg border border-border bg-card">
-        <div className="overflow-x-auto">
-          <Table aria-label="교재내역" className="min-w-[48rem]">
-            <TableHeader className="bg-muted text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-3">원생</TableHead>
-                <TableHead className="px-4 py-3">교재명</TableHead>
-                <TableHead className="px-4 py-3">금액</TableHead>
-                <TableHead className="px-4 py-3">발주일</TableHead>
-                <TableHead className="px-4 py-3">출고일</TableHead>
-                <TableHead className="px-4 py-3">입금일</TableHead>
-                <TableHead className="px-4 py-3">상태</TableHead>
+        <Table aria-label="교재내역">
+          <TableHeader className="bg-muted text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-4 py-3">원생</TableHead>
+              <TableHead className="px-4 py-3">교재명</TableHead>
+              <TableHead className="px-4 py-3">금액</TableHead>
+              <TableHead className="px-4 py-3">발주일</TableHead>
+              <TableHead className="px-4 py-3">출고일</TableHead>
+              <TableHead className="px-4 py-3">입금일</TableHead>
+              <TableHead className="px-4 py-3">상태</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rowsView.items.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell label="원생" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
+                <TableCell label="교재명" className="px-4 py-3">{row.bookTitle}</TableCell>
+                <TableCell label="금액" className="px-4 py-3">{formatWon(row.amount)}</TableCell>
+                <TableCell label="발주일" className="px-4 py-3">{row.orderedOn || "-"}</TableCell>
+                <TableCell label="출고일" className="px-4 py-3">{row.shippedAt}</TableCell>
+                <TableCell label="입금일" className="px-4 py-3">{row.paidAt || "-"}</TableCell>
+                <TableCell label="상태" className="px-4 py-3">
+                  <Badge variant={row.status === "paid" ? "secondary" : "outline"}>
+                    {row.status === "paid" ? "입금 완료" : "입금 대기"}
+                  </Badge>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rowsView.items.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                  <TableCell className="px-4 py-3">{row.bookTitle}</TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(row.amount)}</TableCell>
-                  <TableCell className="px-4 py-3">{row.orderedOn || "-"}</TableCell>
-                  <TableCell className="px-4 py-3">{row.shippedAt}</TableCell>
-                  <TableCell className="px-4 py-3">{row.paidAt || "-"}</TableCell>
-                  <TableCell className="px-4 py-3">
-                    <Badge variant={row.status === "paid" ? "secondary" : "outline"}>
-                      {row.status === "paid" ? "입금 완료" : "입금 대기"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
         {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 교재내역이 없습니다.</EmptyListMessage> : null}
         <ListPagination
           itemLabel="교재내역"
@@ -999,45 +977,43 @@ export function FinancePayrollScreen({
         onChange={changeSearch}
       />
       <div className="rounded-lg border border-border bg-card">
-        <div className="overflow-x-auto">
-          <Table aria-label="선생님 월급" className="min-w-[54rem]">
-            <TableHeader className="bg-muted text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-3">선생님</TableHead>
-                <TableHead className="px-4 py-3">급여유형</TableHead>
-                <TableHead className="px-4 py-3">기본급여</TableHead>
-                <TableHead className="px-4 py-3">원천징수</TableHead>
-                <TableHead className="px-4 py-3">최종지급액</TableHead>
-                <TableHead className="px-4 py-3 text-right">지급</TableHead>
+        <Table aria-label="선생님 월급">
+          <TableHeader className="bg-muted text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-4 py-3">선생님</TableHead>
+              <TableHead className="px-4 py-3">급여유형</TableHead>
+              <TableHead className="px-4 py-3">기본급여</TableHead>
+              <TableHead className="px-4 py-3">원천징수</TableHead>
+              <TableHead className="px-4 py-3">최종지급액</TableHead>
+              <TableHead className="px-4 py-3 text-right">지급</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rowsView.items.map((row) => (
+              <TableRow key={row.payrollId}>
+                <TableCell label="선생님" className="px-4 py-3 font-medium">{row.teacherName}</TableCell>
+                <TableCell label="급여유형" className="px-4 py-3">{formatPayType(row.payType)}</TableCell>
+                <TableCell label="기본급여" className="px-4 py-3">{formatWon(row.basePay)}</TableCell>
+                <TableCell label="원천징수" className="px-4 py-3">{formatWon(row.withholdingTax)}</TableCell>
+                <TableCell label="최종지급액" className="px-4 py-3 font-semibold">{formatWon(row.netPay)}</TableCell>
+                <TableCell label="지급" className="px-4 py-3 text-right">
+                  {row.status === "paid" ? (
+                    <Badge variant="secondary">지급 완료</Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      aria-label={`${row.teacherName} 급여 지급 확정`}
+                      onClick={() => setPaymentTarget(row)}
+                    >
+                      지급 확정
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rowsView.items.map((row) => (
-                <TableRow key={row.payrollId}>
-                  <TableCell className="px-4 py-3 font-medium">{row.teacherName}</TableCell>
-                  <TableCell className="px-4 py-3">{formatPayType(row.payType)}</TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(row.basePay)}</TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(row.withholdingTax)}</TableCell>
-                  <TableCell className="px-4 py-3 font-semibold">{formatWon(row.netPay)}</TableCell>
-                  <TableCell className="px-4 py-3 text-right">
-                    {row.status === "paid" ? (
-                      <Badge variant="secondary">지급 완료</Badge>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        aria-label={`${row.teacherName} 급여 지급 확정`}
-                        onClick={() => setPaymentTarget(row)}
-                      >
-                        지급 확정
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
         {rowsView.totalItems === 0 ? <EmptyListMessage>조건에 맞는 선생님이 없습니다.</EmptyListMessage> : null}
         <ListPagination
           itemLabel="선생님 월급"
@@ -1479,67 +1455,65 @@ function FinanceLedgerTable({
       {view.items.length === 0 ? (
         <EmptyListMessage>조건에 맞는 입출금 내역이 없습니다.</EmptyListMessage>
       ) : (
-        <div className="overflow-x-auto">
-          <Table aria-label="입출금 내역" className="min-w-[56rem]">
-            <TableHeader className="bg-muted text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-3">발생일</TableHead>
-                <TableHead className="px-4 py-3">유형</TableHead>
-                <TableHead className="px-4 py-3">출처</TableHead>
-                <TableHead className="px-4 py-3">분류</TableHead>
-                <TableHead className="px-4 py-3">금액</TableHead>
-                <TableHead className="px-4 py-3">설명</TableHead>
-                <TableHead className="px-4 py-3 text-right">관리</TableHead>
+        <Table aria-label="입출금 내역">
+          <TableHeader className="bg-muted text-muted-foreground">
+            <TableRow>
+              <TableHead className="px-4 py-3">발생일</TableHead>
+              <TableHead className="px-4 py-3">유형</TableHead>
+              <TableHead className="px-4 py-3">출처</TableHead>
+              <TableHead className="px-4 py-3">분류</TableHead>
+              <TableHead className="px-4 py-3">금액</TableHead>
+              <TableHead className="px-4 py-3">설명</TableHead>
+              <TableHead className="px-4 py-3 text-right">관리</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {view.items.map((entry) => (
+              <TableRow key={entry.ledgerId}>
+                <TableCell label="발생일" className="px-4 py-3">{entry.occurredOn}</TableCell>
+                <TableCell label="유형" className="px-4 py-3">
+                  <Badge variant={entry.type === "income" ? "secondary" : "outline"}>
+                    {formatLedgerEntryType(entry.type)}
+                  </Badge>
+                </TableCell>
+                <TableCell label="출처" className="px-4 py-3">
+                  {formatLedgerEntrySource(entry.source)}
+                </TableCell>
+                <TableCell label="분류" className="px-4 py-3">
+                  {formatLedgerCategory(entry.category)}
+                </TableCell>
+                <TableCell label="금액" className="px-4 py-3">{formatWon(entry.amount)}</TableCell>
+                <TableCell label="설명" className="px-4 py-3 font-medium">
+                  {entry.description}
+                </TableCell>
+                <TableCell label="관리" className="px-4 py-3">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`${entry.description} 수정`}
+                      onClick={() => onEdit(entry)}
+                    >
+                      <Pencil aria-hidden="true" />
+                      수정
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`${entry.description} 삭제`}
+                      onClick={() => onDelete(entry)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      삭제
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {view.items.map((entry) => (
-                <TableRow key={entry.ledgerId}>
-                  <TableCell className="px-4 py-3">{entry.occurredOn}</TableCell>
-                  <TableCell className="px-4 py-3">
-                    <Badge variant={entry.type === "income" ? "secondary" : "outline"}>
-                      {formatLedgerEntryType(entry.type)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    {formatLedgerEntrySource(entry.source)}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    {formatLedgerCategory(entry.category)}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">{formatWon(entry.amount)}</TableCell>
-                  <TableCell className="px-4 py-3 font-medium">
-                    {entry.description}
-                  </TableCell>
-                  <TableCell className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label={`${entry.description} 수정`}
-                        onClick={() => onEdit(entry)}
-                      >
-                        <Pencil aria-hidden="true" />
-                        수정
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label={`${entry.description} 삭제`}
-                        onClick={() => onDelete(entry)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                        삭제
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       )}
       <ListPagination
         itemLabel="입출금 내역"
@@ -1727,7 +1701,12 @@ function LessonIncomePaymentAction({
   onClick: (action: "paid" | "unpaid") => void;
 }) {
   if (row.source === "lesson-ticket") {
-    return <Badge variant="secondary">수납 완료</Badge>;
+    const statusLabel = {
+      paid: "수납 완료",
+      "zero-amount": "0원 등록",
+      "missing-ledger": "원장 기록 없음",
+    }[row.status];
+    return <Badge variant={row.status === "missing-ledger" ? "destructive" : "secondary"}>{statusLabel}</Badge>;
   }
 
   const nextAction = row.status === "paid" ? "unpaid" : "paid";
@@ -1879,27 +1858,14 @@ function buildLessonIncomeRows(
     discountTotal: snapshot.discountTotal,
     finalAmount: snapshot.amount,
     status: snapshot.status,
-    paidAt: snapshot.paidAt,
   }));
-  const privateRows = data.tickets
-    .filter(
-      (ticket) =>
-        ticket.academyId === academyId && ticket.registeredAt.startsWith(month),
-    )
-    .map((ticket) => ({
-      id: `ticket:${ticket.ticketId}`,
-      studentId: ticket.studentId,
-      source: "lesson-ticket" as const,
-      studentName: ticket.studentName,
-      lessonKindLabel: "개인레슨 회차권" as const,
-      instrumentName: ticket.instrumentName,
-      progress: "회차권",
-      lessonFee: ticket.paidAmount ?? 0,
-      discountTotal: 0,
-      finalAmount: ticket.paidAmount ?? 0,
-      status: "paid" as const,
-      paidAt: ticket.paidAt ?? ticket.registeredAt,
-    }));
+  const privateRows = buildPrivateLessonIncomeRows(
+    data.ticketRegistrations ?? [],
+    data.tickets,
+    data.ledgerEntries,
+    academyId,
+    month,
+  );
 
   return [...academyRows, ...privateRows].sort(
     (left, right) =>

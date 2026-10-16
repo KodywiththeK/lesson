@@ -378,16 +378,16 @@ describe("cancelPrivateLessonAttendance", () => {
       async rpc(functionName: string, payload: Record<string, unknown>) {
         calls.push({ functionName, payload });
 
-        return { data: null, error: null };
+        return { data: { cancelled: true, restored_ticket: true }, error: null };
       },
     };
 
-    await cancelPrivateLessonAttendance(client, {
+    await expect(cancelPrivateLessonAttendance(client, {
       academyId: "academy-1",
       lessonEventId: "lesson-1",
       studentId: "student-1",
       instrumentId: "violin",
-    });
+    })).resolves.toEqual({ cancelled: true, restoredTicket: true });
 
     expect(calls).toEqual([
       {

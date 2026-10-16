@@ -8,6 +8,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
+      data-responsive-table=""
       className="relative w-full overflow-x-auto"
     >
       <table
@@ -78,10 +79,13 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+type TableCellProps = React.ComponentProps<"td"> & { label?: string }
+
+function TableCell({ className, label, ...props }: TableCellProps) {
   return (
     <td
       data-slot="table-cell"
+      data-label={label}
       className={cn(
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className

@@ -25,8 +25,6 @@ export type LessonTicketGrantSupabaseRow = {
   valid_from: string;
   valid_until: string;
   registered_at: string;
-  paid_amount?: number | null;
-  paid_at?: string | null;
   students: {
     name: string | null;
   } | null;
@@ -89,6 +87,27 @@ type LessonTicketRegistrationOptionsFromBuilder = {
 
 export type LessonTicketRegistrationOptionsSupabaseClient = {
   from(table: "students"): LessonTicketRegistrationOptionsFromBuilder;
+};
+
+export type AssignedLessonTicketBalance = {
+  studentId: string;
+  instrumentId: string;
+  remainingCount: number;
+  validUntil: string;
+};
+
+type AssignedLessonTicketBalanceRow = {
+  student_id: string;
+  instrument_id: string;
+  remaining_count: number;
+  valid_until: string;
+};
+
+export type AssignedLessonTicketBalanceSupabaseClient = {
+  rpc(
+    functionName: "get_assigned_lesson_ticket_balances",
+    payload: { p_academy_id: string },
+  ): PromiseLike<SupabaseQueryResult<AssignedLessonTicketBalanceRow[]>>;
 };
 
 export type RegisterLessonTicketInput = {
@@ -173,7 +192,7 @@ export type AdjustLessonTicketSupabaseClient = {
 };
 
 const LESSON_TICKET_LIST_SELECT =
-  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, paid_amount, paid_at, students!lesson_ticket_grants_academy_student_fk(name)";
+  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)";
 
 /** 재무 집계처럼 페이지로 자르면 안 되는 용도. 학원의 회차권 전체를 준다. */
 export async function fetchAllLessonTickets(
@@ -219,11 +238,40 @@ export async function fetchLessonTicketRegistrationOptions(
 
   return (data ?? [])
     .map(toLessonTicketRegistrationStudentOption)
+    .filter((student) => student.instruments.length > 0)
     .sort(
       (left, right) =>
         compareKoreanNames(left.studentName, right.studentName) ||
         compareKoreanNames(left.studentId, right.studentId),
     );
+}
+
+export async function fetchAssignedLessonTicketBalances(
+  supabase: AssignedLessonTicketBalanceSupabaseClient,
+  academyId: string,
+): Promise<AssignedLessonTicketBalance[]> {
+  const { data, error } = await supabase.rpc("get_assigned_lesson_ticket_balances", {
+    p_academy_id: academyId,
+  });
+  if (error) {
+    throw new Error(`담당 회차권을 불러오지 못했습니다: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({
+    studentId: row.student_id,
+    instrumentId: row.instrument_id,
+    remainingCount: row.remaining_count,
+    validUntil: row.valid_until,
+  }));
+}
+
+export function createAssignedLessonTicketBalancesQueryOptions(
+  supabase: AssignedLessonTicketBalanceSupabaseClient,
+  academyId: string,
+) {
+  return {
+    queryKey: queryKeys.lessonTickets.assignedBalances(academyId),
+    queryFn: () => fetchAssignedLessonTicketBalances(supabase, academyId),
+  };
 }
 
 export function createLessonTicketRegistrationOptionsQueryOptions(
@@ -304,6 +352,7 @@ export function createLessonTicketListQueryKey(
   options: FetchLessonTicketListOptions,
 ) {
   return queryKeys.lessonTickets.list(options.academyId, {
+    today: options.today,
     q: options.search,
     status: options.filters?.status,
     page: options.page?.toString(),
@@ -336,8 +385,6 @@ function toLessonTicketListItem(
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     registeredAt: row.registered_at,
-    paidAmount: row.paid_amount ?? undefined,
-    paidAt: row.paid_at ?? undefined,
   };
 }
 

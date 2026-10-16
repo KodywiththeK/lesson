@@ -132,6 +132,21 @@ describe("날짜에서 개인레슨 등록 (명세 3.2)", () => {
     expect(within(dialog).queryByRole("tab", { name: /메모/ })).toBeNull();
   });
 
+  it("선생님은 담당 악기의 잔여 회수와 만료일만 확인하고 결제 정보는 보지 않는다", async () => {
+    const user = userEvent.setup();
+    renderPrivateWorkspace({
+      canManage: false,
+      assignedTicketBalancesQueryFactory: (academyId) => ({
+        queryKey: ["assigned-tickets", academyId],
+        queryFn: async () => [{ studentId: "student-4", instrumentId: "violin", remainingCount: 2, validUntil: "2026-09-20" }],
+      }),
+    });
+
+    const dialog = await openDay(user, /21/);
+    expect(await within(dialog).findByText("잔여 2회 · 만료일 2026-09-20")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/결제 금액/)).not.toBeInTheDocument();
+  });
+
   it("등록창은 달에 이미 있는 같은 선생님 일정과 겹치면 바로 경고한다", async () => {
     const user = userEvent.setup();
     renderPrivateWorkspace();
