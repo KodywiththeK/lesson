@@ -479,7 +479,7 @@ describe("Supabase schema contract", () => {
   });
 });
 
-describe("레슨 시간표 명세 RPC 계약 (적용 전 migration)", () => {
+describe("레슨 시간표 명세 RPC 계약 (20261016090000·090100)", () => {
   const workflows = readFileSync(
     path.join(process.cwd(), "supabase/migrations/20261016090000_lesson_schedule_workflows.sql"),
     "utf8",
@@ -617,4 +617,186 @@ describe("레슨 시간표 명세 RPC 계약 (적용 전 migration)", () => {
     expect(workflows).toContain("pg_trigger_depth() > 1");
   });
 
+});
+
+describe("수입 관리 명세 RPC 계약 (20261017090000)", () => {
+  const finance = readFileSync(
+    path.join(process.cwd(), "supabase/migrations/20261017090000_finance_income_spec.sql"),
+    "utf8",
+  ).toLocaleLowerCase();
+
+  const sliceFunction = (name: string) => {
+    const start = finance.indexOf(`create or replace function public.${name}`);
+    const next = finance.indexOf("create or replace function", start + 10);
+
+    return finance.slice(start, next === -1 ? undefined : next);
+  };
+  const ownerOnly = "array['owner'::public.academy_member_role]";
+
+  it("수강료 입금 상태에 미납(overdue)을 추가하고 모든 상태 변경은 원장 전용이다", () => {
+    expect(finance).toContain("check (status in ('unpaid', 'paid', 'overdue'))");
+
+    for (const name of [
+      "mark_fixed_income_snapshot_paid",
+      "mark_fixed_income_snapshot_unpaid",
+      "mark_fixed_income_snapshot_overdue",
+    ]) {
+      expect(sliceFunction(name), name).toContain(ownerOnly);
+    }
+  });
+
+  it("미납 처리는 입금 완료 건을 거부하고, 입금은 미입금·미납에서만 하며 0원은 거부한다", () => {
+    const overdue = sliceFunction("mark_fixed_income_snapshot_overdue");
+    expect(overdue).toContain("status = 'overdue'");
+    expect(overdue).toContain("먼저 입금 취소를 해 주세요");
+
+    const paid = sliceFunction("mark_fixed_income_snapshot_paid");
+    expect(paid).toContain("이미 입금 완료된 수강료입니다");
+    expect(paid).toContain("결제 금액이 0원인 수강료는 입금 처리할 수 없습니다");
+    expect(paid).toContain("insert into public.ledger_entries");
+  });
+
+  it("입금 취소는 입금 완료 건만 받아 연결된 원장 행을 함께 삭제하고, 다른 상태는 거부한다", () => {
+    const unpaid = sliceFunction("mark_fixed_income_snapshot_unpaid");
+    expect(unpaid).toContain("status <> 'paid'");
+    expect(unpaid).toContain("입금 완료된 수강료만 입금 취소할 수 있습니다");
+    expect(unpaid).toContain("delete from public.ledger_entries");
+    expect(unpaid).toContain("status = 'unpaid'");
+  });
+
+  it("미납 해제는 미납 건만 받아 원장을 건드리지 않고 미입금으로 돌린다", () => {
+    const clear = sliceFunction("clear_fixed_income_snapshot_overdue");
+    expect(clear).toContain(ownerOnly);
+    expect(clear).toContain("status <> 'overdue'");
+    expect(clear).toContain("미납 상태인 수강료만 미납 해제할 수 있습니다");
+    expect(clear).toContain("status = 'unpaid'");
+    expect(clear).not.toContain("delete from public.ledger_entries");
+  });
+
+  it("급여 지급은 선생님·월 단위로 잠그고 같은 달 어떤 유형이든 지급 완료면 거부한다", () => {
+    const pay = sliceFunction("mark_salary_settlement_paid");
+    expect(pay).toContain("pg_advisory_xact_lock");
+    expect(pay).toContain("status = 'paid'");
+    expect(pay).toContain("이미 지급 완료된 급여입니다");
+    expect(pay).toContain("p_net_pay <> p_base_pay - p_withholding_tax");
+    expect(pay).toContain("지급할 금액이 0원이어서");
+    expect(pay).toContain(ownerOnly);
+    // 선생님 이름은 화면이 보낸 값이 아니라 DB에서 읽는다.
+    expect(pay).toContain("from public.teachers");
+  });
+
+  it("급여 지급 확정은 서버가 등원 수업 목록과 월급·시급·세금을 다시 확인한다", () => {
+    const pay = sliceFunction("mark_salary_settlement_paid");
+    // 형식·미래 월·NULL 입력
+    expect(pay).toContain("급여 월 형식을 확인해 주세요");
+    expect(pay).toContain("아직 시작하지 않은 달의 급여는 지급 확정할 수 없습니다");
+    expect(pay).toContain("급여 지급 정보를 모두 입력해 주세요");
+    // 그 선생님·그 달(한국 시간)의 실제 등원 수업 전체와 보낸 목록이 같아야 한다
+    expect(pay).toContain("from public.lesson_events");
+    expect(pay).toContain("attendance.status = 'present'");
+    expect(pay).toContain("'asia/seoul'");
+    expect(pay).toContain("p_lesson_event_ids");
+    expect(pay).toContain("등원 기록이 바뀌어 급여 금액을 확정할 수 없습니다");
+    // 설정 금액·시간으로 재계산
+    expect(pay).toContain("from public.teacher_salary_settings");
+    expect(pay).toContain("급여 설정을 확인해 주세요");
+    expect(pay).toContain("v_setting.monthly_salary");
+    expect(pay).toContain("v_setting.hourly_rate");
+    expect(pay).toContain("v_worked_minutes");
+    expect(pay).toContain("floor(");
+    // 세금은 화면 정책(3.3% 내림)과 같은 값만 받는다
+    expect(pay).toContain("* 33 / 1000");
+    expect(pay).toContain("원천징수액이 계산과 다릅니다");
+  });
+
+  it("비율제는 등원 기록이 없으면 임의 금액을 받지 않고, 월급제는 수업 목록을 저장하지 않는다", () => {
+    const pay = sliceFunction("mark_salary_settlement_paid");
+    expect(pay).toContain("cardinality(v_expected_ids) = 0");
+    expect(pay).toContain("등원 기록이 없어 비율제 급여를 확정할 수 없습니다");
+    expect(pay).toContain("case when p_pay_type = 'monthly' then '{}'::uuid[] else v_provided_ids end");
+    expect(pay).toContain("p_month < '2000-01'");
+  });
+
+  it("이미 미납인 항목을 다시 미납 처리하지 않는다", () => {
+    const overdue = sliceFunction("mark_fixed_income_snapshot_overdue");
+    expect(overdue).toContain("이미 미납으로 기록된 수강료입니다");
+  });
+
+  it("원장 연결 id가 비어 있는 지급·입금 건도 ref로 찾아 원장을 함께 지운다", () => {
+    const cancel = sliceFunction("cancel_salary_settlement_paid");
+    expect(cancel).toContain("ref_table = 'salary_settlements'");
+    expect(cancel).toContain("ref_id = v_settlement.id::text");
+
+    const unpaid = sliceFunction("mark_fixed_income_snapshot_unpaid");
+    expect(unpaid).toContain("ref_table = 'fixed_income_snapshots'");
+    expect(unpaid).toContain("ref_id = v_snapshot.id::text");
+  });
+
+  it("재정의한 기존 함수에도 anon 직접 실행 권한을 회수한다", () => {
+    for (const signature of [
+      "mark_fixed_income_snapshot_paid(uuid, uuid, date)",
+      "mark_fixed_income_snapshot_unpaid(uuid, uuid)",
+      "mark_salary_settlement_paid(uuid, uuid, text, text, text, integer, integer, integer, uuid[], date)",
+      "register_book_release(uuid, uuid, text, text, integer, date, text)",
+    ]) {
+      expect(finance).toContain(`revoke all on function public.${signature} from anon`);
+    }
+  });
+
+  it("급여 지급 취소는 같은 달에 지급 완료가 여러 건(레거시)이어도 모두 되돌린다", () => {
+    const cancel = sliceFunction("cancel_salary_settlement_paid");
+    expect(cancel).toContain("for v_settlement in");
+    expect(cancel).toContain("end loop");
+  });
+
+  it("급여 지급 취소는 원장 행 삭제와 미지급 복귀를 같은 트랜잭션에서 하고 audit을 남긴다", () => {
+    const cancel = sliceFunction("cancel_salary_settlement_paid");
+    expect(cancel).toContain(ownerOnly);
+    expect(cancel).toContain("pg_advisory_xact_lock");
+    expect(cancel).toContain("delete from public.ledger_entries");
+    expect(cancel).toContain("status = 'pending'");
+    expect(cancel).toContain("insert into public.audit_events");
+    expect(cancel).toContain("지급 완료된 급여를 찾지 못했습니다");
+  });
+
+  it("교재 결제 완료 전환은 원장 전용이며 상태 변경과 원장 등록을 한 트랜잭션에서 한다", () => {
+    const complete = sliceFunction("complete_book_release_payment");
+    expect(complete).toContain(ownerOnly);
+    expect(complete).toContain("for update");
+    expect(complete).toContain("이미 결제 완료된 교재입니다");
+    expect(complete).toContain("insert into public.ledger_entries");
+    expect(complete).toContain("'book-sale'");
+    expect(complete).toContain("status = 'paid'");
+  });
+
+  it("교재 출고는 결제 완료 원장 행의 id를 함께 저장해 연결이 끊긴 것을 알아볼 수 있다", () => {
+    expect(finance).toContain("alter table public.book_releases");
+    expect(finance).toContain("add column if not exists paid_ledger_entry_id uuid");
+    expect(finance).toContain("book_releases_paid_ledger_fk");
+    expect(finance).toContain("on delete set null (paid_ledger_entry_id)");
+    // 이미 결제 완료인 출고는 원장 ref로 연결을 채운다
+    expect(finance).toContain("update public.book_releases release");
+    expect(finance).toContain("ledger.ref_table = 'book_releases'");
+    expect(finance).toContain("ledger.ref_id = release.id::text");
+
+    const complete = sliceFunction("complete_book_release_payment");
+    expect(complete).toContain("paid_ledger_entry_id = v_ledger_id");
+
+    const register = sliceFunction("register_book_release");
+    expect(register).toContain("security invoker");
+    expect(register).toContain("set search_path = ''");
+    expect(register).toContain("paid_ledger_entry_id = created_ledger_id");
+  });
+
+  it("새 RPC는 anon·public 실행 권한을 회수하고 authenticated에만 부여한다", () => {
+    for (const signature of [
+      "mark_fixed_income_snapshot_overdue(uuid, uuid)",
+      "clear_fixed_income_snapshot_overdue(uuid, uuid)",
+      "cancel_salary_settlement_paid(uuid, uuid, text)",
+      "complete_book_release_payment(uuid, uuid, date)",
+    ]) {
+      expect(finance).toContain(`revoke all on function public.${signature} from public`);
+      expect(finance).toContain(`grant execute on function public.${signature} to authenticated`);
+    }
+  });
 });
