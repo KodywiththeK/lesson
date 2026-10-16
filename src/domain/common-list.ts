@@ -3,6 +3,8 @@ export const PAGE_SIZE_OPTIONS = [10, 20, 30] as const;
 
 export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
 
+export type ListSortDirection = "asc" | "desc";
+
 export type ListFilterValue =
   | string
   | number
@@ -12,6 +14,10 @@ export type ListFilterValue =
 
 export type BuildListViewOptions<TItem> = {
   getName: (item: TItem) => string;
+  /** 이름 대신 목록을 정렬할 기준 값. 비어 있는 값은 방향과 상관없이 맨 뒤에 둔다. */
+  getSortValue?: (item: TItem) => string;
+  /** `getSortValue` 기준 방향. 같은 값은 항상 이름 → 보조 기준 오름차순으로 고정한다. */
+  sortDirection?: ListSortDirection;
   /** 이름이 같은 항목의 순서를 고정하는 보조 기준(보통 id). 페이지 경계의 중복·누락을 막는다. */
   getTieBreaker?: (item: TItem) => string;
   search?: string;
@@ -85,16 +91,45 @@ export function buildListView<TItem>(
   const filteredItems = items
     .filter((item) => matchesSearch(item, options))
     .filter((item) => matchesFilters(item, options))
-    .sort(
-      (left, right) =>
-        compareKoreanNames(options.getName(left), options.getName(right)) ||
-        compareKoreanNames(
-          options.getTieBreaker?.(left) ?? "",
-          options.getTieBreaker?.(right) ?? "",
-        ),
-    );
+    .sort((left, right) => compareListItems(left, right, options));
 
   return paginateItems(filteredItems, { page: options.page, pageSize });
+}
+
+function compareListItems<TItem>(
+  left: TItem,
+  right: TItem,
+  options: BuildListViewOptions<TItem>,
+) {
+  return (
+    compareBySortValue(left, right, options) ||
+    compareKoreanNames(options.getName(left), options.getName(right)) ||
+    compareKoreanNames(
+      options.getTieBreaker?.(left) ?? "",
+      options.getTieBreaker?.(right) ?? "",
+    )
+  );
+}
+
+function compareBySortValue<TItem>(
+  left: TItem,
+  right: TItem,
+  options: BuildListViewOptions<TItem>,
+) {
+  if (!options.getSortValue) {
+    return 0;
+  }
+
+  const leftValue = options.getSortValue(left);
+  const rightValue = options.getSortValue(right);
+
+  if (!leftValue || !rightValue) {
+    return Number(!leftValue) - Number(!rightValue);
+  }
+
+  const result = compareKoreanNames(leftValue, rightValue);
+
+  return options.sortDirection === "desc" ? -result : result;
 }
 
 /** 이미 원하는 순서로 정렬된 목록을 순서를 바꾸지 않고 해당 페이지만 잘라 `ListView`로 만든다. */

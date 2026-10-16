@@ -51,6 +51,8 @@ describe("StudentsPage", () => {
     await user.type(within(dialog).getByLabelText("원생명"), "윤라온");
     await user.type(within(dialog).getByLabelText("연락처"), "010-9999-1234");
     await user.click(within(dialog).getByLabelText("피아노 금요일"));
+    // 요일 1개는 가격표 구간이 없어 레슨비를 직접 입력해야 등록할 수 있다.
+    await user.type(within(dialog).getByLabelText("피아노 레슨비"), "135000");
     await user.type(
       within(dialog).getByLabelText("피아노 금 시작 시간"),
       "14:00",

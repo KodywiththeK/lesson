@@ -2,6 +2,7 @@ import type {
   AcademyLessonEnrollment,
   Weekday,
 } from "./academy-lesson-schedule";
+import type { StudentDiscountKind } from "./lesson-pricing";
 
 export type LessonType = "academy" | "private";
 
@@ -31,6 +32,16 @@ export type StudentInstrumentInput = {
     amount: number;
   }>;
   finalMonthlyFee: number;
+};
+
+/**
+ * 악기별 할인 선택. 등록 폼 → API → 서버로만 전달하는 선택 필드이며, 데모 상태는 무시해도 동작한다.
+ * `referralDiscountMonth`는 지인 소개 할인을 적용하는 달 `YYYY-MM`이다.
+ */
+export type StudentInstrumentDiscountSelection = {
+  discountKinds?: StudentDiscountKind[];
+  referralDiscountMonth?: string;
+  referralDiscountAmount?: number;
 };
 
 export type StudentInstrumentWeeklyScheduleInput = {
@@ -293,4 +304,34 @@ function toMonth(date: string) {
   }
 
   return `${match[1]}-${match[2]}`;
+}
+
+/** 홍길동a, 홍길동b처럼 이름 뒤에 붙이는 한 글자 영문 구분 접미사. 앞 글자가 영문이면 이름의 일부로 본다. */
+const NAME_SUFFIX_PATTERN = /^(.*[^A-Za-z\s])([A-Za-z])$/;
+
+/**
+ * 같은 이름의 원생이 이미 있어 구분(홍길동a, 홍길동b)이 필요한지 판단한다.
+ * 접미사를 뺀 이름이 같더라도 서로 다른 접미사로 이미 구분했으면 false다.
+ */
+export function hasSameStudentName(name: string, existingNames: readonly string[]): boolean {
+  const target = splitNameSuffix(name);
+
+  if (!target.base) {
+    return false;
+  }
+
+  return existingNames.some((existingName) => {
+    const existing = splitNameSuffix(existingName);
+    const distinguished =
+      target.suffix !== "" && existing.suffix !== "" && target.suffix !== existing.suffix;
+
+    return existing.base === target.base && !distinguished;
+  });
+}
+
+function splitNameSuffix(name: string) {
+  const normalized = name.trim().replace(/\s+/g, " ").toLocaleLowerCase("ko-KR");
+  const match = normalized.match(NAME_SUFFIX_PATTERN);
+
+  return match ? { base: match[1].trim(), suffix: match[2] } : { base: normalized, suffix: "" };
 }

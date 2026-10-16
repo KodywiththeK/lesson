@@ -9,6 +9,7 @@ import {
   type VendorMutationSupabaseClient,
   type VendorSupabaseRow,
 } from "./vendors";
+import { createFakeSupabase, createNumberedRows } from "./test-support/fake-supabase";
 
 const VENDOR_SELECT = "id, academy_id, name, phone, vendor_type, note";
 
@@ -16,32 +17,15 @@ function createSupabaseStub(
   rows: VendorSupabaseRow[],
   error: Error | null = null,
 ) {
-  const calls: Array<{ table: string; select?: string; eq?: [string, string] }> =
-    [];
-  const client: VendorListSupabaseClient = {
-    from(table) {
-      calls.push({ table });
+  const fake = createFakeSupabase(
+    { vendors: rows },
+    error ? { errors: { vendors: error } } : {},
+  );
 
-      return {
-        select(select) {
-          calls[calls.length - 1].select = select;
-
-          return {
-            async eq(column, value) {
-              calls[calls.length - 1].eq = [column, value];
-
-              return {
-                data: error ? null : rows,
-                error,
-              };
-            },
-          };
-        },
-      };
-    },
+  return {
+    client: fake.client as unknown as VendorListSupabaseClient,
+    calls: fake.queries,
   };
-
-  return { client, calls };
 }
 
 type MutationCall = {
@@ -121,13 +105,15 @@ describe("fetchVendorList", () => {
       search: "교재",
     });
 
-    expect(calls).toEqual([
-      {
-        table: "vendors",
-        select: "id, academy_id, name, phone, vendor_type, note",
-        eq: ["academy_id", "academy-1"],
-      },
-    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      table: "vendors",
+      select: "id, academy_id, name, phone, vendor_type, note",
+      eq: [["academy_id", "academy-1"]],
+      // 서버 1000건 제한에 조용히 잘리지 않도록 순서를 고정하고 range로 읽는다.
+      order: [["name", undefined], ["id", undefined]],
+      range: [[0, 999]],
+    });
     expect(result.items[0]).toMatchObject({
       academyId: "academy-1",
       vendorId: "vendor-1",
@@ -136,6 +122,25 @@ describe("fetchVendorList", () => {
       kind: "교재",
       memo: "바이엘 재고 확인",
     });
+  });
+
+  it("1000건을 넘는 거래처도 range를 이어 끝까지 읽는다", async () => {
+    const { client, calls } = createSupabaseStub(
+      createNumberedRows(1200, (index) => ({
+        id: `vendor-${index}`,
+        academy_id: "academy-1",
+        name: `거래처${index}`,
+        phone: null,
+        vendor_type: "교재",
+        note: null,
+      })) as VendorSupabaseRow[],
+    );
+
+    const result = await fetchVendorList(client, { academyId: "academy-1", pageSize: 10 });
+
+    expect(result.totalItems).toBe(1200);
+    expect(calls[0].range).toEqual([[0, 999]]);
+    expect(calls.map((call) => call.range[0])).toEqual([[0, 999], [1000, 1999]]);
   });
 
   it("Supabase 오류는 사용자에게 전달 가능한 오류로 변환한다", async () => {

@@ -38,6 +38,7 @@ function buildRows(
       status,
       changedAt: "2026-09-01T00:00:00+09:00",
       statusReason: "개인 사정",
+      detailSummary: "월, 수",
     };
   });
 }
@@ -195,6 +196,45 @@ describe("StatusManagementScreen", () => {
     expect(await screen.findByText("퇴원생01")).toBeInTheDocument();
     expect(seenStudentOptions.at(-1)).toMatchObject({ status: "withdrawn", page: 1 });
     expect(screen.getByText("총 2명")).toBeInTheDocument();
+  });
+
+  it("퇴원 원생 상세는 삭제 버튼을 비활성으로 두고 보관 안내를 보여준다", async () => {
+    const user = userEvent.setup();
+    renderStatusManagementScreen();
+
+    await screen.findByRole("table", { name: "휴원/퇴원 관리 목록" });
+    await user.click(screen.getByRole("tab", { name: "퇴원" }));
+    await user.click(await screen.findByRole("button", { name: "퇴원생01 자세히보기" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "퇴원생01 상태 상세" });
+    const deleteButton = within(dialog).getByRole("button", { name: "삭제" });
+
+    expect(deleteButton).toBeDisabled();
+    expect(
+      within(dialog).getByText(
+        "결제·회차권·급여 기록을 보존하기 위해 삭제할 수 없습니다. 보관 상태로 유지됩니다.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("휴원 대상 상세에는 삭제 버튼을 보여주지 않는다", async () => {
+    const user = userEvent.setup();
+    renderStatusManagementScreen();
+
+    await user.click(await screen.findByRole("button", { name: "휴원생01 자세히보기" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "휴원생01 상태 상세" });
+    expect(within(dialog).queryByRole("button", { name: "삭제" })).not.toBeInTheDocument();
+  });
+
+  it("요일 요약은 화면 폭과 상관없이 숨기지 않는다", async () => {
+    renderStatusManagementScreen();
+
+    const table = await screen.findByRole("table", { name: "휴원/퇴원 관리 목록" });
+    const summary = within(table).getAllByText("월, 수")[0];
+
+    // 데스크톱 표에는 요일 열이 없으므로 폭별 숨김 클래스(lg:hidden)를 쓰면 요일을 볼 수 없다.
+    expect(summary.className).not.toContain("hidden");
   });
 
   it("선생님 탭에서는 선생님 기준 인원 수와 페이지당 개수를 고른다", async () => {

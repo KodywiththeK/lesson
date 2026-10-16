@@ -6,6 +6,7 @@ import {
   type VendorListView,
 } from "@/domain/vendor-list";
 
+import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
 type SupabaseQueryResult<TData> = {
@@ -22,19 +23,10 @@ export type VendorSupabaseRow = {
   note: string | null;
 };
 
-type VendorListSelectBuilder = {
-  eq(
-    column: "academy_id",
-    value: string,
-  ): PromiseLike<SupabaseQueryResult<VendorSupabaseRow[]>>;
-};
-
-type VendorListFromBuilder = {
-  select(select: string): VendorListSelectBuilder;
-};
-
 export type VendorListSupabaseClient = {
-  from(table: "vendors"): VendorListFromBuilder;
+  from(table: "vendors"): {
+    select(select: string): PagedSelectQuery<VendorSupabaseRow>;
+  };
 };
 
 export type FetchVendorListOptions = BuildVendorListOptions;
@@ -73,16 +65,18 @@ export async function fetchVendorList(
   supabase: VendorListSupabaseClient,
   options: FetchVendorListOptions,
 ): Promise<VendorListView> {
-  const { data, error } = await supabase
-    .from("vendors")
-    .select(VENDOR_LIST_SELECT)
-    .eq("academy_id", options.academyId);
+  // 서버 max_rows(1000)에 조용히 잘리지 않도록 순서를 고정해 끝까지 읽는다.
+  const rows = await fetchAllRows("거래처 목록을 불러오지 못했습니다", (from, to) =>
+    supabase
+      .from("vendors")
+      .select(VENDOR_LIST_SELECT)
+      .eq("academy_id", options.academyId)
+      .order("name")
+      .order("id")
+      .range(from, to),
+  );
 
-  if (error) {
-    throw new Error(`거래처 목록을 불러오지 못했습니다: ${error.message}`);
-  }
-
-  return buildVendorList((data ?? []).map(toVendorListRow), options);
+  return buildVendorList(rows.map(toVendorListRow), options);
 }
 
 export function createVendorListQueryKey(options: FetchVendorListOptions) {

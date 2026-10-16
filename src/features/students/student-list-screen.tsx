@@ -21,7 +21,6 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
-import { DateField, TimeField } from "@/components/operations/date-time-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +32,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -41,9 +39,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   NativeSelect,
@@ -58,23 +54,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { compareKoreanNames, type ListView } from "@/domain/common-list";
+import type { ListView } from "@/domain/common-list";
 import { getFinanceToday } from "@/domain/finance-date";
-import { getAcademyScheduleValidationError } from "@/domain/student-registration";
+import { STUDENT_DISCOUNTS } from "@/domain/lesson-pricing";
 import {
   buildStudentFilterOptions,
+  DEFAULT_STUDENT_SORT,
+  getStudentDisplayAge,
+  STUDENT_SORT_OPTIONS,
   type BuildStudentListOptions,
+  type StudentListInstrument,
   type StudentListRow,
+  type StudentSort,
+  type StudentSortKey,
 } from "@/domain/student-list";
 import { invalidateAfterPeopleChange } from "@/lib/api/query-invalidation";
 import { toUserMessage } from "@/lib/errors/user-message";
 import {
+  createStudentListQueryKey,
   createStudentListQueryOptions,
   createStudentOptionsQueryOptions,
   registerStudentEnrollment,
   updateStudentProfile,
   updateStudentStatus,
   type RegisterStudentEnrollmentInput,
+  type StudentBasicInfoInput,
   type StudentRegistrationSupabaseClient,
   type StudentListSupabaseClient,
   type StudentUpdateSupabaseClient,
@@ -85,9 +89,15 @@ import {
   type TeacherListSupabaseClient,
 } from "@/lib/api/teachers";
 import { queryKeys } from "@/lib/api/query-keys";
-import type { DemoStudentRegistrationInput } from "@/lib/demo/academy-demo-state";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeacherListRow } from "@/domain/teacher-list";
+
+import { StudentEditForm } from "./student-edit-form";
+import { instrumentOptions, weekdayOptions } from "./student-form-options";
+import {
+  StudentRegistrationDialog,
+  type StudentRegistrationSubmission,
+} from "./student-registration-dialog";
 
 type StudentListQueryOptions = {
   queryKey: QueryKey;
@@ -103,7 +113,7 @@ type StudentListScreenProps = {
   academyName: string;
   queryOptionsFactory?: StudentListQueryOptionsFactory;
   teachers?: TeacherListRow[];
-  registerStudent?: (input: DemoStudentRegistrationInput) => void | Promise<void>;
+  registerStudent?: (input: StudentRegistrationSubmission) => void | Promise<void>;
   updateStudent?: (input: UpdateStudentProfileInput) => void | Promise<void>;
   updateStudentStatus?: (
     input: {
@@ -148,6 +158,7 @@ export function StudentListScreen({
   const [teacherName, setTeacherName] = useState("");
   const [instrumentName, setInstrumentName] = useState("");
   const [weekdayLabel, setWeekdayLabel] = useState("");
+  const [sort, setSort] = useState<StudentSort>(DEFAULT_STUDENT_SORT);
   const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentListRow | null>(
@@ -172,6 +183,7 @@ export function StudentListScreen({
       instrumentName: instrumentName || undefined,
       weekdayLabel: weekdayLabel || undefined,
     },
+    sort,
     page,
     pageSize,
   };
@@ -205,7 +217,7 @@ export function StudentListScreen({
     enabled: !hasInjectedQueryOptions && !supabaseClientState?.error,
   });
   const registerMutation = useMutation({
-    mutationFn: async (input: DemoStudentRegistrationInput) => {
+    mutationFn: async (input: StudentRegistrationSubmission) => {
       if (registerStudent) {
         await registerStudent(input);
         return;
@@ -321,6 +333,8 @@ export function StudentListScreen({
       toast.error("원생 정보 수정에 실패했습니다.", {
         description: toUserMessage(error),
       });
+      // 이름·수강 정보만 저장된 일부 저장일 수 있으므로 목록을 다시 불러온다.
+      invalidateAfterPeopleChange(queryClient, academyId);
     },
   });
   const studentListView = studentListQuery.data;
@@ -331,32 +345,29 @@ export function StudentListScreen({
     teacherNames: teacherOptions.map((teacher) => teacher.name),
     instrumentNames: instrumentOptions.map((instrument) => instrument.name),
   });
+  const existingStudentNames = useMemo(
+    () => (studentOptionsQuery.data ?? studentListView?.items ?? []).map((student) => student.name),
+    [studentOptionsQuery.data, studentListView?.items],
+  );
   const registrationAction = useMemo(
     () => (
-      <Dialog open={isRegistrationOpen} onOpenChange={setIsRegistrationOpen}>
-        <DialogTrigger asChild>
+      <StudentRegistrationDialog
+        open={isRegistrationOpen}
+        onOpenChange={setIsRegistrationOpen}
+        trigger={
           <Button type="button">
             <UserPlus aria-hidden="true" />
             원생 등록
           </Button>
-        </DialogTrigger>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>원생 등록</DialogTitle>
-            <DialogDescription>
-              원생의 수강 악기와 레슨 기준을 함께 등록합니다.
-            </DialogDescription>
-          </DialogHeader>
-          <StudentRegistrationForm
-            teachers={teacherOptions}
-            onSubmit={(input) => {
-              registerMutation.mutate(input);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+        }
+        teachers={teacherOptions}
+        existingStudentNames={existingStudentNames}
+        onSubmit={(input) => {
+          registerMutation.mutate(input);
+        }}
+      />
     ),
-    [isRegistrationOpen, registerMutation, teacherOptions],
+    [existingStudentNames, isRegistrationOpen, registerMutation, teacherOptions],
   );
   const isHeaderActionMounted = usePageHeaderActions(registrationAction);
 
@@ -367,7 +378,7 @@ export function StudentListScreen({
       </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
-        <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_repeat(3,11rem)_auto]">
+        <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_repeat(3,11rem)_repeat(2,9rem)_auto]">
           <ListSearchField
             label="원생 검색"
             value={search}
@@ -406,6 +417,40 @@ export function StudentListScreen({
             }}
           />
 
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>정렬 기준</span>
+            <NativeSelect
+              aria-label="정렬 기준"
+              className="w-full"
+              value={sort.key}
+              onChange={(event) => {
+                setSort({ ...sort, key: event.target.value as StudentSortKey });
+                resetPage();
+              }}
+            >
+              {STUDENT_SORT_OPTIONS.map((option) => (
+                <NativeSelectOption key={option.key} value={option.key}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Label>
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>정렬 방향</span>
+            <NativeSelect
+              aria-label="정렬 방향"
+              className="w-full"
+              value={sort.direction}
+              onChange={(event) => {
+                setSort({ ...sort, direction: event.target.value as StudentSort["direction"] });
+                resetPage();
+              }}
+            >
+              <NativeSelectOption value="asc">오름차순</NativeSelectOption>
+              <NativeSelectOption value="desc">내림차순</NativeSelectOption>
+            </NativeSelect>
+          </Label>
+
           <Button
             type="button"
             variant="outline"
@@ -415,6 +460,7 @@ export function StudentListScreen({
               setTeacherName("");
               setInstrumentName("");
               setWeekdayLabel("");
+              setSort(DEFAULT_STUDENT_SORT);
               resetPage();
             }}
           >
@@ -483,461 +529,6 @@ export function StudentListScreen({
   );
 }
 
-function StudentRegistrationForm({
-  teachers,
-  onSubmit,
-}: {
-  teachers: TeacherListRow[];
-  onSubmit: (input: DemoStudentRegistrationInput) => void;
-}) {
-  const [name, setName] = useState("");
-  const [registeredAt, setRegisteredAt] = useState(getFinanceToday());
-  const [age, setAge] = useState("");
-  const [grade, setGrade] = useState("");
-  const [school, setSchool] = useState("");
-  const [occupation, setOccupation] = useState("");
-  const [contactRelationship, setContactRelationship] = useState("모");
-  const [contactPhone, setContactPhone] = useState("");
-  const [selectedInstrumentIds, setSelectedInstrumentIds] = useState(["piano"]);
-  const [instrumentDrafts, setInstrumentDrafts] = useState<
-    Record<string, StudentRegistrationInstrumentDraft>
-  >(() => ({
-    piano: createRegistrationInstrumentDraft(instrumentOptions[0], teachers),
-  }));
-
-  const orderedDrafts = selectedInstrumentIds
-    .map((instrumentId) => instrumentDrafts[instrumentId])
-    .filter(Boolean);
-  const canSubmit = Boolean(
-    name.trim() &&
-      registeredAt &&
-      contactPhone.replace(/\D/g, "").length >= 4 &&
-      orderedDrafts.length > 0 &&
-      orderedDrafts.every(
-        (draft) =>
-          draft.weeklySchedules.length > 0 &&
-          !getAcademyScheduleValidationError({
-            lessonType: draft.lessonType,
-            teacherId: draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers),
-            weeklySchedules: draft.weeklySchedules,
-          }),
-      ),
-  );
-
-  return (
-    <form
-      className="grid gap-5"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        if (!canSubmit) {
-          return;
-        }
-
-        onSubmit({
-          name: name.trim(),
-          registeredAt,
-          age: age ? Number(age) : undefined,
-          grade: grade.trim() || undefined,
-          school: school.trim() || undefined,
-          occupation: occupation.trim() || undefined,
-          contact: {
-            relationship: contactRelationship.trim() || "본인",
-            phone: contactPhone.trim(),
-          },
-          instruments: orderedDrafts.map((draft) => {
-            const effectiveTeacherId =
-              draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers);
-            const teacher = teachers.find(
-              (option) => option.teacherId === effectiveTeacherId,
-            );
-
-            return {
-              instrumentId: draft.instrumentId,
-              instrumentName: draft.instrumentName,
-              teacherId: effectiveTeacherId,
-              teacherName: teacher?.name ?? "",
-              lessonType: draft.lessonType,
-              weeklySchedules: draft.weeklySchedules,
-              progress: draft.progress.trim() || "신규 등록",
-              lessonFee: draft.lessonFee,
-              discountTotal: draft.discountTotal,
-              discountLabel:
-                draft.discountLabel === "직접입력"
-                  ? draft.customDiscountLabel.trim() || "직접입력"
-                  : draft.discountLabel,
-              finalMonthlyFee: Math.max(0, draft.lessonFee - draft.discountTotal),
-            };
-          }),
-        });
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>원생명</span>
-          <Input
-            aria-label="원생명"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>등록일</span>
-          <DateField
-            aria-label="등록일"
-            value={registeredAt}
-            onValueChange={setRegisteredAt}
-          />
-        </Label>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Label className="grid gap-1">
-          <span>나이</span>
-          <Input
-            aria-label="나이"
-            min={0}
-            type="number"
-            value={age}
-            onChange={(event) => setAge(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>학년</span>
-          <Input
-            aria-label="학년"
-            value={grade}
-            onChange={(event) => setGrade(event.target.value)}
-            placeholder="초등 1학년"
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>학교</span>
-          <Input
-            aria-label="학교"
-            value={school}
-            onChange={(event) => setSchool(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>직업</span>
-          <Input
-            aria-label="직업"
-            value={occupation}
-            onChange={(event) => setOccupation(event.target.value)}
-          />
-        </Label>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
-        <Label className="grid gap-1">
-          <span>연락처 구분</span>
-          <NativeSelect
-            aria-label="연락처 구분"
-            value={contactRelationship}
-            onChange={(event) => setContactRelationship(event.target.value)}
-          >
-            <NativeSelectOption value="모">모</NativeSelectOption>
-            <NativeSelectOption value="부">부</NativeSelectOption>
-            <NativeSelectOption value="본인">본인</NativeSelectOption>
-            <NativeSelectOption value="보호자">보호자</NativeSelectOption>
-          </NativeSelect>
-        </Label>
-        <Label className="grid gap-1">
-          <span>연락처</span>
-          <Input
-            aria-label="연락처"
-            value={contactPhone}
-            onChange={(event) => setContactPhone(event.target.value)}
-            placeholder="010-0000-0000"
-          />
-        </Label>
-      </div>
-
-      <fieldset className="grid gap-2">
-        <legend className="text-sm font-semibold">
-          악기 선택 <span className="text-muted-foreground">(복수 선택 가능)</span>
-        </legend>
-        <div className="grid gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-4">
-          {instrumentOptions.map((instrument) => (
-            <Label key={instrument.id} className="flex items-center gap-2">
-              <Checkbox
-                aria-label={`${instrument.name} 선택`}
-                checked={selectedInstrumentIds.includes(instrument.id)}
-                onCheckedChange={(checked) => {
-                  setSelectedInstrumentIds((current) =>
-                    checked
-                      ? [...new Set([...current, instrument.id])]
-                      : current.filter((value) => value !== instrument.id),
-                  );
-                  setInstrumentDrafts((current) => {
-                    if (checked && !current[instrument.id]) {
-                      return {
-                        ...current,
-                        [instrument.id]: createRegistrationInstrumentDraft(
-                          instrument,
-                          teachers,
-                        ),
-                      };
-                    }
-
-                    return current;
-                  });
-                }}
-              />
-              <span>{instrument.name}</span>
-            </Label>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="grid gap-3">
-        {orderedDrafts.map((draft) => (
-          <StudentRegistrationInstrumentCard
-            key={draft.instrumentId}
-            draft={draft}
-            teachers={teachers}
-            onChange={(nextDraft) =>
-              setInstrumentDrafts((current) => ({
-                ...current,
-                [draft.instrumentId]: nextDraft,
-              }))
-            }
-          />
-        ))}
-      </div>
-
-      <DialogFooter>
-        <Button type="submit" disabled={!canSubmit}>
-          등록
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
-function StudentRegistrationInstrumentCard({
-  draft,
-  teachers,
-  onChange,
-}: {
-  draft: StudentRegistrationInstrumentDraft;
-  teachers: TeacherListRow[];
-  onChange: (draft: StudentRegistrationInstrumentDraft) => void;
-}) {
-  const teacherCandidates = getTeacherCandidates(draft.instrumentName, teachers);
-  const effectiveTeacherId =
-    draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers);
-  const finalMonthlyFee = Math.max(0, draft.lessonFee - draft.discountTotal);
-
-  return (
-    <section className="grid gap-4 rounded-md border border-border bg-background p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">
-          [{draft.instrumentName}] 상세 설정
-        </h3>
-        <span className="text-xs font-medium text-muted-foreground">
-          {draft.instrumentName === "피아노"
-            ? "학원레슨/개인레슨 선택 가능"
-            : "개인레슨 전용"}
-        </span>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>담당 선생님</span>
-          <NativeSelect
-            aria-label={`${draft.instrumentName} 담당 선생님`}
-            value={effectiveTeacherId}
-            onChange={(event) =>
-              onChange({ ...draft, teacherId: event.target.value })
-            }
-          >
-            <NativeSelectOption value="">미배정</NativeSelectOption>
-            {teacherCandidates.map((teacher) => (
-              <NativeSelectOption key={teacher.teacherId} value={teacher.teacherId}>
-                {teacher.name} ({teacher.part})
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Label>
-        <Label className="grid gap-1">
-          <span>레슨 형태</span>
-          <NativeSelect
-            aria-label={`${draft.instrumentName} 레슨 형태`}
-            value={draft.lessonType}
-            disabled={draft.instrumentName !== "피아노"}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                lessonType: event.target.value as "academy" | "private",
-              })
-            }
-          >
-            <NativeSelectOption value="academy">학원레슨</NativeSelectOption>
-            <NativeSelectOption value="private">개인레슨</NativeSelectOption>
-          </NativeSelect>
-        </Label>
-      </div>
-
-      <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">수강 요일</legend>
-        <div className="flex flex-wrap gap-3 rounded-md border border-border bg-muted/40 p-3">
-          {weekdayOptions.map((weekday) => (
-            <Label key={weekday.value} className="flex items-center gap-2">
-              <Checkbox
-                aria-label={`${draft.instrumentName} ${weekday.label}요일`}
-                checked={draft.weeklySchedules.some(
-                  (schedule) => schedule.weekday === weekday.value,
-                )}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...draft,
-                    weeklySchedules: checked
-                      ? [
-                          ...draft.weeklySchedules,
-                          { weekday: weekday.value },
-                        ]
-                      : draft.weeklySchedules.filter(
-                          (schedule) => schedule.weekday !== weekday.value,
-                        ),
-                  })
-                }
-              />
-              <span>{weekday.label}</span>
-            </Label>
-          ))}
-        </div>
-      </fieldset>
-
-      {draft.weeklySchedules.length > 0 ? (
-        <div className="grid gap-2">
-          {draft.weeklySchedules.map((schedule) => {
-            const weekdayLabel =
-              weekdayOptions.find((weekday) => weekday.value === schedule.weekday)
-                ?.label ?? schedule.weekday;
-
-            return (
-              <div
-                key={schedule.weekday}
-                className="grid gap-2 sm:grid-cols-[4rem_1fr_1fr]"
-              >
-                <span className="self-center text-sm font-medium">
-                  {weekdayLabel}
-                </span>
-                <TimeField
-                  aria-label={`${draft.instrumentName} ${weekdayLabel} 시작 시간`}
-                  value={schedule.startTime ?? ""}
-                  onValueChange={(nextValue) =>
-                    onChange({
-                      ...draft,
-                      weeklySchedules: draft.weeklySchedules.map((current) =>
-                        current.weekday === schedule.weekday
-                          ? { ...current, startTime: nextValue }
-                          : current,
-                      ),
-                    })
-                  }
-                />
-                <TimeField
-                  aria-label={`${draft.instrumentName} ${weekdayLabel} 종료 시간`}
-                  value={schedule.endTime ?? ""}
-                  onValueChange={(nextValue) =>
-                    onChange({
-                      ...draft,
-                      weeklySchedules: draft.weeklySchedules.map((current) =>
-                        current.weekday === schedule.weekday
-                          ? { ...current, endTime: nextValue }
-                          : current,
-                      ),
-                    })
-                  }
-                />
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Label className="grid gap-1">
-          <span>레슨비</span>
-          <Input
-            aria-label={`${draft.instrumentName} 레슨비`}
-            type="number"
-            value={draft.lessonFee}
-            onChange={(event) =>
-              onChange({ ...draft, lessonFee: Number(event.target.value) })
-            }
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>할인 구분</span>
-          <NativeSelect
-            aria-label={`${draft.instrumentName} 할인 구분`}
-            value={draft.discountLabel}
-            onChange={(event) =>
-              onChange({ ...draft, discountLabel: event.target.value })
-            }
-          >
-            {discountOptions.map((discount) => (
-              <NativeSelectOption key={discount} value={discount}>
-                {discount}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Label>
-        <Label className="grid gap-1">
-          <span>할인액</span>
-          <Input
-            aria-label={`${draft.instrumentName} 할인액`}
-            type="number"
-            value={draft.discountTotal}
-            onChange={(event) =>
-              onChange({ ...draft, discountTotal: Number(event.target.value) })
-            }
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>최종 금액</span>
-          <Input
-            aria-label={`${draft.instrumentName} 최종 금액`}
-            readOnly
-            value={finalMonthlyFee}
-          />
-        </Label>
-      </div>
-
-      {draft.discountLabel === "직접입력" ? (
-        <Label className="grid gap-1">
-          <span>할인 사유</span>
-          <Input
-            aria-label={`${draft.instrumentName} 할인 사유`}
-            value={draft.customDiscountLabel}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                customDiscountLabel: event.target.value,
-              })
-            }
-          />
-        </Label>
-      ) : null}
-
-      <Label className="grid gap-1">
-        <span>진도</span>
-        <Input
-          aria-label={`${draft.instrumentName} 진도`}
-          value={draft.progress}
-          onChange={(event) =>
-            onChange({ ...draft, progress: event.target.value })
-          }
-        />
-      </Label>
-    </section>
-  );
-}
-
 function StudentDetailDialog({
   student,
   teachers,
@@ -986,7 +577,7 @@ function StudentDetailDialog({
               <DetailItem label="상태" value={formatStudentStatus(student.status)} />
               <DetailItem label="등록일" value={student.registeredOn ?? "-"} />
               <DetailItem label="출석 ID" value={student.attendanceCode ?? "-"} />
-              <DetailItem label="나이" value={student.age ? `${student.age}세` : "-"} />
+              <DetailItem label="나이" value={formatAge(getStudentDisplayAge(student))} />
               <DetailItem label="학년" value={student.grade ?? "-"} />
               <DetailItem label="학교" value={student.school ?? "-"} />
               <DetailItem label="직업" value={student.occupation ?? "-"} />
@@ -1062,6 +653,12 @@ function StudentDetailDialog({
                         label="최종 수강료"
                         value={formatWon(instrument.finalMonthlyFee)}
                       />
+                      {instrument.referralDiscountMonth ? (
+                        <DetailItem
+                          label="지인 소개 할인"
+                          value={formatReferralDiscount(instrument)}
+                        />
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1233,215 +830,6 @@ function StudentStatusConfirmationDialog({
   );
 }
 
-function StudentEditForm({
-  student,
-  teachers,
-  isSaving,
-  onCancel,
-  onSubmit,
-}: {
-  student: StudentListRow;
-  teachers: TeacherListRow[];
-  isSaving: boolean;
-  onCancel: () => void;
-  onSubmit: (input: UpdateStudentProfileInput) => Promise<void>;
-}) {
-  const primaryInstrument =
-    student.instruments?.find((instrument) => instrument.active) ??
-    student.instruments?.[0];
-  const firstTeacher = teachers[0];
-  const initialTeacherId = primaryInstrument?.teacherId ?? firstTeacher?.teacherId ?? "";
-  const instrumentId =
-    primaryInstrument?.instrumentId || toInstrumentId(student.instrumentNames[0]);
-  const instrumentName =
-    primaryInstrument?.instrumentName ?? student.instrumentNames[0] ?? "";
-  const [name, setName] = useState(student.name);
-  const [teacherId, setTeacherId] = useState(initialTeacherId);
-  const [lessonType, setLessonType] = useState(
-    primaryInstrument?.lessonType === "private" ? "private" : "academy",
-  );
-  const [weekdayLabels, setWeekdayLabels] = useState(
-    primaryInstrument?.weekdayLabels?.length
-      ? primaryInstrument.weekdayLabels
-      : student.weekdayLabels,
-  );
-  const [startTime, setStartTime] = useState(primaryInstrument?.startTime ?? "");
-  const [endTime, setEndTime] = useState(primaryInstrument?.endTime ?? "");
-  const [progress, setProgress] = useState(primaryInstrument?.progress ?? "");
-  const [lessonFee, setLessonFee] = useState(primaryInstrument?.lessonFee ?? 0);
-  const [discountTotal, setDiscountTotal] = useState(
-    primaryInstrument?.discountTotal ?? 0,
-  );
-  const finalMonthlyFee = Math.max(0, lessonFee - discountTotal);
-  const selectedTeacher =
-    teachers.find((teacher) => teacher.teacherId === teacherId) ?? firstTeacher;
-  const canSubmit = Boolean(name.trim());
-
-  return (
-    <form
-      className="grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-
-        if (!canSubmit) {
-          return;
-        }
-
-        void onSubmit({
-          academyId: student.academyId,
-          studentId: student.studentId,
-          name: name.trim(),
-          studentInstrumentId: primaryInstrument?.studentInstrumentId,
-          teacherId: selectedTeacher?.teacherId,
-          teacherName: selectedTeacher?.name,
-          instrumentId: instrumentId.trim(),
-          instrumentName: instrumentName.trim(),
-          lessonType,
-          weekdayLabels,
-          startTime,
-          endTime,
-          progress,
-          lessonFee,
-          discountTotal,
-          finalMonthlyFee,
-        });
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>원생명</span>
-          <Input
-            aria-label="원생명"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>담당 선생님</span>
-          <NativeSelect
-            aria-label="담당 선생님"
-            value={teacherId}
-            onChange={(event) => setTeacherId(event.target.value)}
-          >
-            {teachers.map((teacher) => (
-              <NativeSelectOption key={teacher.teacherId} value={teacher.teacherId}>
-                {teacher.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Label>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>악기</span>
-          <Input
-            aria-label="악기"
-            readOnly
-            value={instrumentName || "등록된 악기 없음"}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>수업 형태</span>
-          <NativeSelect
-            aria-label="수업 형태"
-            value={lessonType}
-            onChange={(event) =>
-              setLessonType(event.target.value as "academy" | "private")
-            }
-          >
-            <NativeSelectOption value="academy">학원 수업</NativeSelectOption>
-            <NativeSelectOption value="private">개인레슨</NativeSelectOption>
-          </NativeSelect>
-        </Label>
-      </div>
-
-      <fieldset className="grid gap-2">
-        <legend className="text-sm font-medium">정기 요일</legend>
-        <div className="flex flex-wrap gap-3">
-          {weekdayOptions.map((weekday) => (
-            <Label key={weekday.value} className="flex items-center gap-2">
-              <Checkbox
-                aria-label={`${weekday.label}요일`}
-                checked={weekdayLabels.includes(weekday.label)}
-                onCheckedChange={(checked) =>
-                  setWeekdayLabels((current) =>
-                    checked
-                      ? [...new Set([...current, weekday.label])]
-                      : current.filter((value) => value !== weekday.label),
-                  )
-                }
-              />
-              <span>{weekday.label}</span>
-            </Label>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Label className="grid gap-1">
-          <span>시작 시간</span>
-          <TimeField
-            aria-label="시작 시간"
-            value={startTime}
-            onValueChange={setStartTime}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>종료 시간</span>
-          <TimeField
-            aria-label="종료 시간"
-            value={endTime}
-            onValueChange={setEndTime}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>진도</span>
-          <Input
-            aria-label="진도"
-            value={progress}
-            onChange={(event) => setProgress(event.target.value)}
-          />
-        </Label>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Label className="grid gap-1">
-          <span>레슨비</span>
-          <Input
-            aria-label="레슨비"
-            type="number"
-            value={lessonFee}
-            onChange={(event) => setLessonFee(Number(event.target.value))}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>할인</span>
-          <Input
-            aria-label="할인"
-            type="number"
-            value={discountTotal}
-            onChange={(event) => setDiscountTotal(Number(event.target.value))}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>최종 수강료</span>
-          <Input aria-label="최종 수강료" readOnly value={finalMonthlyFee} />
-        </Label>
-      </div>
-
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          취소
-        </Button>
-        <Button type="submit" disabled={!canSubmit || isSaving}>
-          수정완료
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -1457,14 +845,7 @@ function createDefaultQueryOptions(
 ): StudentListQueryOptions {
   if (supabaseClientState.error) {
     return {
-      queryKey: queryKeys.students.list(options.academyId, {
-        q: options.search,
-        teacherName: options.filters?.teacherName,
-        instrumentName: options.filters?.instrumentName,
-        weekdayLabel: options.filters?.weekdayLabel,
-        page: String(options.page ?? 1),
-        pageSize: String(options.pageSize ?? ""),
-      }),
+      queryKey: createStudentListQueryKey(options),
       queryFn: async () => {
         throw supabaseClientState.error;
       },
@@ -1589,68 +970,6 @@ function StudentListTable({
   );
 }
 
-type StudentRegistrationInstrumentDraft = {
-  instrumentId: string;
-  instrumentName: string;
-  teacherId: string;
-  lessonType: "academy" | "private";
-  weeklySchedules: Array<{
-    weekday: string;
-    startTime?: string;
-    endTime?: string;
-  }>;
-  lessonFee: number;
-  discountTotal: number;
-  discountLabel: string;
-  customDiscountLabel: string;
-  progress: string;
-};
-
-const instrumentOptions = [
-  { id: "piano", name: "피아노" },
-  { id: "violin", name: "바이올린" },
-  { id: "cello", name: "첼로" },
-  { id: "flute", name: "플루트" },
-];
-
-const discountOptions = [
-  "없음",
-  "형제할인",
-  "복수악기할인",
-  "소개할인",
-  "직접입력",
-];
-
-function createRegistrationInstrumentDraft(
-  instrument: (typeof instrumentOptions)[number],
-  teachers: TeacherListRow[],
-): StudentRegistrationInstrumentDraft {
-  return {
-    instrumentId: instrument.id,
-    instrumentName: instrument.name,
-    teacherId: getDefaultTeacherId(instrument.name, teachers),
-    lessonType: instrument.name === "피아노" ? "academy" : "private",
-    weeklySchedules: [],
-    lessonFee: instrument.name === "피아노" ? 150000 : 0,
-    discountTotal: 0,
-    discountLabel: "없음",
-    customDiscountLabel: "",
-    progress: "신규 등록",
-  };
-}
-
-function getDefaultTeacherId(instrumentName: string, teachers: TeacherListRow[]) {
-  const candidates = getTeacherCandidates(instrumentName, teachers);
-
-  return candidates.length === 1 ? candidates[0].teacherId : "";
-}
-
-function getTeacherCandidates(instrumentName: string, teachers: TeacherListRow[]) {
-  return teachers
-    .filter((teacher) => teacher.part === instrumentName)
-    .sort((left, right) => compareKoreanNames(left.name, right.name));
-}
-
 function formatJoinedValue(values: string[]) {
   return values.length > 0 ? values.join(", ") : "-";
 }
@@ -1685,16 +1004,6 @@ function formatWeeklySchedules(
     .join(", ");
 }
 
-const weekdayOptions = [
-  { value: "monday", label: "월" },
-  { value: "tuesday", label: "화" },
-  { value: "wednesday", label: "수" },
-  { value: "thursday", label: "목" },
-  { value: "friday", label: "금" },
-  { value: "saturday", label: "토" },
-  { value: "sunday", label: "일" },
-];
-
 function applyStudentUpdate(
   current: StudentListRow | null,
   input: UpdateStudentProfileInput,
@@ -1715,14 +1024,22 @@ function applyStudentUpdate(
         discountTotal: input.discountTotal ?? 0,
         finalMonthlyFee: input.finalMonthlyFee ?? 0,
         active: true,
+        weeklySchedules: input.weeklySchedules?.map((schedule) => ({
+          weekday: schedule.weekdayLabel,
+          weekdayLabel: schedule.weekdayLabel,
+          startTime: schedule.startTime ?? "",
+          endTime: schedule.endTime ?? "",
+        })),
       }
     : undefined;
 
   return {
+    ...current,
     academyId: input.academyId,
     studentId: input.studentId,
     name: input.name,
-    registeredOn: current?.registeredOn,
+    ...(input.basicInfo ? toBasicInfoFields(input.basicInfo) : {}),
+    registeredOn: input.basicInfo?.registeredOn ?? current?.registeredOn,
     status: current?.status,
     teacherNames: input.teacherName ? [input.teacherName] : current?.teacherNames ?? [],
     instrumentNames: input.instrumentName
@@ -1746,8 +1063,8 @@ function mergeStudentRow(
   updated: StudentListRow,
 ): StudentListRow {
   return {
+    ...current,
     ...updated,
-    registeredOn: updated.registeredOn ?? current?.registeredOn,
     status: updated.status ?? current?.status,
     instruments:
       updated.instruments && updated.instruments.length > 0
@@ -1780,6 +1097,37 @@ function formatWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
-function toInstrumentId(value: string | undefined) {
-  return value?.trim().toLocaleLowerCase("en-US").replace(/\s+/g, "-") ?? "";
+function formatAge(age: number | undefined) {
+  return age === undefined ? "-" : `${age}세`;
+}
+
+function formatReferralDiscount(instrument: StudentListInstrument) {
+  const referral = STUDENT_DISCOUNTS.find((discount) => discount.kind === "referral");
+
+  return `${instrument.referralDiscountMonth} 한 달 -${formatWon(
+    instrument.referralDiscountAmount ?? referral?.amount ?? 0,
+  )}`;
+}
+
+function toBasicInfoFields(basicInfo: StudentBasicInfoInput): Partial<StudentListRow> {
+  const contactPhone = basicInfo.contactPhone.trim();
+
+  return {
+    age: basicInfo.age,
+    ageAsOfYear: basicInfo.age === undefined ? undefined : Number(getFinanceToday().slice(0, 4)),
+    grade: basicInfo.grade?.trim() || undefined,
+    school: basicInfo.school?.trim() || undefined,
+    occupation: basicInfo.occupation?.trim() || undefined,
+    ...(contactPhone
+      ? {
+          contacts: [
+            {
+              contactId: "",
+              relationship: basicInfo.contactRelationship,
+              phone: contactPhone,
+            },
+          ],
+        }
+      : {}),
+  };
 }

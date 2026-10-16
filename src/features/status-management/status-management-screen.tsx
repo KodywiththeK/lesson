@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -481,7 +481,7 @@ function StatusManagementTable({
                     <span>{item.secondaryInfo || "-"}</span>
                   </div>
                   {item.detailSummary ? (
-                    <p className="mt-1 text-xs text-muted-foreground lg:hidden">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {item.detailSummary}
                     </p>
                   ) : null}
@@ -561,6 +561,10 @@ function StatusManagementDetailDialog({
   item: StatusManagementListItem | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const deleteUnavailableNoticeId = useId();
+  // 퇴원 원생과 퇴사 선생님은 기록 보존을 위해 삭제하지 않고 보관 상태로 둔다.
+  const isDeleteUnavailable = item?.status === "withdrawn" || item?.status === "resigned";
+
   return (
     <Dialog open={Boolean(item)} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
@@ -597,9 +601,27 @@ function StatusManagementDetailDialog({
                 {item.statusReason || "남긴 메모가 없습니다."}
               </p>
             </div>
+            {isDeleteUnavailable ? (
+              <p
+                id={deleteUnavailableNoticeId}
+                className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
+              >
+                결제·회차권·급여 기록을 보존하기 위해 삭제할 수 없습니다. 보관 상태로 유지됩니다.
+              </p>
+            ) : null}
           </div>
         ) : null}
         <DialogFooter>
+          {isDeleteUnavailable ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled
+              aria-describedby={deleteUnavailableNoticeId}
+            >
+              삭제
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             닫기
           </Button>

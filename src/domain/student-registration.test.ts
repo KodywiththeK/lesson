@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { registerStudent } from "./student-registration";
+import { hasSameStudentName, registerStudent } from "./student-registration";
 
 describe("registerStudent", () => {
   it("원생 기본 정보와 악기별 수강 설정을 등록 결과로 만든다", () => {
@@ -261,5 +261,33 @@ describe("registerStudent", () => {
         ],
       }),
     ).toThrow("학원레슨 요일을 선택해야 합니다.");
+  });
+});
+
+describe("hasSameStudentName", () => {
+  it("이미 같은 이름의 원생이 있으면 구분이 필요하다", () => {
+    expect(hasSameStudentName("홍길동", ["김하늘", "홍길동"])).toBe(true);
+    expect(hasSameStudentName("  홍길동 ", ["홍길동"])).toBe(true);
+  });
+
+  it("구분 접미사가 같아도, 접미사가 없는 이름과 접미사가 있는 이름이 섞여도 구분이 필요하다", () => {
+    expect(hasSameStudentName("홍길동a", ["홍길동a"])).toBe(true);
+    expect(hasSameStudentName("홍길동", ["홍길동a"])).toBe(true);
+    expect(hasSameStudentName("홍길동b", ["홍길동"])).toBe(true);
+  });
+
+  it("홍길동a, 홍길동b처럼 접미사로 이미 구분했으면 경고하지 않는다", () => {
+    expect(hasSameStudentName("홍길동b", ["홍길동a"])).toBe(false);
+  });
+
+  it("영문 이름의 마지막 글자는 접미사로 보지 않는다", () => {
+    expect(hasSameStudentName("Amy", ["Amb"])).toBe(false);
+    expect(hasSameStudentName("amy", ["Amy"])).toBe(true);
+  });
+
+  it("이름이 비었거나 같은 이름이 없으면 경고하지 않는다", () => {
+    expect(hasSameStudentName("", ["홍길동"])).toBe(false);
+    expect(hasSameStudentName("김하늘", ["홍길동"])).toBe(false);
+    expect(hasSameStudentName("김하늘", [])).toBe(false);
   });
 });

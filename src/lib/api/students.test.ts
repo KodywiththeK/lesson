@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createStudentListQueryOptions,
   createStudentStatusManagementQueryOptions,
-  deleteWithdrawnStudent,
   fetchStudentOptions,
   fetchStudentStatusManagementList,
   fetchStudentList,
@@ -155,7 +154,7 @@ describe("fetchStudentList", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
+          "id, academy_id, name, age, age_as_of_year, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
         eq: [
           ["academy_id", "academy-1"],
           ["status", "enrolled"],
@@ -260,6 +259,9 @@ describe("registerStudentEnrollment", () => {
               lesson_fee: 150000,
               discount_total: 10000,
               discount_label: "형제할인",
+              discount_kinds: [],
+              referral_discount_month: null,
+              referral_discount_amount: 0,
               final_monthly_fee: 140000,
               weekly_schedules: [
                 { weekday: "월", start_time: "15:00", end_time: "15:50" },
@@ -370,6 +372,147 @@ describe("updateStudentProfile", () => {
       name: "김민주",
       teacherNames: ["최선생"],
       weekdayLabels: ["월", "목"],
+    });
+  });
+});
+
+describe("fetchStudentList 요일 표시 순서", () => {
+  it("여러 악기와 요일별 행이 섞여 있어도 요일을 월→일 순서로 보여 준다", async () => {
+    const { client } = createSupabaseStub([
+      {
+        id: "student-1",
+        academy_id: "academy-1",
+        name: "김민지",
+        student_instruments: [
+          {
+            instrument_name: "피아노",
+            weekdays: ["목", "월"],
+            teachers: null,
+            student_instrument_weekly_schedules: [
+              { weekday: "목", start_time: "17:00:00", end_time: "17:50:00" },
+              { weekday: "월", start_time: "15:00:00", end_time: "15:50:00" },
+            ],
+          },
+          {
+            instrument_name: "바이올린",
+            weekdays: ["수"],
+            teachers: null,
+          },
+        ],
+      },
+    ]);
+
+    const list = await fetchStudentList(client, { academyId: "academy-1" });
+    const [student] = list.items;
+
+    expect(student.weekdayLabels).toEqual(["월", "수", "목"]);
+    expect(student.instruments?.[0].weekdayLabels).toEqual(["월", "목"]);
+    expect(student.instruments?.[0].startTime).toBe("15:00");
+  });
+});
+
+describe("updateStudentProfile 요일별 시간", () => {
+  const baseInput = {
+    academyId: "academy-1",
+    studentId: "student-1",
+    name: "김민주",
+    studentInstrumentId: "student-instrument-1",
+    teacherId: "teacher-2",
+    teacherName: "최선생",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    lessonType: "academy",
+    progress: "체르니 100",
+    lessonFee: 160000,
+    discountTotal: 10000,
+    finalMonthlyFee: 150000,
+    effectiveFrom: "2026-08-24",
+  };
+
+  function createRecordingClient() {
+    const payloads: Array<Record<string, unknown>> = [];
+    const client: StudentUpdateSupabaseClient = {
+      async rpc(_functionName, payload) {
+        payloads.push(payload as Record<string, unknown>);
+
+        return { data: null, error: null };
+      },
+    };
+
+    return { client, payloads };
+  }
+
+  it("요일마다 다른 시간을 p_weekly_schedules로 보내고 요일 목록과 대표 시간도 맞춘다", async () => {
+    const { client, payloads } = createRecordingClient();
+
+    const result = await updateStudentProfile(client, {
+      ...baseInput,
+      weeklySchedules: [
+        { weekdayLabel: "월", startTime: "15:30", endTime: "16:20" },
+        { weekdayLabel: "목", startTime: "17:00", endTime: "17:50" },
+      ],
+    });
+
+    expect(payloads[0]).toMatchObject({
+      p_weekdays: ["월", "목"],
+      p_start_time: "15:30",
+      p_end_time: "16:20",
+      p_weekly_schedules: [
+        { weekday: "월", start_time: "15:30", end_time: "16:20" },
+        { weekday: "목", start_time: "17:00", end_time: "17:50" },
+      ],
+    });
+    expect(result.weekdayLabels).toEqual(["월", "목"]);
+    expect(result.instruments?.[0]).toMatchObject({
+      weeklySchedules: [
+        expect.objectContaining({ weekdayLabel: "월", startTime: "15:30" }),
+        expect.objectContaining({ weekdayLabel: "목", startTime: "17:00" }),
+      ],
+    });
+  });
+
+  it("학원 수업에 시간이 빠진 요일이 있으면 RPC를 부르기 전에 알려 준다", async () => {
+    const { client, payloads } = createRecordingClient();
+
+    await expect(
+      updateStudentProfile(client, {
+        ...baseInput,
+        weeklySchedules: [
+          { weekdayLabel: "월", startTime: "15:30", endTime: "16:20" },
+          { weekdayLabel: "목" },
+        ],
+      }),
+    ).rejects.toThrow("모든 요일");
+    expect(payloads).toHaveLength(0);
+  });
+
+  it("학원 수업에 담당 선생님이 없으면 RPC를 부르기 전에 알려 준다", async () => {
+    const { client, payloads } = createRecordingClient();
+
+    await expect(
+      updateStudentProfile(client, {
+        ...baseInput,
+        teacherId: undefined,
+        weeklySchedules: [{ weekdayLabel: "월", startTime: "15:30", endTime: "16:20" }],
+      }),
+    ).rejects.toThrow("선생님");
+    expect(payloads).toHaveLength(0);
+  });
+
+  it("개인레슨은 시간이 없어도 요일만 저장할 수 있다", async () => {
+    const { client, payloads } = createRecordingClient();
+
+    await updateStudentProfile(client, {
+      ...baseInput,
+      lessonType: "private",
+      weeklySchedules: [{ weekdayLabel: "화" }],
+    });
+
+    expect(payloads[0]).toMatchObject({
+      p_weekdays: ["화"],
+      p_start_time: null,
+      p_end_time: null,
+      p_weekly_schedules: [{ weekday: "화", start_time: null, end_time: null }],
     });
   });
 });
@@ -488,32 +631,6 @@ describe("student status mutations", () => {
       statusReason: "방학 기간 휴원",
     });
   });
-
-  it("퇴원 원생 삭제를 RPC로 전달한다", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const client: StudentUpdateSupabaseClient = {
-      async rpc(functionName, payload) {
-        calls.push({ functionName, payload });
-
-        return { data: null, error: null };
-      },
-    };
-
-    await deleteWithdrawnStudent(client, {
-      academyId: "academy-1",
-      studentId: "student-1",
-    });
-
-    expect(calls).toEqual([
-      {
-        functionName: "delete_withdrawn_student",
-        payload: {
-          p_academy_id: "academy-1",
-          p_student_id: "student-1",
-        },
-      },
-    ]);
-  });
 });
 
 describe("휴원/퇴원 관리 원생 목록 검색과 페이지", () => {
@@ -598,10 +715,308 @@ describe("createStudentListQueryOptions", () => {
       "월",
       "1",
       "",
+      "sort",
+      "name",
+      "asc",
     ]);
     await expect(options.queryFn()).resolves.toMatchObject({
       items: [],
       totalItems: 0,
     });
+  });
+});
+
+describe("원생 나이·할인 필드 조회", () => {
+  it("나이 기준 연도와 할인 종류, 지인 소개 할인 달을 목록 행으로 변환한다", async () => {
+    const { client } = createSupabaseStub([
+      {
+        id: "student-1",
+        academy_id: "academy-1",
+        name: "김민지",
+        age: 9,
+        age_as_of_year: 2025,
+        student_instruments: [
+          {
+            instrument_name: "피아노",
+            weekdays: ["월", "수"],
+            discount_total: 10000,
+            discount_kinds: ["sibling", "referral", "unknown-kind"],
+            referral_discount_month: "2026-10-01",
+            referral_discount_amount: 10000,
+            teachers: null,
+          },
+          { instrument_name: "첼로", weekdays: [], teachers: null },
+        ],
+      },
+    ] as StudentSupabaseRow[]);
+
+    const [student] = (await fetchStudentList(client, { academyId: "academy-1" })).items;
+
+    expect(student).toMatchObject({ age: 9, ageAsOfYear: 2025 });
+    expect(student.instruments?.[0]).toMatchObject({
+      discountKinds: ["sibling", "referral"],
+      referralDiscountMonth: "2026-10",
+      referralDiscountAmount: 10000,
+    });
+    expect(student.instruments?.[1]).toMatchObject({
+      discountKinds: [],
+      referralDiscountAmount: 0,
+    });
+    expect(student.instruments?.[1].referralDiscountMonth).toBeUndefined();
+  });
+});
+
+describe("registerStudentEnrollment 할인·나이", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function createRegistrationRecorder() {
+    const payloads: Array<Record<string, unknown>> = [];
+    const client: StudentRegistrationSupabaseClient = {
+      async rpc(_functionName, payload) {
+        payloads.push(payload as unknown as Record<string, unknown>);
+
+        return { data: "student-1", error: null };
+      },
+    };
+
+    return { client, payloads };
+  }
+
+  const baseInput = {
+    academyId: "academy-1",
+    name: "김민지",
+    registeredAt: "2026-10-16",
+    age: 9,
+    contact: { relationship: "모", phone: "010-1111-2222" },
+    instruments: [
+      {
+        instrumentId: "violin",
+        instrumentName: "바이올린",
+        teacherId: "teacher-2",
+        teacherName: "최선생",
+        lessonType: "private" as const,
+        weeklySchedules: [{ weekday: "friday" }],
+        progress: "스즈키 1~3권",
+        lessonFee: 140000,
+        discountTotal: 20000,
+        discountLabel: "두 자녀 할인, 두 악기 할인, 지인 소개 할인",
+        finalMonthlyFee: 120000,
+        discountKinds: ["sibling", "multi_instrument", "referral"] as Array<
+          "sibling" | "multi_instrument" | "referral"
+        >,
+        referralDiscountMonth: "2026-10",
+        referralDiscountAmount: 10000,
+      },
+    ],
+  };
+
+  it("할인 종류와 소개 달(그 달 1일), 소개 할인액을 악기별 payload로 보낸다", async () => {
+    const { client, payloads } = createRegistrationRecorder();
+
+    await registerStudentEnrollment(client, baseInput);
+
+    expect(payloads[0].p_enrollments).toEqual([
+      expect.objectContaining({
+        discount_total: 20000,
+        discount_kinds: ["sibling", "multi_instrument", "referral"],
+        referral_discount_month: "2026-10-01",
+        referral_discount_amount: 10000,
+        final_monthly_fee: 120000,
+      }),
+    ]);
+  });
+
+  it("등록한 원생 행의 나이 기준 연도는 올해(KST)이고 나이를 입력하지 않았으면 비운다", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-31T16:00:00Z")); // KST 2027-01-01 01:00
+    const { client } = createRegistrationRecorder();
+
+    expect(await registerStudentEnrollment(client, baseInput)).toMatchObject({
+      age: 9,
+      ageAsOfYear: 2027,
+    });
+    expect(
+      (await registerStudentEnrollment(client, { ...baseInput, age: undefined })).ageAsOfYear,
+    ).toBeUndefined();
+  });
+});
+
+describe("updateStudentProfile 할인과 기본 정보", () => {
+  const profileInput = {
+    academyId: "academy-1",
+    studentId: "student-1",
+    name: "김민주",
+    studentInstrumentId: "student-instrument-1",
+    teacherId: "teacher-2",
+    teacherName: "최선생",
+    instrumentId: "violin",
+    instrumentName: "바이올린",
+    lessonType: "private",
+    progress: "스즈키 1~3권",
+    lessonFee: 140000,
+    discountTotal: 10000,
+    finalMonthlyFee: 130000,
+    effectiveFrom: "2026-10-16",
+  };
+  const basicInfo = {
+    registeredOn: "2026-09-01",
+    age: 10,
+    grade: " 초등 4학년 ",
+    school: "한빛초",
+    occupation: "",
+    contactRelationship: "부",
+    contactPhone: " 010-3333-4444 ",
+  };
+
+  function createRecorder(failOn?: { functionName: string; message: string }) {
+    const calls: Array<{ functionName: string; payload: Record<string, unknown> }> = [];
+    const client: StudentUpdateSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload: payload as unknown as Record<string, unknown> });
+
+        return {
+          data: null,
+          error:
+            failOn?.functionName === functionName ? new Error(failOn.message) : null,
+        };
+      },
+    };
+
+    return { client, calls };
+  }
+
+  it("할인 종류를 고르지 않은 호출은 서버의 기존 할인 종류를 건드리지 않도록 보내지 않는다", async () => {
+    const { client, calls } = createRecorder();
+
+    await updateStudentProfile(client, profileInput);
+
+    expect(calls[0].payload).not.toHaveProperty("p_discount_kinds");
+    expect(calls[0].payload).not.toHaveProperty("p_referral_discount_month");
+  });
+
+  it("할인 종류와 소개 달·소개 할인액을 수정 RPC로 보낸다", async () => {
+    const { client, calls } = createRecorder();
+
+    const result = await updateStudentProfile(client, {
+      ...profileInput,
+      discountKinds: ["sibling", "referral"],
+      discountLabel: "두 자녀 할인, 지인 소개 할인",
+      referralDiscountMonth: "2026-10",
+      referralDiscountAmount: 10000,
+    });
+
+    expect(calls[0].payload).toMatchObject({
+      p_discount_kinds: ["sibling", "referral"],
+      p_discount_label: "두 자녀 할인, 지인 소개 할인",
+      p_referral_discount_month: "2026-10-01",
+      p_referral_discount_amount: 10000,
+    });
+    expect(result.instruments?.[0]).toMatchObject({
+      discountKinds: ["sibling", "referral"],
+      referralDiscountMonth: "2026-10",
+    });
+  });
+
+  it("지인 소개 할인을 해제하면 소개 달을 비우고 할인액을 0으로 보낸다", async () => {
+    const { client, calls } = createRecorder();
+
+    await updateStudentProfile(client, {
+      ...profileInput,
+      discountKinds: ["sibling"],
+    });
+
+    expect(calls[0].payload).toMatchObject({
+      p_discount_kinds: ["sibling"],
+      p_referral_discount_month: null,
+      p_referral_discount_amount: 0,
+    });
+  });
+
+  it("기본 정보가 있으면 수강 정보 저장 뒤 update_student_basic_info를 호출한다", async () => {
+    const { client, calls } = createRecorder();
+
+    const result = await updateStudentProfile(client, { ...profileInput, basicInfo });
+
+    expect(calls.map((call) => call.functionName)).toEqual([
+      "update_student_profile_from_date",
+      "update_student_basic_info",
+    ]);
+    expect(calls[1].payload).toEqual({
+      p_academy_id: "academy-1",
+      p_student_id: "student-1",
+      p_registered_on: "2026-09-01",
+      p_age: 10,
+      p_grade: "초등 4학년",
+      p_school: "한빛초",
+      p_occupation: null,
+      p_contact_relationship: "부",
+      p_contact_phone: "010-3333-4444",
+    });
+    expect(result).toMatchObject({
+      registeredOn: "2026-09-01",
+      age: 10,
+      grade: "초등 4학년",
+      school: "한빛초",
+      contacts: [expect.objectContaining({ relationship: "부", phone: "010-3333-4444", phoneLast4: "4444" })],
+    });
+  });
+
+  it("나이를 비우면 나이 없음(null)으로 보낸다", async () => {
+    const { client, calls } = createRecorder();
+
+    await updateStudentProfile(client, { ...profileInput, basicInfo: { ...basicInfo, age: undefined } });
+
+    expect(calls[1].payload.p_age).toBeNull();
+  });
+
+  it("수강 정보 저장이 실패하면 기본 정보는 호출하지 않고 아무것도 저장되지 않았다고 알린다", async () => {
+    const { client, calls } = createRecorder({
+      functionName: "update_student_profile_from_date",
+      message: "최종 수강료가 레슨비에서 할인액을 뺀 금액과 다릅니다. 금액을 다시 확인해 주세요.",
+    });
+
+    await expect(updateStudentProfile(client, { ...profileInput, basicInfo })).rejects.toThrow(
+      "원생 정보를 수정하지 못했습니다: 최종 수강료가 레슨비에서 할인액을 뺀 금액과 다릅니다.",
+    );
+    expect(calls.map((call) => call.functionName)).toEqual(["update_student_profile_from_date"]);
+  });
+
+  it("기본 정보 저장만 실패하면 수강 정보는 저장됐고 기본 정보는 저장되지 않았다고 알린다", async () => {
+    const { client } = createRecorder({
+      functionName: "update_student_basic_info",
+      message: "연락처 번호를 입력해 주세요.",
+    });
+
+    await expect(updateStudentProfile(client, { ...profileInput, basicInfo })).rejects.toThrow(
+      /원생 정보를 일부만 저장했습니다: .*이름과 수강 정보는 저장됐지만.*등록일·나이·학년·학교·직업·연락처.*저장하지 못했습니다.*연락처 번호를 입력해 주세요.*다시 수정완료/,
+    );
+  });
+
+  it("기본 정보 저장 실패 원인이 영문이면 사용자 문구에 그대로 싣지 않는다", async () => {
+    const { client } = createRecorder({
+      functionName: "update_student_basic_info",
+      message: "unexpected database failure",
+    });
+
+    const error = await updateStudentProfile(client, { ...profileInput, basicInfo }).catch(
+      (caught: Error) => caught,
+    );
+
+    expect((error as Error).message).not.toContain("unexpected database failure");
+    expect((error as Error).message).toContain("다시 수정완료");
+  });
+});
+
+describe("createStudentListQueryOptions 정렬", () => {
+  it("정렬 기준과 방향이 다르면 queryKey도 달라 정렬이 바뀔 때 다시 조회한다", () => {
+    const { client } = createSupabaseStub([]);
+    const keyFor = (sort?: { key: "name" | "teacher"; direction: "asc" | "desc" }) =>
+      createStudentListQueryOptions(client, { academyId: "academy-1", sort }).queryKey;
+
+    expect(keyFor({ key: "teacher", direction: "desc" }).slice(-3)).toEqual(["sort", "teacher", "desc"]);
+    expect(keyFor({ key: "teacher", direction: "asc" })).not.toEqual(keyFor({ key: "teacher", direction: "desc" }));
+    expect(keyFor()).toEqual(keyFor({ key: "name", direction: "asc" }));
   });
 });

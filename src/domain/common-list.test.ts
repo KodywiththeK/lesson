@@ -148,6 +148,64 @@ describe("buildListView 동명이인 정렬", () => {
   });
 });
 
+describe("buildListView 정렬 기준", () => {
+  type Row = { id: string; name: string; teacher: string };
+  const rows: Row[] = [
+    { id: "3", name: "다은", teacher: "박선생" },
+    { id: "1", name: "가은", teacher: "" },
+    { id: "2", name: "나은", teacher: "최선생" },
+    { id: "4", name: "라은", teacher: "박선생" },
+  ];
+  const base = {
+    getName: (row: Row) => row.name,
+    getTieBreaker: (row: Row) => row.id,
+    getSortValue: (row: Row) => row.teacher,
+    pageSize: 30,
+  };
+  const names = (view: { items: Row[] }) => view.items.map((row) => row.name);
+
+  it("지정한 기준으로 정렬하고 같은 값은 이름, 그다음 보조 기준 순서로 고정한다", () => {
+    expect(names(buildListView(rows, base))).toEqual(["다은", "라은", "나은", "가은"]);
+  });
+
+  it("내림차순은 기준 값만 뒤집고 같은 값의 이름 순서는 그대로 둔다", () => {
+    expect(names(buildListView(rows, { ...base, sortDirection: "desc" }))).toEqual([
+      "나은",
+      "다은",
+      "라은",
+      "가은",
+    ]);
+  });
+
+  it("기준 값이 비어 있는 항목은 오름차순·내림차순 모두 맨 뒤에 둔다", () => {
+    expect(names(buildListView(rows, base)).at(-1)).toBe("가은");
+    expect(names(buildListView(rows, { ...base, sortDirection: "desc" })).at(-1)).toBe("가은");
+  });
+
+  it("정렬 기준이 없으면 이름순이다", () => {
+    expect(
+      names(buildListView(rows, { getName: base.getName, getTieBreaker: base.getTieBreaker })),
+    ).toEqual(["가은", "나은", "다은", "라은"]);
+  });
+
+  it("이름 내림차순은 이름을 기준으로 뒤집고 동명이인은 보조 기준을 오름차순으로 유지한다", () => {
+    const sameName: Row[] = [
+      { id: "2", name: "홍길동", teacher: "" },
+      { id: "1", name: "홍길동", teacher: "" },
+      { id: "3", name: "김하늘", teacher: "" },
+    ];
+
+    expect(
+      buildListView(sameName, {
+        getName: (row) => row.name,
+        getTieBreaker: (row) => row.id,
+        getSortValue: (row) => row.name,
+        sortDirection: "desc",
+      }).items.map((row) => row.id),
+    ).toEqual(["1", "2", "3"]);
+  });
+});
+
 describe("buildPageNumbers", () => {
   it("페이지가 적으면 모든 번호를 보여준다", () => {
     expect(buildPageNumbers(1, 1)).toEqual([1]);

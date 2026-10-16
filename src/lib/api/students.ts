@@ -1,6 +1,7 @@
 import { compareKoreanNames, type ListView } from "@/domain/common-list";
 import {
   buildStudentList,
+  DEFAULT_STUDENT_SORT,
   type BuildStudentListOptions,
   type StudentInstrumentWeeklySchedule,
   type StudentListRow,
@@ -10,7 +11,12 @@ import {
   type StatusManagementFetchOptions,
   type StatusManagementListItem,
 } from "@/domain/status-management";
-import { getAcademyScheduleValidationError } from "@/domain/student-registration";
+import { getFinanceToday } from "@/domain/finance-date";
+import { STUDENT_DISCOUNTS, type StudentDiscountKind } from "@/domain/lesson-pricing";
+import {
+  getAcademyScheduleValidationError,
+  type StudentInstrumentDiscountSelection,
+} from "@/domain/student-registration";
 
 import { queryKeys } from "./query-keys";
 
@@ -32,6 +38,9 @@ export type StudentInstrumentSupabaseRow = {
   lesson_fee?: number | null;
   discount_total?: number | null;
   discount_label?: string | null;
+  discount_kinds?: string[] | null;
+  referral_discount_month?: string | null;
+  referral_discount_amount?: number | null;
   final_monthly_fee?: number | null;
   active?: boolean | null;
   student_instrument_weekly_schedules?:
@@ -68,6 +77,7 @@ export type StudentSupabaseRow = {
   academy_id: string;
   name: string;
   age?: number | null;
+  age_as_of_year?: number | null;
   grade?: string | null;
   school?: string | null;
   occupation?: string | null;
@@ -135,7 +145,7 @@ export type RegisterStudentEnrollmentInput = {
   instruments: RegisterStudentEnrollmentInstrumentInput[];
 };
 
-export type RegisterStudentEnrollmentInstrumentInput = {
+export type RegisterStudentEnrollmentInstrumentInput = StudentInstrumentDiscountSelection & {
   teacherId?: string | null;
   teacherName?: string;
   lessonType: "academy" | "private";
@@ -181,6 +191,9 @@ type RegisterStudentEnrollmentRpcPayload = {
     lesson_fee: number;
     discount_total: number;
     discount_label: string | null;
+    discount_kinds: StudentDiscountKind[];
+    referral_discount_month: string | null;
+    referral_discount_amount: number;
     final_monthly_fee: number;
     weekly_schedules: Array<{
       weekday: string;
@@ -210,6 +223,30 @@ export type StudentUpdateSupabaseClient = {
       p_discount_total: number;
       p_final_monthly_fee: number;
       p_effective_from: string;
+      p_weekly_schedules?: Array<{
+        weekday: string;
+        start_time: string | null;
+        end_time: string | null;
+      }>;
+      /** 보내지 않으면 서버의 기존 할인 종류를 유지한다. */
+      p_discount_kinds?: StudentDiscountKind[];
+      p_referral_discount_month?: string | null;
+      p_referral_discount_amount?: number;
+      p_discount_label?: string | null;
+    },
+  ): PromiseLike<SupabaseQueryResult<null>>;
+  rpc(
+    functionName: "update_student_basic_info",
+    payload: {
+      p_academy_id: string;
+      p_student_id: string;
+      p_registered_on: string;
+      p_age: number | null;
+      p_grade: string | null;
+      p_school: string | null;
+      p_occupation: string | null;
+      p_contact_relationship: string;
+      p_contact_phone: string;
     },
   ): PromiseLike<SupabaseQueryResult<null>>;
   rpc(
@@ -222,16 +259,20 @@ export type StudentUpdateSupabaseClient = {
       p_reason?: string | null;
     },
   ): PromiseLike<SupabaseQueryResult<null>>;
-  rpc(
-    functionName: "delete_withdrawn_student",
-    payload: {
-      p_academy_id: string;
-      p_student_id: string;
-    },
-  ): PromiseLike<SupabaseQueryResult<null>>;
 };
 
-export type UpdateStudentProfileInput = {
+/** 이름·수강 정보와 따로 저장하는 원생 기본 정보. 등록 폼의 필드와 같다. */
+export type StudentBasicInfoInput = {
+  registeredOn: string;
+  age?: number;
+  grade?: string;
+  school?: string;
+  occupation?: string;
+  contactRelationship: string;
+  contactPhone: string;
+};
+
+export type UpdateStudentProfileInput = StudentInstrumentDiscountSelection & {
   academyId: string;
   studentId: string;
   name: string;
@@ -244,15 +285,27 @@ export type UpdateStudentProfileInput = {
   weekdayLabels?: string[];
   startTime?: string;
   endTime?: string;
+  /** 요일마다 다른 시간을 보낼 때 쓴다. 있으면 weekdayLabels·startTime·endTime보다 우선한다. */
+  weeklySchedules?: UpdateStudentWeeklySchedule[];
   progress?: string;
   lessonFee?: number;
   discountTotal?: number;
   finalMonthlyFee?: number;
   effectiveFrom?: string;
+  /** 표시용 할인 라벨. 할인 종류(`discountKinds`)를 보낼 때 함께 저장한다. */
+  discountLabel?: string;
+  /** 있으면 수강 정보 저장 뒤 별도 RPC로 저장한다. */
+  basicInfo?: StudentBasicInfoInput;
+};
+
+export type UpdateStudentWeeklySchedule = {
+  weekdayLabel: string;
+  startTime?: string;
+  endTime?: string;
 };
 
 const STUDENT_LIST_SELECT =
-  "id, academy_id, name, age, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+  "id, academy_id, name, age, age_as_of_year, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
 const STATUS_TRANSITION_SELECT =
   "entity_type, entity_id, to_status, reason, changed_at";
 
@@ -391,6 +444,30 @@ export async function updateStudentProfile(
     throw new Error("원생명은 필수입니다.");
   }
 
+  const lessonType = input.lessonType ?? "academy";
+  const weeklySchedules = input.weeklySchedules;
+
+  if (weeklySchedules) {
+    const scheduleError = getAcademyScheduleValidationError({
+      lessonType: lessonType === "private" ? "private" : "academy",
+      teacherId: input.teacherId,
+      weeklySchedules,
+    });
+
+    if (scheduleError) {
+      throw new Error(scheduleError);
+    }
+  }
+
+  const weekdayLabels =
+    weeklySchedules?.map((schedule) => schedule.weekdayLabel) ?? input.weekdayLabels ?? [];
+  const representativeSchedule = weeklySchedules?.find(
+    (schedule) => schedule.startTime && schedule.endTime,
+  );
+  const startTime = representativeSchedule?.startTime ?? input.startTime;
+  const endTime = representativeSchedule?.endTime ?? input.endTime;
+  const discount = input.discountKinds ? toDiscountPayload(input) : undefined;
+
   const { error } = await supabase.rpc("update_student_profile_from_date", {
     p_academy_id: input.academyId,
     p_student_id: input.studentId,
@@ -399,29 +476,50 @@ export async function updateStudentProfile(
     p_teacher_id: input.teacherId ?? null,
     p_instrument_id: input.instrumentId ?? "",
     p_instrument_name: input.instrumentName ?? "",
-    p_lesson_type: input.lessonType ?? "academy",
-    p_weekdays: input.weekdayLabels ?? [],
-    p_start_time: normalizeOptionalTime(input.startTime),
-    p_end_time: normalizeOptionalTime(input.endTime),
+    p_lesson_type: lessonType,
+    p_weekdays: weekdayLabels,
+    p_start_time: normalizeOptionalTime(startTime),
+    p_end_time: normalizeOptionalTime(endTime),
     p_progress: input.progress ?? "",
     p_lesson_fee: input.lessonFee ?? 0,
     p_discount_total: input.discountTotal ?? 0,
     p_final_monthly_fee: input.finalMonthlyFee ?? 0,
-    p_effective_from: input.effectiveFrom ?? toSeoulDate(new Date()),
+    p_effective_from: input.effectiveFrom ?? getFinanceToday(),
+    ...(weeklySchedules
+      ? {
+          p_weekly_schedules: weeklySchedules.map((schedule) => ({
+            weekday: schedule.weekdayLabel,
+            start_time: normalizeOptionalTime(schedule.startTime),
+            end_time: normalizeOptionalTime(schedule.endTime),
+          })),
+        }
+      : {}),
+    ...(discount
+      ? {
+          p_discount_kinds: discount.discount_kinds,
+          p_referral_discount_month: discount.referral_discount_month,
+          p_referral_discount_amount: discount.referral_discount_amount,
+          p_discount_label: normalizeOptionalText(input.discountLabel),
+        }
+      : {}),
   });
 
   if (error) {
     throw new Error(`원생 정보를 수정하지 못했습니다: ${error.message}`);
   }
 
+  if (input.basicInfo) {
+    await saveStudentBasicInfo(supabase, input, input.basicInfo);
+  }
+
   const instrumentNames = input.instrumentName ? [input.instrumentName] : [];
   const teacherNames = input.teacherName ? [input.teacherName] : [];
-  const weekdayLabels = input.weekdayLabels ?? [];
 
   return {
     academyId: input.academyId,
     studentId: input.studentId,
     name: trimmedName,
+    ...(input.basicInfo ? toBasicInfoRow(input.basicInfo) : {}),
     teacherNames,
     instrumentNames,
     weekdayLabels,
@@ -433,18 +531,93 @@ export async function updateStudentProfile(
             teacherName: input.teacherName ?? "",
             instrumentId: input.instrumentId ?? "",
             instrumentName: input.instrumentName ?? "",
-            lessonType: input.lessonType ?? "academy",
+            lessonType,
             weekdayLabels,
-            startTime: input.startTime ?? "",
-            endTime: input.endTime ?? "",
+            startTime: startTime ?? "",
+            endTime: endTime ?? "",
             progress: input.progress ?? "",
             lessonFee: input.lessonFee ?? 0,
             discountTotal: input.discountTotal ?? 0,
             finalMonthlyFee: input.finalMonthlyFee ?? 0,
             active: true,
+            ...(discount
+              ? {
+                  discountKinds: discount.discount_kinds,
+                  discountLabel: normalizeOptionalText(input.discountLabel) ?? undefined,
+                  referralDiscountMonth: discount.referral_discount_month?.slice(0, 7),
+                  referralDiscountAmount: discount.referral_discount_amount,
+                }
+              : {}),
+            ...(weeklySchedules
+              ? {
+                  weeklySchedules: weeklySchedules.map((schedule) => ({
+                    weekday: schedule.weekdayLabel,
+                    weekdayLabel: schedule.weekdayLabel,
+                    startTime: schedule.startTime ?? "",
+                    endTime: schedule.endTime ?? "",
+                  })),
+                }
+              : {}),
           },
         ]
       : [],
+  };
+}
+
+/**
+ * 수강 정보 저장이 끝난 뒤 기본 정보를 저장한다. 두 RPC는 한 트랜잭션이 아니므로
+ * 여기서 실패하면 수강 정보만 저장된 상태이고, 같은 폼을 다시 저장하면 두 RPC를 다시 호출한다.
+ */
+async function saveStudentBasicInfo(
+  supabase: StudentUpdateSupabaseClient,
+  input: UpdateStudentProfileInput,
+  basicInfo: StudentBasicInfoInput,
+) {
+  const { error } = await supabase.rpc("update_student_basic_info", {
+    p_academy_id: input.academyId,
+    p_student_id: input.studentId,
+    p_registered_on: basicInfo.registeredOn,
+    p_age: basicInfo.age ?? null,
+    p_grade: normalizeOptionalText(basicInfo.grade),
+    p_school: normalizeOptionalText(basicInfo.school),
+    p_occupation: normalizeOptionalText(basicInfo.occupation),
+    p_contact_relationship: basicInfo.contactRelationship.trim() || "본인",
+    p_contact_phone: basicInfo.contactPhone.trim(),
+  });
+
+  if (error) {
+    throw new Error(describePartialSaveFailure(error.message));
+  }
+}
+
+function describePartialSaveFailure(cause: string) {
+  const detail = HANGUL_PATTERN.test(cause) ? ` ${cause}` : "";
+
+  return `원생 정보를 일부만 저장했습니다: 이름과 수강 정보는 저장됐지만 기본 정보(등록일·나이·학년·학교·직업·연락처)는 저장하지 못했습니다.${detail} 다시 수정완료를 눌러 저장해 주세요.`;
+}
+
+function toBasicInfoRow(basicInfo: StudentBasicInfoInput): Partial<StudentListRow> {
+  const contactPhone = basicInfo.contactPhone.trim();
+
+  return {
+    registeredOn: basicInfo.registeredOn,
+    age: basicInfo.age,
+    ageAsOfYear: basicInfo.age === undefined ? undefined : getCurrentFinanceYear(),
+    grade: normalizeOptionalText(basicInfo.grade) ?? undefined,
+    school: normalizeOptionalText(basicInfo.school) ?? undefined,
+    occupation: normalizeOptionalText(basicInfo.occupation) ?? undefined,
+    ...(contactPhone
+      ? {
+          contacts: [
+            {
+              contactId: "",
+              relationship: basicInfo.contactRelationship.trim() || "본인",
+              phone: contactPhone,
+              phoneLast4: getPhoneLast4(contactPhone),
+            },
+          ],
+        }
+      : {}),
   };
 }
 
@@ -453,7 +626,17 @@ export function createStudentListQueryOptions(
   options: FetchStudentListOptions,
 ) {
   return {
-    queryKey: queryKeys.students.list(options.academyId, {
+    queryKey: createStudentListQueryKey(options),
+    queryFn: () => fetchStudentList(supabase, options),
+  };
+}
+
+/** 학원·검색·필터·페이지에 정렬 기준을 이어 붙인다. `queryKeys.students.list`에 정렬 항목이 없어 뒤에 덧붙인다. */
+export function createStudentListQueryKey(options: FetchStudentListOptions) {
+  const sort = options.sort ?? DEFAULT_STUDENT_SORT;
+
+  return [
+    ...queryKeys.students.list(options.academyId, {
       q: options.search,
       teacherName: options.filters?.teacherName,
       instrumentName: options.filters?.instrumentName,
@@ -461,8 +644,10 @@ export function createStudentListQueryOptions(
       page: String(options.page ?? 1),
       pageSize: String(options.pageSize ?? ""),
     }),
-    queryFn: () => fetchStudentList(supabase, options),
-  };
+    "sort",
+    sort.key,
+    sort.direction,
+  ] as const;
 }
 
 export function createStudentStatusManagementQueryOptions(
@@ -521,6 +706,7 @@ export async function registerStudentEnrollment(
         lesson_fee: instrument.lessonFee,
         discount_total: instrument.discountTotal,
         discount_label: normalizeOptionalText(instrument.discountLabel),
+        ...toDiscountPayload(instrument),
         final_monthly_fee: instrument.finalMonthlyFee,
         weekly_schedules: instrument.weeklySchedules.map((schedule) => ({
           weekday: toKoreanWeekdayLabel(schedule.weekday),
@@ -539,39 +725,48 @@ export async function registerStudentEnrollment(
     throw new Error("원생을 등록했지만 반환된 데이터가 없습니다.");
   }
 
-  const instruments = input.instruments.map((instrument) => ({
-    studentInstrumentId: "",
-    teacherId: instrument.teacherId ?? null,
-    teacherName: instrument.teacherName ?? "",
-    instrumentId: instrument.instrumentId,
-    instrumentName: instrument.instrumentName,
-    lessonType: instrument.lessonType,
-    weekdayLabels: uniqueNonEmpty(
-      instrument.weeklySchedules.map((schedule) =>
-        toKoreanWeekdayLabel(schedule.weekday),
+  const instruments = input.instruments.map((instrument) => {
+    const discount = toDiscountPayload(instrument);
+
+    return {
+      studentInstrumentId: "",
+      teacherId: instrument.teacherId ?? null,
+      teacherName: instrument.teacherName ?? "",
+      instrumentId: instrument.instrumentId,
+      instrumentName: instrument.instrumentName,
+      lessonType: instrument.lessonType,
+      weekdayLabels: uniqueNonEmpty(
+        instrument.weeklySchedules.map((schedule) =>
+          toKoreanWeekdayLabel(schedule.weekday),
+        ),
       ),
-    ),
-    startTime: instrument.weeklySchedules[0]?.startTime ?? "",
-    endTime: instrument.weeklySchedules[0]?.endTime ?? "",
-    progress: instrument.progress,
-    lessonFee: instrument.lessonFee,
-    discountTotal: instrument.discountTotal,
-    discountLabel: instrument.discountLabel,
-    finalMonthlyFee: instrument.finalMonthlyFee,
-    active: true,
-    weeklySchedules: instrument.weeklySchedules.map((schedule) => ({
-      weekday: schedule.weekday,
-      weekdayLabel: toKoreanWeekdayLabel(schedule.weekday),
-      startTime: schedule.startTime ?? "",
-      endTime: schedule.endTime ?? "",
-    })),
-  }));
+      startTime: instrument.weeklySchedules[0]?.startTime ?? "",
+      endTime: instrument.weeklySchedules[0]?.endTime ?? "",
+      progress: instrument.progress,
+      lessonFee: instrument.lessonFee,
+      discountTotal: instrument.discountTotal,
+      discountLabel: instrument.discountLabel,
+      discountKinds: discount.discount_kinds,
+      referralDiscountMonth: discount.referral_discount_month?.slice(0, 7),
+      referralDiscountAmount: discount.referral_discount_amount,
+      finalMonthlyFee: instrument.finalMonthlyFee,
+      active: true,
+      weeklySchedules: instrument.weeklySchedules.map((schedule) => ({
+        weekday: schedule.weekday,
+        weekdayLabel: toKoreanWeekdayLabel(schedule.weekday),
+        startTime: schedule.startTime ?? "",
+        endTime: schedule.endTime ?? "",
+      })),
+
+    };
+  });
 
   return {
     academyId: input.academyId,
     studentId,
     name: trimmedName,
     age: input.age,
+    ageAsOfYear: input.age === undefined ? undefined : getCurrentFinanceYear(),
     grade: input.grade,
     school: input.school,
     occupation: input.occupation,
@@ -617,21 +812,16 @@ export async function updateStudentStatus(
   }
 }
 
-export async function deleteWithdrawnStudent(
-  supabase: StudentUpdateSupabaseClient,
-  input: {
-    academyId: string;
-    studentId: string;
-  },
-) {
-  const { error } = await supabase.rpc("delete_withdrawn_student", {
-    p_academy_id: input.academyId,
-    p_student_id: input.studentId,
-  });
+const WEEKDAY_LABEL_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
 
-  if (error) {
-    throw new Error(`퇴원 원생을 삭제하지 못했습니다: ${error.message}`);
-  }
+function weekdayOrder(label: string) {
+  const index = WEEKDAY_LABEL_ORDER.indexOf(label);
+
+  return index === -1 ? WEEKDAY_LABEL_ORDER.length : index;
+}
+
+function sortWeekdayLabels(labels: string[]) {
+  return [...labels].sort((left, right) => weekdayOrder(left) - weekdayOrder(right));
 }
 
 function toKoreanWeekdayLabel(value: string) {
@@ -659,6 +849,7 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     studentId: row.id,
     name: row.name,
     age: row.age ?? undefined,
+    ageAsOfYear: row.age_as_of_year ?? undefined,
     grade: row.grade ?? undefined,
     school: row.school ?? undefined,
     occupation: row.occupation ?? undefined,
@@ -681,8 +872,8 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     instrumentNames: uniqueNonEmpty(
       instruments.map((instrument) => instrument.instrument_name),
     ),
-    weekdayLabels: uniqueNonEmpty(
-      mappedInstruments.flatMap((instrument) => instrument.weekdayLabels),
+    weekdayLabels: sortWeekdayLabels(
+      uniqueNonEmpty(mappedInstruments.flatMap((instrument) => instrument.weekdayLabels)),
     ),
     instruments: mappedInstruments,
   };
@@ -707,6 +898,9 @@ function toStudentListInstrument(instrument: StudentInstrumentSupabaseRow) {
     lessonFee: instrument.lesson_fee ?? 0,
     discountTotal: instrument.discount_total ?? 0,
     discountLabel: instrument.discount_label ?? undefined,
+    discountKinds: toKnownDiscountKinds(instrument.discount_kinds),
+    referralDiscountMonth: instrument.referral_discount_month?.slice(0, 7),
+    referralDiscountAmount: instrument.referral_discount_amount ?? 0,
     finalMonthlyFee: instrument.final_monthly_fee ?? 0,
     active: instrument.active ?? true,
     weeklySchedules,
@@ -717,23 +911,26 @@ function normalizeWeeklySchedulesForRow(
   instrument: StudentInstrumentSupabaseRow,
 ): StudentInstrumentWeeklySchedule[] {
   const scheduleRows = instrument.student_instrument_weekly_schedules ?? [];
+  const schedules: StudentInstrumentWeeklySchedule[] =
+    scheduleRows.length > 0
+      ? scheduleRows.map((schedule) => ({
+          scheduleId: schedule.id ?? undefined,
+          weekday: toWeekdayValue(schedule.weekday ?? ""),
+          weekdayLabel: toKoreanWeekdayLabel(schedule.weekday ?? ""),
+          startTime: normalizeTimeForInput(schedule.start_time),
+          endTime: normalizeTimeForInput(schedule.end_time),
+        }))
+      : (instrument.weekdays ?? []).map((weekday) => ({
+          weekday: toWeekdayValue(weekday),
+          weekdayLabel: toKoreanWeekdayLabel(weekday),
+          startTime: normalizeTimeForInput(instrument.start_time),
+          endTime: normalizeTimeForInput(instrument.end_time),
+        }));
 
-  if (scheduleRows.length > 0) {
-    return scheduleRows.map((schedule) => ({
-      scheduleId: schedule.id ?? undefined,
-      weekday: toWeekdayValue(schedule.weekday ?? ""),
-      weekdayLabel: toKoreanWeekdayLabel(schedule.weekday ?? ""),
-      startTime: normalizeTimeForInput(schedule.start_time),
-      endTime: normalizeTimeForInput(schedule.end_time),
-    }));
-  }
-
-  return (instrument.weekdays ?? []).map((weekday) => ({
-    weekday: toWeekdayValue(weekday),
-    weekdayLabel: toKoreanWeekdayLabel(weekday),
-    startTime: normalizeTimeForInput(instrument.start_time),
-    endTime: normalizeTimeForInput(instrument.end_time),
-  }));
+  return [...schedules].sort(
+    (left, right) =>
+      weekdayOrder(left.weekdayLabel) - weekdayOrder(right.weekdayLabel),
+  );
 }
 
 function normalizeOptionalTime(value: string | undefined) {
@@ -761,13 +958,33 @@ function buildLatestReasonMap(rows: EntityStatusTransitionSupabaseRow[]) {
   return reasons;
 }
 
-function toSeoulDate(date: Date) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+function getCurrentFinanceYear() {
+  return Number(getFinanceToday().slice(0, 4));
+}
+
+const REFERRAL_DISCOUNT_KIND: StudentDiscountKind = "referral";
+const KNOWN_DISCOUNT_KINDS: readonly string[] = STUDENT_DISCOUNTS.map((discount) => discount.kind);
+const HANGUL_PATTERN = /[가-힣]/;
+
+function toKnownDiscountKinds(kinds: string[] | null | undefined): StudentDiscountKind[] {
+  return (kinds ?? []).filter((kind): kind is StudentDiscountKind =>
+    KNOWN_DISCOUNT_KINDS.includes(kind),
+  );
+}
+
+/** 소개 달·소개 할인액은 지인 소개 할인을 고른 경우에만 보낸다. 서버에는 그 달 1일(`YYYY-MM-01`)로 저장한다. */
+function toDiscountPayload(selection: StudentInstrumentDiscountSelection) {
+  const discountKinds = selection.discountKinds ?? [];
+  const hasReferral = discountKinds.includes(REFERRAL_DISCOUNT_KIND);
+
+  return {
+    discount_kinds: discountKinds,
+    referral_discount_month:
+      hasReferral && selection.referralDiscountMonth
+        ? `${selection.referralDiscountMonth}-01`
+        : null,
+    referral_discount_amount: hasReferral ? (selection.referralDiscountAmount ?? 0) : 0,
+  };
 }
 
 function normalizeTimeForInput(value: string | null | undefined) {
