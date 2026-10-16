@@ -61,6 +61,19 @@ export class AuthRequiredError extends Error {
   }
 }
 
+/**
+ * Supabase는 로그인하지 않은 방문에 `user: null`이 아니라 "Auth session missing!" 오류를 돌려주고,
+ * 세션이 만료되거나 지워진 경우에도 토큰 오류를 돌려준다. 모두 "다시 로그인하면 되는" 상태다.
+ * 네트워크 오류 같은 다른 문제는 로그인 폼 뒤에 숨기지 않는다.
+ */
+const SIGNED_OUT_ERROR_NAMES = new Set(["AuthSessionMissingError", "AuthInvalidJwtError"]);
+const SIGNED_OUT_ERROR_MESSAGE =
+  /auth session missing|refresh token|jwt expired|invalid jwt|jwt does not exist|sub claim in jwt does not exist/i;
+
+function isSignedOutError(error: Error) {
+  return SIGNED_OUT_ERROR_NAMES.has(error.name) || SIGNED_OUT_ERROR_MESSAGE.test(error.message);
+}
+
 const CURRENT_ACADEMY_SELECT = "academy_id, role, academies(id, name)";
 
 export async function fetchCurrentAcademyContext(
@@ -69,6 +82,11 @@ export async function fetchCurrentAcademyContext(
   const userResult = await supabase.auth.getUser();
 
   if (userResult.error) {
+    // 로그인하지 않았거나 세션이 만료·손상된 방문은 오류 화면이 아니라 로그인 화면으로 보낸다.
+    if (isSignedOutError(userResult.error)) {
+      throw new AuthRequiredError();
+    }
+
     throw new Error(`사용자 세션을 확인하지 못했습니다: ${userResult.error.message}`);
   }
 
