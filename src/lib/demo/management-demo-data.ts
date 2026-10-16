@@ -3,6 +3,7 @@ import type { BookSale } from "@/domain/book-sale";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { StudentListRow } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
+import type { ConsultationListRow } from "@/domain/consultation-list";
 import type { VendorListRow } from "@/domain/vendor-list";
 
 export const demoAcademyId = "academy-demo";
@@ -225,6 +226,31 @@ export const demoVendors: VendorListRow[] = [
     contact: "02-3000-4000",
     kind: "교재",
     memo: "바이엘, 체르니 정기 입고",
+  },
+];
+
+export const demoConsultations: ConsultationListRow[] = [
+  {
+    academyId,
+    consultationId: "consultation-1",
+    name: "정다은",
+    age: 8,
+    instrumentNames: ["피아노"],
+    phone: "010-5555-6666",
+    school: "새봄초등학교",
+    memo: "화요일 오후 선호, 체험 수업 희망",
+    receivedAt: "2026-08-18T05:30:00.000Z",
+  },
+  {
+    academyId,
+    consultationId: "consultation-2",
+    name: "오시우",
+    age: 11,
+    instrumentNames: ["바이올린", "첼로"],
+    phone: "010-7777-8888",
+    school: "한빛초등학교",
+    memo: "",
+    receivedAt: "2026-08-20T02:10:00.000Z",
   },
 ];
 

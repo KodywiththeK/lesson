@@ -38,6 +38,8 @@ import {
   buildTeacherSalarySetting,
   normalizeWorkSchedules,
 } from "@/domain/teacher";
+import type { ConsultationProfile } from "@/domain/consultation";
+import type { ConsultationListRow } from "@/domain/consultation-list";
 import { registerVendor } from "@/domain/vendor";
 import type { VendorListRow } from "@/domain/vendor-list";
 import type {
@@ -52,6 +54,7 @@ import { demoLessonWorkspaceData } from "./lesson-demo-data";
 import {
   demoAcademyId,
   demoBookSales,
+  demoConsultations,
   demoLedgerEntries,
   demoStudents,
   demoTeachers,
@@ -72,6 +75,7 @@ export type DemoAcademyState = {
   academySheets: Record<string, DailyAcademyAttendanceSheet>;
   privateLessons: PrivateLesson[];
   vendors: VendorListRow[];
+  consultations: ConsultationListRow[];
   bookSales: typeof demoBookSales;
 };
 
@@ -168,6 +172,12 @@ export type DemoVendorRegistrationInput = {
 
 export type DemoVendorUpdateInput = DemoVendorRegistrationInput & {
   vendorId: string;
+};
+
+export type DemoConsultationInput = ConsultationProfile;
+
+export type DemoConsultationUpdateInput = DemoConsultationInput & {
+  consultationId: string;
 };
 
 export type DemoBookReleaseInput = {
@@ -335,6 +345,7 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     ),
     privateLessons: [...demoLessonWorkspaceData.privateLessons],
     vendors: [...demoVendors],
+    consultations: [...demoConsultations],
     bookSales: [...demoBookSales],
   };
 }
@@ -989,6 +1000,60 @@ export function updateDemoVendor(
       vendor.vendorId === vendorId ? { ...vendor, ...profile } : vendor,
     ),
   };
+}
+
+export function registerDemoConsultation(
+  state: DemoAcademyState,
+  input: DemoConsultationInput,
+  receivedAt: string,
+): DemoAcademyState {
+  return {
+    ...state,
+    consultations: [
+      ...state.consultations,
+      {
+        ...input,
+        academyId: state.academyId,
+        consultationId: `consultation-demo-${getNextConsultationNumber(state.consultations)}`,
+        receivedAt,
+      },
+    ],
+  };
+}
+
+export function updateDemoConsultation(
+  state: DemoAcademyState,
+  { consultationId, ...profile }: DemoConsultationUpdateInput,
+): DemoAcademyState {
+  return {
+    ...state,
+    consultations: state.consultations.map((consultation) =>
+      consultation.consultationId === consultationId
+        ? { ...consultation, ...profile }
+        : consultation,
+    ),
+  };
+}
+
+export function deleteDemoConsultation(
+  state: DemoAcademyState,
+  { consultationId }: { consultationId: string },
+): DemoAcademyState {
+  return {
+    ...state,
+    consultations: state.consultations.filter(
+      (consultation) => consultation.consultationId !== consultationId,
+    ),
+  };
+}
+
+/** 삭제 뒤에도 기존 id와 겹치지 않도록 남아 있는 id의 가장 큰 번호 다음 번호를 쓴다. */
+function getNextConsultationNumber(consultations: ConsultationListRow[]) {
+  const numbers = consultations.map(
+    (consultation) => Number(/(\d+)$/.exec(consultation.consultationId)?.[1] ?? 0),
+  );
+
+  return Math.max(0, ...numbers) + 1;
 }
 
 export function registerDemoBookRelease(

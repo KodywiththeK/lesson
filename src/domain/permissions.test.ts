@@ -48,6 +48,7 @@ describe("resolveSessionRole", () => {
 describe("canAccessFeature", () => {
   it("owner는 전체 운영 기능에 접근할 수 있다", () => {
     expect(canAccessFeature({ role: "owner" }, "vendors")).toBe(true);
+    expect(canAccessFeature({ role: "owner" }, "consultations")).toBe(true);
     expect(canAccessFeature({ role: "owner" }, "income-management")).toBe(true);
     expect(canAccessFeature({ role: "owner" }, "manual-ledger")).toBe(true);
   });
@@ -56,6 +57,7 @@ describe("canAccessFeature", () => {
     expect(canAccessFeature({ role: "desk" }, "students")).toBe(true);
     expect(canAccessFeature({ role: "desk" }, "lesson-schedule")).toBe(true);
     expect(canAccessFeature({ role: "desk" }, "vendors")).toBe(true);
+    expect(canAccessFeature({ role: "desk" }, "consultations")).toBe(true);
     expect(canAccessFeature({ role: "desk" }, "income-management")).toBe(false);
   });
 
@@ -98,6 +100,7 @@ describe("canAccessFeature", () => {
       }),
     ).toBe(true);
     expect(canAccessFeature(teacherContext, "vendors")).toBe(false);
+    expect(canAccessFeature(teacherContext, "consultations")).toBe(false);
     expect(canAccessFeature(teacherContext, "income-management")).toBe(false);
   });
 
@@ -108,7 +111,7 @@ describe("canAccessFeature", () => {
 });
 
 describe("getVisibleNavigationItems", () => {
-  it("teacher에게는 거래처와 수입 관리 메뉴를 숨긴다", () => {
+  it("teacher에게는 거래처, 상담, 수입 관리 메뉴를 숨긴다", () => {
     const visibleItems = getVisibleNavigationItems({
       role: "teacher",
       teacherId: "teacher-1",
@@ -119,6 +122,7 @@ describe("getVisibleNavigationItems", () => {
     expect(visibleItems).toContain("students");
     expect(visibleItems).toContain("own-payroll");
     expect(visibleItems).not.toContain("vendors");
+    expect(visibleItems).not.toContain("consultations");
     expect(visibleItems).not.toContain("income-management");
   });
 });

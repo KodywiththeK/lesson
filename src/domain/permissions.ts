@@ -26,6 +26,7 @@ export type FeatureKey =
   | "teachers"
   | "status-management"
   | "vendors"
+  | "consultations"
   | "books"
   | "tickets"
   | "income-management"
@@ -45,6 +46,7 @@ const OWNER_FEATURES: FeatureKey[] = [
   "teachers",
   "status-management",
   "vendors",
+  "consultations",
   "books",
   "tickets",
   "ticket-manual-adjustment",
@@ -60,6 +62,7 @@ const DESK_FEATURES: FeatureKey[] = [
   "teachers",
   "status-management",
   "vendors",
+  "consultations",
   "books",
   "tickets",
   "ticket-manual-adjustment",
@@ -125,6 +128,7 @@ export function getVisibleNavigationItems(context: PermissionContext) {
     "teachers",
     "status-management",
     "vendors",
+    "consultations",
     "books",
     "tickets",
     "income-management",

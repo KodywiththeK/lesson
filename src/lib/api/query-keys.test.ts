@@ -204,4 +204,27 @@ describe("queryKeys", () => {
       "2026-08-21",
     ]);
   });
+  it("상담 목록 key에 academyId와 검색·악기 필터·페이지를 포함하고, all key는 그 접두사다", () => {
+    const listKey = queryKeys.consultations.list("academy-1", {
+      q: "하늘",
+      instrumentName: "피아노",
+      page: "2",
+      pageSize: "20",
+    });
+
+    expect(listKey).toEqual([
+      "academy",
+      "academy-1",
+      "consultations",
+      "list",
+      "하늘",
+      "피아노",
+      "2",
+      "20",
+    ]);
+    expect(listKey.slice(0, 3)).toEqual(queryKeys.consultations.all("academy-1"));
+    expect(queryKeys.consultations.list("academy-2")).not.toEqual(
+      queryKeys.consultations.list("academy-1"),
+    );
+  });
 });

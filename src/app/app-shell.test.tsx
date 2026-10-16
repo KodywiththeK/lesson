@@ -30,6 +30,7 @@ describe("AppShell", () => {
       "선생님",
       "휴원/퇴원",
       "거래처",
+      "상담",
       "교재",
       "수입 관리",
       "학원 고정 수입",
@@ -54,6 +55,10 @@ describe("AppShell", () => {
     expect(
       within(navigation).getByRole("link", { name: "거래처" }),
     ).toHaveAttribute("href", "/management/vendors");
+    expect(within(navigation).getByRole("link", { name: "상담" })).toHaveAttribute(
+      "href",
+      "/management/consultations",
+    );
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
   });
@@ -89,6 +94,7 @@ describe("AppShell", () => {
     expect(labels).not.toContain("휴원/퇴원");
     expect(labels).not.toContain("수입 관리");
     expect(labels).not.toContain("거래처");
+    expect(labels).not.toContain("상담");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
   });
@@ -204,6 +210,7 @@ describe("AppShell", () => {
       "선생님",
       "휴원/퇴원",
       "거래처",
+      "상담",
     ]);
     expect(within(tabs).getByRole("link", { name: "선생님" })).toHaveAttribute(
       "aria-current",

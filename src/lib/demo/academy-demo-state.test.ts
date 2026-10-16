@@ -9,7 +9,10 @@ import {
   registerDemoBookRelease,
   adjustDemoLessonTicket,
   registerDemoLessonTicket,
+  registerDemoConsultation,
   registerDemoVendor,
+  deleteDemoConsultation,
+  updateDemoConsultation,
   updateDemoVendor,
 } from "./academy-demo-state";
 
@@ -266,6 +269,89 @@ describe("academy demo state", () => {
       memo: "수정 메모",
     });
     expect(next.vendors.slice(1)).toEqual(state.vendors.slice(1));
+  });
+
+  it("상담 데모 데이터는 반응형 표 확인을 위해 한 건 이상 있다", () => {
+    expect(createInitialDemoAcademyState().consultations.length).toBeGreaterThan(0);
+  });
+
+  it("상담 등록은 접수 시각과 함께 상담 목록에 새 항목을 추가한다", () => {
+    const state = createInitialDemoAcademyState();
+
+    const next = registerDemoConsultation(
+      state,
+      {
+        name: "정다은",
+        age: 8,
+        instrumentNames: ["피아노"],
+        phone: "010-5555-6666",
+        school: "새봄초",
+        memo: "체험 수업 희망",
+      },
+      "2026-10-16T01:00:00.000Z",
+    );
+
+    expect(next.consultations).toHaveLength(state.consultations.length + 1);
+    expect(next.consultations.at(-1)).toEqual({
+      academyId: state.academyId,
+      consultationId: expect.stringMatching(/^consultation-demo-/),
+      name: "정다은",
+      age: 8,
+      instrumentNames: ["피아노"],
+      phone: "010-5555-6666",
+      school: "새봄초",
+      memo: "체험 수업 희망",
+      receivedAt: "2026-10-16T01:00:00.000Z",
+    });
+  });
+
+  it("상담을 지운 뒤 새로 등록해도 기존 상담과 id가 겹치지 않는다", () => {
+    const profile = { name: "정다은", instrumentNames: [], phone: "1234", school: "", memo: "" };
+    let state = createInitialDemoAcademyState();
+    state = registerDemoConsultation(state, profile, "2026-10-16T01:00:00.000Z");
+    state = registerDemoConsultation(state, profile, "2026-10-16T02:00:00.000Z");
+    state = deleteDemoConsultation(state, { consultationId: state.consultations[0].consultationId });
+    state = registerDemoConsultation(state, profile, "2026-10-16T03:00:00.000Z");
+
+    const ids = state.consultations.map((consultation) => consultation.consultationId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("상담 수정은 대상 상담의 모든 입력 항목을 바꾸되 접수 시각과 id는 유지한다", () => {
+    const state = createInitialDemoAcademyState();
+    const target = state.consultations[0];
+
+    const next = updateDemoConsultation(state, {
+      consultationId: target.consultationId,
+      name: "수정된 이름",
+      age: undefined,
+      instrumentNames: ["플루트"],
+      phone: "02-0000",
+      school: "",
+      memo: "수정 메모",
+    });
+
+    expect(next.consultations[0]).toEqual({
+      academyId: target.academyId,
+      consultationId: target.consultationId,
+      name: "수정된 이름",
+      age: undefined,
+      instrumentNames: ["플루트"],
+      phone: "02-0000",
+      school: "",
+      memo: "수정 메모",
+      receivedAt: target.receivedAt,
+    });
+    expect(next.consultations.slice(1)).toEqual(state.consultations.slice(1));
+  });
+
+  it("상담 삭제는 대상 상담만 목록에서 지운다", () => {
+    const state = createInitialDemoAcademyState();
+    const [target, ...rest] = state.consultations;
+
+    const next = deleteDemoConsultation(state, { consultationId: target.consultationId });
+
+    expect(next.consultations).toEqual(rest);
   });
 
   it("결제 완료 교재 출고는 구매 목록과 수입 ledger를 함께 갱신한다", () => {

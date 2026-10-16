@@ -7,6 +7,7 @@ import {
   Gauge,
   GraduationCap,
   Handshake,
+  MessageSquareText,
   ScrollText,
   UsersRound,
 } from "lucide-react";
@@ -61,7 +62,7 @@ export const mainNavigation: NavigationItem[] = [
   {
     label: "인원·거래처",
     href: "/management/students",
-    description: "원생, 선생님, 휴원/퇴원, 거래처를 한 영역에서 관리합니다.",
+    description: "원생, 선생님, 휴원/퇴원, 거래처, 상담을 한 영역에서 관리합니다.",
     icon: UsersRound,
     children: [
       {
@@ -91,6 +92,13 @@ export const mainNavigation: NavigationItem[] = [
         description: "교재, 조율, 운영 거래처 정보를 관리합니다.",
         icon: Handshake,
         feature: "vendors",
+      },
+      {
+        label: "상담",
+        href: "/management/consultations",
+        description: "전화·문자 상담 기록을 남기고 원생 등록으로 이어갑니다.",
+        icon: MessageSquareText,
+        feature: "consultations",
       },
     ],
   },

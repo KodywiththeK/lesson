@@ -11,6 +11,7 @@ import {
 import type { QueryKey } from "@tanstack/react-query";
 
 import { buildBookPurchaseList, type LedgerEntry } from "@/domain/book-sale";
+import { buildConsultationList } from "@/domain/consultation-list";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
   buildLessonTicketList,
@@ -24,6 +25,7 @@ import {
 import { buildTeacherList } from "@/domain/teacher-list";
 import { buildVendorList } from "@/domain/vendor-list";
 import { createBookPurchaseListQueryKey } from "@/lib/api/books";
+import { createConsultationListQueryKey } from "@/lib/api/consultations";
 import {
   createLessonTicketListQueryKey,
   type AdjustLessonTicketInput,
@@ -38,22 +40,27 @@ import {
   createInitialDemoAcademyState,
   deleteDemoLedgerEntry,
   cancelDemoPrivateLessonAttendance,
+  deleteDemoConsultation,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
   completeDemoBookRelease,
   registerDemoBookRelease,
+  registerDemoConsultation,
   registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
   registerDemoVendor,
   updateDemoAcademyStudent,
   updateDemoAcademyTeacher,
+  updateDemoConsultation,
   updateDemoLedgerEntry,
   updateDemoStudentStatus,
   updateDemoTeacherStatus,
   updateDemoVendor,
   type DemoAcademyState,
   type DemoBookReleaseInput,
+  type DemoConsultationInput,
+  type DemoConsultationUpdateInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
   type DemoStudentUpdateInput,
@@ -88,6 +95,9 @@ type DemoAcademyContextValue = {
   deleteLedgerEntry: (input: { ledgerId: string }) => void;
   registerVendor: (input: DemoVendorRegistrationInput) => void;
   updateVendor: (input: DemoVendorUpdateInput) => void;
+  registerConsultation: (input: DemoConsultationInput) => void;
+  updateConsultation: (input: DemoConsultationUpdateInput) => void;
+  deleteConsultation: (input: { consultationId: string }) => void;
   registerBookRelease: (
     input: Omit<DemoBookReleaseInput, "studentName"> & {
       studentName?: string;
@@ -133,6 +143,10 @@ type DemoAcademyContextValue = {
   createVendorListQueryOptions: (options: Parameters<typeof buildVendorList>[1]) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildVendorList>>;
+  };
+  createConsultationListQueryOptions: (options: Parameters<typeof buildConsultationList>[1]) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<ReturnType<typeof buildConsultationList>>;
   };
   createBookPurchaseListQueryOptions: (options: Parameters<typeof buildBookPurchaseList>[1]) => {
     queryKey: QueryKey;
@@ -236,6 +250,16 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       updateVendor(input) {
         commitState((current) => updateDemoVendor(current, input));
+      },
+      registerConsultation(input) {
+        const receivedAt = new Date().toISOString();
+        commitState((current) => registerDemoConsultation(current, input, receivedAt));
+      },
+      updateConsultation(input) {
+        commitState((current) => updateDemoConsultation(current, input));
+      },
+      deleteConsultation(input) {
+        commitState((current) => deleteDemoConsultation(current, input));
       },
       registerBookRelease(input) {
         commitState((current) =>
@@ -440,6 +464,12 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
         return {
           queryKey: [...createVendorListQueryKey(options), "demo", revision],
           queryFn: async () => buildVendorList(state.vendors, options),
+        };
+      },
+      createConsultationListQueryOptions(options) {
+        return {
+          queryKey: [...createConsultationListQueryKey(options), "demo", revision],
+          queryFn: async () => buildConsultationList(state.consultations, options),
         };
       },
       createBookPurchaseListQueryOptions(options) {

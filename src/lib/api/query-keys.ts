@@ -24,6 +24,13 @@ type VendorListFilters = {
   kind?: string;
 };
 
+type ConsultationListFilters = {
+  page?: string;
+  pageSize?: string;
+  q?: string;
+  instrumentName?: string;
+};
+
 type BookPurchaseListFilters = {
   page?: string;
   pageSize?: string;
@@ -114,6 +121,19 @@ export const queryKeys = {
         "list",
         filters.q ?? "",
         filters.kind ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
+      ] as const,
+  },
+  consultations: {
+    all: (academyId: string) =>
+      [...queryKeys.academy(academyId), "consultations"] as const,
+    list: (academyId: string, filters: ConsultationListFilters = {}) =>
+      [
+        ...queryKeys.consultations.all(academyId),
+        "list",
+        filters.q ?? "",
+        filters.instrumentName ?? "",
         filters.page ?? "",
         filters.pageSize ?? "",
       ] as const,

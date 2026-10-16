@@ -172,6 +172,7 @@ test("관리·재무 목록은 작은 화면에서도 항목명과 표 작업을
     "/management/students",
     "/management/teachers",
     "/management/vendors",
+    "/management/consultations",
     "/management/status",
     "/books",
     "/finance/ledger",
@@ -256,6 +257,21 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
   await expect(
     page.getByRole("searchbox", { name: "거래처 검색" }),
   ).toBeVisible();
+});
+
+test("상담 메뉴에서 상담 목록 화면으로 이동할 수 있다", async ({ page }) => {
+  await page.goto("/");
+
+  await mainNavigation(page).getByRole("link", { name: "상담", exact: true }).click();
+  await expect(page).toHaveURL(/\/management\/consultations$/);
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "인원·거래처" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("searchbox", { name: "상담 검색" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "정다은 원생 등록" })).toBeVisible();
 });
 
 test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다", async ({ page }) => {

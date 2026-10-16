@@ -21,7 +21,7 @@ describe("mainNavigation", () => {
     }
   });
 
-  it("인원·거래처 메뉴는 원생, 선생님, 휴원/퇴원, 거래처 하위 메뉴를 가진다", () => {
+  it("인원·거래처 메뉴는 원생, 선생님, 휴원/퇴원, 거래처, 상담 하위 메뉴를 가진다", () => {
     const managementNavigation = mainNavigation.find(
       (item) => item.label === "인원·거래처",
     );
@@ -32,12 +32,14 @@ describe("mainNavigation", () => {
       "선생님",
       "휴원/퇴원",
       "거래처",
+      "상담",
     ]);
     expect(managementNavigation?.children?.map((item) => item.href)).toEqual([
       "/management/students",
       "/management/teachers",
       "/management/status",
       "/management/vendors",
+      "/management/consultations",
     ]);
   });
 
