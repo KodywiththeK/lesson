@@ -1,7 +1,7 @@
 "use client";
 
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
-import { BookPurchaseListScreen } from "@/features/books/book-purchase-list-screen";
+import { BookStockScreen } from "@/features/books/book-stock-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 
 import { AppShell } from "../app-shell";
@@ -18,21 +18,28 @@ export default function BooksPage() {
         <AppShell
           academyName={academy.academyName}
           permissionContext={academy.permissionContext}
-          pageTitle="교재 관리"
+          pageTitle="교재"
         >
-          <BookPurchaseListScreen
+          <BookStockScreen
             academyId={academy.academyId}
-            academyName={academy.academyName}
-            canRecordPayment={academy.permissionContext.role === "owner"}
             queryOptionsFactory={
-              useTestDemo ? demo.createBookPurchaseListQueryOptions : undefined
+              useTestDemo ? demo.createBookStockListQueryOptions : undefined
             }
-            students={useTestDemo ? demo.state.students : undefined}
-            registerBookRelease={
-              useTestDemo ? demo.registerBookRelease : undefined
+            bookOptionsQueryOptions={
+              useTestDemo ? demo.createBookOptionsQueryOptions : undefined
             }
-            completeBookPayment={
-              useTestDemo ? demo.completeBookPayment : undefined
+            registerBook={useTestDemo ? demo.registerBookStock : undefined}
+            updateBook={useTestDemo ? demo.updateBook : undefined}
+            deleteBook={useTestDemo ? demo.deleteBook : undefined}
+            countPendingReleases={
+              useTestDemo
+                ? (book) =>
+                    demo.state.bookSales.filter(
+                      (sale) =>
+                        sale.bookId === book.bookId &&
+                        sale.status === "payment-pending",
+                    ).length
+                : undefined
             }
           />
         </AppShell>

@@ -55,6 +55,65 @@ describe("PaymentDialog", () => {
     expect(within(dialog).queryByText(/입출입내역으로 기록됩니다/)).not.toBeInTheDocument();
   });
 
+  it("입금일이 호출하는 쪽의 검증을 통과하지 못하면 이유를 알려 주고 확인을 막는다", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const validateDate = (date: string) => (date < "2026-10-10" ? "입금일은 출고일(2026-10-10) 이후여야 합니다." : null);
+    render(
+      <PaymentDialog
+        open
+        title="입금 처리"
+        dateLabel="입금일"
+        validateDate={validateDate}
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeEnabled();
+
+    await user.clear(within(dialog).getByLabelText("입금일"));
+    await user.type(within(dialog).getByLabelText("입금일"), "2026-10-09");
+
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("입금일은 출고일(2026-10-10) 이후여야 합니다.");
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+
+    await user.clear(within(dialog).getByLabelText("입금일"));
+    await user.type(within(dialog).getByLabelText("입금일"), "2026-10-10");
+
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    expect(onConfirm).toHaveBeenCalledWith("2026-10-10");
+  });
+
+  it("고른 입금일에 맞는 안내를 호출하는 쪽이 정해 보여 준다", async () => {
+    const user = userEvent.setup();
+    const describeDate = (date: string) => ({
+      message: `입금일이 속한 ${Number(date.slice(5, 7))}월에 반영됩니다.`,
+      emphasized: !date.startsWith("2026-10"),
+    });
+    render(
+      <PaymentDialog
+        open
+        title="입금 처리"
+        dateLabel="입금일"
+        describeDate={describeDate}
+        onConfirm={vi.fn()}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+
+    expect(within(dialog).getByText("입금일이 속한 10월에 반영됩니다.")).toBeInTheDocument();
+
+    await user.clear(within(dialog).getByLabelText("입금일"));
+    await user.type(within(dialog).getByLabelText("입금일"), "2026-11-02");
+
+    expect(within(dialog).getByText("입금일이 속한 11월에 반영됩니다.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("입금일이 속한 10월에 반영됩니다.")).not.toBeInTheDocument();
+  });
+
   it("처리 중에는 버튼을 막아 중복 제출을 방지한다", () => {
     render(
       <PaymentDialog

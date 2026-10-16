@@ -27,17 +27,28 @@ import { getFinanceToday } from "@/domain/finance-date";
 
 const DEFAULT_PAYMENT_DESCRIPTION = "확인하면 연결된 입출입내역이 자동으로 기록됩니다.";
 
+/** 고른 날짜에 맞춰 호출하는 쪽이 정하는 안내. `emphasized`면 눈에 띄게 보여 준다. */
+export type PaymentDateNotice = { message: string; emphasized?: boolean };
+
+type PaymentDateRules = {
+  /** 고른 날짜를 막아야 하면 이유 문구를, 통과하면 null을 돌려준다. 막히면 확인할 수 없다. */
+  validateDate?: (date: string) => string | null;
+  describeDate?: (date: string) => PaymentDateNotice | null;
+};
+
 export function PaymentDialog({
   confirmLabel = "확인",
   contextMonth,
   dateLabel,
   description = DEFAULT_PAYMENT_DESCRIPTION,
+  describeDate,
   onConfirm,
   open,
   pending = false,
   title,
+  validateDate,
   onOpenChange,
-}: {
+}: PaymentDateRules & {
   confirmLabel?: string;
   /** 지금 보고 있는 월(`YYYY-MM`). 고른 날짜가 이 월 밖이면 어느 월 내역으로 기록되는지 안내한다. */
   contextMonth?: string;
@@ -60,7 +71,9 @@ export function PaymentDialog({
           confirmLabel={confirmLabel}
           contextMonth={contextMonth}
           dateLabel={dateLabel}
+          describeDate={describeDate}
           pending={pending}
+          validateDate={validateDate}
           onConfirm={onConfirm}
           onCancel={() => onOpenChange(false)}
         />
@@ -74,10 +87,12 @@ export function PaymentDateForm({
   confirmLabel,
   contextMonth,
   dateLabel,
+  describeDate,
   pending,
+  validateDate,
   onConfirm,
   onCancel,
-}: {
+}: PaymentDateRules & {
   confirmLabel: string;
   contextMonth?: string;
   dateLabel: string;
@@ -89,6 +104,8 @@ export function PaymentDateForm({
   const isMissing = paidAt === "";
   const recordedMonth = paidAt.slice(0, 7);
   const showsOtherMonth = !isMissing && contextMonth !== undefined && recordedMonth !== contextMonth;
+  const dateError = isMissing ? `${dateLabel}을 입력해 주세요.` : (validateDate?.(paidAt) ?? null);
+  const dateNotice = isMissing ? null : (describeDate?.(paidAt) ?? null);
 
   return (
     <>
@@ -96,9 +113,14 @@ export function PaymentDateForm({
         <span>{dateLabel}</span>
         <DateField aria-label={dateLabel} value={paidAt} onValueChange={setPaidAt} />
       </Label>
-      {isMissing ? (
+      {dateError ? (
         <p role="alert" className="text-sm text-destructive">
-          {dateLabel}을 입력해 주세요.
+          {dateError}
+        </p>
+      ) : null}
+      {dateNotice ? (
+        <p className={dateNotice.emphasized ? "text-sm font-medium text-foreground" : "text-sm text-muted-foreground"}>
+          {dateNotice.message}
         </p>
       ) : null}
       {showsOtherMonth ? (
@@ -110,7 +132,7 @@ export function PaymentDateForm({
         <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           취소
         </Button>
-        <Button type="button" disabled={pending || isMissing} onClick={() => onConfirm(paidAt)}>
+        <Button type="button" disabled={pending || dateError !== null} onClick={() => onConfirm(paidAt)}>
           {pending ? "처리 중" : confirmLabel}
         </Button>
       </DialogFooter>

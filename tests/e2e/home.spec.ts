@@ -175,6 +175,8 @@ test("관리·재무 목록은 작은 화면에서도 항목명과 표 작업을
     "/management/consultations",
     "/management/status",
     "/books",
+    "/books/shipments",
+    "/books/paid",
     "/finance/ledger",
     "/finance/lesson-income",
     "/finance/books",
@@ -274,17 +276,21 @@ test("상담 메뉴에서 상담 목록 화면으로 이동할 수 있다", asyn
   await expect(page.getByRole("button", { name: "정다은 원생 등록" })).toBeVisible();
 });
 
-test("교재 메뉴에서 교재 구매 목록 화면으로 이동할 수 있다", async ({ page }) => {
+test("교재 메뉴에서 재고, 출고, 결제 완료 탭으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
   await mainNavigation(page).getByRole("link", { name: "교재", exact: true }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: "교재 관리" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("searchbox", { name: "교재 구매 검색" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/books$/);
+  await expect(page.getByRole("heading", { level: 1, name: "교재" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "교재 재고 목록" })).toBeVisible();
+
+  await mainNavigation(page).getByRole("link", { name: "출고", exact: true }).click();
+  await expect(page).toHaveURL(/\/books\/shipments$/);
+  await expect(page.getByRole("table", { name: "출고 목록" })).toBeVisible();
+
+  await mainNavigation(page).getByRole("link", { name: "결제 완료", exact: true }).click();
+  await expect(page).toHaveURL(/\/books\/paid$/);
 });
 
 test("수입 관리 메뉴는 학원 고정 수입을 기본으로 열고 입출입내역 탭으로 이동할 수 있다", async ({ page }) => {
