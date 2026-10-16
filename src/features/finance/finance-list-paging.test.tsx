@@ -536,6 +536,7 @@ describe("교재내역 목록 나누기", () => {
       studentId: "student-1",
       studentName: "김민지",
       price: 12000,
+      quantity: 1,
       shippedAt: "2026-08-10",
       status: "paid",
       paidAt: "2026-08-12",
@@ -604,7 +605,7 @@ describe("교재내역 목록 나누기", () => {
 
     const table = screen.getByRole("table", { name: "교재내역" });
     expect(columnTexts(table, 0)).toEqual(["김민지", "김민지", "한서아"]);
-    expect(columnTexts(table, 3)).toEqual(["2026-08-05", "2026-08-20", "2026-08-01"]);
+    expect(columnTexts(table, 5)).toEqual(["2026-08-05", "2026-08-20", "2026-08-01"]);
   });
 
   it("페이지당 20건을 고르면 1페이지로 돌아가 12건을 모두 보여준다", async () => {

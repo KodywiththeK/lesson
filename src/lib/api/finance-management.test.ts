@@ -316,14 +316,14 @@ describe("finance management payment API", () => {
       book_releases: [{
         id: "release-1", academy_id: "academy-1", book_id: "book-1",
         student_id: "student-1", student_name: "김민지", book_title: "바이엘 2",
-        price: 12000, shipped_at: "2026-08-01", status: "paid", paid_at: "2026-08-25",
+        price: 12000, quantity: 1, shipped_at: "2026-08-01", status: "paid", paid_at: "2026-08-25",
         paid_ledger_entry_id: "ledger-9",
       }],
     });
 
     const query = queriesFor("book_releases")[0];
     expect(query.select).toBe(
-      "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at, paid_ledger_entry_id",
+      "id, academy_id, book_id, student_id, student_name, book_title, price, quantity, shipped_at, status, paid_at, paid_ledger_entry_id",
     );
     expect(query).toMatchObject({
       eq: [["academy_id", "academy-1"], ["status", "paid"]],

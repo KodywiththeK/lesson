@@ -1,265 +1,181 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildBookPaidList,
+  buildBookShipmentList,
+  formatBookSaleLedgerDescription,
+  formatBookSaleStatus,
   type BookSale,
-  buildBookPurchaseList,
 } from "./book-sale";
 
-describe("buildBookPurchaseList", () => {
-  it("교재 구매 목록은 원생, 교재명, 자동 입력 가격, 출고일을 표시한다", () => {
-    const rows = buildBookPurchaseList(
+function createSale(overrides: Partial<BookSale> = {}): BookSale {
+  return {
+    academyId: "academy-1",
+    saleId: "sale-1",
+    bookId: "book-1",
+    bookTitle: "바이엘 2",
+    studentId: "student-1",
+    studentName: "김민지",
+    price: 12000,
+    quantity: 1,
+    shippedAt: "2026-08-21",
+    status: "payment-pending",
+    ...overrides,
+  } as BookSale;
+}
+
+function createPaidSale(overrides: Partial<BookSale> = {}): BookSale {
+  return createSale({
+    status: "paid",
+    paidAt: "2026-08-23",
+    paidLedgerEntryId: "ledger-1",
+    permanent: true,
+    ...overrides,
+  } as Partial<BookSale>);
+}
+
+describe("buildBookShipmentList", () => {
+  it("결제 대기 출고만 현재 학원 범위에서 단가·수량·금액과 함께 보여 준다", () => {
+    const view = buildBookShipmentList(
       [
-        {
-          academyId: "academy-1",
-          saleId: "sale-2",
-          bookId: "book-2",
-          bookTitle: "체르니 100",
-          studentId: "student-2",
-          studentName: "이서윤",
-          price: 15000,
-          shippedAt: "2026-08-22",
-          status: "payment-pending",
-        },
-        {
-          academyId: "academy-1",
-          saleId: "sale-1",
-          bookId: "book-1",
-          bookTitle: "바이엘 2",
-          studentId: "student-1",
-          studentName: "김민지",
-          price: 12000,
-          shippedAt: "2026-08-21",
-          status: "payment-pending",
-        },
-        {
-          academyId: "academy-2",
-          saleId: "sale-3",
-          bookId: "book-3",
-          bookTitle: "다른 학원 교재",
-          studentId: "student-3",
-          studentName: "박하준",
-          price: 10000,
-          shippedAt: "2026-08-21",
-          status: "payment-pending",
-        },
+        createSale({ saleId: "sale-1", price: 15000, quantity: 3 }),
+        createSale({ saleId: "sale-2", academyId: "academy-2", studentName: "다른 학원" }),
+        createPaidSale({ saleId: "sale-3" }),
       ],
-      {
-        academyId: "academy-1",
-      },
+      { academyId: "academy-1" },
     );
 
-    expect(rows.items).toEqual([
+    expect(view.items).toEqual([
       {
-        saleId: "sale-1",
-        studentName: "김민지",
-        bookTitle: "바이엘 2",
-        autoFilledPrice: 12000,
-        shippedAt: "2026-08-21",
-        status: "payment-pending",
-      },
-      {
-        saleId: "sale-2",
-        studentName: "이서윤",
-        bookTitle: "체르니 100",
-        autoFilledPrice: 15000,
-        shippedAt: "2026-08-22",
-        status: "payment-pending",
-      },
-    ]);
-  });
-
-  it("교재 구매 목록은 검색어와 결제 상태 필터를 적용한다", () => {
-    const rows = buildBookPurchaseList(
-      [
-        {
-          academyId: "academy-1",
-          saleId: "sale-1",
-          bookId: "book-1",
-          bookTitle: "바이엘 2",
-          studentId: "student-1",
-          studentName: "김민지",
-          price: 12000,
-          shippedAt: "2026-08-21",
-          status: "payment-pending",
-        },
-        {
-          academyId: "academy-1",
-          saleId: "sale-2",
-          bookId: "book-2",
-          bookTitle: "체르니 100",
-          studentId: "student-2",
-          studentName: "이서윤",
-          price: 15000,
-          shippedAt: "2026-08-22",
-          status: "paid",
-          paidAt: "2026-08-23",
-          permanent: true,
-        },
-      ],
-      {
-        academyId: "academy-1",
-        search: "체르니",
-        filters: {
-          status: "paid",
-        },
-      },
-    );
-
-    expect(rows.items).toEqual([
-      {
-        saleId: "sale-2",
-        studentName: "이서윤",
-        bookTitle: "체르니 100",
-        autoFilledPrice: 15000,
-        shippedAt: "2026-08-22",
-        status: "paid",
-      },
-    ]);
-    expect(rows.totalItems).toBe(1);
-  });
-
-  describe("페이지 나누기와 정렬", () => {
-    function createSale(overrides: Partial<BookSale> = {}): BookSale {
-      return {
-        academyId: "academy-1",
         saleId: "sale-1",
         bookId: "book-1",
-        bookTitle: "바이엘 2",
         studentId: "student-1",
         studentName: "김민지",
-        price: 12000,
+        bookTitle: "바이엘 2",
+        price: 15000,
+        quantity: 3,
+        amount: 45000,
         shippedAt: "2026-08-21",
-        status: "payment-pending",
-        ...overrides,
-      } as BookSale;
-    }
+      },
+    ]);
+    expect(view.totalItems).toBe(1);
+  });
 
-    function createNumberedSales(count: number) {
-      return Array.from({ length: count }, (_, index) => {
-        const number = String(index + 1).padStart(2, "0");
+  it("원생명 가나다순 → 출고일 → 교재명 → id 순으로 정렬한다", () => {
+    const view = buildBookShipmentList(
+      [
+        createSale({ saleId: "sale-1", studentName: "이서윤", shippedAt: "2026-08-01" }),
+        createSale({ saleId: "sale-2", studentName: "김민지", shippedAt: "2026-08-22", bookTitle: "체르니 100" }),
+        createSale({ saleId: "sale-3", studentName: "김민지", shippedAt: "2026-08-22", bookTitle: "바이엘 2" }),
+        createSale({ saleId: "sale-4", studentName: "김민지", shippedAt: "2026-08-10", bookTitle: "하농" }),
+      ],
+      { academyId: "academy-1" },
+    );
 
-        return createSale({
-          saleId: `sale-${number}`,
-          studentId: `student-${number}`,
-          studentName: `원생${number}`,
-          bookTitle: `교재${number}`,
-        });
-      });
-    }
+    expect(view.items.map((row) => row.saleId)).toEqual(["sale-4", "sale-3", "sale-2", "sale-1"]);
+  });
 
-    it("기본은 10개씩 나누고 총 건수와 페이지 정보를 함께 준다", () => {
-      const sales = createNumberedSales(25);
+  it("원생명·도서명·출고일로 검색하고 10개씩 나눈다", () => {
+    const sales = Array.from({ length: 25 }, (_, index) =>
+      createSale({
+        saleId: `sale-${String(index + 1).padStart(2, "0")}`,
+        studentName: `원생${String(index + 1).padStart(2, "0")}`,
+        bookTitle: index === 3 ? "체르니 100" : "바이엘",
+      }),
+    );
 
-      const firstPage = buildBookPurchaseList(sales, { academyId: "academy-1" });
-      const lastPage = buildBookPurchaseList(sales, { academyId: "academy-1", page: 3 });
-
-      expect(firstPage.items).toHaveLength(10);
-      expect(firstPage.items[0].studentName).toBe("원생01");
-      expect(firstPage).toMatchObject({
-        page: 1,
-        pageSize: 10,
-        totalItems: 25,
-        totalPages: 3,
-        hasNextPage: true,
-      });
-      expect(lastPage.items.map((row) => row.studentName)).toEqual([
-        "원생21",
-        "원생22",
-        "원생23",
-        "원생24",
-        "원생25",
-      ]);
+    expect(buildBookShipmentList(sales, { academyId: "academy-1", search: "체르니" }).items).toHaveLength(1);
+    expect(buildBookShipmentList(sales, { academyId: "academy-1", search: "원생04" }).items[0].saleId).toBe("sale-04");
+    expect(buildBookShipmentList(sales, { academyId: "academy-1" })).toMatchObject({
+      pageSize: 10,
+      totalItems: 25,
+      totalPages: 3,
     });
+    expect(buildBookShipmentList(sales, { academyId: "academy-1", page: 3 }).items).toHaveLength(5);
+  });
 
-    it("페이지당 20개를 고르면 20개씩 나눈다", () => {
-      const view = buildBookPurchaseList(createNumberedSales(25), {
-        academyId: "academy-1",
-        page: 2,
-        pageSize: 20,
-      });
+  it("원생이 삭제되어 연결이 끊긴 출고도 이름 스냅샷으로 보여 준다", () => {
+    const view = buildBookShipmentList(
+      [createSale({ studentId: null, studentName: "삭제된원생" })],
+      { academyId: "academy-1" },
+    );
 
-      expect(view.items).toHaveLength(5);
-      expect(view).toMatchObject({ page: 2, pageSize: 20, totalPages: 2 });
-    });
+    expect(view.items[0]).toMatchObject({ studentId: null, studentName: "삭제된원생" });
+  });
+});
 
-    it("출고일이 늦어도 원생명 가나다순을 먼저 따르고, 같은 원생이면 출고일, 교재명 순으로 정렬한다", () => {
-      const view = buildBookPurchaseList(
-        [
-          createSale({ saleId: "sale-1", studentName: "이서윤", shippedAt: "2026-08-01" }),
-          createSale({ saleId: "sale-2", studentName: "김민지", shippedAt: "2026-08-22", bookTitle: "체르니 100" }),
-          createSale({ saleId: "sale-3", studentName: "김민지", shippedAt: "2026-08-22", bookTitle: "바이엘 2" }),
-          createSale({ saleId: "sale-4", studentName: "김민지", shippedAt: "2026-08-10", bookTitle: "하농" }),
-          createSale({ saleId: "sale-5", studentName: "김민지", shippedAt: "2026-08-22", bookTitle: "바이엘 2 상" }),
-        ],
-        { academyId: "academy-1" },
-      );
+describe("buildBookPaidList", () => {
+  it("결제 완료 건만 입금일이 속한 월 기준으로 보여 주고 금액은 단가 × 수량이다", () => {
+    const view = buildBookPaidList(
+      [
+        createPaidSale({ saleId: "sale-1", shippedAt: "2026-07-28", paidAt: "2026-08-02", price: 15000, quantity: 2 }),
+        createPaidSale({ saleId: "sale-2", shippedAt: "2026-08-28", paidAt: "2026-09-02" }),
+        createSale({ saleId: "sale-3" }),
+      ],
+      { academyId: "academy-1", month: "2026-08" },
+    );
 
-      expect(view.items.map((row) => row.saleId)).toEqual(["sale-4", "sale-3", "sale-5", "sale-2", "sale-1"]);
-    });
+    expect(view.items).toEqual([
+      {
+        saleId: "sale-1",
+        studentName: "김민지",
+        bookTitle: "바이엘 2",
+        price: 15000,
+        quantity: 2,
+        amount: 30000,
+        shippedAt: "2026-07-28",
+        paidAt: "2026-08-02",
+        ledgerMissing: false,
+      },
+    ]);
+  });
 
-    it("원생명, 교재명, 출고일, 결제 상태 이름으로 검색한다", () => {
-      const sales = [
-        createSale({ saleId: "sale-1", studentName: "김민지", bookTitle: "바이엘 2", shippedAt: "2026-08-21" }),
-        createSale({
-          saleId: "sale-2",
-          studentName: "이서윤",
-          bookTitle: "체르니 100",
-          shippedAt: "2026-09-02",
-          status: "paid",
-          paidAt: "2026-09-03",
-          permanent: true,
-        }),
-      ];
-      const search = (keyword: string) =>
-        buildBookPurchaseList(sales, { academyId: "academy-1", search: keyword }).items.map((row) => row.saleId);
+  it("입출입내역 연결이 끊긴 결제 완료 건은 원장 기록 없음으로 표시한다", () => {
+    const view = buildBookPaidList(
+      [
+        createPaidSale({ saleId: "sale-1", paidLedgerEntryId: null }),
+        createPaidSale({ saleId: "sale-2", paidLedgerEntryId: undefined }),
+      ],
+      { academyId: "academy-1", month: "2026-08" },
+    );
 
-      expect(search("이서")).toEqual(["sale-2"]);
-      expect(search("바이엘")).toEqual(["sale-1"]);
-      expect(search("2026-09")).toEqual(["sale-2"]);
-      expect(search("결제 대기")).toEqual(["sale-1"]);
-      expect(search("  김민지  ")).toEqual(["sale-1"]);
-    });
+    expect(view.items.find((row) => row.saleId === "sale-1")?.ledgerMissing).toBe(true);
+    // 연결 정보를 읽지 않은 환경(데모)은 알 수 없으므로 표시하지 않는다.
+    expect(view.items.find((row) => row.saleId === "sale-2")?.ledgerMissing).toBe(false);
+  });
 
-    it("원생명은 숫자 크기와 가나다 기준으로 정렬한다", () => {
-      const view = buildBookPurchaseList(
-        ["원생10", "원생2", "하늘", "가은"].map((studentName, index) =>
-          createSale({ saleId: `sale-${index}`, studentName }),
-        ),
-        { academyId: "academy-1" },
-      );
+  it("입금일 최신순 → 원생명 → 도서명 → id 순으로 정렬하고 이름·도서명으로 검색한다", () => {
+    const sales = [
+      createPaidSale({ saleId: "sale-1", studentName: "이서윤", paidAt: "2026-08-10" }),
+      createPaidSale({ saleId: "sale-2", studentName: "김민지", paidAt: "2026-08-20", bookTitle: "체르니 100" }),
+      createPaidSale({ saleId: "sale-3", studentName: "김민지", paidAt: "2026-08-20", bookTitle: "바이엘 2" }),
+    ];
 
-      expect(view.items.map((row) => row.studentName)).toEqual(["가은", "원생2", "원생10", "하늘"]);
-    });
+    expect(buildBookPaidList(sales, { academyId: "academy-1", month: "2026-08" }).items.map((row) => row.saleId)).toEqual([
+      "sale-3",
+      "sale-2",
+      "sale-1",
+    ]);
+    expect(
+      buildBookPaidList(sales, { academyId: "academy-1", month: "2026-08", search: "체르니" }).items.map((row) => row.saleId),
+    ).toEqual(["sale-2"]);
+  });
+});
 
-    it("원생·출고일·교재명이 모두 같아도 페이지를 넘길 때 중복이나 누락이 없다", () => {
-      const sameSales = Array.from({ length: 12 }, (_, index) =>
-        createSale({ saleId: `sale-${index + 1}` }),
-      );
+describe("formatBookSaleStatus", () => {
+  it("상태를 사용자가 쓰는 말로 바꾼다", () => {
+    expect(formatBookSaleStatus("paid")).toBe("결제 완료");
+    expect(formatBookSaleStatus("payment-pending")).toBe("결제 대기");
+  });
+});
 
-      const firstPage = buildBookPurchaseList(sameSales, { academyId: "academy-1" });
-      const secondPage = buildBookPurchaseList(sameSales, { academyId: "academy-1", page: 2 });
-      const pagedIds = [...firstPage.items, ...secondPage.items].map((row) => row.saleId);
-
-      expect(pagedIds).toEqual(Array.from({ length: 12 }, (_, index) => `sale-${index + 1}`));
-    });
-
-    it("검색과 결제 상태 필터를 적용한 결과를 기준으로 총 건수를 센다", () => {
-      const sales = [
-        ...createNumberedSales(12),
-        createSale({
-          saleId: "sale-paid",
-          studentName: "한서아",
-          bookTitle: "체르니 100",
-          status: "paid",
-          paidAt: "2026-08-23",
-          permanent: true,
-        }),
-      ];
-
-      expect(buildBookPurchaseList(sales, { academyId: "academy-1", search: "교재" }).totalItems).toBe(12);
-      expect(
-        buildBookPurchaseList(sales, { academyId: "academy-1", filters: { status: "paid" } }).totalItems,
-      ).toBe(1);
-    });
+describe("formatBookSaleLedgerDescription", () => {
+  it("수량이 1권이면 도서명과 원생만, 2권 이상이면 수량도 적는다(서버 입출입내역 설명과 같다)", () => {
+    expect(
+      formatBookSaleLedgerDescription({ bookTitle: "바이엘 2", quantity: 1, studentName: "김민지" }),
+    ).toBe("교재 판매: 바이엘 2 / 김민지");
+    expect(
+      formatBookSaleLedgerDescription({ bookTitle: "바이엘 2", quantity: 3, studentName: "김민지" }),
+    ).toBe("교재 판매: 바이엘 2 × 3권 / 김민지");
   });
 });

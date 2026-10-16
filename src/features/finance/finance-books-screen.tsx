@@ -5,6 +5,7 @@ import { ListPagination } from "@/components/management/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { BookSale } from "@/domain/book-sale";
+import { calculateBookAmount } from "@/domain/book-stock";
 import { buildListView } from "@/domain/common-list";
 import { FinanceDataScreenProps } from "./finance-types";
 import {
@@ -21,6 +22,10 @@ export type BookFinanceRow = {
   id: string;
   studentName: string;
   bookTitle: string;
+  /** 출고 시점의 단가. */
+  price: number;
+  quantity: number;
+  /** 금액 = 단가 × 수량. */
   amount: number;
   shippedAt: string;
   paidAt: string;
@@ -84,6 +89,8 @@ export function FinanceBooksScreen({
               <TableHead className="px-4 py-3">이름</TableHead>
               <TableHead className="px-4 py-3">도서명</TableHead>
               <TableHead className="px-4 py-3">가격</TableHead>
+              <TableHead className="px-4 py-3">수량</TableHead>
+              <TableHead className="px-4 py-3">금액</TableHead>
               <TableHead className="px-4 py-3">출고일</TableHead>
               <TableHead className="px-4 py-3">입금일</TableHead>
             </TableRow>
@@ -93,7 +100,9 @@ export function FinanceBooksScreen({
               <TableRow key={row.id}>
                 <TableCell label="이름" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
                 <TableCell label="도서명" className="px-4 py-3">{row.bookTitle}</TableCell>
-                <TableCell label="가격" className="px-4 py-3">{formatWon(row.amount)}</TableCell>
+                <TableCell label="가격" className="px-4 py-3">{formatWon(row.price)}</TableCell>
+                <TableCell label="수량" className="px-4 py-3">{row.quantity}권</TableCell>
+                <TableCell label="금액" className="px-4 py-3">{formatWon(row.amount)}</TableCell>
                 <TableCell label="출고일" className="px-4 py-3">{row.shippedAt}</TableCell>
                 <TableCell label="입금일" className="px-4 py-3">
                   <span className="flex flex-wrap items-center gap-2">
@@ -131,7 +140,9 @@ export function buildBookFinanceRows(
             id: sale.saleId,
             studentName: sale.studentName,
             bookTitle: sale.bookTitle,
-            amount: sale.price,
+            price: sale.price,
+            quantity: sale.quantity,
+            amount: calculateBookAmount(sale.price, sale.quantity),
             shippedAt: sale.shippedAt,
             paidAt: sale.paidAt,
             paidLedgerEntryId: sale.paidLedgerEntryId,

@@ -10,7 +10,18 @@ import {
 } from "react";
 import type { QueryKey } from "@tanstack/react-query";
 
-import { buildBookPurchaseList, type LedgerEntry } from "@/domain/book-sale";
+import {
+  buildBookPaidList,
+  buildBookShipmentList,
+  type BuildBookPaidListOptions,
+  type BuildBookShipmentListOptions,
+  type LedgerEntry,
+} from "@/domain/book-sale";
+import {
+  buildBookStockList,
+  type BookStockRow,
+  type BuildBookStockListOptions,
+} from "@/domain/book-stock";
 import { buildConsultationList } from "@/domain/consultation-list";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
@@ -24,7 +35,6 @@ import {
 } from "@/domain/status-management";
 import { buildTeacherList } from "@/domain/teacher-list";
 import { buildVendorList } from "@/domain/vendor-list";
-import { createBookPurchaseListQueryKey } from "@/lib/api/books";
 import { createConsultationListQueryKey } from "@/lib/api/consultations";
 import {
   createLessonTicketListQueryKey,
@@ -44,8 +54,6 @@ import {
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   registerDemoAcademyTeacher,
-  completeDemoBookRelease,
-  registerDemoBookRelease,
   registerDemoConsultation,
   registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
@@ -58,7 +66,6 @@ import {
   updateDemoTeacherStatus,
   updateDemoVendor,
   type DemoAcademyState,
-  type DemoBookReleaseInput,
   type DemoConsultationInput,
   type DemoConsultationUpdateInput,
   type DemoManualLedgerInput,
@@ -71,6 +78,16 @@ import {
   type DemoVendorRegistrationInput,
   type DemoVendorUpdateInput,
 } from "./academy-demo-state";
+import {
+  cancelDemoBookPayment,
+  completeDemoBookRelease,
+  deleteDemoBook,
+  deleteDemoBookRelease,
+  registerDemoBookRelease,
+  registerDemoBookStock,
+  updateDemoBook,
+  updateDemoBookRelease,
+} from "./academy-demo-books";
 import { queryKeys } from "../api/query-keys";
 import { createVendorListQueryKey } from "../api/vendors";
 
@@ -98,12 +115,15 @@ type DemoAcademyContextValue = {
   registerConsultation: (input: DemoConsultationInput) => void;
   updateConsultation: (input: DemoConsultationUpdateInput) => void;
   deleteConsultation: (input: { consultationId: string }) => void;
-  registerBookRelease: (
-    input: Omit<DemoBookReleaseInput, "studentName"> & {
-      studentName?: string;
-    },
-  ) => void;
+  /** 교재·출고 변경은 서버 RPC와 같은 규칙으로 검사하고, 규칙에 어긋나면 한국어 오류를 던진다. */
+  registerBookStock: (input: DemoBookStockInput) => void;
+  updateBook: (input: DemoBookStockInput & { bookId: string }) => void;
+  deleteBook: (input: { bookId: string }) => void;
+  registerBookRelease: (input: DemoBookReleaseRegisterInput) => void;
+  updateBookRelease: (input: DemoBookReleaseUpdateInput) => void;
+  deleteBookRelease: (input: { releaseId: string }) => void;
   completeBookPayment: (input: { releaseId: string; paidAt: string }) => void;
+  cancelBookPayment: (input: { releaseId: string; reason: string }) => void;
   createStudentListQueryOptions: (options: Parameters<typeof buildStudentList>[1]) => {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
@@ -148,13 +168,46 @@ type DemoAcademyContextValue = {
     queryKey: QueryKey;
     queryFn: () => Promise<ReturnType<typeof buildConsultationList>>;
   };
-  createBookPurchaseListQueryOptions: (options: Parameters<typeof buildBookPurchaseList>[1]) => {
+  createBookStockListQueryOptions: (options: BuildBookStockListOptions) => {
     queryKey: QueryKey;
-    queryFn: () => Promise<ReturnType<typeof buildBookPurchaseList>>;
+    queryFn: () => Promise<ReturnType<typeof buildBookStockList>>;
+  };
+  createBookOptionsQueryOptions: () => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<BookStockRow[]>;
+  };
+  createPendingBookReleasesQueryOptions: (options: BuildBookShipmentListOptions) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<ReturnType<typeof buildBookShipmentList>>;
+  };
+  createPaidBookReleasesQueryOptions: (options: BuildBookPaidListOptions) => {
+    queryKey: QueryKey;
+    queryFn: () => Promise<ReturnType<typeof buildBookPaidList>>;
   };
 };
 
 const DemoAcademyContext = createContext<DemoAcademyContextValue | null>(null);
+
+export type DemoBookStockInput = {
+  title: string;
+  price: number;
+  quantity: number;
+  stockedOn: string;
+};
+
+export type DemoBookReleaseUpdateInput = {
+  releaseId: string;
+  studentId: string;
+  bookId: string;
+  price: number;
+  quantity: number;
+  shippedOn: string;
+};
+
+export type DemoBookReleaseRegisterInput = Omit<DemoBookReleaseUpdateInput, "releaseId"> & {
+  status: "payment-pending" | "paid";
+  paidOn?: string;
+};
 
 export function DemoAcademyProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(createInitialDemoAcademyState);
@@ -165,6 +218,15 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       setRevision((current) => current + 1);
     },
     [],
+  );
+
+  /** 현재 상태로 먼저 규칙을 검사해 오류를 호출한 쪽에 던지고, 통과하면 상태를 바꾼다(updater 안에서 던지면 화면이 깨진다). */
+  const commitBookChange = useCallback(
+    (apply: (current: DemoAcademyState) => DemoAcademyState) => {
+      apply(state);
+      commitState(apply);
+    },
+    [commitState, state],
   );
 
   const value = useMemo<DemoAcademyContextValue>(
@@ -261,20 +323,29 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       deleteConsultation(input) {
         commitState((current) => deleteDemoConsultation(current, input));
       },
+      registerBookStock(input) {
+        commitBookChange((current) => registerDemoBookStock(current, input));
+      },
+      updateBook(input) {
+        commitBookChange((current) => updateDemoBook(current, input));
+      },
+      deleteBook(input) {
+        commitBookChange((current) => deleteDemoBook(current, input));
+      },
       registerBookRelease(input) {
-        commitState((current) =>
-          registerDemoBookRelease(current, {
-            ...input,
-            studentName:
-              input.studentName ??
-              current.students.find((student) => student.studentId === input.studentId)
-                ?.name ??
-              "이름 없음",
-          }),
-        );
+        commitBookChange((current) => registerDemoBookRelease(current, input));
+      },
+      updateBookRelease(input) {
+        commitBookChange((current) => updateDemoBookRelease(current, input));
+      },
+      deleteBookRelease(input) {
+        commitBookChange((current) => deleteDemoBookRelease(current, input));
       },
       completeBookPayment(input) {
-        commitState((current) => completeDemoBookRelease(current, input));
+        commitBookChange((current) => completeDemoBookRelease(current, input));
+      },
+      cancelBookPayment(input) {
+        commitBookChange((current) => cancelDemoBookPayment(current, input));
       },
       createStudentListQueryOptions(options) {
         return {
@@ -472,18 +543,62 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
           queryFn: async () => buildConsultationList(state.consultations, options),
         };
       },
-      createBookPurchaseListQueryOptions(options) {
+      createBookStockListQueryOptions(options) {
         return {
           queryKey: [
-            ...createBookPurchaseListQueryKey(options),
+            ...queryKeys.books.stockList(options.academyId, {
+              q: options.search,
+              sort: options.sortOrder,
+              page: options.page?.toString(),
+              pageSize: options.pageSize?.toString(),
+            }),
             "demo",
             revision,
           ],
-          queryFn: async () => buildBookPurchaseList(state.bookSales, options),
+          queryFn: async () =>
+            buildBookStockList(
+              state.books.filter((book) => book.active),
+              options,
+            ),
+        };
+      },
+      createBookOptionsQueryOptions() {
+        return {
+          queryKey: [...queryKeys.books.options(state.academyId), "demo", revision],
+          queryFn: async () => state.books.filter((book) => book.active),
+        };
+      },
+      createPendingBookReleasesQueryOptions(options) {
+        return {
+          queryKey: [
+            ...queryKeys.books.pendingList(options.academyId, {
+              q: options.search,
+              page: options.page?.toString(),
+              pageSize: options.pageSize?.toString(),
+            }),
+            "demo",
+            revision,
+          ],
+          queryFn: async () => buildBookShipmentList(state.bookSales, options),
+        };
+      },
+      createPaidBookReleasesQueryOptions(options) {
+        return {
+          queryKey: [
+            ...queryKeys.books.paidList(options.academyId, {
+              month: options.month,
+              q: options.search,
+              page: options.page?.toString(),
+              pageSize: options.pageSize?.toString(),
+            }),
+            "demo",
+            revision,
+          ],
+          queryFn: async () => buildBookPaidList(state.bookSales, options),
         };
       },
     }),
-    [commitState, revision, state],
+    [commitBookChange, commitState, revision, state],
   );
 
   return (

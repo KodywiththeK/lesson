@@ -15,6 +15,7 @@ import {
   fetchAllLessonTickets,
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
+import { BOOK_RELEASE_SELECT, toBookSale, type BookReleaseSupabaseRow } from "./books";
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { fetchPayrollTeachers, type TeacherListSupabaseClient } from "./teachers";
 import { queryKeys } from "./query-keys";
@@ -53,7 +54,7 @@ export type FinanceManagementSupabaseClient = FinanceLedgerListSupabaseClient &
       select(select: string): PagedSelectQuery<StudentFinanceRow>;
     };
     from(table: "book_releases"): {
-      select(select: string): PagedSelectQuery<BookReleaseFinanceRow>;
+      select(select: string): PagedSelectQuery<BookReleaseSupabaseRow>;
     };
     from(table: "lesson_events"): {
       select(select: string): PagedSelectQuery<LessonEventFinanceRow>;
@@ -104,20 +105,6 @@ type StudentFinanceRow = {
         teachers: { name: string | null } | null;
       }>
     | null;
-};
-
-type BookReleaseFinanceRow = {
-  id: string;
-  academy_id: string;
-  book_id: string;
-  student_id: string;
-  student_name: string;
-  book_title: string;
-  price: number;
-  shipped_at: string;
-  status: "payment-pending" | "paid";
-  paid_at: string | null;
-  paid_ledger_entry_id?: string | null;
 };
 
 type LessonEventFinanceRow = {
@@ -196,8 +183,6 @@ export type FetchFinanceManagementDataOptions = {
 
 const FINANCE_STUDENT_SELECT =
   "id, academy_id, name, registered_on, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, teacher_id, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, final_monthly_fee, active, teachers!student_instruments_academy_teacher_fk(name))";
-const FINANCE_BOOK_RELEASE_SELECT =
-  "id, academy_id, book_id, student_id, student_name, book_title, price, shipped_at, status, paid_at, paid_ledger_entry_id";
 const FINANCE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, teacher_id, lesson_kind, origin, instrument_id, instrument_name, starts_at, ends_at, students!lesson_events_academy_student_fk(name), student_instruments!lesson_events_academy_student_instrument_fk(final_monthly_fee), attendance_records!attendance_records_academy_lesson_event_fk(status)";
 const FINANCE_SALARY_SETTLEMENT_SELECT =
@@ -564,7 +549,7 @@ async function fetchFinanceBookSales(
   const rows = await fetchAllRows("교재 내역을 불러오지 못했습니다", (from, to) =>
     supabase
       .from("book_releases")
-      .select(FINANCE_BOOK_RELEASE_SELECT)
+      .select(BOOK_RELEASE_SELECT)
       .eq("academy_id", academyId)
       .eq("status", "paid")
       .gte("paid_at", paidRange.from)
@@ -666,34 +651,6 @@ function toStudentEnrollments(row: StudentFinanceRow): StudentEnrollment[] {
       },
     ];
   });
-}
-
-function toBookSale(row: BookReleaseFinanceRow): BookSale {
-  const common = {
-    academyId: row.academy_id,
-    saleId: row.id,
-    bookId: row.book_id,
-    bookTitle: row.book_title,
-    studentId: row.student_id,
-    studentName: row.student_name,
-    price: row.price,
-    shippedAt: row.shipped_at,
-  };
-
-  if (row.status === "paid") {
-    return {
-      ...common,
-      status: "paid",
-      paidAt: row.paid_at ?? "",
-      paidLedgerEntryId: row.paid_ledger_entry_id,
-      permanent: true,
-    };
-  }
-
-  return {
-    ...common,
-    status: "payment-pending",
-  };
 }
 
 function toPayrollLessonSource(row: LessonEventFinanceRow): PayrollLessonSource {

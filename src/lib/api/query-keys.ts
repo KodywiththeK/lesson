@@ -31,12 +31,15 @@ type ConsultationListFilters = {
   instrumentName?: string;
 };
 
-type BookPurchaseListFilters = {
+type BookListFilters = {
   page?: string;
   pageSize?: string;
   q?: string;
-  status?: string;
 };
+
+type BookStockListFilters = BookListFilters & { sort?: string };
+
+type BookPaidListFilters = BookListFilters & { month?: string };
 
 type FinanceLedgerListFilters = {
   page?: string;
@@ -139,16 +142,34 @@ export const queryKeys = {
       ] as const,
   },
   books: {
-    purchaseList: (
-      academyId: string,
-      filters: BookPurchaseListFilters = {},
-    ) =>
+    all: (academyId: string) =>
+      [...queryKeys.academy(academyId), "books"] as const,
+    stockList: (academyId: string, filters: BookStockListFilters = {}) =>
       [
-        ...queryKeys.academy(academyId),
-        "books",
-        "purchase-list",
+        ...queryKeys.books.all(academyId),
+        "stock",
         filters.q ?? "",
-        filters.status ?? "",
+        filters.sort ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
+      ] as const,
+    /** 출고 폼의 도서 선택지(보관하지 않은 교재 전체, 페이지 없음). */
+    options: (academyId: string) =>
+      [...queryKeys.books.all(academyId), "options"] as const,
+    pendingList: (academyId: string, filters: BookListFilters = {}) =>
+      [
+        ...queryKeys.books.all(academyId),
+        "pending",
+        filters.q ?? "",
+        filters.page ?? "",
+        filters.pageSize ?? "",
+      ] as const,
+    paidList: (academyId: string, filters: BookPaidListFilters = {}) =>
+      [
+        ...queryKeys.books.all(academyId),
+        "paid",
+        filters.month ?? "",
+        filters.q ?? "",
         filters.page ?? "",
         filters.pageSize ?? "",
       ] as const,

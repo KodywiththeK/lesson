@@ -19,3 +19,9 @@ export function invalidateAfterPeopleChange(queryClient: QueryClient, academyId:
     void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), section] });
   }
 }
+
+/** 교재·출고·결제 변경 뒤 함께 갱신해야 하는 쿼리: 교재 탭(재고·출고·결제 완료)과 수입 관리(교재 내역·입출입내역·연간 수입). */
+export function invalidateAfterBookChange(queryClient: QueryClient, academyId: string) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.books.all(academyId) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
+}

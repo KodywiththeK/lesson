@@ -5,8 +5,6 @@ import {
   createInitialDemoAcademyState,
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
-  completeDemoBookRelease,
-  registerDemoBookRelease,
   adjustDemoLessonTicket,
   registerDemoLessonTicket,
   registerDemoConsultation,
@@ -352,67 +350,5 @@ describe("academy demo state", () => {
     const next = deleteDemoConsultation(state, { consultationId: target.consultationId });
 
     expect(next.consultations).toEqual(rest);
-  });
-
-  it("결제 완료 교재 출고는 구매 목록과 수입 ledger를 함께 갱신한다", () => {
-    const state = createInitialDemoAcademyState();
-
-    const next = registerDemoBookRelease(state, {
-      studentId: "student-1",
-      studentName: "김민지",
-      bookTitle: "체르니 100",
-      price: 13000,
-      shippedAt: "2026-08-21",
-      status: "paid",
-    });
-
-    expect(next.bookSales).toContainEqual(
-      expect.objectContaining({
-        studentName: "김민지",
-        bookTitle: "체르니 100",
-        status: "paid",
-      }),
-    );
-    expect(next.ledgerEntries).toContainEqual(
-      expect.objectContaining({
-        type: "income",
-        source: "book-sale",
-        amount: 13000,
-        description: "교재 판매: 체르니 100 / 김민지",
-      }),
-    );
-  });
-
-  it("결제 대기 교재를 결제 완료로 바꾸면 입금일이 기록되고 수입 ledger가 한 번만 생긴다", () => {
-    const state = registerDemoBookRelease(createInitialDemoAcademyState(), {
-      studentId: "student-1",
-      studentName: "김민지",
-      bookTitle: "체르니 100",
-      price: 13000,
-      shippedAt: "2026-08-21",
-      status: "payment-pending",
-    });
-    const releaseId = state.bookSales.at(-1)?.saleId ?? "";
-
-    const next = completeDemoBookRelease(state, { releaseId, paidAt: "2026-08-25" });
-
-    expect(next.bookSales.find((sale) => sale.saleId === releaseId)).toMatchObject({
-      status: "paid",
-      paidAt: "2026-08-25",
-    });
-    expect(
-      next.ledgerEntries.filter((entry) => entry.source === "book-sale" && entry.refId === releaseId),
-    ).toEqual([
-      expect.objectContaining({ type: "income", occurredOn: "2026-08-25", amount: 13000 }),
-    ]);
-    expect(() => completeDemoBookRelease(next, { releaseId, paidAt: "2026-08-26" })).toThrow(
-      "이미 결제 완료된 교재입니다.",
-    );
-  });
-
-  it("없는 교재 출고는 결제 완료 처리할 수 없다", () => {
-    expect(() =>
-      completeDemoBookRelease(createInitialDemoAcademyState(), { releaseId: "none", paidAt: "2026-08-25" }),
-    ).toThrow("결제 완료 처리할 교재 출고를 찾지 못했습니다.");
   });
 });

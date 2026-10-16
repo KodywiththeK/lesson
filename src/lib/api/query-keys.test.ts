@@ -98,24 +98,31 @@ describe("queryKeys", () => {
     ]);
   });
 
-  it("학원별 교재 구매 목록 key에 academyId와 검색/상태 필터를 포함한다", () => {
-    expect(
-      queryKeys.books.purchaseList("academy-1", {
-        q: "바이엘",
-        status: "payment-pending",
-        page: "2",
-        pageSize: "30",
-      }),
-    ).toEqual([
+  it("교재 관리 key는 탭별로 academyId와 조회 조건을 포함한다", () => {
+    expect(queryKeys.books.all("academy-1")).toEqual(["academy", "academy-1", "books"]);
+    expect(queryKeys.books.stockList("academy-1", { q: "바이엘", sort: "desc", page: "2", pageSize: "30" })).toEqual([
       "academy",
       "academy-1",
       "books",
-      "purchase-list",
+      "stock",
       "바이엘",
-      "payment-pending",
+      "desc",
       "2",
       "30",
     ]);
+    expect(queryKeys.books.options("academy-1")).toEqual(["academy", "academy-1", "books", "options"]);
+    expect(queryKeys.books.pendingList("academy-1", { q: "민지", page: "1", pageSize: "10" })).toEqual([
+      "academy",
+      "academy-1",
+      "books",
+      "pending",
+      "민지",
+      "1",
+      "10",
+    ]);
+    expect(
+      queryKeys.books.paidList("academy-1", { month: "2026-10", q: "바이엘", page: "1", pageSize: "10" }),
+    ).toEqual(["academy", "academy-1", "books", "paid", "2026-10", "바이엘", "1", "10"]);
   });
 
   it("학원별 입출입 내역 key에 academyId와 검색/유형/출처 필터를 포함한다", () => {

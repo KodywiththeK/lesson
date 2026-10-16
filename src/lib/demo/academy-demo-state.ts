@@ -6,7 +6,7 @@ import {
   generateAcademyLessonEvents,
   type Weekday,
 } from "@/domain/academy-lesson-schedule";
-import type { BookSale, LedgerCategory, LedgerEntry } from "@/domain/book-sale";
+import type { LedgerCategory, LedgerEntry } from "@/domain/book-sale";
 import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
@@ -53,6 +53,7 @@ import type { UpdateStudentProfileInput } from "@/lib/api/students";
 import { demoLessonWorkspaceData } from "./lesson-demo-data";
 import {
   demoAcademyId,
+  demoBooks,
   demoBookSales,
   demoConsultations,
   demoLedgerEntries,
@@ -60,6 +61,7 @@ import {
   demoTeachers,
   demoTickets,
   demoVendors,
+  type DemoBook,
 } from "./management-demo-data";
 
 export type DemoAcademyState = {
@@ -76,6 +78,7 @@ export type DemoAcademyState = {
   privateLessons: PrivateLesson[];
   vendors: VendorListRow[];
   consultations: ConsultationListRow[];
+  books: DemoBook[];
   bookSales: typeof demoBookSales;
 };
 
@@ -178,15 +181,6 @@ export type DemoConsultationInput = ConsultationProfile;
 
 export type DemoConsultationUpdateInput = DemoConsultationInput & {
   consultationId: string;
-};
-
-export type DemoBookReleaseInput = {
-  studentId: string;
-  studentName: string;
-  bookTitle: string;
-  price: number;
-  shippedAt: string;
-  status: BookSale["status"];
 };
 
 const initialEnrollments: StudentEnrollment[] = [
@@ -346,6 +340,7 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     privateLessons: [...demoLessonWorkspaceData.privateLessons],
     vendors: [...demoVendors],
     consultations: [...demoConsultations],
+    books: demoBooks.map((book) => ({ ...book })),
     bookSales: [...demoBookSales],
   };
 }
@@ -1054,121 +1049,6 @@ function getNextConsultationNumber(consultations: ConsultationListRow[]) {
   );
 
   return Math.max(0, ...numbers) + 1;
-}
-
-export function registerDemoBookRelease(
-  state: DemoAcademyState,
-  input: DemoBookReleaseInput,
-): DemoAcademyState {
-  const bookTitle = input.bookTitle.trim();
-
-  if (!bookTitle) {
-    throw new Error("교재명은 필수입니다.");
-  }
-
-  if (!Number.isInteger(input.price) || input.price <= 0) {
-    throw new Error("교재 금액은 1 이상의 정수여야 합니다.");
-  }
-
-  const saleId = `book-sale-demo-${state.bookSales.length + 1}`;
-  const sale: BookSale =
-    input.status === "paid"
-      ? {
-          academyId: state.academyId,
-          saleId,
-          bookId: `book-demo-${state.bookSales.length + 1}`,
-          bookTitle,
-          studentId: input.studentId,
-          studentName: input.studentName,
-          price: input.price,
-          shippedAt: input.shippedAt,
-          status: "paid",
-          paidAt: input.shippedAt,
-          permanent: true,
-        }
-      : {
-          academyId: state.academyId,
-          saleId,
-          bookId: `book-demo-${state.bookSales.length + 1}`,
-          bookTitle,
-          studentId: input.studentId,
-          studentName: input.studentName,
-          price: input.price,
-          shippedAt: input.shippedAt,
-          status: "payment-pending",
-        };
-
-  return {
-    ...state,
-    bookSales: [...state.bookSales, sale],
-    ledgerEntries:
-      sale.status === "paid"
-        ? buildFinanceLedgerList(
-            [
-              ...state.ledgerEntries,
-              {
-                academyId: state.academyId,
-                ledgerId: `ledger-book-${sale.saleId}`,
-                occurredOn: sale.paidAt,
-                type: "income",
-                source: "book-sale",
-                category: "book-sale",
-                amount: sale.price,
-                description: `교재 판매: ${sale.bookTitle} / ${sale.studentName}`,
-                refId: sale.saleId,
-              },
-            ],
-            { academyId: state.academyId },
-          )
-        : state.ledgerEntries,
-  };
-}
-
-/** 결제 대기 교재를 결제 완료로 바꾸고 수입 ledger를 만든다(DB `complete_book_release_payment`와 같은 규칙). */
-export function completeDemoBookRelease(
-  state: DemoAcademyState,
-  input: { releaseId: string; paidAt: string },
-): DemoAcademyState {
-  const sale = state.bookSales.find((candidate) => candidate.saleId === input.releaseId);
-
-  if (!sale) {
-    throw new Error("결제 완료 처리할 교재 출고를 찾지 못했습니다.");
-  }
-
-  if (sale.status === "paid") {
-    throw new Error("이미 결제 완료된 교재입니다.");
-  }
-
-  const paidSale: BookSale = {
-    ...sale,
-    status: "paid",
-    paidAt: input.paidAt,
-    permanent: true,
-  };
-
-  return {
-    ...state,
-    bookSales: state.bookSales.map((candidate) =>
-      candidate.saleId === sale.saleId ? paidSale : candidate,
-    ),
-    ledgerEntries: buildFinanceLedgerList(
-      [
-        ...state.ledgerEntries,
-        {
-          academyId: state.academyId,
-          ledgerId: `ledger-book-${sale.saleId}`,
-          occurredOn: input.paidAt,
-          type: "income",
-          source: "book-sale",
-          category: "book-sale",
-          amount: sale.price,
-          description: `교재 판매: ${sale.bookTitle} / ${sale.studentName}`,
-          refId: sale.saleId,
-        },
-      ],
-      { academyId: state.academyId },
-    ),
-  };
 }
 
 export function updateDemoLedgerEntry(

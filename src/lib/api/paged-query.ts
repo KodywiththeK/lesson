@@ -7,7 +7,7 @@ type QueryResult<TRow> = {
 
 /** 목록 조회에서 쓰는 필터·정렬·범위 체인. `order`를 건 뒤 `range`로 한 페이지씩 읽는다. */
 export type PagedSelectQuery<TRow> = PromiseLike<QueryResult<TRow>> & {
-  eq(column: string, value: string): PagedSelectQuery<TRow>;
+  eq(column: string, value: string | number | boolean): PagedSelectQuery<TRow>;
   is(column: string, value: null): PagedSelectQuery<TRow>;
   gte(column: string, value: string): PagedSelectQuery<TRow>;
   lte(column: string, value: string): PagedSelectQuery<TRow>;

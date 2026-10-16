@@ -1,5 +1,6 @@
 import type { LedgerEntry } from "@/domain/book-sale";
 import type { BookSale } from "@/domain/book-sale";
+import type { BookStockRow } from "@/domain/book-stock";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { StudentListRow } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
@@ -254,6 +255,16 @@ export const demoConsultations: ConsultationListRow[] = [
   },
 ];
 
+/** 데모 교재 재고. 체르니 100은 0권이라 "재고 없음" 표시를 확인할 수 있다. */
+/** `active`가 false인 교재는 삭제(보관)한 교재다. 재고 목록·출고 선택지에서 빠지고 판매 기록은 남는다. */
+export type DemoBook = BookStockRow & { active: boolean };
+
+export const demoBooks: DemoBook[] = [
+  { academyId, bookId: "book-1", title: "바이엘 상", price: 12000, quantity: 9, stockedOn: "2026-08-01", active: true },
+  { academyId, bookId: "book-2", title: "스즈키 바이올린 1", price: 18000, quantity: 4, stockedOn: "2026-08-03", active: true },
+  { academyId, bookId: "book-3", title: "체르니 100", price: 15000, quantity: 0, stockedOn: "2026-07-20", active: true },
+];
+
 export const demoBookSales: BookSale[] = [
   {
     academyId,
@@ -263,6 +274,7 @@ export const demoBookSales: BookSale[] = [
     studentId: "student-1",
     studentName: "김민지",
     price: 12000,
+    quantity: 1,
     orderedOn: "2026-08-10",
     shippedAt: "2026-08-18",
     status: "payment-pending",
@@ -275,6 +287,7 @@ export const demoBookSales: BookSale[] = [
     studentId: "student-4",
     studentName: "한서아",
     price: 18000,
+    quantity: 1,
     orderedOn: "2026-08-08",
     shippedAt: "2026-08-12",
     status: "paid",

@@ -502,7 +502,7 @@ describe("FinanceLedgerListScreen", () => {
         bookSales: [{
           academyId: "academy-1", saleId: "sale-1", bookId: "book-1",
           bookTitle: "바이엘", studentId: "student-1", studentName: "김민지",
-          price: 12000, shippedAt: "2026-08-20", status: "payment-pending",
+          price: 12000, quantity: 1, shippedAt: "2026-08-20", status: "payment-pending",
         }],
       }} />,
     );
@@ -611,7 +611,7 @@ describe("재무 목록 반응형 표", () => {
         bookSales: [{
           academyId: "academy-1", saleId: "sale-responsive", bookId: "book-1",
           bookTitle: "바이엘", studentId: "student-1", studentName: "김민지",
-          price: 12000, shippedAt: "2026-08-20", status: "paid",
+          price: 12000, quantity: 1, shippedAt: "2026-08-20", status: "paid",
           paidAt: "2026-08-21", permanent: true,
         }],
       }} />,
@@ -619,7 +619,7 @@ describe("재무 목록 반응형 표", () => {
 
     const table = screen.getByRole("table", { name: "교재내역" });
     expectRowLabels(within(table).getByRole("row", { name: /김민지/ }),
-      ["이름", "도서명", "가격", "출고일", "입금일"]);
+      ["이름", "도서명", "가격", "수량", "금액", "출고일", "입금일"]);
   });
 
   it("선생님 월급의 모든 값에 항목명을 제공하고 지급 동작을 유지한다", () => {

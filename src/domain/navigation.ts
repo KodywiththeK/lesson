@@ -107,7 +107,29 @@ export const mainNavigation: NavigationItem[] = [
     href: "/books",
     description: "교재 재고, 출고, 결제 완료 상태를 관리합니다.",
     icon: BookOpen,
-    feature: "books",
+    children: [
+      {
+        label: "재고",
+        href: "/books",
+        description: "교재를 등록하고 재고 권수를 확인·수정합니다.",
+        icon: BookOpen,
+        feature: "books",
+      },
+      {
+        label: "출고",
+        href: "/books/shipments",
+        description: "원생에게 교재를 출고하고 입금 전 출고 목록을 관리합니다.",
+        icon: BookOpen,
+        feature: "books",
+      },
+      {
+        label: "결제 완료",
+        href: "/books/paid",
+        description: "입금이 확인된 교재 판매 기록을 확인합니다.",
+        icon: BookOpen,
+        feature: "books",
+      },
+    ],
   },
   {
     label: "수입 관리",

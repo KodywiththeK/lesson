@@ -18,6 +18,7 @@ function buildSale(overrides: { saleId: string } & Record<string, unknown>): Boo
     studentId: "student-1",
     studentName: "김민지",
     price: 12000,
+    quantity: 1,
     shippedAt: "2026-08-10",
     status: "paid",
     paidAt: "2026-08-12",
@@ -67,7 +68,7 @@ describe("교재 내역 화면", () => {
     expect(within(within(table).getByRole("row", { name: /박지후/ })).queryByText("원장 기록 없음")).not.toBeInTheDocument();
   });
 
-  it("결제 완료 건만 이름·도서명·가격·출고일·입금일 열로 보여 준다", () => {
+  it("결제 완료 건만 이름·도서명·가격·수량·금액·출고일·입금일 열로 보여 준다", () => {
     renderBooks([
       buildSale({ saleId: "sale-paid" }),
       buildSale({
@@ -83,19 +84,33 @@ describe("교재 내역 화면", () => {
 
     const table = screen.getByRole("table", { name: "교재내역" });
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "이름", "도서명", "가격", "출고일", "입금일",
+      "이름", "도서명", "가격", "수량", "금액", "출고일", "입금일",
     ]);
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
-      "이름", "도서명", "가격", "출고일", "입금일",
+      "이름", "도서명", "가격", "수량", "금액", "출고일", "입금일",
     ]);
     expect(within(rows[0]).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
-      "김민지", "바이엘 1", "12,000원", "2026-08-10", "2026-08-12",
+      "김민지", "바이엘 1", "12,000원", "1권", "12,000원", "2026-08-10", "2026-08-12",
     ]);
     expect(screen.queryByText("이서윤")).not.toBeInTheDocument();
     expect(screen.queryByText("박지후")).not.toBeInTheDocument();
     expect(screen.queryByText("입금 대기")).not.toBeInTheDocument();
+  });
+
+  it("금액은 단가 × 수량이고 교재 수입 총합도 금액의 합이다", () => {
+    renderBooks([
+      buildSale({ saleId: "sale-1", price: 15000, quantity: 3 }),
+      buildSale({ saleId: "sale-2", studentName: "이서윤", price: 10000, quantity: 1 }),
+    ]);
+
+    const table = screen.getByRole("table", { name: "교재내역" });
+    const firstRow = within(table).getByRole("row", { name: /김민지/ });
+    expect(within(firstRow).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "김민지", "바이엘 1", "15,000원", "3권", "45,000원", "2026-08-10", "2026-08-12",
+    ]);
+    expect(screen.getByText("55,000원")).toHaveClass("text-total");
   });
 
   it("조회 전용임을 알리는 한 줄 설명과 파란색 교재 수입 총합을 보여 준다", () => {
