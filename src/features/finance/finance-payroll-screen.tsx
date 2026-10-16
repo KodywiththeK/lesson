@@ -33,6 +33,7 @@ import {
 
 const UNSUPPORTED_HANDLER_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
 const ZERO_PAY_REASON = "이번 달 등원 확인이 없어 지급할 금액이 없습니다.";
+const ZERO_HOURLY_PAY_REASON = "이번 달 출근 일정에 해당하는 근무 시간이 없어 지급할 금액이 없습니다.";
 const LESSON_RECORD_CHANGED_MESSAGE = "지급 후 등원 기록이 변경되었습니다. 지급액은 그대로입니다.";
 
 /** 급여 표 한 행. 계산·정산 기록(`payroll`)에 화면에서 함께 보여 줄 선생님 정보를 붙였다. */
@@ -338,15 +339,20 @@ function PayrollActions({
         지급 확정
       </Button>
       {hasNothingToPay ? (
-        <p id={reasonId} className="text-xs text-muted-foreground">{ZERO_PAY_REASON}</p>
+        <p id={reasonId} className="text-xs text-muted-foreground">
+          {payroll.payType === "hourly" ? ZERO_HOURLY_PAY_REASON : ZERO_PAY_REASON}
+        </p>
       ) : null}
     </div>
   );
 }
 
 export class PayrollChangedError extends Error {
-  constructor() {
-    super("등원 기록이 바뀌어 금액이 달라졌습니다. 새 금액을 확인한 뒤 다시 확정해 주세요.");
+  constructor(payType: PayrollRecord["payType"]) {
+    // 시급제 금액은 등원 기록이 아니라 선생님의 출근 일정에서 나온다.
+    const changed = payType === "hourly" ? "출근 일정" : "등원 기록";
+
+    super(`${changed}이 바뀌어 금액이 달라졌습니다. 새 금액을 확인한 뒤 다시 확정해 주세요.`);
   }
 }
 
@@ -367,7 +373,7 @@ async function readFreshPayroll(
     current.basePay !== shown.basePay ||
     hasLessonRecordChangedSincePayment(shown.lessonEventIds, current.lessonEventIds)
   ) {
-    throw new PayrollChangedError();
+    throw new PayrollChangedError(shown.payType);
   }
 
   return current;

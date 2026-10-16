@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { registerTeacher } from "./teacher";
+import { buildTeacherSalarySetting, registerTeacher } from "./teacher";
 
 describe("registerTeacher", () => {
   it("담당 파트, 연락처, 등록일, 주민등록번호 보안 참조, 급여 형태를 기록한다", () => {
@@ -250,5 +250,19 @@ describe("registerTeacher", () => {
         payType: "commission" as "ratio",
       }),
     ).toThrow("지원하지 않는 급여 형태입니다.");
+  });
+});
+
+describe("buildTeacherSalarySetting 비율제 소수 입력", () => {
+  it("소수 첫째 자리 비율도 부동소수점 오차 없이 정수 퍼센트로 변환한다(1.1 → 11%)", () => {
+    expect(
+      buildTeacherSalarySetting({ payType: "ratio", ratioAcademyShare: 8.9, ratioTeacherShare: 1.1 }),
+    ).toEqual({ payType: "ratio", ratioTeacherShare: 11 });
+  });
+
+  it("선생님 몫 0은 유효한 비율이며 0%로 변환한다", () => {
+    expect(
+      buildTeacherSalarySetting({ payType: "ratio", ratioAcademyShare: 10, ratioTeacherShare: 0 }),
+    ).toEqual({ payType: "ratio", ratioTeacherShare: 0 });
   });
 });

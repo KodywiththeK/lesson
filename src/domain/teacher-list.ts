@@ -35,6 +35,8 @@ export type TeacherListRow = {
   salarySummary?: string;
   workSchedules?: TeacherWorkSchedule[];
   workScheduleSummary?: string;
+  /** 마스킹된 주민등록번호(`900101-1******`). 원문과 암호문은 목록 행에 싣지 않는다. */
+  residentRegistrationMasked?: string;
 };
 
 export type TeacherListFilters = {
@@ -50,6 +52,9 @@ export type BuildTeacherListOptions = {
   page?: number;
   pageSize?: PageSizeOption;
 };
+
+/** 담당 파트 선택 목록. 목록 밖 값은 기존 데이터를 유지할 때만 `buildTeacherPartFormOptions`가 더한다. */
+export const TEACHER_PARTS = ["피아노", "바이올린", "첼로", "플루트", "원장"];
 
 const TEACHER_PAY_TYPE_LABELS: Record<TeacherPayType, string> = {
   monthly: "월급제",
@@ -87,6 +92,13 @@ export function buildTeacherList(
     page: options.page,
     pageSize: options.pageSize,
   });
+}
+
+/** 등록·수정 폼의 담당 파트 선택지. 기존 선생님의 파트가 목록 밖이어도 사라지지 않게 마지막에 더한다. */
+export function buildTeacherPartFormOptions(currentPart: string | undefined) {
+  const part = currentPart?.trim();
+
+  return part && !TEACHER_PARTS.includes(part) ? [...TEACHER_PARTS, part] : TEACHER_PARTS;
 }
 
 export function formatTeacherPayType(payType: TeacherPayType) {

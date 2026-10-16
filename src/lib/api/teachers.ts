@@ -15,10 +15,16 @@ import {
   type TeacherWorkScheduleInput,
 } from "@/domain/teacher";
 import {
+  maskResidentRegistration,
+  validateResidentRegistration,
+} from "@/domain/teacher-resident-registration";
+import {
   buildStatusManagementList,
   type StatusManagementFetchOptions,
   type StatusManagementListItem,
 } from "@/domain/status-management";
+
+import { toUserMessage } from "@/lib/errors/user-message";
 
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
@@ -59,6 +65,8 @@ export type TeacherSupabaseRow = {
   resigned_at?: string | null;
   retention_until?: string | null;
   archived_at?: string | null;
+  /** 마스킹된 주민등록번호만 읽는다. 암호문 컬럼은 어떤 조회에서도 읽지 않는다. */
+  resident_registration_masked?: string | null;
   teacher_work_schedules?: TeacherWorkScheduleRow[] | null;
   teacher_salary_settings?: TeacherSalarySettingRow[] | null;
 };
@@ -95,12 +103,15 @@ export type TeacherProfileMutationInput = {
   registeredAt: string;
   contractStartOn: string;
   contractEndOn: string;
-  payType: TeacherPayType;
+  /** 급여 항목은 원장만 보낸다. `payType`이 없으면 급여 설정은 저장하지 않고 기존 값을 그대로 둔다. */
+  payType?: TeacherPayType;
   monthlySalary?: number;
   hourlyRate?: number;
   ratioAcademyShare?: number;
   ratioTeacherShare?: number;
   workSchedules?: TeacherWorkScheduleInput[];
+  /** 원장만 보낸다. 비어 있으면 저장하지 않고, 있으면 프로필 저장 뒤 전용 RPC로 암호화해 저장한다. */
+  residentRegistration?: string;
 };
 
 export type RegisterTeacherInput = TeacherProfileMutationInput;
@@ -122,11 +133,26 @@ export type DeleteResignedTeacherInput = {
   teacherId: string;
 };
 
+export type RevealTeacherResidentRegistrationInput = {
+  academyId: string;
+  teacherId: string;
+};
+
 type TeacherRpcName =
   | "register_teacher_with_profile"
   | "update_teacher_profile"
   | "update_teacher_status"
-  | "delete_resigned_teacher";
+  | "delete_resigned_teacher"
+  | "set_teacher_resident_registration"
+  | "reveal_teacher_resident_registration";
+
+/** 프로필은 저장됐지만 주민등록번호 저장만 실패했다. 호출부가 같은 프로필을 다시 등록하지 않도록 다른 오류로 구분한다. */
+export class ResidentRegistrationSaveError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResidentRegistrationSaveError";
+  }
+}
 
 export type TeacherMutationSupabaseClient = {
   rpc(
@@ -136,7 +162,10 @@ export type TeacherMutationSupabaseClient = {
 };
 
 const TEACHER_LIST_SELECT =
-  "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)";
+  "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, resident_registration_masked, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)";
+/** 급여 설정 없이 등록하면 서버가 teachers.salary_type에 임시로 넣는 값과 같다(20261018090100). */
+const DEFAULT_PAY_TYPE_WITHOUT_SETTING: TeacherPayType = "monthly";
+const UNSET_SALARY_SUMMARY = "급여 미설정";
 const STATUS_TRANSITION_SELECT =
   "entity_type, entity_id, to_status, reason, changed_at";
 
@@ -347,6 +376,7 @@ export async function registerTeacher(
   supabase: TeacherMutationSupabaseClient,
   input: RegisterTeacherInput,
 ): Promise<TeacherListRow> {
+  const residentRegistration = readResidentRegistration(input.residentRegistration);
   const payload = buildTeacherProfilePayload(input);
   const { data, error } = await supabase.rpc(
     "register_teacher_with_profile",
@@ -361,13 +391,23 @@ export async function registerTeacher(
     throw new Error("선생님을 등록했지만 반환된 데이터가 없습니다.");
   }
 
-  return buildOptimisticTeacherRow(input, data);
+  if (residentRegistration) {
+    await saveResidentRegistration(supabase, {
+      academyId: input.academyId,
+      teacherId: data,
+      residentRegistration,
+      savedProfile: "선생님은 등록했지만",
+    });
+  }
+
+  return buildOptimisticTeacherRow(input, data, residentRegistration);
 }
 
 export async function updateTeacherProfile(
   supabase: TeacherMutationSupabaseClient,
   input: UpdateTeacherProfileInput,
 ) {
+  const residentRegistration = readResidentRegistration(input.residentRegistration);
   const { error } = await supabase.rpc("update_teacher_profile", {
     ...buildTeacherProfilePayload(input),
     p_teacher_id: input.teacherId,
@@ -376,6 +416,36 @@ export async function updateTeacherProfile(
   if (error) {
     throw new Error(`선생님 정보를 수정하지 못했습니다: ${error.message}`);
   }
+
+  if (residentRegistration) {
+    await saveResidentRegistration(supabase, {
+      academyId: input.academyId,
+      teacherId: input.teacherId,
+      residentRegistration,
+      savedProfile: "선생님 정보는 수정했지만",
+    });
+  }
+}
+
+/** 원장 전용 원문 열람. 서버가 호출마다 열람 기록을 남기므로 필요할 때 한 명씩만 부른다. */
+export async function revealTeacherResidentRegistration(
+  supabase: TeacherMutationSupabaseClient,
+  input: RevealTeacherResidentRegistrationInput,
+): Promise<string> {
+  const { data, error } = await supabase.rpc("reveal_teacher_resident_registration", {
+    p_academy_id: input.academyId,
+    p_teacher_id: input.teacherId,
+  });
+
+  if (error) {
+    throw new Error(`주민등록번호 원문을 불러오지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("등록된 주민등록번호가 없습니다.");
+  }
+
+  return data;
 }
 
 export async function updateTeacherStatus(
@@ -409,8 +479,46 @@ export async function deleteResignedTeacher(
   }
 }
 
+/** 비어 있으면 저장하지 않는다는 뜻으로 undefined, 있으면 형식을 검증해 `######-#######`로 정규화한다. */
+function readResidentRegistration(value: string | undefined) {
+  if (!value?.trim()) {
+    return undefined;
+  }
+
+  const result = validateResidentRegistration(value);
+
+  if (!result.ok) {
+    throw new Error(result.reason);
+  }
+
+  return result.normalized;
+}
+
+async function saveResidentRegistration(
+  supabase: TeacherMutationSupabaseClient,
+  input: {
+    academyId: string;
+    teacherId: string;
+    residentRegistration: string;
+    /** 오류 문구 앞머리: 프로필 저장은 끝났음을 알려 같은 입력을 다시 등록하지 않게 한다. */
+    savedProfile: string;
+  },
+) {
+  const { error } = await supabase.rpc("set_teacher_resident_registration", {
+    p_academy_id: input.academyId,
+    p_teacher_id: input.teacherId,
+    p_resident_registration: input.residentRegistration,
+  });
+
+  if (error) {
+    throw new ResidentRegistrationSaveError(
+      `${input.savedProfile} 주민등록번호를 저장하지 못했습니다. ${toUserMessage(error)} 선생님 상세에서 수정해 다시 입력해 주세요.`,
+    );
+  }
+}
+
 function buildTeacherProfilePayload(input: TeacherProfileMutationInput) {
-  const salary = buildTeacherSalarySetting(input);
+  const salary = readSalarySetting(input);
   const workSchedules = normalizeWorkSchedules(input.workSchedules ?? []).map(
     (schedule) => ({
       weekday: toWeekdayLabel(schedule.weekday),
@@ -427,21 +535,29 @@ function buildTeacherProfilePayload(input: TeacherProfileMutationInput) {
     p_registered_on: input.registeredAt,
     p_contract_start_on: input.contractStartOn,
     p_contract_end_on: input.contractEndOn,
-    p_pay_type: input.payType,
+    p_pay_type: salary?.payType ?? null,
     p_monthly_salary:
-      salary.payType === "monthly" ? salary.monthlySalary : null,
-    p_hourly_rate: salary.payType === "hourly" ? salary.hourlyRate : null,
+      salary?.payType === "monthly" ? salary.monthlySalary : null,
+    p_hourly_rate: salary?.payType === "hourly" ? salary.hourlyRate : null,
     p_ratio_teacher_share:
-      salary.payType === "ratio" ? salary.ratioTeacherShare : null,
+      salary?.payType === "ratio" ? salary.ratioTeacherShare : null,
     p_work_schedules: workSchedules,
   };
+}
+
+/** 급여 형태가 없으면(원장이 아닌 사용자의 입력) 급여 설정이 없는 것으로 본다. */
+function readSalarySetting(input: TeacherProfileMutationInput) {
+  return input.payType
+    ? buildTeacherSalarySetting({ ...input, payType: input.payType })
+    : undefined;
 }
 
 function buildOptimisticTeacherRow(
   input: RegisterTeacherInput,
   teacherId: string,
+  residentRegistration: string | undefined,
 ): TeacherListRow {
-  const salary = buildTeacherSalarySetting(input);
+  const salary = readSalarySetting(input);
   const workSchedules = normalizeWorkSchedules(input.workSchedules ?? []).map(
     (schedule, index) => ({
       scheduleId: `optimistic-${teacherId}-${index}`,
@@ -458,20 +574,23 @@ function buildOptimisticTeacherRow(
     part: input.part.trim(),
     contact: input.contact.trim(),
     registeredAt: input.registeredAt,
-    payType: input.payType,
+    payType: salary?.payType ?? DEFAULT_PAY_TYPE_WITHOUT_SETTING,
     status: "employed",
     contractStartOn: input.contractStartOn,
     contractEndOn: input.contractEndOn,
     workSchedules,
-    monthlySalary: salary.payType === "monthly" ? salary.monthlySalary : undefined,
-    hourlyRate: salary.payType === "hourly" ? salary.hourlyRate : undefined,
+    monthlySalary: salary?.payType === "monthly" ? salary.monthlySalary : undefined,
+    hourlyRate: salary?.payType === "hourly" ? salary.hourlyRate : undefined,
     ratioTeacherShare:
-      salary.payType === "ratio" ? salary.ratioTeacherShare : undefined,
+      salary?.payType === "ratio" ? salary.ratioTeacherShare : undefined,
+    residentRegistrationMasked: residentRegistration
+      ? maskResidentRegistration(residentRegistration)
+      : undefined,
   };
 
   return {
     ...row,
-    salarySummary: formatTeacherSalarySummary(row),
+    salarySummary: salary ? formatTeacherSalarySummary(row) : UNSET_SALARY_SUMMARY,
     workScheduleSummary: formatTeacherWorkScheduleSummary(workSchedules),
   };
 }
@@ -505,11 +624,14 @@ function toTeacherListRow(row: TeacherSupabaseRow): TeacherListRow {
     hourlyRate: activeSalarySetting?.hourly_rate ?? undefined,
     ratioTeacherShare: activeSalarySetting?.ratio_teacher_share ?? undefined,
     workSchedules,
+    residentRegistrationMasked: row.resident_registration_masked ?? undefined,
   };
 
   return {
     ...mapped,
-    salarySummary: formatTeacherSalarySummary(mapped),
+    salarySummary: activeSalarySetting
+      ? formatTeacherSalarySummary(mapped)
+      : UNSET_SALARY_SUMMARY,
     workScheduleSummary: formatTeacherWorkScheduleSummary(workSchedules),
   };
 }

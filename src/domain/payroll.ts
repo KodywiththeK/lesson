@@ -1,7 +1,10 @@
 import { toFinanceDate, toFinanceMonth } from "./finance-date";
 import type { TeacherListRow } from "./teacher-list";
+import { calculateScheduledWorkMinutes, formatWorkDuration } from "./teacher-work-minutes";
 
 export type PayrollRounding = "floor" | "round" | "ceil";
+
+const MINUTES_PER_HOUR = 60;
 
 /** 급여 계산 정책. 세율과 반올림 방식은 학원 정책이 확정되기 전까지 이 한 곳에서만 정한다. */
 export const PAYROLL_POLICY = {
@@ -36,7 +39,8 @@ export type HourlyPayrollPolicy = {
   teacherName: string;
   month: string;
   hourlyRate: number;
-  workedHours: number;
+  /** 출근 일정 기준 그 달 근무 시간을 정수 분으로 센 값. */
+  workedMinutes: number;
   withholdingTaxRate: number;
   rounding: PayrollRounding;
 };
@@ -50,9 +54,6 @@ export type CompletedLessonRevenue = {
   instrumentName: string;
   lessonRevenue: number;
   completedOn: string;
-  durationHours?: number;
-  /** 수업 시간을 분 단위 정수로 반올림한 값. 시급 계산은 서버와 같게 이 값만 합산한다. */
-  durationMinutes?: number;
 };
 
 /** 개인레슨 1회 레슨비를 구하는 회차권 등록 기록(결제 금액 ÷ 부여 회수). */
@@ -69,7 +70,12 @@ export type PayrollTeacher = Pick<
   TeacherListRow,
   "academyId" | "teacherId" | "name" | "payType" | "monthlySalary" | "hourlyRate" | "ratioTeacherShare"
 > &
-  Partial<Pick<TeacherListRow, "status" | "registeredAt" | "contractStartOn" | "resignedAt">>;
+  Partial<
+    Pick<
+      TeacherListRow,
+      "status" | "registeredAt" | "contractStartOn" | "contractEndOn" | "resignedAt" | "workSchedules"
+    >
+  >;
 
 /** 그 달 월 수강료 snapshot(없으면 수업에 붙은 현재 금액을 쓴다). */
 export type PayrollTuitionFee = {
@@ -182,7 +188,6 @@ type LessonRevenueAnalysis = {
   missingPrivateFeeCount: number;
   missingAcademyFeeCount: number;
   currentFeeLessonCount: number;
-  workedMinutes: number;
 };
 
 /**
@@ -261,8 +266,6 @@ function analyzeLessonRevenues(
       instrumentName: lesson.instrumentName,
       lessonRevenue: lessonRevenue ?? 0,
       completedOn: toFinanceDate(lesson.startedAt),
-      durationHours: calculateDurationMinutes(lesson.startedAt, lesson.endedAt) / 60,
-      durationMinutes: calculateDurationMinutes(lesson.startedAt, lesson.endedAt),
     });
   }
 
@@ -274,7 +277,6 @@ function analyzeLessonRevenues(
     missingPrivateFeeCount,
     missingAcademyFeeCount,
     currentFeeLessonCount,
-    workedMinutes: revenues.reduce((total, revenue) => total + (revenue.durationMinutes ?? 0), 0),
   };
 }
 
@@ -454,34 +456,15 @@ function buildTeacherPayrollRow({
     };
   }
 
+  if (teacher.payType === "hourly") {
+    return buildHourlyPayrollRow(identity, teacher);
+  }
+
   const analysis = analyzeLessonRevenues(
     lessons.filter((lesson) => lesson.teacherId === teacher.teacherId),
     { academyId, month, privateLessonFees },
     lessons,
   );
-
-  if (teacher.payType === "hourly") {
-    if (!teacher.hourlyRate || teacher.hourlyRate <= 0) {
-      return buildIssuePayrollRow(identity, "hourly", "시급 설정을 확인해 주세요.");
-    }
-
-    const workedHours = analysis.workedMinutes / 60;
-    const basis = `등원 ${formatHours(workedHours)}시간`;
-
-    if (analysis.workedMinutes <= 0) {
-      return { ...buildEmptyPayrollRecord(identity, "hourly"), basis };
-    }
-
-    return {
-      ...calculateHourlyPayroll({
-        ...identity,
-        hourlyRate: teacher.hourlyRate,
-        workedHours,
-      }),
-      lessonEventIds: analysis.revenues.map((revenue) => revenue.lessonEventId),
-      basis,
-    };
-  }
 
   const share = teacher.ratioTeacherShare;
 
@@ -499,6 +482,38 @@ function buildTeacherPayrollRow({
     ),
     basis: `등원 ${analysis.presentCount}회 / 예정 ${analysis.scheduledCount}회${privateSuffix}`,
     note: buildFeeNote(analysis),
+  };
+}
+
+/** 시급제: 시급 × 선생님 출근 요일·시간을 그 달(계약 기간 안)에 펼친 근무 시간. 등원 확인 수업은 보지 않는다. */
+function buildHourlyPayrollRow(
+  identity: Pick<RatioPayrollPolicy, "academyId" | "teacherId" | "teacherName" | "month" | "withholdingTaxRate" | "rounding">,
+  teacher: PayrollTeacher,
+): PayrollRecord {
+  if (!teacher.hourlyRate || teacher.hourlyRate <= 0) {
+    return buildIssuePayrollRow(identity, "hourly", "시급 설정을 확인해 주세요.");
+  }
+
+  const work = calculateScheduledWorkMinutes({
+    month: identity.month,
+    schedules: teacher.workSchedules,
+    contractStartOn: teacher.contractStartOn,
+    contractEndOn: teacher.contractEndOn,
+  });
+
+  if (!work.ok) {
+    return buildIssuePayrollRow(identity, "hourly", work.reason);
+  }
+
+  const basis = `근무 ${formatWorkDuration(work.minutes)} (출근 일정 기준)`;
+
+  if (work.minutes <= 0) {
+    return { ...buildEmptyPayrollRecord(identity, "hourly"), basis };
+  }
+
+  return {
+    ...calculateHourlyPayroll({ ...identity, hourlyRate: teacher.hourlyRate, workedMinutes: work.minutes }),
+    basis,
   };
 }
 
@@ -555,10 +570,6 @@ export function formatPayType(payType: PayrollRecord["payType"]) {
   return labels[payType];
 }
 
-function formatHours(hours: number) {
-  return String(Math.round(hours * 100) / 100);
-}
-
 function readFinanceMonth(value: string) {
   try {
     return toFinanceMonth(value);
@@ -590,13 +601,17 @@ export function calculateHourlyPayroll(policy: HourlyPayrollPolicy): PayrollReco
     throw new Error("시급제 급여는 1 이상의 시급이 필요합니다.");
   }
 
-  if (policy.workedHours <= 0) {
+  if (policy.workedMinutes <= 0) {
     throw new Error("시급제 급여는 0보다 큰 근무 시간이 필요합니다.");
+  }
+
+  if (!Number.isInteger(policy.workedMinutes)) {
+    throw new Error("근무 시간은 분 단위 정수여야 합니다.");
   }
 
   return buildPayrollRecord(policy, {
     payType: "hourly",
-    basePay: applyRounding(roundPrecision(policy.hourlyRate * policy.workedHours), policy.rounding),
+    basePay: applyRounding(roundPrecision((policy.hourlyRate * policy.workedMinutes) / MINUTES_PER_HOUR), policy.rounding),
     lessonEventIds: [],
   });
 }
@@ -682,14 +697,6 @@ function toMonth(date: string) {
 
 function toCompletedLessonRevenueKey(lesson: PayrollLessonSource) {
   return `${lesson.studentId}:${lesson.instrumentName}`;
-}
-
-/** 수업 시간을 분 단위 정수로 반올림한다(서버 `round(extract(epoch from ends_at - starts_at) / 60)`와 같다). */
-function calculateDurationMinutes(startedAt: string, endedAt: string) {
-  const milliseconds = new Date(endedAt).getTime() - new Date(startedAt).getTime();
-
-  // 시간이 이상한 수업 하나 때문에 급여 화면 전체가 깨지지 않도록 0분으로 본다.
-  return milliseconds > 0 ? Math.round(milliseconds / 60_000) : 0;
 }
 
 /** 1회 레슨비를 나누는 "정규 예정 수업": 정규·이동 학원 수업. 수동·특별·보강 수업은 넣지 않는다. */

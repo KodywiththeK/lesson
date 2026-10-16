@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTeacherList, formatTeacherPayType } from "./teacher-list";
+import {
+  TEACHER_PARTS,
+  buildTeacherList,
+  buildTeacherPartFormOptions,
+  formatTeacherPayType,
+} from "./teacher-list";
 
 const teachers = [
   {
@@ -145,5 +150,18 @@ describe("formatTeacherStatus", () => {
     expect(formatTeacherStatus("employed")).toBe("재직");
     expect(formatTeacherStatus("on_leave")).toBe("휴직");
     expect(formatTeacherStatus("resigned")).toBe("퇴사");
+  });
+});
+
+describe("buildTeacherPartFormOptions", () => {
+  it("담당 파트는 피아노·바이올린·첼로·플루트·원장 순서의 고정 목록이다", () => {
+    expect(TEACHER_PARTS).toEqual(["피아노", "바이올린", "첼로", "플루트", "원장"]);
+    expect(buildTeacherPartFormOptions(undefined)).toEqual(TEACHER_PARTS);
+    expect(buildTeacherPartFormOptions("첼로")).toEqual(TEACHER_PARTS);
+  });
+
+  it("기존 데이터에 목록 밖 값이 있으면 그 값을 마지막 선택지로 더해 유지한다", () => {
+    expect(buildTeacherPartFormOptions("오보에")).toEqual([...TEACHER_PARTS, "오보에"]);
+    expect(buildTeacherPartFormOptions("  ")).toEqual(TEACHER_PARTS);
   });
 });

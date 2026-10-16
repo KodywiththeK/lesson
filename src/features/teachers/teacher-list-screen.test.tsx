@@ -24,7 +24,9 @@ const teacherRows = [
     contractStartOn: "2026-08-01",
     contractEndOn: "2027-07-31",
     salarySummary: "비율제 60%",
+    ratioTeacherShare: 60,
     workScheduleSummary: "월 14:00-20:00",
+    residentRegistrationMasked: "900101-1******",
   },
   {
     academyId: "academy-1",
@@ -92,6 +94,7 @@ function renderTeacherListScreen(
       <TeacherListScreen
         academyId="academy-1"
         academyName="더 클래식"
+        isOwner
         queryOptionsFactory={queryOptionsFactory}
         {...props}
       />
@@ -109,11 +112,31 @@ describe("TeacherListScreen", () => {
     const table = await screen.findByRole("table", { name: "선생님 목록" });
     const row = within(table).getByRole("row", { name: /박선생/ });
     expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
-      "선생님", "상태", "담당 파트", "연락처", "계약기간", "근무시간", "급여", "관리",
+      "선생님", "상태", "담당 파트", "연락처", "등록일", "주민등록번호", "근무시간", "급여", "관리",
     ]);
   });
 
-  it("선생님 목록을 표로 보여주고 상태, 계약기간, 근무시간, 급여 상세를 표시한다", async () => {
+  it("목록 표에 등록일과 마스킹된 주민등록번호를 보여 주고 계약기간은 표에서 뺀다", async () => {
+    renderTeacherListScreen((options) => ({
+      queryKey: ["teachers", options.academyId],
+      queryFn: async () => buildTeacherList(teacherRows, options),
+    }));
+
+    const table = await screen.findByRole("table", { name: "선생님 목록" });
+    const row = within(table).getByRole("row", { name: /박선생/ });
+
+    expect(within(row).getByRole("cell", { name: "2026-08-01" })).toHaveAttribute("data-label", "등록일");
+    expect(within(row).getByRole("cell", { name: "900101-1******" })).toHaveAttribute("data-label", "주민등록번호");
+    expect(within(table).queryByRole("columnheader", { name: "계약기간" })).not.toBeInTheDocument();
+    // 주민등록번호가 없는 선생님은 빈 값 표시
+    const emptyRow = within(table).getByRole("row", { name: /최선생/ });
+    const emptyResidentCell = within(emptyRow)
+      .getAllByRole("cell")
+      .find((cell) => cell.getAttribute("data-label") === "주민등록번호");
+    expect(emptyResidentCell).toHaveTextContent("-");
+  });
+
+  it("선생님 목록을 표로 보여주고 상태, 근무시간, 급여 상세를 표시한다", async () => {
     renderTeacherListScreen((options) => ({
       queryKey: ["teachers", options.academyId, options.search ?? ""],
       queryFn: async () => buildTeacherList(teacherRows, options),
@@ -128,11 +151,6 @@ describe("TeacherListScreen", () => {
     ).toBeInTheDocument();
     expect(
       within(table).getByRole("cell", { name: "재직" }),
-    ).toBeInTheDocument();
-    expect(
-      within(table).getAllByRole("cell", {
-        name: "2026-08-01 - 2027-07-31",
-      })[0],
     ).toBeInTheDocument();
     expect(
       within(table).getByRole("cell", { name: "월 14:00-20:00" }),
@@ -409,6 +427,7 @@ describe("TeacherListScreen", () => {
     });
 
     expect(within(dialog).getByText("비율제 60%")).toBeInTheDocument();
+    expect(within(dialog).getByText("2026-08-01 - 2027-07-31")).toBeInTheDocument();
     expect(
       within(dialog).getByRole("button", { name: "수정하기" }),
     ).toBeInTheDocument();
@@ -459,6 +478,401 @@ describe("TeacherListScreen", () => {
     expect(confirmSpy).not.toHaveBeenCalled();
 
     confirmSpy.mockRestore();
+  });
+
+  describe("원장이 아닌 사용자(데스크)", () => {
+    const deskProps = { isOwner: false };
+
+    it("급여 컬럼·급여 형태 필터·상세의 급여정보를 숨기고 금액이 어디에도 나오지 않는다", async () => {
+      const user = userEvent.setup();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        deskProps,
+      );
+
+      const table = await screen.findByRole("table", { name: "선생님 목록" });
+      const row = within(table).getByRole("row", { name: /박선생/ });
+
+      expect(within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"))).toEqual([
+        "선생님", "상태", "담당 파트", "연락처", "등록일", "주민등록번호", "근무시간", "관리",
+      ]);
+      expect(within(table).queryByRole("columnheader", { name: "급여" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("급여 형태 필터")).not.toBeInTheDocument();
+      expect(screen.queryByText("비율제 60%")).not.toBeInTheDocument();
+      expect(screen.queryByText("월급제 2,500,000원")).not.toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "선생님 검색" })).toHaveAttribute(
+        "placeholder",
+        "이름, 담당 파트, 연락처",
+      );
+      // 마스킹 값은 데스크도 본다.
+      expect(within(row).getByRole("cell", { name: "900101-1******" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "박선생 자세히보기" }));
+      const dialog = await screen.findByRole("dialog", { name: "박선생 상세" });
+
+      expect(within(dialog).queryByText("급여정보")).not.toBeInTheDocument();
+      expect(within(dialog).queryByText("비율제 60%")).not.toBeInTheDocument();
+      expect(within(dialog).getByText("900101-1******")).toBeInTheDocument();
+      expect(within(dialog).queryByRole("button", { name: "원문 보기" })).not.toBeInTheDocument();
+    });
+
+    it("등록 폼에는 급여·주민등록번호 입력이 없고 저장하면 급여 항목 없이 전달한다", async () => {
+      const user = userEvent.setup();
+      const registerTeacher = vi.fn();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        { ...deskProps, registerTeacher },
+      );
+
+      await user.click(screen.getByRole("button", { name: "선생님 등록" }));
+      const dialog = await screen.findByRole("dialog", { name: "선생님 등록" });
+
+      expect(within(dialog).queryByLabelText("급여 형태")).not.toBeInTheDocument();
+      expect(within(dialog).queryByLabelText("월급")).not.toBeInTheDocument();
+      expect(within(dialog).queryByLabelText("주민등록번호")).not.toBeInTheDocument();
+
+      await user.type(within(dialog).getByLabelText("선생님명"), "홍선생");
+      await user.type(within(dialog).getByLabelText("연락처"), "010-9999-0000");
+      await user.type(within(dialog).getByLabelText("계약 시작일"), "2026-09-01");
+      await user.type(within(dialog).getByLabelText("계약 종료일"), "2027-08-31");
+      await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+      expect(registerTeacher).toHaveBeenCalledTimes(1);
+      const submitted = registerTeacher.mock.calls[0][0];
+      expect(submitted).toMatchObject({ name: "홍선생", part: "피아노" });
+      for (const key of ["payType", "monthlySalary", "hourlyRate", "ratioAcademyShare", "ratioTeacherShare", "residentRegistration"]) {
+        expect(submitted, key).not.toHaveProperty(key);
+      }
+    });
+
+    it("수정 폼도 급여 항목 없이 전달하고 급여 입력은 보이지 않는다", async () => {
+      const user = userEvent.setup();
+      const updateTeacher = vi.fn();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        { ...deskProps, updateTeacher },
+      );
+
+      await user.click(await screen.findByRole("button", { name: "박선생 자세히보기" }));
+      const dialog = await screen.findByRole("dialog", { name: "박선생 상세" });
+      await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+
+      expect(within(dialog).queryByLabelText("급여 형태")).not.toBeInTheDocument();
+      expect(within(dialog).queryByLabelText("주민등록번호")).not.toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+
+      expect(updateTeacher).toHaveBeenCalledTimes(1);
+      expect(updateTeacher.mock.calls[0][0]).not.toHaveProperty("payType");
+      expect(updateTeacher.mock.calls[0][0]).not.toHaveProperty("ratioTeacherShare");
+    });
+  });
+
+  describe("담당 파트 선택", () => {
+    it("자유 입력 대신 피아노·바이올린·첼로·플루트·원장 중에서 고르고 기본값은 피아노다", async () => {
+      const user = userEvent.setup();
+      const registerTeacher = vi.fn();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        { registerTeacher },
+      );
+
+      await user.click(screen.getByRole("button", { name: "선생님 등록" }));
+      const dialog = await screen.findByRole("dialog", { name: "선생님 등록" });
+      const part = within(dialog).getByLabelText("담당 파트");
+
+      expect(part.tagName).toBe("SELECT");
+      expect(part).toHaveValue("피아노");
+      expect(within(part).getAllByRole("option").map((option) => option.textContent)).toEqual([
+        "피아노", "바이올린", "첼로", "플루트", "원장",
+      ]);
+
+      await user.selectOptions(part, "원장");
+      await user.type(within(dialog).getByLabelText("선생님명"), "홍선생");
+      await user.type(within(dialog).getByLabelText("연락처"), "010-9999-0000");
+      await user.type(within(dialog).getByLabelText("계약 시작일"), "2026-09-01");
+      await user.type(within(dialog).getByLabelText("계약 종료일"), "2027-08-31");
+      await user.type(within(dialog).getByLabelText("월급"), "2500000");
+      await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+      expect(registerTeacher).toHaveBeenCalledWith(expect.objectContaining({ part: "원장" }));
+    });
+
+    it("수정할 때 기존 데이터의 목록 밖 파트는 선택지로 남아 선택된 채 유지된다", async () => {
+      const user = userEvent.setup();
+      const oboe = { ...teacherRows[0], part: "오보에" };
+
+      renderTeacherListScreen((options) => ({
+        queryKey: ["teachers", options.academyId],
+        queryFn: async () => buildTeacherList([oboe], options),
+      }));
+
+      await user.click(await screen.findByRole("button", { name: "박선생 자세히보기" }));
+      const dialog = await screen.findByRole("dialog", { name: "박선생 상세" });
+      await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+
+      const part = within(dialog).getByLabelText("담당 파트");
+      expect(part).toHaveValue("오보에");
+      expect(within(part).getAllByRole("option").map((option) => option.textContent)).toEqual([
+        "피아노", "바이올린", "첼로", "플루트", "원장", "오보에",
+      ]);
+    });
+  });
+
+  describe("주민등록번호 입력", () => {
+    async function openRegistration(props: Partial<ComponentProps<typeof TeacherListScreen>> = {}) {
+      const user = userEvent.setup();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        props,
+      );
+      await user.click(screen.getByRole("button", { name: "선생님 등록" }));
+      const dialog = await screen.findByRole("dialog", { name: "선생님 등록" });
+
+      await user.type(within(dialog).getByLabelText("선생님명"), "홍선생");
+      await user.type(within(dialog).getByLabelText("연락처"), "010-9999-0000");
+      await user.type(within(dialog).getByLabelText("계약 시작일"), "2026-09-01");
+      await user.type(within(dialog).getByLabelText("계약 종료일"), "2027-08-31");
+      await user.type(within(dialog).getByLabelText("월급"), "2500000");
+
+      return { user, dialog };
+    }
+
+    it("숫자만 입력해도 6자리 뒤에 하이픈이 자동으로 붙고 저장할 때 정규화된 번호를 전달한다", async () => {
+      const registerTeacher = vi.fn();
+      const { user, dialog } = await openRegistration({ registerTeacher });
+      const field = within(dialog).getByLabelText("주민등록번호");
+
+      await user.type(field, "9001011234567");
+
+      expect(field).toHaveValue("900101-1234567");
+
+      await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+      expect(registerTeacher).toHaveBeenCalledWith(
+        expect.objectContaining({ residentRegistration: "900101-1234567" }),
+      );
+    });
+
+    it("입력하지 않으면 선택 항목으로 보고 저장 때 번호를 전달하지 않는다", async () => {
+      const registerTeacher = vi.fn();
+      const { user, dialog } = await openRegistration({ registerTeacher });
+
+      await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+      expect(registerTeacher.mock.calls[0][0]).not.toHaveProperty("residentRegistration");
+    });
+
+    it("생년월일이나 성별 자리가 잘못되면 이유를 보여 주고 저장하지 못한다", async () => {
+      const registerTeacher = vi.fn();
+      const { user, dialog } = await openRegistration({ registerTeacher });
+      const field = within(dialog).getByLabelText("주민등록번호");
+
+      await user.type(field, "9013011234567");
+
+      expect(field).toBeInvalid();
+      expect(within(dialog).getByText("주민등록번호 앞 6자리가 올바른 생년월일이 아닙니다.")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+
+      await user.clear(field);
+      await user.type(field, "9001019234567");
+
+      expect(within(dialog).getByText("주민등록번호 성별 자리(뒤 첫 숫자)는 1~8이어야 합니다.")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+      expect(registerTeacher).not.toHaveBeenCalled();
+    });
+
+    it("13자리를 채우기 전에는 오류를 띄우지 않고 칸을 벗어나면 형식 안내를 보여 준다", async () => {
+      const { user, dialog } = await openRegistration();
+      const field = within(dialog).getByLabelText("주민등록번호");
+
+      await user.type(field, "90010");
+
+      expect(within(dialog).queryByText(/숫자 13자리/)).not.toBeInTheDocument();
+
+      await user.tab();
+
+      expect(within(dialog).getByText("주민등록번호는 숫자 13자리(######-#######)로 입력해 주세요.")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
+    });
+
+    it("수정 폼은 번호를 비워 두고 현재는 마스킹 값만 안내하며, 비워 두면 번호를 바꾸지 않는다", async () => {
+      const user = userEvent.setup();
+      const updateTeacher = vi.fn();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        { updateTeacher },
+      );
+
+      await user.click(await screen.findByRole("button", { name: "박선생 자세히보기" }));
+      const dialog = await screen.findByRole("dialog", { name: "박선생 상세" });
+      await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+
+      const field = within(dialog).getByLabelText("주민등록번호");
+      expect(field).toHaveValue("");
+      expect(within(dialog).getByText("현재 900101-1****** · 바꿀 때만 새로 입력해 주세요.")).toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+
+      expect(updateTeacher.mock.calls[0][0]).not.toHaveProperty("residentRegistration");
+    });
+  });
+
+  describe("주민등록번호 원문 보기(원장 전용)", () => {
+    async function openDetail(reveal: ReturnType<typeof vi.fn>) {
+      const user = userEvent.setup();
+
+      renderTeacherListScreen(
+        (options) => ({
+          queryKey: ["teachers", options.academyId],
+          queryFn: async () => buildTeacherList(teacherRows, options),
+        }),
+        { revealResidentRegistration: reveal, updateTeacher: vi.fn() },
+      );
+      await user.click(await screen.findByRole("button", { name: "박선생 자세히보기" }));
+      const dialog = await screen.findByRole("dialog", { name: "박선생 상세" });
+
+      return { user, dialog };
+    }
+
+    it("확인을 거친 뒤에만 원문을 보여 주고, 숨기면 다시 마스킹 값으로 돌아간다", async () => {
+      const reveal = vi.fn().mockResolvedValue("900101-1234567");
+      const { user, dialog } = await openDetail(reveal);
+
+      expect(within(dialog).getByText("900101-1******")).toBeInTheDocument();
+      expect(within(dialog).queryByText("900101-1234567")).not.toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "원문 보기" }));
+      const confirm = await screen.findByRole("alertdialog", { name: "주민등록번호 원문 보기" });
+      expect(reveal).not.toHaveBeenCalled();
+      expect(within(confirm).getByText(/열람 기록이 남습니다/)).toBeInTheDocument();
+
+      await user.click(within(confirm).getByRole("button", { name: "원문 보기" }));
+
+      expect(await within(dialog).findByText("900101-1234567")).toBeInTheDocument();
+      expect(reveal).toHaveBeenCalledWith({ academyId: "academy-1", teacherId: "teacher-1" });
+      expect(within(dialog).queryByText("900101-1******")).not.toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "숨기기" }));
+
+      expect(within(dialog).queryByText("900101-1234567")).not.toBeInTheDocument();
+      expect(within(dialog).getByText("900101-1******")).toBeInTheDocument();
+    });
+
+    it("확인에서 취소하면 원문을 요청하지 않는다", async () => {
+      const reveal = vi.fn();
+      const { user, dialog } = await openDetail(reveal);
+
+      await user.click(within(dialog).getByRole("button", { name: "원문 보기" }));
+      const confirm = await screen.findByRole("alertdialog", { name: "주민등록번호 원문 보기" });
+      await user.click(within(confirm).getByRole("button", { name: "취소" }));
+
+      expect(reveal).not.toHaveBeenCalled();
+      expect(within(dialog).getByText("900101-1******")).toBeInTheDocument();
+    });
+
+    it("상세를 닫았다가 다시 열면 원문은 지워지고 마스킹 값만 보인다", async () => {
+      const reveal = vi.fn().mockResolvedValue("900101-1234567");
+      const { user, dialog } = await openDetail(reveal);
+
+      await user.click(within(dialog).getByRole("button", { name: "원문 보기" }));
+      await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "원문 보기" }));
+      await within(dialog).findByText("900101-1234567");
+
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "박선생 상세" })).not.toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: "박선생 자세히보기" }));
+      const reopened = await screen.findByRole("dialog", { name: "박선생 상세" });
+
+      expect(within(reopened).queryByText("900101-1234567")).not.toBeInTheDocument();
+      expect(within(reopened).getByText("900101-1******")).toBeInTheDocument();
+    });
+
+    it("수정 화면으로 넘어가면 원문을 지우고, 열람 실패는 사용자 문구로 안내한다", async () => {
+      const reveal = vi
+        .fn()
+        .mockResolvedValueOnce("900101-1234567")
+        .mockRejectedValueOnce(new Error("주민등록번호 원문을 불러오지 못했습니다: 주민등록번호 암호화 키가 설정되지 않았습니다. 관리자에게 Vault의 teacher_rrn_key 설정을 요청해 주세요."));
+      const { user, dialog } = await openDetail(reveal);
+
+      await user.click(within(dialog).getByRole("button", { name: "원문 보기" }));
+      await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "원문 보기" }));
+      await within(dialog).findByText("900101-1234567");
+      await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+
+      expect(within(dialog).queryByText("900101-1234567")).not.toBeInTheDocument();
+      expect(screen.queryByText("900101-1234567")).not.toBeInTheDocument();
+
+      await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+      await waitFor(() => expect(within(dialog).queryByRole("button", { name: "수정완료" })).not.toBeInTheDocument());
+      await user.click(within(dialog).getByRole("button", { name: "원문 보기" }));
+      await user.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "원문 보기" }));
+
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("주민등록번호 암호화 키가 설정되지 않았습니다.");
+      expect(within(dialog).getByText("900101-1******")).toBeInTheDocument();
+    });
+  });
+
+  describe("수정 폼 급여 초기값", () => {
+    async function openEdit(teacher: TeacherListRow) {
+      const user = userEvent.setup();
+
+      renderTeacherListScreen((options) => ({
+        queryKey: ["teachers", options.academyId],
+        queryFn: async () => buildTeacherList([teacher], options),
+      }));
+      await user.click(await screen.findByRole("button", { name: `${teacher.name} 자세히보기` }));
+      const dialog = await screen.findByRole("dialog", { name: `${teacher.name} 상세` });
+      await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+
+      return { user, dialog };
+    }
+
+    it("선생님 몫 0%는 0:10으로 보여 주고 6으로 바꾸지 않는다", async () => {
+      const { dialog } = await openEdit({ ...teacherRows[0], ratioTeacherShare: 0, salarySummary: "비율제 0%" });
+
+      expect(within(dialog).getByLabelText("선생님 몫")).toHaveValue(0);
+      expect(within(dialog).getByLabelText("학원 몫")).toHaveValue(10);
+    });
+
+    it("저장된 비율이 없으면 4:6을 채우지 않고 비워 두어 저장 버튼이 막힌다", async () => {
+      const { dialog } = await openEdit({ ...teacherRows[0], ratioTeacherShare: undefined, salarySummary: "급여 미설정" });
+
+      expect(within(dialog).getByLabelText("선생님 몫")).toHaveValue(null);
+      expect(within(dialog).getByLabelText("학원 몫")).toHaveValue(null);
+      expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeDisabled();
+    });
+
+    it("저장된 60%는 4:6으로 그대로 보여 준다", async () => {
+      const { dialog } = await openEdit({ ...teacherRows[0], ratioTeacherShare: 60 });
+
+      expect(within(dialog).getByLabelText("선생님 몫")).toHaveValue(6);
+      expect(within(dialog).getByLabelText("학원 몫")).toHaveValue(4);
+    });
   });
 
   it("Supabase 오류가 나면 화면에서 확인 가능한 오류 상태를 보여준다", async () => {

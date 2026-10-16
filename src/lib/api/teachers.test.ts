@@ -9,6 +9,8 @@ import {
   fetchTeacherStatusManagementList,
   fetchTeacherList,
   registerTeacher,
+  revealTeacherResidentRegistration,
+  ResidentRegistrationSaveError,
   updateTeacherProfile,
   updateTeacherStatus,
   type TeacherMutationSupabaseClient,
@@ -48,6 +50,7 @@ describe("fetchTeacherList", () => {
         status: "employed",
         contract_start_on: "2026-09-01",
         contract_end_on: "2027-08-31",
+        resident_registration_masked: "900101-1******",
         teacher_work_schedules: [
           {
             id: "schedule-1",
@@ -78,7 +81,7 @@ describe("fetchTeacherList", () => {
       expect.objectContaining({
         table: "teachers",
         select:
-          "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)",
+          "id, academy_id, name, part, phone, registered_on, salary_type, status, contract_start_on, contract_end_on, on_leave_at, resigned_at, retention_until, archived_at, resident_registration_masked, teacher_work_schedules!teacher_work_schedules_academy_teacher_fk(id, weekday, start_time, end_time), teacher_salary_settings!teacher_salary_settings_academy_teacher_fk(id, pay_type, ratio_teacher_share, monthly_salary, hourly_rate, active)",
         eq: [
           ["academy_id", "academy-1"],
           ["status", "employed"],
@@ -88,7 +91,9 @@ describe("fetchTeacherList", () => {
         range: [[0, 999]],
       }),
     ]);
-    expect(calls[0].select).not.toContain("resident_registration");
+    // 목록에는 마스킹 값만 읽는다. 암호문 컬럼은 어떤 조회에서도 읽지 않는다.
+    expect(calls[0].select).toContain("resident_registration_masked");
+    expect(calls[0].select).not.toContain("resident_registration_encrypted_ref");
     expect(result.items[0]).toMatchObject({
       academyId: "academy-1",
       teacherId: "teacher-1",
@@ -102,7 +107,29 @@ describe("fetchTeacherList", () => {
       contractEndOn: "2027-08-31",
       salarySummary: "비율제 60%",
       workScheduleSummary: "월 14:00-20:00",
+      residentRegistrationMasked: "900101-1******",
     });
+  });
+
+  it("활성 급여 설정이 없으면 0원으로 꾸미지 않고 급여 미설정으로 표시한다", async () => {
+    const { client } = createSupabaseStub([
+      {
+        id: "teacher-9",
+        academy_id: "academy-1",
+        name: "이선생",
+        part: "첼로",
+        phone: null,
+        registered_on: "2026-08-01",
+        salary_type: "monthly",
+        teacher_salary_settings: [],
+      },
+    ]);
+
+    const result = await fetchTeacherList(client, { academyId: "academy-1" });
+
+    expect(result.items[0]).toMatchObject({ salarySummary: "급여 미설정" });
+    expect(result.items[0].monthlySalary).toBeUndefined();
+    expect(result.items[0].residentRegistrationMasked).toBeUndefined();
   });
 
   it("Supabase 오류는 사용자에게 전달 가능한 오류로 변환한다", async () => {
@@ -315,6 +342,164 @@ describe("teacher mutations", () => {
       p_academy_id: "academy-1",
       p_teacher_id: "teacher-1",
     });
+  });
+
+  const baseProfile = {
+    academyId: "academy-1",
+    name: "박선생",
+    part: "피아노",
+    contact: "010-1111-1111",
+    registeredAt: "2026-08-21",
+    contractStartOn: "2026-09-01",
+    contractEndOn: "2027-08-31",
+  };
+
+  function createRecordingClient(results: Record<string, { data: string | null; error: Error | null }> = {}) {
+    const calls: Array<{ functionName: string; payload: Record<string, unknown> }> = [];
+    const client: TeacherMutationSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload });
+
+        return results[functionName] ?? { data: functionName === "register_teacher_with_profile" ? "teacher-1" : null, error: null };
+      },
+    };
+
+    return { client, calls };
+  }
+
+  it("주민등록번호가 있으면 등록 직후 전용 RPC로 정규화한 번호를 저장한다", async () => {
+    const { client, calls } = createRecordingClient();
+
+    const result = await registerTeacher(client, {
+      ...baseProfile,
+      payType: "monthly",
+      monthlySalary: 2_500_000,
+      residentRegistration: "9001011234567",
+    });
+
+    expect(calls.map((call) => call.functionName)).toEqual([
+      "register_teacher_with_profile",
+      "set_teacher_resident_registration",
+    ]);
+    expect(calls[1].payload).toEqual({
+      p_academy_id: "academy-1",
+      p_teacher_id: "teacher-1",
+      p_resident_registration: "900101-1234567",
+    });
+    // 프로필 RPC 인자에는 주민등록번호가 섞이지 않는다.
+    expect(JSON.stringify(calls[0].payload)).not.toContain("1234567");
+    expect(result.residentRegistrationMasked).toBe("900101-1******");
+    expect(JSON.stringify(result)).not.toContain("1234567");
+  });
+
+  it("주민등록번호가 비어 있으면 저장 RPC를 부르지 않는다", async () => {
+    const { client, calls } = createRecordingClient();
+
+    await registerTeacher(client, { ...baseProfile, payType: "monthly", monthlySalary: 2_500_000, residentRegistration: "" });
+    await updateTeacherProfile(client, { ...baseProfile, teacherId: "teacher-1", payType: "monthly", monthlySalary: 2_500_000 });
+
+    expect(calls.map((call) => call.functionName)).toEqual(["register_teacher_with_profile", "update_teacher_profile"]);
+  });
+
+  it("형식이 잘못된 주민등록번호는 어떤 RPC도 부르기 전에 한국어 오류로 거부한다", async () => {
+    const { client, calls } = createRecordingClient();
+
+    await expect(
+      registerTeacher(client, { ...baseProfile, payType: "monthly", monthlySalary: 1, residentRegistration: "900101-9234567" }),
+    ).rejects.toThrow("주민등록번호 성별 자리(뒤 첫 숫자)는 1~8이어야 합니다.");
+    await expect(
+      updateTeacherProfile(client, { ...baseProfile, teacherId: "teacher-1", payType: "monthly", monthlySalary: 1, residentRegistration: "123" }),
+    ).rejects.toThrow("주민등록번호는 숫자 13자리(######-#######)로 입력해 주세요.");
+    expect(calls).toEqual([]);
+  });
+
+  it("수정 때도 주민등록번호가 있으면 프로필 수정 뒤에 저장 RPC를 호출한다", async () => {
+    const { client, calls } = createRecordingClient();
+
+    await updateTeacherProfile(client, {
+      ...baseProfile,
+      teacherId: "teacher-1",
+      payType: "monthly",
+      monthlySalary: 2_500_000,
+      residentRegistration: "900101-2345678",
+    });
+
+    expect(calls.map((call) => call.functionName)).toEqual(["update_teacher_profile", "set_teacher_resident_registration"]);
+    expect(calls[1].payload).toMatchObject({ p_teacher_id: "teacher-1", p_resident_registration: "900101-2345678" });
+  });
+
+  it("급여 항목이 없으면 급여 인자를 모두 null로 보내 급여 설정을 건드리지 않게 한다(데스크 등록·수정)", async () => {
+    const { client, calls } = createRecordingClient();
+
+    await registerTeacher(client, baseProfile);
+    await updateTeacherProfile(client, { ...baseProfile, teacherId: "teacher-1" });
+
+    for (const call of calls) {
+      expect(call.payload).toMatchObject({
+        p_pay_type: null,
+        p_monthly_salary: null,
+        p_hourly_rate: null,
+        p_ratio_teacher_share: null,
+      });
+    }
+  });
+
+  it("등록은 됐지만 주민등록번호 저장이 실패하면 중복 등록하지 않도록 구분된 오류로 알린다", async () => {
+    const { client } = createRecordingClient({
+      set_teacher_resident_registration: { data: null, error: new Error("주민등록번호 암호화 키가 설정되지 않았습니다. 관리자에게 Vault의 teacher_rrn_key 설정을 요청해 주세요.") },
+    });
+
+    const failure = await registerTeacher(client, {
+      ...baseProfile,
+      payType: "monthly",
+      monthlySalary: 2_500_000,
+      residentRegistration: "900101-1234567",
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ResidentRegistrationSaveError);
+    expect((failure as Error).message).toContain("선생님은 등록했지만 주민등록번호를 저장하지 못했습니다");
+    expect((failure as Error).message).toContain("암호화 키가 설정되지 않았습니다");
+    expect((failure as Error).message).not.toContain("1234567");
+  });
+
+  it("수정 중 주민등록번호 저장이 실패하면 정보는 수정됐다고 알린다", async () => {
+    const { client } = createRecordingClient({
+      set_teacher_resident_registration: { data: null, error: new Error("주민등록번호는 원장만 등록·수정할 수 있습니다.") },
+    });
+
+    await expect(
+      updateTeacherProfile(client, { ...baseProfile, teacherId: "teacher-1", residentRegistration: "900101-1234567" }),
+    ).rejects.toThrow("선생님 정보는 수정했지만 주민등록번호를 저장하지 못했습니다");
+  });
+
+  it("원문 열람은 전용 RPC로 한 번에 한 명만 읽고 값을 그대로 돌려준다", async () => {
+    const { client, calls } = createRecordingClient({
+      reveal_teacher_resident_registration: { data: "900101-1234567", error: null },
+    });
+
+    await expect(
+      revealTeacherResidentRegistration(client, { academyId: "academy-1", teacherId: "teacher-1" }),
+    ).resolves.toBe("900101-1234567");
+    expect(calls).toEqual([
+      {
+        functionName: "reveal_teacher_resident_registration",
+        payload: { p_academy_id: "academy-1", p_teacher_id: "teacher-1" },
+      },
+    ]);
+  });
+
+  it("원문 열람 실패는 서버의 한국어 사유를 담은 오류로 바꾸고, 빈 응답도 오류로 본다", async () => {
+    const denied = createRecordingClient({
+      reveal_teacher_resident_registration: { data: null, error: new Error("주민등록번호 원문은 원장만 볼 수 있습니다.") },
+    });
+    const empty = createRecordingClient({ reveal_teacher_resident_registration: { data: null, error: null } });
+
+    await expect(
+      revealTeacherResidentRegistration(denied.client, { academyId: "academy-1", teacherId: "teacher-1" }),
+    ).rejects.toThrow("주민등록번호 원문을 불러오지 못했습니다: 주민등록번호 원문은 원장만 볼 수 있습니다.");
+    await expect(
+      revealTeacherResidentRegistration(empty.client, { academyId: "academy-1", teacherId: "teacher-1" }),
+    ).rejects.toThrow("등록된 주민등록번호가 없습니다.");
   });
 
   it("휴직/퇴사 관리 목록을 상태별로 조회한다", async () => {

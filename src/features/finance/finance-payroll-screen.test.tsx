@@ -46,6 +46,14 @@ const hourlyTeacher: TeacherListRow = {
   hourlyRate: 30_000,
 };
 
+/** 월요일 10:00-18:00 출근, 계약 2026년 한 해. 2026-08에는 월요일이 5번(3·10·17·24·31)이라 40시간이다. */
+const scheduledHourlyTeacher: TeacherListRow = {
+  ...hourlyTeacher,
+  contractStartOn: "2026-01-01",
+  contractEndOn: "2026-12-31",
+  workSchedules: [{ weekday: "월", weekdayLabel: "월", startTime: "10:00", endTime: "18:00" }],
+};
+
 /** 한 달 4회 수업, 레슨비 140,000원, 모두 등원 확인: 140,000 ÷ 4 × 0.6 × 4 = 84,000원. */
 const ratioLessons: PayrollLessonSource[] = ["06", "13", "20", "27"].map((day) => ({
   academyId: "academy-1",
@@ -221,7 +229,7 @@ describe("FinancePayrollScreen 합계", () => {
       }),
     );
 
-    // 비율제 81,228원만 예정이다. 시급제(등원 없음 0원)와 설정 미완료는 빠진다.
+    // 비율제 81,228원만 예정이다. 시급제(출근 일정 없음 → 설정 확인)와 설정 미완료는 빠진다.
     const expected = screen.getByText("지급 예정 급여").parentElement;
     expect(expected).toHaveTextContent("81,228원");
     const done = screen.getByText("지급 완료 급여").parentElement;
@@ -243,6 +251,91 @@ describe("FinancePayrollScreen 합계", () => {
   });
 });
 
+describe("FinancePayrollScreen 시급제(출근 일정 기준)", () => {
+  it("시급 × 그 달 출근 일정 합계로 계산하고 산출 근거에 근무 시간(출근 일정 기준)을 보여 준다", () => {
+    renderPayroll(buildFinanceData({ teachers: [scheduledHourlyTeacher] }));
+
+    const row = getRow("이시급");
+    // 40시간 × 30,000원 = 1,200,000원, 세금 39,600원
+    expect(within(row).getByRole("cell", { name: "1,200,000원" })).toBeInTheDocument();
+    expect(within(row).getByRole("cell", { name: "39,600원" })).toBeInTheDocument();
+    expect(within(row).getByRole("cell", { name: "1,160,400원" })).toBeInTheDocument();
+    expect(within(row).getByText("근무 40시간 (출근 일정 기준)")).toBeInTheDocument();
+    expect(within(row).queryByText(/등원/)).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "이시급 급여 지급 확정" })).toBeEnabled();
+  });
+
+  it("출근 요일·시간이 없으면 등록을 안내하고 지급 버튼을 숨긴다", () => {
+    renderPayroll(buildFinanceData({ teachers: [hourlyTeacher] }));
+
+    const row = getRow("이시급");
+    expect(
+      within(row).getByText(
+        "설정 확인 필요: 출근 요일·시간을 설정해 주세요. 선생님 정보에서 출근 일정을 등록하면 시급을 계산할 수 있습니다.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /지급/ })).not.toBeInTheDocument();
+  });
+
+  it("출근 요일만 있고 시간이 비어 있으면 출근 시간 설정을 안내한다", () => {
+    renderPayroll(
+      buildFinanceData({
+        teachers: [{ ...scheduledHourlyTeacher, workSchedules: [{ weekday: "수", weekdayLabel: "수" }] }],
+      }),
+    );
+
+    expect(
+      within(getRow("이시급")).getByText("설정 확인 필요: 출근 시간을 설정해 주세요. 수요일의 시작·종료 시간이 비어 있습니다."),
+    ).toBeInTheDocument();
+  });
+
+  it("지급 확정 때 수업 목록 없이 계산된 금액을 보낸다", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const markPayrollPaid = vi.fn().mockResolvedValue(buildPaidSettlement());
+    renderPayroll(buildFinanceData({ teachers: [scheduledHourlyTeacher] }), { markPayrollPaid });
+
+    await user.click(within(getRow("이시급")).getByRole("button", { name: "이시급 급여 지급 확정" }));
+    const dialog = await screen.findByRole("dialog", { name: "급여 지급 확정" });
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(markPayrollPaid).toHaveBeenCalledWith({
+        academyId: "academy-1",
+        paidAt: "2026-08-21",
+        payroll: expect.objectContaining({
+          teacherId: "teacher-hourly",
+          payType: "hourly",
+          basePay: 1_200_000,
+          netPay: 1_160_400,
+          lessonEventIds: [],
+        }),
+      }),
+    );
+  });
+
+  it("지급 직전에 다시 불러온 출근 일정으로 금액이 달라졌으면 출근 일정이 바뀌었다고 알리고 지급하지 않는다", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const markPayrollPaid = vi.fn();
+    const changed = {
+      ...scheduledHourlyTeacher,
+      workSchedules: [{ weekday: "월", weekdayLabel: "월", startTime: "10:00", endTime: "17:00" }],
+    };
+    const refetchFinanceData = vi.fn().mockResolvedValue(buildFinanceData({ teachers: [changed] }));
+    renderPayroll(buildFinanceData({ teachers: [scheduledHourlyTeacher] }), { markPayrollPaid, refetchFinanceData });
+
+    await user.click(within(getRow("이시급")).getByRole("button", { name: "이시급 급여 지급 확정" }));
+    const dialog = await screen.findByRole("dialog", { name: "급여 지급 확정" });
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("급여 지급 확정에 실패했습니다.", {
+        description: "출근 일정이 바뀌어 금액이 달라졌습니다. 새 금액을 확인한 뒤 다시 확정해 주세요.",
+      }),
+    );
+    expect(markPayrollPaid).not.toHaveBeenCalled();
+  });
+});
+
 describe("FinancePayrollScreen 지급 확정", () => {
   it("설정 확인이 필요한 행은 안내를 보여 주고 지급 버튼을 숨긴다", () => {
     const brokenTeacher: TeacherListRow = { ...BASE_TEACHER, teacherId: "teacher-broken", name: "최미설정", payType: "monthly" };
@@ -254,11 +347,22 @@ describe("FinancePayrollScreen 지급 확정", () => {
   });
 
   it("최종지급액이 0원이면 지급 버튼을 비활성하고 이유를 문장으로 연결한다", () => {
-    renderPayroll(buildFinanceData({ teachers: [hourlyTeacher] }));
+    renderPayroll(buildFinanceData({ payrollLessonSources: [] }));
+
+    fireEvent.change(screen.getByLabelText("지급 예정 급여 월 선택"), { target: { value: "2026-07" } });
+
+    const button = within(getRow("김동성")).getByRole("button", { name: "김동성 급여 지급 확정" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription("이번 달 등원 확인이 없어 지급할 금액이 없습니다.");
+  });
+
+  it("시급제는 등원 확인이 아니라 출근 일정 기준이라 0원 이유도 근무 시간으로 안내한다", () => {
+    // 계약이 7월에 끝나 8월에는 출근일이 없다.
+    renderPayroll(buildFinanceData({ teachers: [{ ...scheduledHourlyTeacher, contractEndOn: "2026-07-31" }] }));
 
     const button = within(getRow("이시급")).getByRole("button", { name: "이시급 급여 지급 확정" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription("이번 달 등원 확인이 없어 지급할 금액이 없습니다.");
+    expect(button).toHaveAccessibleDescription("이번 달 출근 일정에 해당하는 근무 시간이 없어 지급할 금액이 없습니다.");
   });
 
   it("지급일을 고르면 지급 확정 handler를 부르고 성공 토스트를 보여 준다", async () => {

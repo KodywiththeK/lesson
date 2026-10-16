@@ -23,6 +23,7 @@ export default function TeachersPage() {
           <TeacherListScreen
             academyId={academy.academyId}
             academyName={academy.academyName}
+            isOwner={academy.permissionContext.role === "owner"}
             queryOptionsFactory={
               useTestDemo ? demo.createTeacherListQueryOptions : undefined
             }

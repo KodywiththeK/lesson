@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PayrollLessonSource } from "./payroll";
+import type { PayrollLessonSource, PayrollTeacher } from "./payroll";
 import {
   PAYROLL_POLICY,
   buildCompletedLessonRevenues,
@@ -70,8 +70,6 @@ describe("buildCompletedLessonRevenues", () => {
         instrumentName: "바이올린",
         lessonRevenue: 70000,
         completedOn: "2026-08-06",
-        durationHours: 1,
-        durationMinutes: 60,
       },
       {
         academyId: "academy-1",
@@ -82,8 +80,6 @@ describe("buildCompletedLessonRevenues", () => {
         instrumentName: "바이올린",
         lessonRevenue: 70000,
         completedOn: "2026-08-13",
-        durationHours: 1,
-        durationMinutes: 60,
       },
     ]);
   });
@@ -260,72 +256,18 @@ describe("calculateMonthlyPayroll", () => {
 });
 
 describe("calculateHourlyPayroll", () => {
-  it("시급제 근무시간은 완료 수업의 실제 시간 합산 값을 사용한다", () => {
-    const completedLessons = buildCompletedLessonRevenues(
-      [
-        {
-          academyId: "academy-1",
-          lessonEventId: "lesson-1",
-          teacherId: "teacher-3",
-          studentId: "student-1",
-          studentName: "김민지",
-          instrumentName: "피아노",
-          lessonKind: "academy",
-          status: "present",
-          startedAt: "2026-08-06T09:00:00+09:00",
-          endedAt: "2026-08-06T10:30:00+09:00",
-          monthlyLessonFee: 150000,
-        },
-        {
-          academyId: "academy-1",
-          lessonEventId: "lesson-2",
-          teacherId: "teacher-3",
-          studentId: "student-2",
-          studentName: "이서윤",
-          instrumentName: "피아노",
-          lessonKind: "makeup",
-          status: "present",
-          startedAt: "2026-08-07T09:00:00+09:00",
-          endedAt: "2026-08-07T10:00:00+09:00",
-          monthlyLessonFee: 150000,
-        },
-      ],
-      {
-        academyId: "academy-1",
-        month: "2026-08",
-      },
-    );
-    const workedHours = completedLessons.reduce(
-      (total, lesson) => total + (lesson.durationHours ?? 0),
-      0,
-    );
+  const policy = {
+    academyId: "academy-1",
+    teacherId: "teacher-3",
+    teacherName: "최선생",
+    month: "2026-08",
+    hourlyRate: 30_000,
+    withholdingTaxRate: 0.033,
+    rounding: "floor" as const,
+  };
 
-    expect(workedHours).toBe(2.5);
-    expect(
-      calculateHourlyPayroll({
-        academyId: "academy-1",
-        teacherId: "teacher-3",
-        teacherName: "최선생",
-        month: "2026-08",
-        hourlyRate: 30_000,
-        workedHours,
-        withholdingTaxRate: 0.033,
-        rounding: "floor",
-      }).netPay,
-    ).toBe(72_525);
-  });
-
-  it("시급제 급여는 월 근무 시간과 시급으로 계산한다", () => {
-    const payroll = calculateHourlyPayroll({
-      academyId: "academy-1",
-      teacherId: "teacher-3",
-      teacherName: "최선생",
-      month: "2026-08",
-      hourlyRate: 30_000,
-      workedHours: 12.5,
-      withholdingTaxRate: 0.033,
-      rounding: "round",
-    });
+  it("시급제 급여는 시급 × 근무 분 ÷ 60(내림)과 3.3% 원천징수로 계산한다", () => {
+    const payroll = calculateHourlyPayroll({ ...policy, workedMinutes: 750 });
 
     expect(payroll).toMatchObject({
       payrollId: "2026-08:teacher-3",
@@ -337,19 +279,27 @@ describe("calculateHourlyPayroll", () => {
     });
   });
 
-  it("시급제는 시급과 근무 시간이 필요하다", () => {
-    expect(() =>
-      calculateHourlyPayroll({
-        academyId: "academy-1",
-        teacherId: "teacher-3",
-        teacherName: "최선생",
-        month: "2026-08",
-        hourlyRate: 30_000,
-        workedHours: 0,
-        withholdingTaxRate: 0.033,
-        rounding: "round",
-      }),
-    ).toThrow("시급제 급여는 0보다 큰 근무 시간이 필요합니다.");
+  it("분 단위 나머지는 금액에서 내림한다(25,000원 × 116분 ÷ 60 = 48,333.33원)", () => {
+    expect(calculateHourlyPayroll({ ...policy, hourlyRate: 25_000, workedMinutes: 116 }).basePay).toBe(48_333);
+  });
+
+  it("부동소수점 오차로 1원 모자라게 계산하지 않는다(20,000원 × 240분 = 80,000원)", () => {
+    expect(calculateHourlyPayroll({ ...policy, hourlyRate: 20_000, workedMinutes: 240 }).basePay).toBe(80_000);
+  });
+
+  it("시급은 1 이상의 정수여야 한다", () => {
+    expect(() => calculateHourlyPayroll({ ...policy, hourlyRate: 0, workedMinutes: 60 })).toThrow(
+      "시급제 급여는 1 이상의 시급이 필요합니다.",
+    );
+  });
+
+  it("근무 시간은 0보다 큰 정수 분이어야 한다", () => {
+    expect(() => calculateHourlyPayroll({ ...policy, workedMinutes: 0 })).toThrow(
+      "시급제 급여는 0보다 큰 근무 시간이 필요합니다.",
+    );
+    expect(() => calculateHourlyPayroll({ ...policy, workedMinutes: 90.5 })).toThrow(
+      "근무 시간은 분 단위 정수여야 합니다.",
+    );
   });
 });
 
@@ -386,6 +336,19 @@ const ratioTeacher = {
   payType: "ratio" as const,
   ratioTeacherShare: 60,
 };
+
+const mondayShift = { weekday: "월", weekdayLabel: "월", startTime: "10:00", endTime: "18:00" };
+
+function hourlyTeacher(overrides: Partial<PayrollTeacher> = {}): PayrollTeacher {
+  return {
+    academyId,
+    teacherId: "teacher-1",
+    name: "김동성",
+    payType: "hourly",
+    hourlyRate: 30_000,
+    ...overrides,
+  };
+}
 
 describe("buildCompletedLessonRevenues — 명세 공식", () => {
   it("1회 레슨비는 월 수강료를 그 달 예정 수업 수로 나눈다(등원 횟수가 아니다)", () => {
@@ -530,20 +493,113 @@ describe("buildPayrollRows", () => {
     expect(rows[0].note).toBe("회차권 결제 금액을 찾지 못한 개인레슨 1건은 계산에서 제외했습니다.");
   });
 
-  it("시급제는 학원·보강·개인레슨 등원 시간을 모두 합산한다", () => {
+  it("시급제는 등원 확인 수업이 아니라 출근 요일·시간을 그 달에 펼친 합계로 계산한다", () => {
     const rows = buildPayrollRows({
       academyId,
       month: "2026-08",
-      teachers: [{ academyId, teacherId: "teacher-1", name: "김동성", payType: "hourly", hourlyRate: 30_000 }],
-      lessons: [
-        lesson("a1", "2026-08-03T10:00:00+09:00"),
-        lesson("m1", "2026-08-10T10:00:00+09:00", { lessonKind: "makeup" }),
-        lesson("p1", "2026-08-12T10:00:00+09:00", { lessonKind: "private" }),
-      ],
+      teachers: [hourlyTeacher({ hourlyRate: 30_000, workSchedules: [mondayShift] })],
+      // 등원 확인 수업이 있어도 시급 금액에는 영향이 없다.
+      lessons: [lesson("a1", "2026-08-03T10:00:00+09:00"), lesson("m1", "2026-08-10T10:00:00+09:00", { lessonKind: "makeup" })],
     });
 
-    expect(rows[0]).toMatchObject({ payType: "hourly", basePay: 90_000 });
-    expect(rows[0].basis).toBe("등원 3시간");
+    // 월요일 5번(3·10·17·24·31) × 8시간 = 40시간 × 30,000원
+    expect(rows[0]).toMatchObject({ payType: "hourly", basePay: 1_200_000, withholdingTax: 39_600, lessonEventIds: [] });
+    expect(rows[0].basis).toBe("근무 40시간 (출근 일정 기준)");
+    expect(rows[0].issue).toBeUndefined();
+  });
+
+  it("시급제는 등원 확인 수업이 하나도 없어도 출근 일정만으로 계산한다", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [hourlyTeacher({ hourlyRate: 10_000, workSchedules: [mondayShift] })],
+      lessons: [],
+    });
+
+    expect(rows[0].basePay).toBe(400_000);
+  });
+
+  it("시급제는 계약 시작일·종료일 당일을 포함하고 그 밖의 출근 요일은 제외한다", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [
+        hourlyTeacher({
+          hourlyRate: 10_000,
+          workSchedules: [mondayShift],
+          contractStartOn: "2026-08-10",
+          contractEndOn: "2026-08-24",
+        }),
+      ],
+      lessons: [],
+    });
+
+    // 10·17·24일 3번 × 8시간
+    expect(rows[0].basePay).toBe(240_000);
+    expect(rows[0].basis).toBe("근무 24시간 (출근 일정 기준)");
+  });
+
+  it("시급제의 분 단위 금액은 총 분으로 곱한 뒤 한 번만 내린다(35분 × 5번 = 175분)", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [
+        hourlyTeacher({
+          hourlyRate: 25_000,
+          workSchedules: [{ weekday: "월", weekdayLabel: "월", startTime: "10:00", endTime: "10:35" }],
+        }),
+      ],
+      lessons: [],
+    });
+
+    // floor(25,000 × 175 / 60) = 72,916 (날짜마다 내리면 72,915)
+    expect(rows[0].basePay).toBe(72_916);
+    expect(rows[0].basis).toBe("근무 2시간 55분 (출근 일정 기준)");
+  });
+
+  it("시급제 계약 기간이 그 달과 겹치지 않으면 0원 행이며 설정 문제는 아니다", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [
+        hourlyTeacher({
+          workSchedules: [mondayShift],
+          contractStartOn: "2026-06-01",
+          contractEndOn: "2026-07-31",
+        }),
+      ],
+      lessons: [],
+    });
+
+    expect(rows[0]).toMatchObject({ basePay: 0, netPay: 0 });
+    expect(rows[0].issue).toBeUndefined();
+    expect(rows[0].basis).toBe("근무 0분 (출근 일정 기준)");
+  });
+
+  it("시급제 선생님의 출근 일정이 비어 있으면 출근 요일·시간 등록을 안내하는 설정 확인 행이 된다", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [hourlyTeacher({ workSchedules: [] })],
+      lessons: [],
+    });
+
+    expect(rows[0].issue).toBe(
+      "출근 요일·시간을 설정해 주세요. 선생님 정보에서 출근 일정을 등록하면 시급을 계산할 수 있습니다.",
+    );
+    expect(rows[0]).toMatchObject({ basePay: 0, netPay: 0 });
+  });
+
+  it("출근 요일만 있고 시간이 비어 있으면 출근 시간 설정을 안내한다", () => {
+    const rows = buildPayrollRows({
+      academyId,
+      month: "2026-08",
+      teachers: [hourlyTeacher({ workSchedules: [mondayShift, { weekday: "수", weekdayLabel: "수" }] })],
+      lessons: [],
+    });
+
+    expect(rows[0].issue).toBe("출근 시간을 설정해 주세요. 수요일의 시작·종료 시간이 비어 있습니다.");
+    expect(rows[0].netPay).toBe(0);
   });
 
   it("급여 설정이 비어 있으면 화면이 깨지지 않고 설정 확인 필요 행으로 돌려준다", () => {
@@ -639,22 +695,6 @@ describe("buildPayrollRows", () => {
     expect(rows[0].basePay).toBe(35_000);
   });
 
-  it("시급제는 분 단위 시간이 부동소수점으로 1원 모자라게 계산되지 않는다", () => {
-    const fortyMinutes = (id: string, day: string) => ({
-      ...lesson(id, `2026-08-${day}T10:00:00+09:00`),
-      endedAt: `2026-08-${day}T10:40:00+09:00`,
-    });
-    const rows = buildPayrollRows({
-      academyId,
-      month: "2026-08",
-      teachers: [{ academyId, teacherId: "teacher-1", name: "김동성", payType: "hourly", hourlyRate: 20_000 }],
-      lessons: ["03", "04", "05", "06", "07", "10"].map((day) => fortyMinutes(`h${day}`, day)),
-    });
-
-    // 40분 × 6회 = 4시간 × 20,000원 = 80,000원 (부동소수점으로는 79,999.99999999999)
-    expect(rows[0].basePay).toBe(80_000);
-  });
-
   it("분모는 정규·이동 수업만 센다: 수동·특별 수업은 등원 횟수에는 들어가도 예정 수업 수에는 넣지 않는다", () => {
     const rows = buildPayrollRows({
       academyId,
@@ -673,24 +713,6 @@ describe("buildPayrollRows", () => {
     // 정규·이동 예정 4회 → 1회 35,000원, 등원은 정규 1회 + 수동 1회 = 2회
     expect(rows[0].basePay).toBe(70_000);
     expect(rows[0].basis).toBe("등원 2회 / 예정 4회");
-  });
-
-  it("시급제는 수업 시간을 분 단위 정수로 더한 뒤 시급을 곱한다(서버와 같은 계산)", () => {
-    const withSeconds = (id: string, day: string, endMinute: string) => ({
-      ...lesson(id, `2026-08-${day}T10:00:00+09:00`),
-      // 수업마다 분 단위로 반올림한다: 40분 40초 → 41분, 40분 10초 → 40분, 35분 → 35분
-      endedAt: `2026-08-${day}T${endMinute}+09:00`,
-    });
-    const rows = buildPayrollRows({
-      academyId,
-      month: "2026-08",
-      teachers: [{ academyId, teacherId: "teacher-1", name: "김동성", payType: "hourly", hourlyRate: 25_000 }],
-      lessons: [withSeconds("a", "03", "10:40:40"), withSeconds("b", "04", "10:40:10"), withSeconds("c", "05", "10:35:00")],
-    });
-
-    // 41 + 40 + 35 = 116분 → floor(25,000 × 116 / 60) = 48,333 (초 단위로 더하면 48,263)
-    expect(rows[0].basePay).toBe(48_333);
-    expect(rows[0].basis).toBe("등원 1.93시간");
   });
 
   it("월 수강료는 그 달 월 snapshot 금액을 우선하고 없으면 수업에 붙은 현재 금액을 쓴다", () => {

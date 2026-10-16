@@ -34,6 +34,9 @@ describe("TeachersPage", () => {
     ).not.toBeInTheDocument();
     expect(await screen.findByText("김하늘")).toBeInTheDocument();
     expect(screen.getByText("오유진")).toBeInTheDocument();
+    // 세션 역할이 원장이면 급여 컬럼과 급여 형태 필터가 보인다.
+    expect(screen.getByRole("columnheader", { name: "급여" })).toBeInTheDocument();
+    expect(screen.getByLabelText("급여 형태 필터")).toBeInTheDocument();
   });
 
   it("선생님 등록 다이얼로그에서 등록한 선생님을 목록에 반영한다", async () => {
