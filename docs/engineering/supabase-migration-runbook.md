@@ -194,6 +194,24 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 적용 후 읽기 전용 카탈로그 확인: 공개 RPC 8개가 새 시그니처로만 존재(옛 7인자 `register_book_release` 없음, 오버로드 없음), anon 실행 불가, `private.apply_book_stock_delta`·`mark_book_release_paid`·`assert_book_role`은 앱 사용자 실행 불가. `books`·`book_releases`에서 anon·authenticated는 SELECT만 남았다. `books_title_key_check`, `book_releases_academy_student_fk`(`on delete set null (student_id)`), 인덱스 `books_academy_title_key_active_key`·`book_releases_academy_status_paid_idx`, `book_releases.student_id` nullable 확인. 두 교재의 `title_key`는 모두 채워졌고 재고는 0권, 출고 수량은 1로 이전됐다.
 - 한계: 운영 데이터 행은 읽지 않았다. **재고 잠금·동시성, 결제 취소의 원장 삭제, 데스크 거부, 병합 이행(이번에는 중복이 없어 실행되지 않음)은 앱에서 직접 확인해야 한다.**
 
+## 원생 수정 악기 추가·종료·결석 사유 migration (20261020090000~20261020090100) — 2026-10-18 적용 완료
+
+원생 수정의 악기 추가·종료·원자 저장과 개인레슨 결석 사유 반영분이다. 사용자 요청으로 2026-10-18 운영 DB에 적용했다. 앱 코드가 새 RPC(`update_student_with_enrollments`, 7인자 `mark_private_lesson_attendance`)를 호출하므로 **적용된 상태에서만 새 앱이 동작**한다. 반대로 옛 앱은 2번이 옛 6인자 출결 함수를 지우므로 적용 즉시 개인레슨 출결 저장이 실패한다. 적용과 앱 배포를 이어서 한다.
+
+| 순서 | 파일 | 내용 | 적용 후 확인 |
+| --- | --- | --- | --- |
+| 1 | `20261020090000_student_enrollment_edit.sql` | `student_instruments.started_on·ended_on`, 수강 unique를 활성 행 한정 index로 교체(종료 행 보존·재추가는 새 행), 내부 함수 `private.insert_student_enrollment`·`end_student_enrollment`, 공개 RPC `update_student_with_enrollments`, `ensure_monthly_fixed_income_snapshots` 재정의(시작·종료 달 기준) | 새 RPC 시그니처 1개(5인자)와 anon 실행 불가, `private.*`가 앱 사용자 실행 불가, 두 컬럼 존재, **옛 unique 제약이 사라지고 활성 한정 unique index `student_instruments_active_enrollment_key`(`where active`)만 남았는지**, 같은 악기·수업 형태의 종료 행과 활성 행이 공존할 수 있는지, 기존 활성 수강의 월 수강료 snapshot 결과가 이전과 같은지(시작일·종료일이 없는 행) |
+| 2 | `20261020090100_private_absence_reason.sql` | 옛 6인자 `mark_private_lesson_attendance` 삭제, 사유를 받는 7인자 래퍼 | 7인자 시그니처만 남았는지(오버로드 없음), anon 실행 불가, `private.mark_private_lesson_attendance_impl`이 그대로인지 |
+
+적용 전 절차: `pnpm supabase migration list`로 원격 history가 `20261019090100`까지인지 확인하고 `pnpm supabase db push --dry-run`으로 대상이 위 2개뿐인지 본다. 1번은 운영 데이터를 바꾸는 이행이 없다(컬럼 추가와 함수 정의뿐). SQL은 로컬에서 실제 Postgres에 적용해 보지 못했고 계약 테스트(SQL 문자열)와 독립 코드 리뷰까지만 했다.
+
+앱에서 직접 확인할 것(적용 후): ① 복수 악기 원생에서 악기 추가 → 정기 일정 생성(시작일 이후)과 월 수강료 시작 달, ② 악기 종료 → 시리즈 닫힘·오늘 이후 정기 일정 취소·이동/보강/개인레슨 일정 유지, ③ 마지막 악기 종료 거부와 한 호출 안 실패 시 전체 롤백(이름 포함), ④ 종료한 조합 재추가 시 새 수강 행이 생기고(unique 오류 없음) 종료 행은 그대로이며, 예전 기간의 월 수강료가 열어 본 적 없는 달에도 만들어지는지, ⑤ 개인레슨 결석 사유 저장·수정이 회차권 잔액을 바꾸지 않는지, 선생님 계정에서도 동작하는지.
+
+적용 기록 (2026-10-18):
+- 방법: `pnpm supabase migration list`(대기 2개, 원격에 없음 확인) → `pnpm supabase db push --dry-run`(대상이 위 2개뿐) → `pnpm supabase db push --yes`. 2개 모두 오류 없이 적용됐고 원격 history가 로컬 파일명과 일치한다. 적용 전에 `20261020090000`을 수강 unique 교체(활성 한정 partial index)와 재추가=새 행 정책으로 제자리 수정했다.
+- 적용 후 읽기 전용 카탈로그 확인: `student_instruments`에 옛 4컬럼 unique 제약이 사라지고 PK와 `(academy_id, id)` unique만 남았으며 활성 한정 unique index `student_instruments_active_enrollment_key`가 있다. `started_on`·`ended_on` 컬럼 존재. `update_student_with_enrollments`(5인자)는 authenticated만 실행 가능, `private.insert_student_enrollment`·`end_student_enrollment`·`mark_private_lesson_attendance_impl`은 anon·authenticated 실행 불가, `mark_private_lesson_attendance`는 7인자 하나만 있다(옛 6인자 없음, 오버로드 없음). `ensure_monthly_fixed_income_snapshots`가 시작·종료 달 조건과 `created_at desc, id desc` 정렬을 포함한다.
+- 한계: 운영 데이터 행은 읽지 않았다. **원자 롤백, 시리즈 닫기·정기 일정 취소, 종료 행과 활성 행 공존·재추가, snapshot 결과, 결석 재호출의 회차권 영향은 앱에서 직접 확인해야 한다.**
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.
