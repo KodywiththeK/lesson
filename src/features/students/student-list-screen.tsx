@@ -55,8 +55,13 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type { ListView } from "@/domain/common-list";
-import { getFinanceToday } from "@/domain/finance-date";
 import { STUDENT_DISCOUNTS } from "@/domain/lesson-pricing";
+import {
+  applyStudentEnrollmentSave,
+  getRemainingEventNotice,
+  type StudentEnrollmentSaveResult,
+  type UpdateStudentEnrollmentsInput,
+} from "@/domain/student-enrollment-edit";
 import {
   buildStudentFilterOptions,
   DEFAULT_STUDENT_SORT,
@@ -75,14 +80,12 @@ import {
   createStudentListQueryOptions,
   createStudentOptionsQueryOptions,
   registerStudentEnrollment,
-  updateStudentProfile,
+  updateStudentEnrollments,
   updateStudentStatus,
   type RegisterStudentEnrollmentInput,
-  type StudentBasicInfoInput,
   type StudentRegistrationSupabaseClient,
   type StudentListSupabaseClient,
   type StudentUpdateSupabaseClient,
-  type UpdateStudentProfileInput,
 } from "@/lib/api/students";
 import {
   createTeacherOptionsQueryOptions,
@@ -93,11 +96,14 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { TeacherListRow } from "@/domain/teacher-list";
 
 import { StudentEditForm } from "./student-edit-form";
+import { toStudentSaveFailureMessage } from "./student-edit-save";
 import { instrumentOptions, weekdayOptions } from "./student-form-options";
 import {
   StudentRegistrationDialog,
   type StudentRegistrationSubmission,
 } from "./student-registration-dialog";
+import { STUDENT_LESSON_TYPE_LABELS } from "./student-registration-instrument";
+import { useStudentRowOverrides } from "./student-row-overrides";
 
 type StudentListQueryOptions = {
   queryKey: QueryKey;
@@ -114,7 +120,9 @@ type StudentListScreenProps = {
   queryOptionsFactory?: StudentListQueryOptionsFactory;
   teachers?: TeacherListRow[];
   registerStudent?: (input: StudentRegistrationSubmission) => void | Promise<void>;
-  updateStudent?: (input: UpdateStudentProfileInput) => void | Promise<void>;
+  updateStudent?: (
+    input: UpdateStudentEnrollmentsInput,
+  ) => void | StudentEnrollmentSaveResult | Promise<void | StudentEnrollmentSaveResult>;
   updateStudentStatus?: (
     input: {
       academyId: string;
@@ -166,9 +174,6 @@ export function StudentListScreen({
   );
   const [pendingStatusChange, setPendingStatusChange] =
     useState<StudentStatusChangeRequest | null>(null);
-  const [studentOverrides, setStudentOverrides] = useState<
-    Record<string, StudentListRow>
-  >({});
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createStudentListSupabaseClient()),
@@ -198,6 +203,14 @@ export function StudentListScreen({
     queryFn: queryOptions.queryFn,
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
   });
+  const studentListView = studentListQuery.data;
+  const rowOverrides = useStudentRowOverrides(studentListView);
+  const students = rowOverrides.resolve(studentListView?.items ?? []);
+  // 상세 창은 열 때의 스냅샷이지만, 현재 목록에 같은 원생이 있으면 그 행을 보여 줘 낡은 값이 남지 않게 한다.
+  const detailStudent = selectedStudent
+    ? (students.find((student) => student.studentId === selectedStudent.studentId) ??
+      rowOverrides.resolve(selectedStudent))
+    : null;
   const teacherOptionsQuery = useQuery({
     ...createDefaultTeacherOptionsQueryOptions(
       academyId,
@@ -270,29 +283,18 @@ export function StudentListScreen({
       return input;
     },
     onSuccess: (input) => {
-      setStudentOverrides((current) => {
-        const currentStudent =
-          current[input.studentId] ??
-          selectedStudent ??
-          students.find((student) => student.studentId === input.studentId);
+      const currentStudent =
+        detailStudent ?? students.find((student) => student.studentId === input.studentId);
 
-        if (!currentStudent) {
-          return current;
-        }
+      // 합칠 원생 행을 알 수 없으면 부분 행을 만들지 않고 다시 불러온 결과를 따른다.
+      if (currentStudent) {
+        const updatedStudent = { ...currentStudent, status: input.status };
 
-        return {
-          ...current,
-          [input.studentId]: {
-            ...currentStudent,
-            status: input.status,
-          },
-        };
-      });
-      setSelectedStudent((current) =>
-        current?.studentId === input.studentId
-          ? { ...current, status: input.status }
-          : current,
-      );
+        rowOverrides.apply(updatedStudent);
+        setSelectedStudent((current) =>
+          current?.studentId === input.studentId ? updatedStudent : current,
+        );
+      }
       toast.success("원생 상태를 변경했습니다.");
       invalidateAfterPeopleChange(queryClient, academyId);
     },
@@ -303,44 +305,41 @@ export function StudentListScreen({
     },
   });
   const updateMutation = useMutation({
-    mutationFn: async (input: UpdateStudentProfileInput) => {
+    mutationFn: async (input: UpdateStudentEnrollmentsInput) => {
       if (updateStudent) {
-        await updateStudent(input);
-        return applyStudentUpdate(selectedStudent, input);
+        return { input, result: (await updateStudent(input)) ?? undefined };
       }
 
       if (!supabaseClientState?.client) {
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
 
-      return updateStudentProfile(supabaseClientState.client, input);
+      return { input, result: await updateStudentEnrollments(supabaseClientState.client, input) };
     },
-    onSuccess: (updatedStudent) => {
-      const mergedStudent = mergeStudentRow(
-        studentOverrides[updatedStudent.studentId] ?? selectedStudent,
-        updatedStudent,
-      );
+    onSuccess: ({ input, result }) => {
+      const currentStudent =
+        detailStudent ?? students.find((student) => student.studentId === input.studentId);
+      const remainingEventNotice = result ? getRemainingEventNotice(result) : null;
 
-      setStudentOverrides((current) => ({
-        ...current,
-        [updatedStudent.studentId]: mergedStudent,
-      }));
-      setSelectedStudent(mergedStudent);
-      toast.success("원생 정보를 수정했습니다.");
+      // 합칠 원생 행을 알 수 없으면 부분 행을 만들지 않고 다시 불러온 결과를 따른다.
+      if (currentStudent) {
+        const mergedStudent = applyStudentEnrollmentSave(currentStudent, input, result);
+
+        rowOverrides.apply(mergedStudent);
+        setSelectedStudent(mergedStudent);
+      }
+      toast.success("원생 정보를 수정했습니다.", {
+        description: remainingEventNotice ?? undefined,
+      });
       invalidateAfterPeopleChange(queryClient, academyId);
     },
     onError: (error) => {
+      // 서버가 한 트랜잭션으로 처리해 실패하면 아무것도 저장되지 않는다. 폼은 입력값을 그대로 둔다.
       toast.error("원생 정보 수정에 실패했습니다.", {
-        description: toUserMessage(error),
+        description: toStudentSaveFailureMessage(error),
       });
-      // 이름·수강 정보만 저장된 일부 저장일 수 있으므로 목록을 다시 불러온다.
-      invalidateAfterPeopleChange(queryClient, academyId);
     },
   });
-  const studentListView = studentListQuery.data;
-  const students = (studentListView?.items ?? []).map(
-    (student) => studentOverrides[student.studentId] ?? student,
-  );
   const filterOptions = buildStudentFilterOptions(studentOptionsQuery.data ?? [], {
     teacherNames: teacherOptions.map((teacher) => teacher.name),
     instrumentNames: instrumentOptions.map((instrument) => instrument.name),
@@ -378,7 +377,11 @@ export function StudentListScreen({
       </PageHeaderActionFallback>
 
       <div className="rounded-lg border border-border bg-card">
-        <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_repeat(3,11rem)_repeat(2,9rem)_auto]">
+        <div
+          role="group"
+          aria-label="검색·필터·정렬"
+          className="grid min-w-0 gap-3 border-b border-border p-4"
+        >
           <ListSearchField
             label="원생 검색"
             value={search}
@@ -389,84 +392,87 @@ export function StudentListScreen({
             placeholder="이름, 선생님, 악기, 요일"
           />
 
-          <ListFilterSelect
-            label="선생님 필터"
-            value={teacherName}
-            options={filterOptions.teacherNames}
-            onChange={(value) => {
-              setTeacherName(value);
-              resetPage();
-            }}
-          />
-          <ListFilterSelect
-            label="악기 필터"
-            value={instrumentName}
-            options={filterOptions.instrumentNames}
-            onChange={(value) => {
-              setInstrumentName(value);
-              resetPage();
-            }}
-          />
-          <ListFilterSelect
-            label="요일 필터"
-            value={weekdayLabel}
-            options={filterOptions.weekdayLabels}
-            onChange={(value) => {
-              setWeekdayLabel(value);
-              resetPage();
-            }}
-          />
+          {/* 열 폭은 카드 폭을 균등 분할(grid-cols-N = minmax(0,1fr))하고, NativeSelect 래퍼(w-fit)가 가장 긴 선택지 폭으로 열을 밀지 않게 칸을 꽉 채운다. */}
+          <div className="grid min-w-0 grid-cols-2 gap-3 *:min-w-0 md:grid-cols-3 2xl:grid-cols-6 [&_[data-slot=native-select-wrapper]]:w-full">
+            <ListFilterSelect
+              label="선생님 필터"
+              value={teacherName}
+              options={filterOptions.teacherNames}
+              onChange={(value) => {
+                setTeacherName(value);
+                resetPage();
+              }}
+            />
+            <ListFilterSelect
+              label="악기 필터"
+              value={instrumentName}
+              options={filterOptions.instrumentNames}
+              onChange={(value) => {
+                setInstrumentName(value);
+                resetPage();
+              }}
+            />
+            <ListFilterSelect
+              label="요일 필터"
+              value={weekdayLabel}
+              options={filterOptions.weekdayLabels}
+              onChange={(value) => {
+                setWeekdayLabel(value);
+                resetPage();
+              }}
+            />
 
-          <Label className="grid gap-1 text-sm font-medium">
-            <span>정렬 기준</span>
-            <NativeSelect
-              aria-label="정렬 기준"
-              className="w-full"
-              value={sort.key}
-              onChange={(event) => {
-                setSort({ ...sort, key: event.target.value as StudentSortKey });
+            <Label className="grid gap-1 text-sm font-medium">
+              <span>정렬 기준</span>
+              <NativeSelect
+                aria-label="정렬 기준"
+                className="w-full"
+                value={sort.key}
+                onChange={(event) => {
+                  setSort({ ...sort, key: event.target.value as StudentSortKey });
+                  resetPage();
+                }}
+              >
+                {STUDENT_SORT_OPTIONS.map((option) => (
+                  <NativeSelectOption key={option.key} value={option.key}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Label>
+            <Label className="grid gap-1 text-sm font-medium">
+              <span>정렬 방향</span>
+              <NativeSelect
+                aria-label="정렬 방향"
+                className="w-full"
+                value={sort.direction}
+                onChange={(event) => {
+                  setSort({ ...sort, direction: event.target.value as StudentSort["direction"] });
+                  resetPage();
+                }}
+              >
+                <NativeSelectOption value="asc">오름차순</NativeSelectOption>
+                <NativeSelectOption value="desc">내림차순</NativeSelectOption>
+              </NativeSelect>
+            </Label>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="self-end"
+              onClick={() => {
+                setSearch("");
+                setTeacherName("");
+                setInstrumentName("");
+                setWeekdayLabel("");
+                setSort(DEFAULT_STUDENT_SORT);
                 resetPage();
               }}
             >
-              {STUDENT_SORT_OPTIONS.map((option) => (
-                <NativeSelectOption key={option.key} value={option.key}>
-                  {option.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Label>
-          <Label className="grid gap-1 text-sm font-medium">
-            <span>정렬 방향</span>
-            <NativeSelect
-              aria-label="정렬 방향"
-              className="w-full"
-              value={sort.direction}
-              onChange={(event) => {
-                setSort({ ...sort, direction: event.target.value as StudentSort["direction"] });
-                resetPage();
-              }}
-            >
-              <NativeSelectOption value="asc">오름차순</NativeSelectOption>
-              <NativeSelectOption value="desc">내림차순</NativeSelectOption>
-            </NativeSelect>
-          </Label>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="self-end"
-            onClick={() => {
-              setSearch("");
-              setTeacherName("");
-              setInstrumentName("");
-              setWeekdayLabel("");
-              setSort(DEFAULT_STUDENT_SORT);
-              resetPage();
-            }}
-          >
-            <RotateCcw aria-hidden="true" />
-            초기화
-          </Button>
+              <RotateCcw aria-hidden="true" />
+              초기화
+            </Button>
+          </div>
         </div>
 
         {!hasInjectedQueryOptions && supabaseClientState?.error ? (
@@ -507,7 +513,7 @@ export function StudentListScreen({
       </div>
 
       <StudentDetailDialog
-        student={selectedStudent}
+        student={detailStudent}
         teachers={teacherOptions}
         isSaving={updateMutation.isPending}
         isStatusSaving={statusMutation.isPending}
@@ -516,7 +522,9 @@ export function StudentListScreen({
             setSelectedStudent(null);
           }
         }}
-        onSubmit={(input) => updateMutation.mutateAsync(input)}
+        onSubmit={async (input) => {
+          await updateMutation.mutateAsync(input);
+        }}
         onRequestStatusChange={setPendingStatusChange}
       />
       <StudentStatusConfirmationDialog
@@ -543,7 +551,7 @@ function StudentDetailDialog({
   isSaving: boolean;
   isStatusSaving: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (input: UpdateStudentProfileInput) => Promise<StudentListRow>;
+  onSubmit: (input: UpdateStudentEnrollmentsInput) => Promise<void>;
   onRequestStatusChange: (request: StudentStatusChangeRequest) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -554,6 +562,11 @@ function StudentDetailDialog({
     <Dialog
       open={Boolean(student)}
       onOpenChange={(open) => {
+        // 저장하는 동안 닫으면 저장 결과를 합칠 원생 행이 없어진다. 끝날 때까지 열어 둔다.
+        if (!open && isSaving) {
+          return;
+        }
+
         if (!open) {
           setIsEditing(false);
         }
@@ -566,7 +579,7 @@ function StudentDetailDialog({
             {student ? `${student.name} 원생 상세` : "원생 상세"}
           </DialogTitle>
           <DialogDescription>
-            원생의 기본 정보와 대표 수업 정보를 확인하고 수정합니다.
+            원생의 기본 정보와 악기별 수업 정보를 확인하고 수정합니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -1004,75 +1017,6 @@ function formatWeeklySchedules(
     .join(", ");
 }
 
-function applyStudentUpdate(
-  current: StudentListRow | null,
-  input: UpdateStudentProfileInput,
-): StudentListRow {
-  const nextInstrument = input.studentInstrumentId
-    ? {
-        studentInstrumentId: input.studentInstrumentId,
-        teacherId: input.teacherId ?? null,
-        teacherName: input.teacherName ?? "",
-        instrumentId: input.instrumentId ?? "",
-        instrumentName: input.instrumentName ?? "",
-        lessonType: input.lessonType ?? "academy",
-        weekdayLabels: input.weekdayLabels ?? [],
-        startTime: input.startTime ?? "",
-        endTime: input.endTime ?? "",
-        progress: input.progress ?? "",
-        lessonFee: input.lessonFee ?? 0,
-        discountTotal: input.discountTotal ?? 0,
-        finalMonthlyFee: input.finalMonthlyFee ?? 0,
-        active: true,
-        weeklySchedules: input.weeklySchedules?.map((schedule) => ({
-          weekday: schedule.weekdayLabel,
-          weekdayLabel: schedule.weekdayLabel,
-          startTime: schedule.startTime ?? "",
-          endTime: schedule.endTime ?? "",
-        })),
-      }
-    : undefined;
-
-  return {
-    ...current,
-    academyId: input.academyId,
-    studentId: input.studentId,
-    name: input.name,
-    ...(input.basicInfo ? toBasicInfoFields(input.basicInfo) : {}),
-    registeredOn: input.basicInfo?.registeredOn ?? current?.registeredOn,
-    status: current?.status,
-    teacherNames: input.teacherName ? [input.teacherName] : current?.teacherNames ?? [],
-    instrumentNames: input.instrumentName
-      ? [input.instrumentName]
-      : current?.instrumentNames ?? [],
-    weekdayLabels: input.weekdayLabels ?? current?.weekdayLabels ?? [],
-    instruments: nextInstrument
-      ? [
-          nextInstrument,
-          ...(current?.instruments ?? []).filter(
-            (instrument) =>
-              instrument.studentInstrumentId !== input.studentInstrumentId,
-          ),
-        ]
-      : current?.instruments ?? [],
-  };
-}
-
-function mergeStudentRow(
-  current: StudentListRow | null,
-  updated: StudentListRow,
-): StudentListRow {
-  return {
-    ...current,
-    ...updated,
-    status: updated.status ?? current?.status,
-    instruments:
-      updated.instruments && updated.instruments.length > 0
-        ? updated.instruments
-        : current?.instruments,
-  };
-}
-
 function formatStudentStatus(status: string | undefined) {
   if (status === "enrolled") {
     return "재원";
@@ -1090,7 +1034,7 @@ function formatStudentStatus(status: string | undefined) {
 }
 
 function formatLessonType(lessonType: string) {
-  return lessonType === "private" ? "개인레슨" : "학원 수업";
+  return STUDENT_LESSON_TYPE_LABELS[lessonType === "private" ? "private" : "academy"];
 }
 
 function formatWon(value: number) {
@@ -1107,27 +1051,4 @@ function formatReferralDiscount(instrument: StudentListInstrument) {
   return `${instrument.referralDiscountMonth} 한 달 -${formatWon(
     instrument.referralDiscountAmount ?? referral?.amount ?? 0,
   )}`;
-}
-
-function toBasicInfoFields(basicInfo: StudentBasicInfoInput): Partial<StudentListRow> {
-  const contactPhone = basicInfo.contactPhone.trim();
-
-  return {
-    age: basicInfo.age,
-    ageAsOfYear: basicInfo.age === undefined ? undefined : Number(getFinanceToday().slice(0, 4)),
-    grade: basicInfo.grade?.trim() || undefined,
-    school: basicInfo.school?.trim() || undefined,
-    occupation: basicInfo.occupation?.trim() || undefined,
-    ...(contactPhone
-      ? {
-          contacts: [
-            {
-              contactId: "",
-              relationship: basicInfo.contactRelationship,
-              phone: contactPhone,
-            },
-          ],
-        }
-      : {}),
-  };
 }

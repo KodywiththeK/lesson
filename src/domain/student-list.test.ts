@@ -4,6 +4,7 @@ import {
   buildStudentFilterOptions,
   buildStudentList,
   getStudentDisplayAge,
+  mergeStudentUpdate,
   STUDENT_SORT_OPTIONS,
   type StudentListRow,
 } from "./student-list";
@@ -221,5 +222,107 @@ describe("buildStudentList 정렬", () => {
         sort: { key: "name", direction: "desc" },
       }).items.map((student) => student.studentId),
     ).toEqual(["s1", "s2", "s3"]);
+  });
+});
+
+describe("mergeStudentUpdate", () => {
+  const instrument = (
+    id: string,
+    instrumentName: string,
+    teacherName: string,
+    weekdayLabels: string[],
+  ) => ({
+    studentInstrumentId: id,
+    teacherId: `${id}-teacher`,
+    teacherName,
+    instrumentId: instrumentName,
+    instrumentName,
+    lessonType: "private",
+    weekdayLabels,
+    startTime: "",
+    endTime: "",
+    progress: "",
+    lessonFee: 0,
+    discountTotal: 0,
+    finalMonthlyFee: 0,
+    active: true,
+  });
+  const current: StudentListRow = {
+    academyId: "academy-1",
+    studentId: "s1",
+    name: "한소희",
+    status: "enrolled",
+    teacherNames: ["박선생", "최선생"],
+    instrumentNames: ["피아노", "바이올린"],
+    weekdayLabels: ["월", "화"],
+    instruments: [
+      instrument("si-piano", "피아노", "박선생", ["월"]),
+      instrument("si-violin", "바이올린", "최선생", ["화"]),
+    ],
+  };
+
+  it("한 악기만 수정한 결과를 합쳐도 다른 악기와 선생님·요일 요약을 잃지 않는다", () => {
+    const merged = mergeStudentUpdate(current, {
+      academyId: "academy-1",
+      studentId: "s1",
+      name: "한소희",
+      teacherNames: ["윤선생"],
+      instrumentNames: ["바이올린"],
+      weekdayLabels: ["목"],
+      instruments: [instrument("si-violin", "바이올린", "윤선생", ["목"])],
+    });
+
+    expect(merged.instruments?.map((item) => item.studentInstrumentId)).toEqual([
+      "si-piano",
+      "si-violin",
+    ]);
+    expect(merged.teacherNames).toEqual(["박선생", "윤선생"]);
+    expect(merged.instrumentNames).toEqual(["피아노", "바이올린"]);
+    expect(merged.weekdayLabels).toEqual(["월", "목"]);
+    expect(merged.status).toBe("enrolled");
+  });
+
+  it("수정 결과를 차례로 합치면 두 악기의 변경이 모두 남는다", () => {
+    const results = [
+      {
+        ...current,
+        teacherNames: ["김선생"],
+        instrumentNames: ["피아노"],
+        weekdayLabels: ["수"],
+        instruments: [instrument("si-piano", "피아노", "김선생", ["수"])],
+      },
+      {
+        ...current,
+        teacherNames: ["윤선생"],
+        instrumentNames: ["바이올린"],
+        weekdayLabels: ["목"],
+        instruments: [instrument("si-violin", "바이올린", "윤선생", ["목"])],
+      },
+    ];
+
+    const merged = results.reduce(mergeStudentUpdate, current);
+
+    expect(merged.teacherNames).toEqual(["김선생", "윤선생"]);
+    expect(merged.weekdayLabels).toEqual(["수", "목"]);
+  });
+
+  it("악기 없이 이름·기본 정보만 수정한 결과는 기존 악기와 요약을 그대로 둔다", () => {
+    const merged = mergeStudentUpdate(current, {
+      academyId: "academy-1",
+      studentId: "s1",
+      name: "한소희B",
+      grade: "중1",
+      teacherNames: [],
+      instrumentNames: [],
+      weekdayLabels: [],
+      instruments: [],
+    });
+
+    expect(merged.name).toBe("한소희B");
+    expect(merged.grade).toBe("중1");
+    expect(merged.teacherNames).toEqual(["박선생", "최선생"]);
+    expect(merged.instrumentNames).toEqual(["피아노", "바이올린"]);
+    expect(merged.weekdayLabels).toEqual(["월", "화"]);
+    expect(merged.instruments).toHaveLength(2);
   });
 });

@@ -28,6 +28,10 @@ import {
   buildLessonTicketList,
   type BuildLessonTicketListOptions,
 } from "@/domain/lesson-ticket";
+import type {
+  StudentEnrollmentSaveResult,
+  UpdateStudentEnrollmentsInput,
+} from "@/domain/student-enrollment-edit";
 import { buildStudentList } from "@/domain/student-list";
 import {
   buildStatusManagementList,
@@ -45,6 +49,7 @@ import {
 } from "@/lib/api/lesson-tickets";
 import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons";
 
+import { updateDemoStudentEnrollments } from "./academy-demo-student-edit";
 import {
   adjustDemoLessonTicket,
   createInitialDemoAcademyState,
@@ -58,7 +63,6 @@ import {
   registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
   registerDemoVendor,
-  updateDemoAcademyStudent,
   updateDemoAcademyTeacher,
   updateDemoConsultation,
   updateDemoLedgerEntry,
@@ -70,7 +74,6 @@ import {
   type DemoConsultationUpdateInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
-  type DemoStudentUpdateInput,
   type DemoStudentStatusInput,
   type DemoTeacherRegistrationInput,
   type DemoTeacherStatusInput,
@@ -94,7 +97,8 @@ import { createVendorListQueryKey } from "../api/vendors";
 type DemoAcademyContextValue = {
   state: DemoAcademyState;
   registerStudent: (input: DemoStudentRegistrationInput) => void;
-  updateStudent: (input: DemoStudentUpdateInput) => void;
+  /** 원생 수정(이름·기본 정보·악기 수정/추가/종료). 규칙에 어긋나면 서버 RPC와 같은 한국어 오류를 던진다. */
+  updateStudentEnrollments: (input: UpdateStudentEnrollmentsInput) => StudentEnrollmentSaveResult;
   updateStudentStatus: (input: DemoStudentStatusInput) => void;
   registerTeacher: (input: DemoTeacherRegistrationInput) => void;
   updateTeacher: (input: DemoTeacherUpdateInput) => void;
@@ -105,6 +109,8 @@ type DemoAcademyContextValue = {
   markPrivateLessonAttendance: (
     lessonId: string,
     status: "present" | "absent",
+    /** 결석 사유(선택). 비우면 기본 문구(결석 확인). */
+    reason?: string,
   ) => void;
   cancelPrivateLessonAttendance: (lessonId: string) => void;
   registerManualLedgerEntry: (input: DemoManualLedgerInput) => void;
@@ -235,8 +241,12 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       registerStudent(input) {
         commitState((current) => registerDemoAcademyStudent(current, input));
       },
-      updateStudent(input) {
-        commitState((current) => updateDemoAcademyStudent(current, input));
+      updateStudentEnrollments(input) {
+        const { result } = updateDemoStudentEnrollments(state, input);
+
+        commitState((current) => updateDemoStudentEnrollments(current, input).state);
+
+        return result;
       },
       updateStudentStatus(input) {
         commitState((current) => updateDemoStudentStatus(current, input));
@@ -284,11 +294,12 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
           ],
         }));
       },
-      markPrivateLessonAttendance(lessonId, status) {
+      markPrivateLessonAttendance(lessonId, status, reason) {
         commitState((current) =>
           markDemoPrivateLessonAttendance(current, {
             lessonId,
             status,
+            reason,
             markedAt: new Date().toISOString(),
           }),
         );

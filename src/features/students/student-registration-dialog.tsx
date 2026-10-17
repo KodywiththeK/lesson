@@ -20,29 +20,20 @@ import {
 } from "@/components/ui/native-select";
 import { getFinanceToday } from "@/domain/finance-date";
 import {
-  changeLessonFeeLessonType,
-  createLessonFeeDraft,
-  getLessonFeeSubmission,
-  isReferralMonthMissing,
-  repriceLessonFee,
-  type LessonFeeDraft,
-} from "@/domain/lesson-fee-draft";
-import {
-  getAcademyScheduleValidationError,
   hasSameStudentName,
   type StudentInstrumentDiscountSelection,
 } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import type { DemoStudentRegistrationInput } from "@/lib/demo/academy-demo-state";
 
+import { contactRelationshipOptions, instrumentOptions } from "./student-form-options";
 import {
-  contactRelationshipOptions,
-  getDefaultTeacherId,
-  getTeacherCandidates,
-  instrumentOptions,
-} from "./student-form-options";
-import { StudentLessonFeeFields } from "./student-lesson-fee-fields";
-import { WeeklyScheduleFields } from "./student-weekly-schedule-fields";
+  buildRegistrationInstrument,
+  createRegistrationInstrumentDraft,
+  isRegistrationInstrumentReady,
+  type StudentRegistrationInstrumentDraft,
+} from "./student-registration-instrument";
+import { StudentRegistrationInstrumentCard } from "./student-registration-instrument-card";
 
 /**
  * 등록 폼이 내보내는 입력. 데모 등록 입력에 악기별 할인 선택(종류·소개 달)을 더한 상위 타입이라
@@ -152,16 +143,8 @@ function StudentRegistrationForm({
       registeredAt &&
       contactPhone.replace(/\D/g, "").length >= 4 &&
       orderedDrafts.length > 0 &&
-      orderedDrafts.every(
-        (draft) =>
-          draft.weeklySchedules.length > 0 &&
-          draft.fee.lessonFee > 0 &&
-          !isReferralMonthMissing(draft.fee, referenceMonth) &&
-          !getAcademyScheduleValidationError({
-            lessonType: draft.lessonType,
-            teacherId: draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers),
-            weeklySchedules: draft.weeklySchedules,
-          }),
+      orderedDrafts.every((draft) =>
+        isRegistrationInstrumentReady(draft, teachers, referenceMonth),
       ),
   );
 
@@ -186,25 +169,9 @@ function StudentRegistrationForm({
             relationship: contactRelationship.trim() || "본인",
             phone: contactPhone.trim(),
           },
-          instruments: orderedDrafts.map((draft) => {
-            const effectiveTeacherId =
-              draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers);
-            const teacher = teachers.find(
-              (option) => option.teacherId === effectiveTeacherId,
-            );
-            const fee = getLessonFeeSubmission(draft.fee, referenceMonth);
-
-            return {
-              instrumentId: draft.instrumentId,
-              instrumentName: draft.instrumentName,
-              teacherId: effectiveTeacherId,
-              teacherName: teacher?.name ?? "",
-              lessonType: draft.lessonType,
-              weeklySchedules: draft.weeklySchedules,
-              progress: draft.fee.progress.trim() || "신규 등록",
-              ...fee,
-            };
-          }),
+          instruments: orderedDrafts.map((draft) =>
+            buildRegistrationInstrument(draft, teachers, referenceMonth),
+          ),
         });
       }}
     >
@@ -359,118 +326,6 @@ function StudentRegistrationForm({
   );
 }
 
-function StudentRegistrationInstrumentCard({
-  draft,
-  teachers,
-  referenceMonth,
-  onChange,
-}: {
-  draft: StudentRegistrationInstrumentDraft;
-  teachers: TeacherListRow[];
-  referenceMonth: string;
-  onChange: (draft: StudentRegistrationInstrumentDraft) => void;
-}) {
-  const teacherCandidates = getTeacherCandidates(draft.instrumentName, teachers);
-  const effectiveTeacherId =
-    draft.teacherId || getDefaultTeacherId(draft.instrumentName, teachers);
-  const feeContext = (
-    lessonType: StudentRegistrationInstrumentDraft["lessonType"],
-    weekdayCount: number,
-  ) => ({ instrumentName: draft.instrumentName, lessonType, weekdayCount });
-
-  return (
-    <section className="grid gap-4 rounded-md border border-border bg-background p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">
-          [{draft.instrumentName}] 상세 설정
-        </h3>
-        <span className="text-xs font-medium text-muted-foreground">
-          {draft.instrumentName === "피아노"
-            ? "학원레슨/개인레슨 선택 가능"
-            : "개인레슨 전용"}
-        </span>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>담당 선생님</span>
-          <NativeSelect
-            aria-label={`${draft.instrumentName} 담당 선생님`}
-            value={effectiveTeacherId}
-            onChange={(event) =>
-              onChange({ ...draft, teacherId: event.target.value })
-            }
-          >
-            <NativeSelectOption value="">미배정</NativeSelectOption>
-            {teacherCandidates.map((teacher) => (
-              <NativeSelectOption key={teacher.teacherId} value={teacher.teacherId}>
-                {teacher.name} ({teacher.part})
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Label>
-        <Label className="grid gap-1">
-          <span>레슨 형태</span>
-          <NativeSelect
-            aria-label={`${draft.instrumentName} 레슨 형태`}
-            value={draft.lessonType}
-            disabled={draft.instrumentName !== "피아노"}
-            onChange={(event) => {
-              const lessonType = event.target.value as "academy" | "private";
-
-              onChange({
-                ...draft,
-                lessonType,
-                fee: changeLessonFeeLessonType(
-                  draft.fee,
-                  feeContext(lessonType, draft.weeklySchedules.length),
-                ),
-              });
-            }}
-          >
-            <NativeSelectOption value="academy">학원레슨</NativeSelectOption>
-            <NativeSelectOption value="private">개인레슨</NativeSelectOption>
-          </NativeSelect>
-        </Label>
-      </div>
-
-      <WeeklyScheduleFields
-        legend="수강 요일"
-        labelPrefix={`${draft.instrumentName} `}
-        schedules={draft.weeklySchedules}
-        onChange={(weeklySchedules) =>
-          onChange({
-            ...draft,
-            weeklySchedules,
-            fee: repriceLessonFee(draft.fee, feeContext(draft.lessonType, weeklySchedules.length)),
-          })
-        }
-      />
-
-      <StudentLessonFeeFields
-        labelPrefix={`${draft.instrumentName} `}
-        context={feeContext(draft.lessonType, draft.weeklySchedules.length)}
-        referenceMonth={referenceMonth}
-        draft={draft.fee}
-        onChange={(fee) => onChange({ ...draft, fee })}
-      />
-    </section>
-  );
-}
-
-type StudentRegistrationInstrumentDraft = {
-  instrumentId: string;
-  instrumentName: string;
-  teacherId: string;
-  lessonType: "academy" | "private";
-  weeklySchedules: Array<{
-    weekday: string;
-    startTime?: string;
-    endTime?: string;
-  }>;
-  fee: LessonFeeDraft;
-};
-
 /** 목록에 있는 악기만 고르고, 하나도 없으면 피아노로 시작한다. */
 function pickInitialInstruments(instrumentNames: string[] | undefined) {
   const matched = instrumentOptions.filter((instrument) =>
@@ -478,20 +333,4 @@ function pickInitialInstruments(instrumentNames: string[] | undefined) {
   );
 
   return matched.length > 0 ? matched : [instrumentOptions[0]];
-}
-
-function createRegistrationInstrumentDraft(
-  instrument: (typeof instrumentOptions)[number],
-  teachers: TeacherListRow[],
-): StudentRegistrationInstrumentDraft {
-  const lessonType = instrument.name === "피아노" ? "academy" : "private";
-
-  return {
-    instrumentId: instrument.id,
-    instrumentName: instrument.name,
-    teacherId: getDefaultTeacherId(instrument.name, teachers),
-    lessonType,
-    weeklySchedules: [],
-    fee: createLessonFeeDraft({ instrumentName: instrument.name, lessonType, weekdayCount: 0 }),
-  };
 }

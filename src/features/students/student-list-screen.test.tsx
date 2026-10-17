@@ -514,6 +514,46 @@ describe("StudentListScreen", () => {
     );
   });
 
+  it("Supabase 경로에서는 수정 내용을 서버 호출 한 번으로 저장하고 목록에 반영한다", async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn().mockResolvedValue({ data: { added: [], ended: [] }, error: null });
+    const row = createStudentSupabaseRow("student-1", "김민지", "박선생", "피아노", ["monday"]);
+    supabaseBrowserClient.create.mockReturnValue({
+      ...createStudentsClient([
+        {
+          ...row,
+          registered_on: "2026-08-01",
+          student_instruments: (row.student_instruments ?? []).map((instrument) => ({
+            ...instrument,
+            lesson_type: "private",
+          })),
+        },
+      ]),
+      rpc,
+    });
+
+    renderStudentListScreen(undefined);
+    await user.click(await screen.findByRole("button", { name: "김민지 자세히보기" }));
+    const dialog = await screen.findByRole("dialog", { name: "김민지 원생 상세" });
+    await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+    await user.clear(within(dialog).getByLabelText("원생명"));
+    await user.type(within(dialog).getByLabelText("원생명"), "김민주");
+    await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+
+    await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
+    expect(rpc).toHaveBeenCalledWith(
+      "update_student_with_enrollments",
+      expect.objectContaining({
+        p_academy_id: "academy-1",
+        p_student_id: "student-1",
+        p_name: "김민주",
+        p_basic: null,
+        p_instruments: [],
+      }),
+    );
+    expect(await screen.findByRole("cell", { name: "김민주" })).toBeInTheDocument();
+  });
+
   it("자세히보기 다이얼로그에서 원생 정보를 확인하고 바로 수정완료한다", async () => {
     const user = userEvent.setup();
     const updateStudent = vi.fn();
@@ -566,22 +606,26 @@ describe("StudentListScreen", () => {
     await user.click(within(detailDialog).getByRole("button", { name: "수정완료" }));
 
     await waitFor(() => {
-      expect(updateStudent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          studentId: "student-1",
-          name: "김민주",
-          teacherId: "teacher-3",
-          teacherName: "정선생",
-          instrumentId: "piano",
-          instrumentName: "피아노",
-          weekdayLabels: expect.arrayContaining(["월", "목"]),
-          weeklySchedules: [
-            { weekdayLabel: "월", startTime: "15:00", endTime: "15:50" },
-            { weekdayLabel: "수", startTime: "15:00", endTime: "15:50" },
-            { weekdayLabel: "목", startTime: "16:00", endTime: "16:50" },
-          ],
-        }),
-      );
+      expect(updateStudent).toHaveBeenCalledWith({
+        academyId: "academy-1",
+        studentId: "student-1",
+        name: "김민주",
+        changes: [
+          expect.objectContaining({
+            action: "update",
+            studentInstrumentId: "student-instrument-1",
+            teacherId: "teacher-3",
+            teacherName: "정선생",
+            instrumentId: "piano",
+            instrumentName: "피아노",
+            weeklySchedules: [
+              { weekdayLabel: "월", startTime: "15:00", endTime: "15:50" },
+              { weekdayLabel: "수", startTime: "15:00", endTime: "15:50" },
+              { weekdayLabel: "목", startTime: "16:00", endTime: "16:50" },
+            ],
+          }),
+        ],
+      });
     });
     const updatedRow = (await screen.findByRole("cell", { name: "김민주" })).closest("tr");
     expect(updatedRow).not.toBeNull();
@@ -611,6 +655,28 @@ describe("StudentListScreen", () => {
 
     return { user, updateStudent, dialog: detailDialog };
   }
+
+  it("저장하는 동안에는 상세 창을 닫아도 닫히지 않아 목록이 부분 정보로 바뀌지 않는다", async () => {
+    let finishSave: () => void = () => {};
+    const updateStudent = vi.fn(
+      () => new Promise<void>((resolve) => { finishSave = resolve; }),
+    );
+    const { user, dialog } = await openEditForm("김민지", studentRows, { updateStudent });
+
+    await user.clear(within(dialog).getByLabelText("원생명"));
+    await user.type(within(dialog).getByLabelText("원생명"), "김민주");
+    await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+    await waitFor(() => expect(updateStudent).toHaveBeenCalled());
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("dialog", { name: "김민지 원생 상세" })).toBeInTheDocument();
+
+    finishSave();
+
+    const updatedRow = (await screen.findByRole("cell", { name: "김민주" })).closest("tr");
+    expect(within(updatedRow as HTMLElement).getByRole("cell", { name: "박선생" })).toBeInTheDocument();
+    expect(within(updatedRow as HTMLElement).getByRole("cell", { name: "피아노" })).toBeInTheDocument();
+  });
 
   it("수정 폼은 요일마다 저장된 시작·종료 시간을 보여 준다", async () => {
     const { dialog } = await openEditForm("김민지");
@@ -650,11 +716,14 @@ describe("StudentListScreen", () => {
     expect(teacherSelect).toHaveValue("");
     expect(optionLabels(teacherSelect)).toEqual(["미배정", "박선생"]);
 
+    await user.click(within(dialog).getByLabelText("목요일"));
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
     await waitFor(() => {
       expect(updateStudent).toHaveBeenCalledWith(
-        expect.objectContaining({ teacherId: undefined }),
+        expect.objectContaining({
+          changes: [expect.objectContaining({ action: "update", teacherId: undefined })],
+        }),
       );
     });
   });
@@ -678,11 +747,20 @@ describe("StudentListScreen", () => {
     expect(within(dialog).getByLabelText("담당 선생님")).toHaveValue("teacher-9");
     expect(optionLabels(within(dialog).getByLabelText("담당 선생님"))).toContain("한선생");
 
+    await user.click(within(dialog).getByLabelText("목요일"));
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
     await waitFor(() => {
       expect(updateStudent).toHaveBeenCalledWith(
-        expect.objectContaining({ teacherId: "teacher-9", teacherName: "한선생" }),
+        expect.objectContaining({
+          changes: [
+            expect.objectContaining({
+              action: "update",
+              teacherId: "teacher-9",
+              teacherName: "한선생",
+            }),
+          ],
+        }),
       );
     });
   });
@@ -818,6 +896,55 @@ describe("StudentListScreen", () => {
     });
   });
 
+  describe("검색·필터·정렬 툴바", () => {
+    async function renderToolbar() {
+      renderStudentListScreen((options) => ({
+        queryKey: ["students", options.academyId, "toolbar"],
+        queryFn: async () => buildStudentList(studentRows, options),
+      }));
+      await screen.findByRole("table", { name: "원생 목록" });
+
+      return screen.getByRole("group", { name: "검색·필터·정렬" });
+    }
+
+    it("검색, 필터 3개, 정렬 2개, 초기화를 한 툴바 안에 모두 둔다", async () => {
+      const toolbar = await renderToolbar();
+
+      for (const label of ["원생 검색", "선생님 필터", "악기 필터", "요일 필터", "정렬 기준", "정렬 방향"]) {
+        expect(within(toolbar).getByLabelText(label)).toBeInTheDocument();
+      }
+      expect(within(toolbar).getByRole("button", { name: "초기화" })).toBeInTheDocument();
+    });
+
+    it("툴바는 자식 폭 때문에 카드 밖으로 넘치지 않도록 폭을 0까지 줄일 수 있는 grid 트랙을 쓴다", async () => {
+      const toolbar = await renderToolbar();
+      const controlsGrid = within(toolbar).getByLabelText("선생님 필터").closest("div.grid");
+
+      expect(toolbar).toHaveClass("min-w-0");
+      expect(controlsGrid).not.toBeNull();
+      // 같은 grid 안에 필터·정렬·초기화가 함께 있어 줄바꿈이 한 곳에서 정해진다.
+      expect(controlsGrid).toContainElement(within(toolbar).getByLabelText("정렬 방향"));
+      expect(controlsGrid).toContainElement(within(toolbar).getByRole("button", { name: "초기화" }));
+      expect(controlsGrid).toHaveClass("min-w-0", "grid-cols-2", "md:grid-cols-3");
+      // NativeSelect 래퍼는 w-fit이라 가장 긴 선택지 폭으로 열을 밀 수 있어 칸을 꽉 채우게 한다.
+      expect(controlsGrid).toHaveClass("[&_[data-slot=native-select-wrapper]]:w-full");
+      // 고정 rem 폭 열(예: 11rem)은 열 합계가 카드보다 커져 넘치므로 쓰지 않는다.
+      expect(controlsGrid?.className).not.toMatch(/grid-cols-\[[^\]]*\d(rem|px)/);
+    });
+
+    it("초기화를 누르면 검색어와 필터가 비워진다", async () => {
+      const user = userEvent.setup();
+      const toolbar = await renderToolbar();
+
+      await user.type(within(toolbar).getByLabelText("원생 검색"), "김");
+      await user.selectOptions(within(toolbar).getByLabelText("악기 필터"), "피아노");
+      await user.click(within(toolbar).getByRole("button", { name: "초기화" }));
+
+      expect(within(toolbar).getByLabelText("원생 검색")).toHaveValue("");
+      expect(within(toolbar).getByLabelText("악기 필터")).toHaveValue("");
+    });
+  });
+
   describe("나이 자동 증가", () => {
     afterEach(() => {
       vi.useRealTimers();
@@ -846,6 +973,7 @@ describe("StudentListScreen", () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지", rows);
 
       expect(within(dialog).getByLabelText("나이")).toHaveValue(10);
+      await user.type(within(dialog).getByLabelText("학교"), "한빛초");
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
       await waitFor(() => {
@@ -921,11 +1049,11 @@ describe("StudentListScreen", () => {
       expect(within(dialog).getByLabelText("연락처 구분")).toHaveValue("조모");
     });
 
-    it("저장에 실패하면 수정 폼을 닫지 않아 다시 저장할 수 있다", async () => {
+    it("저장에 실패하면 저장되지 않았다고 알리고 수정 폼과 입력값을 유지해 다시 저장할 수 있다", async () => {
       const user = userEvent.setup();
       const updateStudent = vi
         .fn()
-        .mockRejectedValueOnce(new Error("원생 정보를 일부만 저장했습니다: 기본 정보 저장 실패"))
+        .mockRejectedValueOnce(new Error("원생 정보를 수정하지 못했습니다: 기본 정보 저장 실패"))
         .mockResolvedValueOnce(undefined);
 
       renderStudentListScreen(
@@ -938,13 +1066,20 @@ describe("StudentListScreen", () => {
       await user.click(await screen.findByRole("button", { name: "김민지 자세히보기" }));
       const dialog = await screen.findByRole("dialog", { name: "김민지 원생 상세" });
       await user.click(within(dialog).getByRole("button", { name: "수정하기" }));
+      await user.clear(within(dialog).getByLabelText("학교"));
+      await user.type(within(dialog).getByLabelText("학교"), "새빛초");
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
       await waitFor(() => expect(updateStudent).toHaveBeenCalledTimes(1));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+        "저장되지 않았습니다. 기본 정보 저장 실패",
+      );
       expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
+      expect(within(dialog).getByLabelText("학교")).toHaveValue("새빛초");
 
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
       await waitFor(() => expect(updateStudent).toHaveBeenCalledTimes(2));
+      expect(updateStudent.mock.calls[1][0]).toEqual(updateStudent.mock.calls[0][0]);
     });
   });
 
@@ -964,7 +1099,9 @@ describe("StudentListScreen", () => {
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
       await waitFor(() => {
         expect(updateStudent).toHaveBeenCalledWith(
-          expect.objectContaining({ progress: "체르니30", lessonFee: 160000 }),
+          expect.objectContaining({
+            changes: [expect.objectContaining({ progress: "체르니30", lessonFee: 160000 })],
+          }),
         );
       });
     });
@@ -982,9 +1119,13 @@ describe("StudentListScreen", () => {
       await waitFor(() => {
         expect(updateStudent).toHaveBeenCalledWith(
           expect.objectContaining({
-            discountKinds: ["sibling"],
-            discountTotal: 20000,
-            finalMonthlyFee: 130000,
+            changes: [
+              expect.objectContaining({
+                discountKinds: ["sibling"],
+                discountTotal: 20000,
+                finalMonthlyFee: 130000,
+              }),
+            ],
           }),
         );
       });
@@ -1000,10 +1141,14 @@ describe("StudentListScreen", () => {
       await waitFor(() => {
         expect(updateStudent).toHaveBeenCalledWith(
           expect.objectContaining({
-            discountKinds: ["referral"],
-            referralDiscountMonth: "2026-08",
-            referralDiscountAmount: 10000,
-            finalMonthlyFee: 140000,
+            changes: [
+              expect.objectContaining({
+                discountKinds: ["referral"],
+                referralDiscountMonth: "2026-08",
+                referralDiscountAmount: 10000,
+                finalMonthlyFee: 140000,
+              }),
+            ],
           }),
         );
       });
@@ -1037,13 +1182,17 @@ describe("StudentListScreen", () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지", rows);
 
       expect(within(dialog).getByLabelText("일요일")).toBeChecked();
+      await user.click(within(dialog).getByLabelText("목요일"));
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
-      await waitFor(() => {
-        expect(updateStudent).toHaveBeenCalledWith(
-          expect.objectContaining({ weekdayLabels: ["월", "일"] }),
-        );
-      });
+      await waitFor(() => expect(updateStudent).toHaveBeenCalledTimes(1));
+      const [change] = updateStudent.mock.calls[0][0].changes;
+
+      expect(change.weeklySchedules.map((schedule: { weekdayLabel: string }) => schedule.weekdayLabel)).toEqual([
+        "월",
+        "목",
+        "일",
+      ]);
     });
   });
 });

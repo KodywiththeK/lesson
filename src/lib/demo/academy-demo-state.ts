@@ -1,5 +1,6 @@
 import {
   buildDailyAcademyAttendance,
+  DEFAULT_ABSENCE_REASON,
   type DailyAcademyAttendanceSheet,
 } from "@/domain/academy-lesson-attendance";
 import {
@@ -48,7 +49,6 @@ import type {
   RegisterLessonTicketInput,
   RegisterLessonTicketResult,
 } from "@/lib/api/lesson-tickets";
-import type { UpdateStudentProfileInput } from "@/lib/api/students";
 
 import { demoLessonWorkspaceData } from "./lesson-demo-data";
 import {
@@ -114,8 +114,6 @@ export type DemoStudentRegistrationInstrumentInput = {
   finalMonthlyFee: number;
 };
 
-export type DemoStudentUpdateInput = UpdateStudentProfileInput;
-
 export type DemoStudentStatusInput = {
   academyId: string;
   studentId: string;
@@ -156,6 +154,8 @@ export type MarkDemoPrivateLessonAttendanceInput = {
   lessonId: string;
   status: Exclude<PrivateLessonStatus, "scheduled" | "cancelled" | "makeup">;
   markedAt: string;
+  /** 결석 사유(선택). 비우면 기본 문구(결석 확인). 출석 처리에서는 무시한다. */
+  reason?: string;
 };
 
 export type DemoManualLedgerInput = {
@@ -481,127 +481,6 @@ export function registerDemoAcademyStudent(
   };
 }
 
-export function updateDemoAcademyStudent(
-  state: DemoAcademyState,
-  input: DemoStudentUpdateInput,
-): DemoAcademyState {
-  const updatedStudent: StudentListRow = {
-    academyId: input.academyId,
-    studentId: input.studentId,
-    name: input.name,
-    teacherNames: input.teacherName ? [input.teacherName] : [],
-    instrumentNames: input.instrumentName ? [input.instrumentName] : [],
-    weekdayLabels: input.weekdayLabels ?? [],
-    instruments: input.studentInstrumentId
-      ? [
-          {
-            studentInstrumentId: input.studentInstrumentId,
-            teacherId: input.teacherId ?? null,
-            teacherName: input.teacherName ?? "",
-            instrumentId: input.instrumentId ?? "",
-            instrumentName: input.instrumentName ?? "",
-            lessonType: input.lessonType ?? "academy",
-            weekdayLabels: input.weekdayLabels ?? [],
-            startTime: input.startTime ?? "",
-            endTime: input.endTime ?? "",
-            progress: input.progress ?? "",
-            lessonFee: input.lessonFee ?? 0,
-            discountTotal: input.discountTotal ?? 0,
-            finalMonthlyFee: input.finalMonthlyFee ?? 0,
-            active: true,
-            weeklySchedules: (input.weekdayLabels ?? []).map((weekdayLabel) => ({
-              weekday: toWeekdayValue(weekdayLabel),
-              weekdayLabel,
-              startTime: input.startTime ?? "",
-              endTime: input.endTime ?? "",
-            })),
-          },
-        ]
-      : [],
-  };
-  const students = state.students.map((student) =>
-    student.studentId === input.studentId
-      ? {
-          ...student,
-          ...updatedStudent,
-          registeredOn: student.registeredOn,
-          status: student.status,
-        }
-      : student,
-  );
-  const enrollments = state.enrollments.map((enrollment) =>
-    enrollment.studentId === input.studentId &&
-    (!input.studentInstrumentId ||
-      enrollment.enrollmentId === input.studentInstrumentId)
-      ? {
-          ...enrollment,
-          studentName: input.name,
-          teacherId: input.teacherId ?? enrollment.teacherId,
-          teacherName: input.teacherName ?? enrollment.teacherName,
-          instrumentId: input.instrumentId ?? enrollment.instrumentId,
-          instrumentName: input.instrumentName ?? enrollment.instrumentName,
-          lessonType: (input.lessonType as LessonType | undefined) ?? enrollment.lessonType,
-          weekdays: (input.weekdayLabels ?? enrollment.weekdays).map(toWeekdayValue),
-          startTime: input.startTime ?? enrollment.startTime,
-          endTime: input.endTime ?? enrollment.endTime,
-          progress: input.progress ?? enrollment.progress,
-          lessonFee: input.lessonFee ?? enrollment.lessonFee,
-          discountTotal: input.discountTotal ?? enrollment.discountTotal,
-          finalMonthlyFee: input.finalMonthlyFee ?? enrollment.finalMonthlyFee,
-        }
-      : enrollment,
-  );
-
-  return {
-    ...state,
-    students,
-    enrollments,
-    tickets: state.tickets.map((ticket) =>
-      ticket.studentId === input.studentId
-        ? {
-            ...ticket,
-            studentName: input.name,
-            instrumentName: input.instrumentName ?? ticket.instrumentName,
-          }
-        : ticket,
-    ),
-    privateLessons: state.privateLessons.map((lesson) =>
-      lesson.studentId === input.studentId
-        ? {
-            ...lesson,
-            studentName: input.name,
-            teacherId: input.teacherId ?? lesson.teacherId,
-            teacherName: input.teacherName ?? lesson.teacherName,
-            instrumentId: input.instrumentId ?? lesson.instrumentId,
-            instrumentName: input.instrumentName ?? lesson.instrumentName,
-          }
-        : lesson,
-    ),
-    academySheets: Object.fromEntries(
-      Object.entries(state.academySheets).map(([date, sheet]) => [
-        date,
-        {
-          ...sheet,
-          rows: sheet.rows.map((row) =>
-            row.studentId === input.studentId
-              ? {
-                  ...row,
-                  studentName: input.name,
-                  teacherId: input.teacherId ?? row.teacherId,
-                  teacherName: input.teacherName ?? row.teacherName,
-                  instrumentId: input.instrumentId ?? row.instrumentId,
-                  instrumentName: input.instrumentName ?? row.instrumentName,
-                  startTime: input.startTime ?? row.startTime,
-                  endTime: input.endTime ?? row.endTime,
-                }
-              : row,
-          ),
-        },
-      ]),
-    ),
-  };
-}
-
 export function updateDemoStudentStatus(
   state: DemoAcademyState,
   input: DemoStudentStatusInput,
@@ -833,6 +712,8 @@ export function markDemoPrivateLessonAttendance(
       ? {
           ...candidate,
           status: input.status,
+          absenceReason:
+            input.status === "absent" ? input.reason?.trim() || DEFAULT_ABSENCE_REASON : undefined,
         }
       : candidate,
   );
@@ -1089,7 +970,7 @@ export function deleteDemoLedgerEntry(
   };
 }
 
-function buildAcademySheets(
+export function buildAcademySheets(
   enrollments: StudentEnrollment[],
   academyId: string,
   month: string,
@@ -1128,7 +1009,7 @@ function indexSheets(sheets: DailyAcademyAttendanceSheet[]) {
   return Object.fromEntries(sheets.map((sheet) => [sheet.date, sheet]));
 }
 
-function mergeSheets(
+export function mergeSheets(
   left: Record<string, DailyAcademyAttendanceSheet>,
   right: Record<string, DailyAcademyAttendanceSheet>,
 ) {
@@ -1192,7 +1073,7 @@ function formatWeekday(weekday: Weekday | string) {
   return labels[toWeekdayValue(weekday)] ?? weekday;
 }
 
-function toWeekdayValue(value: string): Weekday {
+export function toWeekdayValue(value: string): Weekday {
   const weekdays: Record<string, Weekday> = {
     일: "sunday",
     월: "monday",

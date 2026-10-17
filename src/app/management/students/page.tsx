@@ -39,7 +39,7 @@ export default function StudentsPage() {
                   : undefined
               }
               registerStudent={useTestDemo ? demo.registerStudent : undefined}
-              updateStudent={useTestDemo ? demo.updateStudent : undefined}
+              updateStudent={useTestDemo ? demo.updateStudentEnrollments : undefined}
               updateStudentStatus={
                 useTestDemo ? demo.updateStudentStatus : undefined
               }

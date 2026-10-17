@@ -206,6 +206,44 @@ describe("academy demo state", () => {
     ).toBe(1);
   });
 
+  it("개인레슨 결석은 사유를 저장하고, 비우면 기본 문구, 결석 상태에서 다시 저장하면 사유만 바뀐다", () => {
+    const state = createInitialDemoAcademyState();
+    const lessonId = "private-lesson-1";
+    const reasonOf = (target: typeof state) =>
+      target.privateLessons.find((lesson) => lesson.id === lessonId)?.absenceReason;
+    const remainingOf = (target: typeof state) =>
+      target.tickets.find((ticket) => ticket.ticketId === "ticket-1")?.remainingCount;
+
+    const absentWithReason = markDemoPrivateLessonAttendance(state, {
+      lessonId,
+      status: "absent",
+      markedAt: "2026-08-21T18:05:00+09:00",
+      reason: "  감기로 결석  ",
+    });
+    const reasonEdited = markDemoPrivateLessonAttendance(absentWithReason, {
+      lessonId,
+      status: "absent",
+      markedAt: "2026-08-21T18:06:00+09:00",
+      reason: "가족 여행",
+    });
+    const reasonCleared = markDemoPrivateLessonAttendance(reasonEdited, {
+      lessonId,
+      status: "absent",
+      markedAt: "2026-08-21T18:07:00+09:00",
+    });
+    const present = markDemoPrivateLessonAttendance(reasonCleared, {
+      lessonId,
+      status: "present",
+      markedAt: "2026-08-21T18:08:00+09:00",
+    });
+
+    expect(reasonOf(absentWithReason)).toBe("감기로 결석");
+    expect(reasonOf(reasonEdited)).toBe("가족 여행");
+    expect(reasonOf(reasonCleared)).toBe("결석 확인");
+    expect(reasonOf(present)).toBeUndefined();
+    expect(remainingOf(reasonEdited)).toBe(remainingOf(state));
+  });
+
   it("개인레슨 등원 확인을 취소하면 예정 상태로 돌아가고 차감한 회차권 1회를 복구한다", () => {
     const state = createInitialDemoAcademyState();
     const lessonId = "private-lesson-1";

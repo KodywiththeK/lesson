@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { StudentEnrollmentFields } from "@/domain/student-enrollment-edit";
+
 import {
   createStudentListQueryOptions,
   createStudentStatusManagementQueryOptions,
@@ -7,7 +9,7 @@ import {
   fetchStudentStatusManagementList,
   fetchStudentList,
   registerStudentEnrollment,
-  updateStudentProfile,
+  updateStudentEnrollments,
   updateStudentStatus,
   type StudentSupabaseRow,
   type StudentListSupabaseClient,
@@ -311,71 +313,6 @@ describe("registerStudentEnrollment", () => {
   });
 });
 
-describe("updateStudentProfile", () => {
-  it("원생 기본 정보와 대표 수강 악기를 적용일 기준 RPC로 수정한다", async () => {
-    const calls: Array<Record<string, unknown>> = [];
-    const client: StudentUpdateSupabaseClient = {
-      async rpc(functionName, payload) {
-        calls.push({ functionName, payload });
-
-        return {
-          data: null,
-          error: null,
-        };
-      },
-    };
-
-    const result = await updateStudentProfile(client, {
-      academyId: "academy-1",
-      studentId: "student-1",
-      name: "김민주",
-      studentInstrumentId: "student-instrument-1",
-      teacherId: "teacher-2",
-      teacherName: "최선생",
-      instrumentId: "piano",
-      instrumentName: "피아노",
-      lessonType: "academy",
-      weekdayLabels: ["월", "목"],
-      startTime: "15:30",
-      endTime: "16:20",
-      progress: "체르니 100",
-      lessonFee: 160000,
-      discountTotal: 10000,
-      finalMonthlyFee: 150000,
-      effectiveFrom: "2026-08-24",
-    });
-
-    expect(calls).toEqual([
-      {
-        functionName: "update_student_profile_from_date",
-        payload: {
-          p_academy_id: "academy-1",
-          p_student_id: "student-1",
-          p_name: "김민주",
-          p_student_instrument_id: "student-instrument-1",
-          p_teacher_id: "teacher-2",
-          p_instrument_id: "piano",
-          p_instrument_name: "피아노",
-          p_lesson_type: "academy",
-          p_weekdays: ["월", "목"],
-          p_start_time: "15:30",
-          p_end_time: "16:20",
-          p_progress: "체르니 100",
-          p_lesson_fee: 160000,
-          p_discount_total: 10000,
-          p_final_monthly_fee: 150000,
-          p_effective_from: "2026-08-24",
-        },
-      },
-    ]);
-    expect(result).toMatchObject({
-      name: "김민주",
-      teacherNames: ["최선생"],
-      weekdayLabels: ["월", "목"],
-    });
-  });
-});
-
 describe("fetchStudentList 요일 표시 순서", () => {
   it("여러 악기와 요일별 행이 섞여 있어도 요일을 월→일 순서로 보여 준다", async () => {
     const { client } = createSupabaseStub([
@@ -408,112 +345,6 @@ describe("fetchStudentList 요일 표시 순서", () => {
     expect(student.weekdayLabels).toEqual(["월", "수", "목"]);
     expect(student.instruments?.[0].weekdayLabels).toEqual(["월", "목"]);
     expect(student.instruments?.[0].startTime).toBe("15:00");
-  });
-});
-
-describe("updateStudentProfile 요일별 시간", () => {
-  const baseInput = {
-    academyId: "academy-1",
-    studentId: "student-1",
-    name: "김민주",
-    studentInstrumentId: "student-instrument-1",
-    teacherId: "teacher-2",
-    teacherName: "최선생",
-    instrumentId: "piano",
-    instrumentName: "피아노",
-    lessonType: "academy",
-    progress: "체르니 100",
-    lessonFee: 160000,
-    discountTotal: 10000,
-    finalMonthlyFee: 150000,
-    effectiveFrom: "2026-08-24",
-  };
-
-  function createRecordingClient() {
-    const payloads: Array<Record<string, unknown>> = [];
-    const client: StudentUpdateSupabaseClient = {
-      async rpc(_functionName, payload) {
-        payloads.push(payload as Record<string, unknown>);
-
-        return { data: null, error: null };
-      },
-    };
-
-    return { client, payloads };
-  }
-
-  it("요일마다 다른 시간을 p_weekly_schedules로 보내고 요일 목록과 대표 시간도 맞춘다", async () => {
-    const { client, payloads } = createRecordingClient();
-
-    const result = await updateStudentProfile(client, {
-      ...baseInput,
-      weeklySchedules: [
-        { weekdayLabel: "월", startTime: "15:30", endTime: "16:20" },
-        { weekdayLabel: "목", startTime: "17:00", endTime: "17:50" },
-      ],
-    });
-
-    expect(payloads[0]).toMatchObject({
-      p_weekdays: ["월", "목"],
-      p_start_time: "15:30",
-      p_end_time: "16:20",
-      p_weekly_schedules: [
-        { weekday: "월", start_time: "15:30", end_time: "16:20" },
-        { weekday: "목", start_time: "17:00", end_time: "17:50" },
-      ],
-    });
-    expect(result.weekdayLabels).toEqual(["월", "목"]);
-    expect(result.instruments?.[0]).toMatchObject({
-      weeklySchedules: [
-        expect.objectContaining({ weekdayLabel: "월", startTime: "15:30" }),
-        expect.objectContaining({ weekdayLabel: "목", startTime: "17:00" }),
-      ],
-    });
-  });
-
-  it("학원 수업에 시간이 빠진 요일이 있으면 RPC를 부르기 전에 알려 준다", async () => {
-    const { client, payloads } = createRecordingClient();
-
-    await expect(
-      updateStudentProfile(client, {
-        ...baseInput,
-        weeklySchedules: [
-          { weekdayLabel: "월", startTime: "15:30", endTime: "16:20" },
-          { weekdayLabel: "목" },
-        ],
-      }),
-    ).rejects.toThrow("모든 요일");
-    expect(payloads).toHaveLength(0);
-  });
-
-  it("학원 수업에 담당 선생님이 없으면 RPC를 부르기 전에 알려 준다", async () => {
-    const { client, payloads } = createRecordingClient();
-
-    await expect(
-      updateStudentProfile(client, {
-        ...baseInput,
-        teacherId: undefined,
-        weeklySchedules: [{ weekdayLabel: "월", startTime: "15:30", endTime: "16:20" }],
-      }),
-    ).rejects.toThrow("선생님");
-    expect(payloads).toHaveLength(0);
-  });
-
-  it("개인레슨은 시간이 없어도 요일만 저장할 수 있다", async () => {
-    const { client, payloads } = createRecordingClient();
-
-    await updateStudentProfile(client, {
-      ...baseInput,
-      lessonType: "private",
-      weeklySchedules: [{ weekdayLabel: "화" }],
-    });
-
-    expect(payloads[0]).toMatchObject({
-      p_weekdays: ["화"],
-      p_start_time: null,
-      p_end_time: null,
-      p_weekly_schedules: [{ weekday: "화", start_time: null, end_time: null }],
-    });
   });
 });
 
@@ -843,172 +674,6 @@ describe("registerStudentEnrollment 할인·나이", () => {
   });
 });
 
-describe("updateStudentProfile 할인과 기본 정보", () => {
-  const profileInput = {
-    academyId: "academy-1",
-    studentId: "student-1",
-    name: "김민주",
-    studentInstrumentId: "student-instrument-1",
-    teacherId: "teacher-2",
-    teacherName: "최선생",
-    instrumentId: "violin",
-    instrumentName: "바이올린",
-    lessonType: "private",
-    progress: "스즈키 1~3권",
-    lessonFee: 140000,
-    discountTotal: 10000,
-    finalMonthlyFee: 130000,
-    effectiveFrom: "2026-10-16",
-  };
-  const basicInfo = {
-    registeredOn: "2026-09-01",
-    age: 10,
-    grade: " 초등 4학년 ",
-    school: "한빛초",
-    occupation: "",
-    contactRelationship: "부",
-    contactPhone: " 010-3333-4444 ",
-  };
-
-  function createRecorder(failOn?: { functionName: string; message: string }) {
-    const calls: Array<{ functionName: string; payload: Record<string, unknown> }> = [];
-    const client: StudentUpdateSupabaseClient = {
-      async rpc(functionName, payload) {
-        calls.push({ functionName, payload: payload as unknown as Record<string, unknown> });
-
-        return {
-          data: null,
-          error:
-            failOn?.functionName === functionName ? new Error(failOn.message) : null,
-        };
-      },
-    };
-
-    return { client, calls };
-  }
-
-  it("할인 종류를 고르지 않은 호출은 서버의 기존 할인 종류를 건드리지 않도록 보내지 않는다", async () => {
-    const { client, calls } = createRecorder();
-
-    await updateStudentProfile(client, profileInput);
-
-    expect(calls[0].payload).not.toHaveProperty("p_discount_kinds");
-    expect(calls[0].payload).not.toHaveProperty("p_referral_discount_month");
-  });
-
-  it("할인 종류와 소개 달·소개 할인액을 수정 RPC로 보낸다", async () => {
-    const { client, calls } = createRecorder();
-
-    const result = await updateStudentProfile(client, {
-      ...profileInput,
-      discountKinds: ["sibling", "referral"],
-      discountLabel: "두 자녀 할인, 지인 소개 할인",
-      referralDiscountMonth: "2026-10",
-      referralDiscountAmount: 10000,
-    });
-
-    expect(calls[0].payload).toMatchObject({
-      p_discount_kinds: ["sibling", "referral"],
-      p_discount_label: "두 자녀 할인, 지인 소개 할인",
-      p_referral_discount_month: "2026-10-01",
-      p_referral_discount_amount: 10000,
-    });
-    expect(result.instruments?.[0]).toMatchObject({
-      discountKinds: ["sibling", "referral"],
-      referralDiscountMonth: "2026-10",
-    });
-  });
-
-  it("지인 소개 할인을 해제하면 소개 달을 비우고 할인액을 0으로 보낸다", async () => {
-    const { client, calls } = createRecorder();
-
-    await updateStudentProfile(client, {
-      ...profileInput,
-      discountKinds: ["sibling"],
-    });
-
-    expect(calls[0].payload).toMatchObject({
-      p_discount_kinds: ["sibling"],
-      p_referral_discount_month: null,
-      p_referral_discount_amount: 0,
-    });
-  });
-
-  it("기본 정보가 있으면 수강 정보 저장 뒤 update_student_basic_info를 호출한다", async () => {
-    const { client, calls } = createRecorder();
-
-    const result = await updateStudentProfile(client, { ...profileInput, basicInfo });
-
-    expect(calls.map((call) => call.functionName)).toEqual([
-      "update_student_profile_from_date",
-      "update_student_basic_info",
-    ]);
-    expect(calls[1].payload).toEqual({
-      p_academy_id: "academy-1",
-      p_student_id: "student-1",
-      p_registered_on: "2026-09-01",
-      p_age: 10,
-      p_grade: "초등 4학년",
-      p_school: "한빛초",
-      p_occupation: null,
-      p_contact_relationship: "부",
-      p_contact_phone: "010-3333-4444",
-    });
-    expect(result).toMatchObject({
-      registeredOn: "2026-09-01",
-      age: 10,
-      grade: "초등 4학년",
-      school: "한빛초",
-      contacts: [expect.objectContaining({ relationship: "부", phone: "010-3333-4444", phoneLast4: "4444" })],
-    });
-  });
-
-  it("나이를 비우면 나이 없음(null)으로 보낸다", async () => {
-    const { client, calls } = createRecorder();
-
-    await updateStudentProfile(client, { ...profileInput, basicInfo: { ...basicInfo, age: undefined } });
-
-    expect(calls[1].payload.p_age).toBeNull();
-  });
-
-  it("수강 정보 저장이 실패하면 기본 정보는 호출하지 않고 아무것도 저장되지 않았다고 알린다", async () => {
-    const { client, calls } = createRecorder({
-      functionName: "update_student_profile_from_date",
-      message: "최종 수강료가 레슨비에서 할인액을 뺀 금액과 다릅니다. 금액을 다시 확인해 주세요.",
-    });
-
-    await expect(updateStudentProfile(client, { ...profileInput, basicInfo })).rejects.toThrow(
-      "원생 정보를 수정하지 못했습니다: 최종 수강료가 레슨비에서 할인액을 뺀 금액과 다릅니다.",
-    );
-    expect(calls.map((call) => call.functionName)).toEqual(["update_student_profile_from_date"]);
-  });
-
-  it("기본 정보 저장만 실패하면 수강 정보는 저장됐고 기본 정보는 저장되지 않았다고 알린다", async () => {
-    const { client } = createRecorder({
-      functionName: "update_student_basic_info",
-      message: "연락처 번호를 입력해 주세요.",
-    });
-
-    await expect(updateStudentProfile(client, { ...profileInput, basicInfo })).rejects.toThrow(
-      /원생 정보를 일부만 저장했습니다: .*이름과 수강 정보는 저장됐지만.*등록일·나이·학년·학교·직업·연락처.*저장하지 못했습니다.*연락처 번호를 입력해 주세요.*다시 수정완료/,
-    );
-  });
-
-  it("기본 정보 저장 실패 원인이 영문이면 사용자 문구에 그대로 싣지 않는다", async () => {
-    const { client } = createRecorder({
-      functionName: "update_student_basic_info",
-      message: "unexpected database failure",
-    });
-
-    const error = await updateStudentProfile(client, { ...profileInput, basicInfo }).catch(
-      (caught: Error) => caught,
-    );
-
-    expect((error as Error).message).not.toContain("unexpected database failure");
-    expect((error as Error).message).toContain("다시 수정완료");
-  });
-});
-
 describe("createStudentListQueryOptions 정렬", () => {
   it("정렬 기준과 방향이 다르면 queryKey도 달라 정렬이 바뀔 때 다시 조회한다", () => {
     const { client } = createSupabaseStub([]);
@@ -1018,5 +683,227 @@ describe("createStudentListQueryOptions 정렬", () => {
     expect(keyFor({ key: "teacher", direction: "desc" }).slice(-3)).toEqual(["sort", "teacher", "desc"]);
     expect(keyFor({ key: "teacher", direction: "asc" })).not.toEqual(keyFor({ key: "teacher", direction: "desc" }));
     expect(keyFor()).toEqual(keyFor({ key: "name", direction: "asc" }));
+  });
+});
+
+describe("fetchStudentList 종료한 수강", () => {
+  it("종료(비활성)한 악기는 목록·상세의 악기, 선생님, 요일 요약에서 뺀다", async () => {
+    const { client } = createSupabaseStub([
+      {
+        id: "student-1",
+        academy_id: "academy-1",
+        name: "김민지",
+        student_instruments: [
+          { id: "si-piano", instrument_name: "피아노", weekdays: ["월"], active: true, teachers: { name: "박선생" } },
+          { id: "si-violin", instrument_name: "바이올린", weekdays: ["수"], active: false, teachers: { name: "최선생" } },
+        ],
+      },
+    ]);
+
+    const result = await fetchStudentList(client, { academyId: "academy-1" });
+
+    expect(result.items[0]).toMatchObject({
+      teacherNames: ["박선생"],
+      instrumentNames: ["피아노"],
+      weekdayLabels: ["월"],
+    });
+    expect(result.items[0].instruments?.map((instrument) => instrument.studentInstrumentId)).toEqual(["si-piano"]);
+  });
+});
+
+describe("updateStudentEnrollments", () => {
+  const academyPiano: StudentEnrollmentFields = {
+    lessonType: "academy",
+    teacherId: "teacher-1",
+    teacherName: "김하늘",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    weeklySchedules: [{ weekdayLabel: "월", startTime: "15:00", endTime: "15:50" }],
+    progress: "체르니 40",
+    lessonFee: 200000,
+    discountTotal: 10000,
+    finalMonthlyFee: 190000,
+  };
+  const baseInput = { academyId: "academy-1", studentId: "student-1", name: " 김민지 " };
+
+  function createRecorder(response: { data?: unknown; error?: Error | null } = {}) {
+    const calls: Array<{ functionName: string; payload: Record<string, unknown> }> = [];
+    const client: StudentUpdateSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload: payload as unknown as Record<string, unknown> });
+
+        return { data: (response.data ?? null) as never, error: response.error ?? null };
+      },
+    };
+
+    return { client, calls };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("이름·기본 정보·악기 변경을 RPC 한 번으로 보낸다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-17T03:00:00Z"));
+    const { client, calls } = createRecorder();
+
+    await updateStudentEnrollments(client, {
+      ...baseInput,
+      basicInfo: {
+        registeredOn: "2026-03-01",
+        age: 9,
+        grade: " 초3 ",
+        occupation: "",
+        contactRelationship: "어머니",
+        contactPhone: " 010-1234-5678 ",
+      },
+      changes: [
+        { ...academyPiano, action: "update", studentInstrumentId: "si-piano" },
+        {
+          ...academyPiano,
+          action: "add",
+          startedOn: "2026-10-20",
+          instrumentId: "cello",
+          instrumentName: "첼로",
+          discountKinds: ["multi_instrument", "referral"],
+          referralDiscountMonth: "2026-10",
+          referralDiscountAmount: 5000,
+          discountLabel: "두 악기 할인, 지인 소개 할인",
+        },
+        { action: "end", studentInstrumentId: "si-violin" },
+      ],
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].functionName).toBe("update_student_with_enrollments");
+    expect(calls[0].payload).toEqual({
+      p_academy_id: "academy-1",
+      p_student_id: "student-1",
+      p_name: "김민지",
+      p_basic: {
+        registered_on: "2026-03-01",
+        age: 9,
+        grade: "초3",
+        school: null,
+        occupation: null,
+        contact_relationship: "어머니",
+        contact_phone: "010-1234-5678",
+      },
+      p_instruments: [
+        {
+          action: "update",
+          student_instrument_id: "si-piano",
+          teacher_id: "teacher-1",
+          instrument_id: "piano",
+          instrument_name: "피아노",
+          lesson_type: "academy",
+          progress: "체르니 40",
+          lesson_fee: 200000,
+          discount_total: 10000,
+          final_monthly_fee: 190000,
+          effective_from: "2026-10-17",
+          weekly_schedules: [{ weekday: "월", start_time: "15:00", end_time: "15:50" }],
+        },
+        {
+          action: "add",
+          started_on: "2026-10-20",
+          teacher_id: "teacher-1",
+          instrument_id: "cello",
+          instrument_name: "첼로",
+          lesson_type: "academy",
+          progress: "체르니 40",
+          lesson_fee: 200000,
+          discount_total: 10000,
+          final_monthly_fee: 190000,
+          weekly_schedules: [{ weekday: "월", start_time: "15:00", end_time: "15:50" }],
+          discount_kinds: ["multi_instrument", "referral"],
+          referral_discount_month: "2026-10-01",
+          referral_discount_amount: 5000,
+          discount_label: "두 악기 할인, 지인 소개 할인",
+        },
+        { action: "end", student_instrument_id: "si-violin" },
+      ],
+    });
+  });
+
+  it("기본 정보가 없으면 p_basic은 null이고, 할인 종류를 고르지 않은 수정은 서버의 기존 할인을 건드리지 않는다", async () => {
+    const { client, calls } = createRecorder();
+
+    await updateStudentEnrollments(client, {
+      ...baseInput,
+      changes: [{ ...academyPiano, action: "update", studentInstrumentId: "si-piano", effectiveFrom: "2026-11-02" }],
+    });
+
+    const [update] = calls[0].payload.p_instruments as Array<Record<string, unknown>>;
+
+    expect(calls[0].payload.p_basic).toBeNull();
+    expect(update).not.toHaveProperty("discount_kinds");
+    expect(update.effective_from).toBe("2026-11-02");
+  });
+
+  it("추가한 수강의 할인 종류를 고르지 않으면 빈 할인으로 보낸다", async () => {
+    const { client, calls } = createRecorder();
+
+    await updateStudentEnrollments(client, {
+      ...baseInput,
+      changes: [{ ...academyPiano, action: "add", startedOn: "2026-10-20", instrumentId: "cello", instrumentName: "첼로" }],
+    });
+
+    const [add] = calls[0].payload.p_instruments as Array<Record<string, unknown>>;
+
+    expect(add).toMatchObject({
+      discount_kinds: [],
+      referral_discount_month: null,
+      referral_discount_amount: 0,
+    });
+  });
+
+  it("서버가 알려 준 추가·종료 결과를 도메인 모양으로 돌려준다", async () => {
+    const { client } = createRecorder({
+      data: {
+        added: [{ student_instrument_id: "si-cello", instrument_id: "cello" }],
+        ended: [{ student_instrument_id: "si-violin", remaining_event_count: 2 }],
+      },
+    });
+
+    const result = await updateStudentEnrollments(client, {
+      ...baseInput,
+      changes: [
+        { ...academyPiano, action: "add", startedOn: "2026-10-20", instrumentId: "cello", instrumentName: "첼로" },
+        { action: "end", studentInstrumentId: "si-violin" },
+      ],
+    });
+
+    expect(result).toEqual({
+      addedStudentInstrumentIds: ["si-cello"],
+      ended: [{ studentInstrumentId: "si-violin", remainingEventCount: 2 }],
+    });
+  });
+
+  it("검증에 걸리면 RPC를 부르지 않는다", async () => {
+    const { client, calls } = createRecorder();
+
+    await expect(updateStudentEnrollments(client, { ...baseInput, name: " ", changes: [] })).rejects.toThrow(
+      "원생명은 필수입니다.",
+    );
+    await expect(
+      updateStudentEnrollments(client, {
+        ...baseInput,
+        changes: [{ ...academyPiano, action: "add", startedOn: "2026-10-20", teacherId: null }],
+      }),
+    ).rejects.toThrow("학원레슨 선생님을 선택해야 합니다.");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("서버가 거부하면 서버의 한국어 사유를 담아 던진다", async () => {
+    const { client } = createRecorder({ error: new Error("수강 중인 악기는 최소 1개 있어야 합니다.") });
+
+    await expect(
+      updateStudentEnrollments(client, {
+        ...baseInput,
+        changes: [{ action: "end", studentInstrumentId: "si-piano" }],
+      }),
+    ).rejects.toThrow("원생 정보를 수정하지 못했습니다: 수강 중인 악기는 최소 1개 있어야 합니다.");
   });
 });

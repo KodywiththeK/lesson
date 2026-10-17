@@ -12,6 +12,14 @@ import {
   type StatusManagementListItem,
 } from "@/domain/status-management";
 import { getFinanceToday } from "@/domain/finance-date";
+import {
+  getStudentEnrollmentValidationError,
+  type StudentBasicInfoInput,
+  type StudentEnrollmentChange,
+  type StudentEnrollmentFields,
+  type StudentEnrollmentSaveResult,
+  type UpdateStudentEnrollmentsInput,
+} from "@/domain/student-enrollment-edit";
 import { STUDENT_DISCOUNTS, type StudentDiscountKind } from "@/domain/lesson-pricing";
 import {
   getAcademyScheduleValidationError,
@@ -205,50 +213,9 @@ type RegisterStudentEnrollmentRpcPayload = {
 
 export type StudentUpdateSupabaseClient = {
   rpc(
-    functionName: "update_student_profile_from_date",
-    payload: {
-      p_academy_id: string;
-      p_student_id: string;
-      p_name: string;
-      p_student_instrument_id: string | null;
-      p_teacher_id: string | null;
-      p_instrument_id: string;
-      p_instrument_name: string;
-      p_lesson_type: string;
-      p_weekdays: string[];
-      p_start_time: string | null;
-      p_end_time: string | null;
-      p_progress: string;
-      p_lesson_fee: number;
-      p_discount_total: number;
-      p_final_monthly_fee: number;
-      p_effective_from: string;
-      p_weekly_schedules?: Array<{
-        weekday: string;
-        start_time: string | null;
-        end_time: string | null;
-      }>;
-      /** 보내지 않으면 서버의 기존 할인 종류를 유지한다. */
-      p_discount_kinds?: StudentDiscountKind[];
-      p_referral_discount_month?: string | null;
-      p_referral_discount_amount?: number;
-      p_discount_label?: string | null;
-    },
-  ): PromiseLike<SupabaseQueryResult<null>>;
-  rpc(
-    functionName: "update_student_basic_info",
-    payload: {
-      p_academy_id: string;
-      p_student_id: string;
-      p_registered_on: string;
-      p_age: number | null;
-      p_grade: string | null;
-      p_school: string | null;
-      p_occupation: string | null;
-      p_contact_relationship: string;
-      p_contact_phone: string;
-    },
-  ): PromiseLike<SupabaseQueryResult<null>>;
+    functionName: "update_student_with_enrollments",
+    payload: UpdateStudentEnrollmentsRpcPayload,
+  ): PromiseLike<SupabaseQueryResult<UpdateStudentEnrollmentsRpcResult>>;
   rpc(
     functionName: "update_student_status",
     payload: {
@@ -261,47 +228,48 @@ export type StudentUpdateSupabaseClient = {
   ): PromiseLike<SupabaseQueryResult<null>>;
 };
 
-/** 이름·수강 정보와 따로 저장하는 원생 기본 정보. 등록 폼의 필드와 같다. */
-export type StudentBasicInfoInput = {
-  registeredOn: string;
-  age?: number;
-  grade?: string;
-  school?: string;
-  occupation?: string;
-  contactRelationship: string;
-  contactPhone: string;
+export type { StudentBasicInfoInput };
+
+type EnrollmentRpcFields = {
+  teacher_id: string | null;
+  instrument_id: string;
+  instrument_name: string;
+  lesson_type: string;
+  progress: string;
+  lesson_fee: number;
+  discount_total: number;
+  final_monthly_fee: number;
+  weekly_schedules: Array<{ weekday: string; start_time: string | null; end_time: string | null }>;
+  discount_kinds?: StudentDiscountKind[];
+  referral_discount_month?: string | null;
+  referral_discount_amount?: number;
+  discount_label?: string | null;
 };
 
-export type UpdateStudentProfileInput = StudentInstrumentDiscountSelection & {
-  academyId: string;
-  studentId: string;
-  name: string;
-  studentInstrumentId?: string;
-  teacherId?: string;
-  teacherName?: string;
-  instrumentId?: string;
-  instrumentName?: string;
-  lessonType?: "academy" | "private" | string;
-  weekdayLabels?: string[];
-  startTime?: string;
-  endTime?: string;
-  /** 요일마다 다른 시간을 보낼 때 쓴다. 있으면 weekdayLabels·startTime·endTime보다 우선한다. */
-  weeklySchedules?: UpdateStudentWeeklySchedule[];
-  progress?: string;
-  lessonFee?: number;
-  discountTotal?: number;
-  finalMonthlyFee?: number;
-  effectiveFrom?: string;
-  /** 표시용 할인 라벨. 할인 종류(`discountKinds`)를 보낼 때 함께 저장한다. */
-  discountLabel?: string;
-  /** 있으면 수강 정보 저장 뒤 별도 RPC로 저장한다. */
-  basicInfo?: StudentBasicInfoInput;
+type EnrollmentRpcChange =
+  | ({ action: "update"; student_instrument_id: string; effective_from: string } & EnrollmentRpcFields)
+  | ({ action: "add"; started_on: string } & EnrollmentRpcFields)
+  | { action: "end"; student_instrument_id: string };
+
+type UpdateStudentEnrollmentsRpcPayload = {
+  p_academy_id: string;
+  p_student_id: string;
+  p_name: string;
+  p_basic: {
+    registered_on: string;
+    age: number | null;
+    grade: string | null;
+    school: string | null;
+    occupation: string | null;
+    contact_relationship: string;
+    contact_phone: string;
+  } | null;
+  p_instruments: EnrollmentRpcChange[];
 };
 
-export type UpdateStudentWeeklySchedule = {
-  weekdayLabel: string;
-  startTime?: string;
-  endTime?: string;
+type UpdateStudentEnrollmentsRpcResult = {
+  added?: Array<{ student_instrument_id: string; instrument_id?: string }>;
+  ended?: Array<{ student_instrument_id: string; remaining_event_count?: number }>;
 };
 
 const STUDENT_LIST_SELECT =
@@ -434,190 +402,99 @@ async function fetchLatestStatusReasonMap(
   return buildLatestReasonMap(data ?? []);
 }
 
-export async function updateStudentProfile(
+/**
+ * 이름·기본 정보·수강 변경(수정·추가·종료)을 RPC 한 번으로 저장한다. 서버가 한 트랜잭션으로 처리하므로
+ * 실패하면 아무것도 저장되지 않는다. 악기는 바꿀 수 없고, 다른 악기로 바꾸려면 종료하고 추가한다.
+ */
+export async function updateStudentEnrollments(
   supabase: StudentUpdateSupabaseClient,
-  input: UpdateStudentProfileInput,
-): Promise<StudentListRow> {
-  const trimmedName = input.name.trim();
+  input: UpdateStudentEnrollmentsInput,
+): Promise<StudentEnrollmentSaveResult> {
+  const validationError = getStudentEnrollmentValidationError(input);
 
-  if (!trimmedName) {
-    throw new Error("원생명은 필수입니다.");
+  if (validationError) {
+    throw new Error(validationError);
   }
 
-  const lessonType = input.lessonType ?? "academy";
-  const weeklySchedules = input.weeklySchedules;
-
-  if (weeklySchedules) {
-    const scheduleError = getAcademyScheduleValidationError({
-      lessonType: lessonType === "private" ? "private" : "academy",
-      teacherId: input.teacherId,
-      weeklySchedules,
-    });
-
-    if (scheduleError) {
-      throw new Error(scheduleError);
-    }
-  }
-
-  const weekdayLabels =
-    weeklySchedules?.map((schedule) => schedule.weekdayLabel) ?? input.weekdayLabels ?? [];
-  const representativeSchedule = weeklySchedules?.find(
-    (schedule) => schedule.startTime && schedule.endTime,
-  );
-  const startTime = representativeSchedule?.startTime ?? input.startTime;
-  const endTime = representativeSchedule?.endTime ?? input.endTime;
-  const discount = input.discountKinds ? toDiscountPayload(input) : undefined;
-
-  const { error } = await supabase.rpc("update_student_profile_from_date", {
+  const { data, error } = await supabase.rpc("update_student_with_enrollments", {
     p_academy_id: input.academyId,
     p_student_id: input.studentId,
-    p_name: trimmedName,
-    p_student_instrument_id: input.studentInstrumentId ?? null,
-    p_teacher_id: input.teacherId ?? null,
-    p_instrument_id: input.instrumentId ?? "",
-    p_instrument_name: input.instrumentName ?? "",
-    p_lesson_type: lessonType,
-    p_weekdays: weekdayLabels,
-    p_start_time: normalizeOptionalTime(startTime),
-    p_end_time: normalizeOptionalTime(endTime),
-    p_progress: input.progress ?? "",
-    p_lesson_fee: input.lessonFee ?? 0,
-    p_discount_total: input.discountTotal ?? 0,
-    p_final_monthly_fee: input.finalMonthlyFee ?? 0,
-    p_effective_from: input.effectiveFrom ?? getFinanceToday(),
-    ...(weeklySchedules
-      ? {
-          p_weekly_schedules: weeklySchedules.map((schedule) => ({
-            weekday: schedule.weekdayLabel,
-            start_time: normalizeOptionalTime(schedule.startTime),
-            end_time: normalizeOptionalTime(schedule.endTime),
-          })),
-        }
-      : {}),
-    ...(discount
-      ? {
-          p_discount_kinds: discount.discount_kinds,
-          p_referral_discount_month: discount.referral_discount_month,
-          p_referral_discount_amount: discount.referral_discount_amount,
-          p_discount_label: normalizeOptionalText(input.discountLabel),
-        }
-      : {}),
+    p_name: input.name.trim(),
+    p_basic: input.basicInfo ? toBasicInfoPayload(input.basicInfo) : null,
+    p_instruments: input.changes.map(toEnrollmentRpcChange),
   });
 
   if (error) {
     throw new Error(`원생 정보를 수정하지 못했습니다: ${error.message}`);
   }
 
-  if (input.basicInfo) {
-    await saveStudentBasicInfo(supabase, input, input.basicInfo);
-  }
-
-  const instrumentNames = input.instrumentName ? [input.instrumentName] : [];
-  const teacherNames = input.teacherName ? [input.teacherName] : [];
-
   return {
-    academyId: input.academyId,
-    studentId: input.studentId,
-    name: trimmedName,
-    ...(input.basicInfo ? toBasicInfoRow(input.basicInfo) : {}),
-    teacherNames,
-    instrumentNames,
-    weekdayLabels,
-    instruments: input.studentInstrumentId
-      ? [
-          {
-            studentInstrumentId: input.studentInstrumentId,
-            teacherId: input.teacherId ?? null,
-            teacherName: input.teacherName ?? "",
-            instrumentId: input.instrumentId ?? "",
-            instrumentName: input.instrumentName ?? "",
-            lessonType,
-            weekdayLabels,
-            startTime: startTime ?? "",
-            endTime: endTime ?? "",
-            progress: input.progress ?? "",
-            lessonFee: input.lessonFee ?? 0,
-            discountTotal: input.discountTotal ?? 0,
-            finalMonthlyFee: input.finalMonthlyFee ?? 0,
-            active: true,
-            ...(discount
-              ? {
-                  discountKinds: discount.discount_kinds,
-                  discountLabel: normalizeOptionalText(input.discountLabel) ?? undefined,
-                  referralDiscountMonth: discount.referral_discount_month?.slice(0, 7),
-                  referralDiscountAmount: discount.referral_discount_amount,
-                }
-              : {}),
-            ...(weeklySchedules
-              ? {
-                  weeklySchedules: weeklySchedules.map((schedule) => ({
-                    weekday: schedule.weekdayLabel,
-                    weekdayLabel: schedule.weekdayLabel,
-                    startTime: schedule.startTime ?? "",
-                    endTime: schedule.endTime ?? "",
-                  })),
-                }
-              : {}),
-          },
-        ]
-      : [],
+    addedStudentInstrumentIds: (data?.added ?? []).map((added) => added.student_instrument_id),
+    ended: (data?.ended ?? []).map((ended) => ({
+      studentInstrumentId: ended.student_instrument_id,
+      remainingEventCount: ended.remaining_event_count ?? 0,
+    })),
   };
 }
 
-/**
- * 수강 정보 저장이 끝난 뒤 기본 정보를 저장한다. 두 RPC는 한 트랜잭션이 아니므로
- * 여기서 실패하면 수강 정보만 저장된 상태이고, 같은 폼을 다시 저장하면 두 RPC를 다시 호출한다.
- */
-async function saveStudentBasicInfo(
-  supabase: StudentUpdateSupabaseClient,
-  input: UpdateStudentProfileInput,
-  basicInfo: StudentBasicInfoInput,
-) {
-  const { error } = await supabase.rpc("update_student_basic_info", {
-    p_academy_id: input.academyId,
-    p_student_id: input.studentId,
-    p_registered_on: basicInfo.registeredOn,
-    p_age: basicInfo.age ?? null,
-    p_grade: normalizeOptionalText(basicInfo.grade),
-    p_school: normalizeOptionalText(basicInfo.school),
-    p_occupation: normalizeOptionalText(basicInfo.occupation),
-    p_contact_relationship: basicInfo.contactRelationship.trim() || "본인",
-    p_contact_phone: basicInfo.contactPhone.trim(),
-  });
+function toBasicInfoPayload(basicInfo: StudentBasicInfoInput) {
+  return {
+    registered_on: basicInfo.registeredOn,
+    age: basicInfo.age ?? null,
+    grade: normalizeOptionalText(basicInfo.grade),
+    school: normalizeOptionalText(basicInfo.school),
+    occupation: normalizeOptionalText(basicInfo.occupation),
+    contact_relationship: basicInfo.contactRelationship.trim() || "본인",
+    contact_phone: basicInfo.contactPhone.trim(),
+  };
+}
 
-  if (error) {
-    throw new Error(describePartialSaveFailure(error.message));
+function toEnrollmentRpcChange(change: StudentEnrollmentChange): EnrollmentRpcChange {
+  if (change.action === "end") {
+    return { action: "end", student_instrument_id: change.studentInstrumentId };
   }
-}
 
-function describePartialSaveFailure(cause: string) {
-  const detail = HANGUL_PATTERN.test(cause) ? ` ${cause}` : "";
-
-  return `원생 정보를 일부만 저장했습니다: 이름과 수강 정보는 저장됐지만 기본 정보(등록일·나이·학년·학교·직업·연락처)는 저장하지 못했습니다.${detail} 다시 수정완료를 눌러 저장해 주세요.`;
-}
-
-function toBasicInfoRow(basicInfo: StudentBasicInfoInput): Partial<StudentListRow> {
-  const contactPhone = basicInfo.contactPhone.trim();
+  if (change.action === "update") {
+    return {
+      action: "update",
+      student_instrument_id: change.studentInstrumentId,
+      ...toEnrollmentRpcFields(change),
+      effective_from: change.effectiveFrom ?? getFinanceToday(),
+      // 할인 종류를 고르지 않은 수정은 서버의 기존 할인 종류를 유지하도록 보내지 않는다.
+      ...(change.discountKinds ? toDiscountRpcFields(change) : {}),
+    };
+  }
 
   return {
-    registeredOn: basicInfo.registeredOn,
-    age: basicInfo.age,
-    ageAsOfYear: basicInfo.age === undefined ? undefined : getCurrentFinanceYear(),
-    grade: normalizeOptionalText(basicInfo.grade) ?? undefined,
-    school: normalizeOptionalText(basicInfo.school) ?? undefined,
-    occupation: normalizeOptionalText(basicInfo.occupation) ?? undefined,
-    ...(contactPhone
-      ? {
-          contacts: [
-            {
-              contactId: "",
-              relationship: basicInfo.contactRelationship.trim() || "본인",
-              phone: contactPhone,
-              phoneLast4: getPhoneLast4(contactPhone),
-            },
-          ],
-        }
-      : {}),
+    action: "add",
+    started_on: change.startedOn,
+    ...toEnrollmentRpcFields(change),
+    ...toDiscountRpcFields(change),
+  };
+}
+
+function toEnrollmentRpcFields(fields: StudentEnrollmentFields) {
+  return {
+    teacher_id: fields.teacherId || null,
+    instrument_id: fields.instrumentId,
+    instrument_name: fields.instrumentName,
+    lesson_type: fields.lessonType,
+    progress: fields.progress,
+    lesson_fee: fields.lessonFee,
+    discount_total: fields.discountTotal,
+    final_monthly_fee: fields.finalMonthlyFee,
+    weekly_schedules: fields.weeklySchedules.map((schedule) => ({
+      weekday: schedule.weekdayLabel,
+      start_time: normalizeOptionalTime(schedule.startTime),
+      end_time: normalizeOptionalTime(schedule.endTime),
+    })),
+  };
+}
+
+function toDiscountRpcFields(fields: StudentEnrollmentFields) {
+  return {
+    ...toDiscountPayload(fields),
+    discount_label: normalizeOptionalText(fields.discountLabel),
   };
 }
 
@@ -839,7 +716,8 @@ function toKoreanWeekdayLabel(value: string) {
 }
 
 function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
-  const instruments = row.student_instruments ?? [];
+  // 종료(비활성)한 수강은 목록·상세에 보이지 않는다. active가 비어 있는 이전 행은 수강 중으로 본다.
+  const instruments = (row.student_instruments ?? []).filter((instrument) => instrument.active !== false);
   const mappedInstruments = instruments.map((instrument) =>
     toStudentListInstrument(instrument),
   );
@@ -964,7 +842,6 @@ function getCurrentFinanceYear() {
 
 const REFERRAL_DISCOUNT_KIND: StudentDiscountKind = "referral";
 const KNOWN_DISCOUNT_KINDS: readonly string[] = STUDENT_DISCOUNTS.map((discount) => discount.kind);
-const HANGUL_PATTERN = /[가-힣]/;
 
 function toKnownDiscountKinds(kinds: string[] | null | undefined): StudentDiscountKind[] {
   return (kinds ?? []).filter((kind): kind is StudentDiscountKind =>

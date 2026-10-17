@@ -227,3 +227,74 @@ function matchesStudentFilters(
 function matchesOptionalValue(values: string[], expected: string | undefined) {
   return !expected || values.includes(expected);
 }
+
+/**
+ * 원생 수정 한 번의 결과를 화면에 있는 행에 합친다. 수정 결과는 수정한 악기 하나(또는 악기 없이 이름·기본 정보)만
+ * 담고 있으므로, 악기는 `studentInstrumentId`로 바꿔 넣고 선생님·악기·요일 요약은 합친 악기 목록에서 다시 만든다.
+ * 복수 악기 원생의 한 악기를 수정해도 다른 악기가 목록에서 사라지지 않게 한다.
+ */
+export function mergeStudentUpdate(
+  current: StudentListRow | null | undefined,
+  updated: StudentListRow,
+): StudentListRow {
+  const merged: StudentListRow = {
+    ...current,
+    ...updated,
+    status: updated.status ?? current?.status,
+  };
+  const updatedInstruments = updated.instruments ?? [];
+
+  if (!current || updatedInstruments.length === 0) {
+    return current
+      ? {
+          ...merged,
+          teacherNames: current.teacherNames,
+          instrumentNames: current.instrumentNames,
+          weekdayLabels: current.weekdayLabels,
+          instruments: current.instruments,
+        }
+      : merged;
+  }
+
+  return withInstruments(merged, replaceInstruments(current.instruments ?? [], updatedInstruments));
+}
+
+/** 악기 목록을 바꾼 행을 돌려준다. 선생님·악기·요일 요약은 새 악기 목록에서 다시 만든다. */
+export function withInstruments(
+  student: StudentListRow,
+  instruments: StudentListInstrument[],
+): StudentListRow {
+  return {
+    ...student,
+    instruments,
+    teacherNames: uniqueNonEmpty(instruments.map((instrument) => instrument.teacherName)),
+    instrumentNames: uniqueNonEmpty(instruments.map((instrument) => instrument.instrumentName)),
+    weekdayLabels: STUDENT_WEEKDAY_LABELS.filter((label) =>
+      instruments.some((instrument) => instrument.weekdayLabels.includes(label)),
+    ),
+  };
+}
+
+function replaceInstruments(
+  currentInstruments: StudentListInstrument[],
+  updatedInstruments: StudentListInstrument[],
+) {
+  const isStored = (instrument: StudentListInstrument) =>
+    currentInstruments.some(
+      (current) => current.studentInstrumentId === instrument.studentInstrumentId,
+    );
+
+  return [
+    ...currentInstruments.map(
+      (current) =>
+        updatedInstruments.find(
+          (updated) => updated.studentInstrumentId === current.studentInstrumentId,
+        ) ?? current,
+    ),
+    ...updatedInstruments.filter((updated) => !isStored(updated)),
+  ];
+}
+
+function uniqueNonEmpty(values: string[]) {
+  return [...new Set(values.filter((value) => value.trim() !== ""))];
+}
