@@ -35,32 +35,38 @@ export function LessonToolbar({
   );
 }
 
+/** 캘린더·테이블 보기 전환 탭. `actions`를 주면 같은 줄의 오른쪽 끝에 둔다(좁은 화면에서는 줄바꿈). */
 export function LessonViewTabs({
   labelPrefix,
   value,
   onValueChange,
+  actions,
 }: {
   labelPrefix: string;
   value: LessonView;
   onValueChange: (value: LessonView) => void;
+  actions?: ReactNode;
 }) {
   return (
-    <Tabs
-      value={value}
-      onValueChange={(nextValue) => onValueChange(toLessonView(nextValue))}
-      className="gap-3"
-    >
-      <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
-        <TabsTrigger value="calendar">
-          <CalendarDays aria-hidden="true" />
-          {labelPrefix} 캘린더뷰
-        </TabsTrigger>
-        <TabsTrigger value="table">
-          <Table2 aria-hidden="true" />
-          {labelPrefix} 테이블뷰
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Tabs
+        value={value}
+        onValueChange={(nextValue) => onValueChange(toLessonView(nextValue))}
+        className="w-full gap-3 sm:w-auto"
+      >
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+          <TabsTrigger value="calendar">
+            <CalendarDays aria-hidden="true" />
+            {labelPrefix} 캘린더뷰
+          </TabsTrigger>
+          <TabsTrigger value="table">
+            <Table2 aria-hidden="true" />
+            {labelPrefix} 테이블뷰
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
   );
 }
 

@@ -141,6 +141,50 @@ describe("fetchLessonWorkspaceData", () => {
     });
   });
 
+  it("개인레슨 결석 사유를 출결 기록에서 읽고, 출석·예정 레슨에는 사유를 두지 않는다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const privateRow = (id: string, attendance: Array<Record<string, unknown>>) => ({
+      id,
+      academy_id: "academy-1",
+      student_id: "student-1",
+      students: { name: "김민지" },
+      instrument_id: "piano",
+      instrument_name: "피아노",
+      teacher_id: "teacher-1",
+      teachers: { name: "박선생" },
+      lesson_kind: "private",
+      origin: "private",
+      starts_at: "2026-08-21T15:00:00+09:00",
+      ends_at: "2026-08-21T15:50:00+09:00",
+      status: "scheduled",
+      attendance_records: attendance,
+    });
+    const record = (status: string, absenceReason: string | null) => ({
+      status,
+      absence_reason: absenceReason,
+      marked_at: "2026-08-21T06:00:00Z",
+    });
+    const client = createLessonWorkspaceClient(calls, {
+      eventRows: [
+        privateRow("absent-with-reason", [record("absent", "감기로 결석")]),
+        privateRow("absent-default", [record("absent", "결석 확인")]),
+        privateRow("present", [record("present", null)]),
+        privateRow("scheduled", []),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-08" });
+
+    expect(
+      Object.fromEntries(result.privateLessons.map((lesson) => [lesson.id, lesson.absenceReason])),
+    ).toEqual({
+      "absent-with-reason": "감기로 결석",
+      "absent-default": "결석 확인",
+      present: undefined,
+      scheduled: undefined,
+    });
+  });
+
   it("학원 레슨의 보강 처리 여부와 시간 미입력 여부를 서버 값으로 읽고 보강 일정은 보강 수업으로 표시한다", async () => {
     const academyRow = (id: string, overrides: Record<string, unknown>) => ({
       id,

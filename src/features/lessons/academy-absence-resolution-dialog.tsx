@@ -239,7 +239,7 @@ function describeResolution(draft: AbsenceResolutionDraft) {
   const name = draft.row.studentName;
 
   if (draft.resolution === "pass") {
-    return `${name} 원생의 결석을 패스로 처리합니다. 확인하면 결석인원 목록에서 사라지고 월별 메모에 기록됩니다.`;
+    return `${name} 원생의 결석을 패스로 처리합니다. 확인하면 결석인원 목록에 패스 완료로 표시되고 월별 메모에 기록됩니다.`;
   }
 
   const time = draft.startTime ? ` ${draft.startTime}` : "";

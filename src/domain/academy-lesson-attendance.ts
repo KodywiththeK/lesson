@@ -15,6 +15,13 @@ export type AbsenceResolutionKind = "makeup" | "pass";
 /** 사유 없이 결석으로 저장할 때 기록하는 기본 문구. 화면에서는 사유가 아니라 빈 값으로 보여 준다. */
 export const DEFAULT_ABSENCE_REASON = "결석 확인";
 
+/** 결석 사유 표시. 사유가 없거나 기본 문구면 -로 보여 준다. */
+export function formatAbsenceReason(reason: string | undefined) {
+  const trimmed = reason?.trim();
+
+  return trimmed && trimmed !== DEFAULT_ABSENCE_REASON ? trimmed : "-";
+}
+
 export type DailyAcademyAttendanceOptions = {
   academyId: string;
   date: string;

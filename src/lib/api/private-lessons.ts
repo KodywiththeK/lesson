@@ -2,6 +2,7 @@ import { compareKoreanNames } from "@/domain/common-list";
 import {
   deriveLessonMinutes,
   findPrivateLessonRegistrationBlocker,
+  getPrivateAbsenceReasonError,
   type PrivateLesson,
 } from "@/domain/private-lesson";
 
@@ -145,6 +146,8 @@ export type MarkPrivateLessonAttendanceSupabaseClient = {
       p_instrument_id: string;
       p_status: "present" | "absent";
       p_marked_at: string;
+      /** 결석일 때만 보낸다. 비우면 서버가 기본 문구(결석 확인)를 쓴다. */
+      p_reason: string | null;
     },
   ): PromiseLike<SupabaseQueryResult<null>>;
 };
@@ -189,6 +192,8 @@ export type MarkPrivateLessonAttendanceInput = {
   instrumentName: string;
   status: "present" | "absent";
   markedAt: string;
+  /** 결석 사유(선택, 100자). 출석 처리에서는 무시한다. */
+  reason?: string;
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
@@ -331,6 +336,13 @@ export async function markPrivateLessonAttendance(
   supabase: MarkPrivateLessonAttendanceSupabaseClient,
   input: MarkPrivateLessonAttendanceInput,
 ) {
+  const reason = input.status === "absent" ? input.reason?.trim() || null : null;
+  const reasonError = getPrivateAbsenceReasonError(reason ?? undefined);
+
+  if (reasonError) {
+    throw new Error(reasonError);
+  }
+
   const { error } = await supabase.rpc("mark_private_lesson_attendance", {
     p_academy_id: input.academyId,
     p_lesson_event_id: input.lessonEventId,
@@ -338,6 +350,7 @@ export async function markPrivateLessonAttendance(
     p_instrument_id: input.instrumentId,
     p_status: input.status,
     p_marked_at: input.markedAt,
+    p_reason: reason,
   });
 
   if (error) {

@@ -57,7 +57,7 @@ async function openDay(user: User, day: number) {
 async function openAbsenceDialog(user: User) {
   await user.click(screen.getByRole("button", { name: "결석인원" }));
 
-  return screen.findByRole("dialog", { name: "2026-08-21 결석인원" });
+  return screen.findByRole("dialog", { name: "2026년 8월 결석인원" });
 }
 
 async function openResolutionDialog(user: User, studentName = "박지호") {
@@ -185,7 +185,7 @@ describe("학원 레슨표 출석확인", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "결석인원" }));
-    const absenceDialog = await screen.findByRole("dialog", { name: "2026-08-21 결석인원" });
+    const absenceDialog = await screen.findByRole("dialog", { name: "2026년 8월 결석인원" });
     expect(absenceDialog).toHaveTextContent("김민지");
     expect(absenceDialog).toHaveTextContent("이서윤");
     expect(absenceDialog).toHaveTextContent("박지호");
@@ -237,49 +237,74 @@ describe("학원 레슨표 출석확인", () => {
 describe("학원 레슨표 결석인원과 결석 사유서", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("결석인원은 선택한 날짜에 결석 처리된 원생만 모아 보여 주고 날짜를 바꿀 수 있다", async () => {
+  it("결석인원은 조회 중인 달의 결석을 날짜순으로 한 번에 보여 준다", async () => {
     const user = userEvent.setup();
     renderAcademy();
 
     const dialog = await openAbsenceDialog(user);
-    expect(within(dialog).getByText("박지호")).toBeInTheDocument();
-    expect(within(dialog).queryByText("강도현")).not.toBeInTheDocument();
+    const rows = within(dialog).getAllByRole("row").slice(1);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("2026-08-21");
+    expect(rows[0]).toHaveTextContent("17:00-17:50");
+    expect(rows[0]).toHaveTextContent("박지호");
+    expect(rows[0]).toHaveTextContent("피아노");
+    expect(rows[0]).toHaveTextContent("김하늘");
+    expect(rows[0]).toHaveTextContent("연락 대기");
+    expect(rows[0]).toHaveTextContent("미처리");
+    expect(rows[1]).toHaveTextContent("2026-08-22");
+    expect(rows[1]).toHaveTextContent("강도현");
+    expect(rows[1]).toHaveTextContent("보호자 통화 예정");
     expect(within(dialog).queryByText("김민지")).not.toBeInTheDocument();
-
-    const dateField = within(dialog).getByLabelText("결석인원 날짜");
-    await user.clear(dateField);
-    await user.type(dateField, "2026-08-22");
-
-    expect(await screen.findByRole("dialog", { name: "2026-08-22 결석인원" })).toHaveTextContent("강도현");
+    expect(within(dialog).queryByText("정하린")).not.toBeInTheDocument();
+    expect(dialog).toHaveTextContent("총 2건 · 미처리 2건 · 보강 0건 · 패스 0건");
   });
 
-  it("결석이 없는 날짜는 빈 상태를 보여 준다", async () => {
+  it("월을 옮기면 그 달의 결석으로 바뀌고 결석이 없는 달은 빈 상태를 보여 준다", async () => {
     const user = userEvent.setup();
     renderAcademy();
 
     const dialog = await openAbsenceDialog(user);
-    const dateField = within(dialog).getByLabelText("결석인원 날짜");
-    await user.clear(dateField);
-    await user.type(dateField, "2026-08-25");
+    await user.click(within(dialog).getByRole("button", { name: "결석인원 다음 달" }));
 
-    expect(await screen.findByRole("dialog", { name: "2026-08-25 결석인원" })).toHaveTextContent(
-      "이 날짜에 처리할 결석이 없습니다.",
-    );
+    const septemberDialog = await screen.findByRole("dialog", { name: "2026년 9월 결석인원" });
+    expect(septemberDialog).toHaveTextContent("이 달에는 결석 인원이 없습니다.");
+    expect(within(septemberDialog).queryByText("박지호")).not.toBeInTheDocument();
+
+    await user.click(within(septemberDialog).getByRole("button", { name: "결석인원 이전 달" }));
+
+    expect(await screen.findByRole("dialog", { name: "2026년 8월 결석인원" })).toHaveTextContent("박지호");
   });
 
-  it("서버에서 이미 보강·패스로 처리된 결석은 목록에 나오지 않아 이중 보강을 막는다", async () => {
+  it("다른 날짜의 미처리 결석도 같은 목록에서 바로 결석확인할 수 있다", async () => {
+    const user = userEvent.setup();
+    renderAcademy();
+
+    const dialog = await openAbsenceDialog(user);
+    await user.click(within(dialog).getByRole("button", { name: "강도현 결석확인" }));
+
+    expect(await screen.findByRole("dialog", { name: "결석 사유서" })).toHaveTextContent("강도현 · 8/22");
+  });
+
+  it("이미 보강·패스로 처리된 결석은 처리 결과만 보여 주고 다시 처리할 수 없어 이중 보강을 막는다", async () => {
     const user = userEvent.setup();
     renderAcademy({
       demoData: withRows([
         { lessonEventId: "a", studentName: "박지호", status: "absent", absenceResolution: "makeup" },
-        { lessonEventId: "b", studentName: "강도현", status: "absent" },
+        { lessonEventId: "b", studentName: "이서윤", status: "absent", absenceResolution: "pass" },
+        { lessonEventId: "c", studentName: "강도현", status: "absent" },
       ]),
     });
 
     const dialog = await openAbsenceDialog(user);
 
-    expect(within(dialog).getByText("강도현")).toBeInTheDocument();
-    expect(within(dialog).queryByText("박지호")).not.toBeInTheDocument();
+    expect(within(within(dialog).getByRole("row", { name: /박지호/ })).getByText("보강 완료")).toBeInTheDocument();
+    expect(within(within(dialog).getByRole("row", { name: /이서윤/ })).getByText("패스 완료")).toBeInTheDocument();
+    expect(within(within(dialog).getByRole("row", { name: /강도현/ })).getByText("미처리")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "박지호 결석확인" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "이서윤 결석 취소" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "강도현 결석확인" })).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("총 3건 · 미처리 1건 · 보강 1건 · 패스 1건");
   });
 
   it("결석 취소는 결석 표시를 거두고 출결을 대기 상태로 되돌린다", async () => {
@@ -289,7 +314,8 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
     const dialog = await openAbsenceDialog(user);
     await user.click(within(dialog).getByRole("button", { name: "박지호 결석 취소" }));
 
-    expect(dialog).toHaveTextContent("이 날짜에 처리할 결석이 없습니다.");
+    expect(within(dialog).queryByText("박지호")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("강도현")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
     const dayDialog = await openDay(user, 21);
     expect(within(within(dayDialog).getByRole("row", { name: /박지호/ })).getByText("대기")).toBeInTheDocument();
@@ -338,7 +364,7 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
     expect(screen.getByRole("dialog", { name: "결석 사유서" })).toBeInTheDocument();
   });
 
-  it("패스로 최종 확인하면 결석인원 목록에서 사라지고 보강 일정은 생기지 않는다", async () => {
+  it("패스로 최종 확인하면 결석인원 목록에서 패스 완료로 바뀌고 보강 일정은 생기지 않는다", async () => {
     const user = userEvent.setup();
     const success = vi.spyOn(toast, "success");
     renderAcademy();
@@ -350,13 +376,16 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
     await user.type(within(sheet).getByLabelText("사유 메모"), "보호자 요청");
     await user.click(within(sheet).getByRole("button", { name: "확인" }));
     const confirm = await screen.findByRole("alertdialog", { name: "최종확인하시겠습니까?" });
+    expect(confirm).toHaveTextContent("결석인원 목록에 패스 완료로 표시되고 월별 메모에 기록됩니다.");
     await user.click(within(confirm).getByRole("button", { name: "확인" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "결석 사유서" })).not.toBeInTheDocument());
     expect(success).toHaveBeenCalledWith("패스로 처리했습니다.");
-    expect(
-      within(screen.getByRole("dialog", { name: "2026-08-21 결석인원" })).queryByText("박지호"),
-    ).not.toBeInTheDocument();
+    const passedRow = within(screen.getByRole("dialog", { name: "2026년 8월 결석인원" })).getByRole("row", {
+      name: /박지호/,
+    });
+    expect(within(passedRow).getByText("패스 완료")).toBeInTheDocument();
+    expect(within(passedRow).queryByRole("button", { name: "박지호 결석확인" })).not.toBeInTheDocument();
     expect(within(getCalendar()).getAllByText("박지호")).toHaveLength(1);
   });
 
@@ -457,9 +486,11 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
     expect(makeupCell).toHaveTextContent("박지호");
     expect(makeupCell).toHaveTextContent("[보강 수업]");
     expect(makeupCell).not.toHaveTextContent("17:00");
-    expect(
-      within(screen.getByRole("dialog", { name: "2026-08-21 결석인원" })).queryByText("박지호"),
-    ).not.toBeInTheDocument();
+    const makeupRow = within(screen.getByRole("dialog", { name: "2026년 8월 결석인원" })).getByRole("row", {
+      name: /박지호/,
+    });
+    expect(within(makeupRow).getByText("보강 완료")).toBeInTheDocument();
+    expect(within(makeupRow).queryByRole("button", { name: "박지호 결석확인" })).not.toBeInTheDocument();
   });
 
   it("보강 시간을 입력하면 보강 수업에 그 시간이 표시된다", async () => {
@@ -493,7 +524,7 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "결석 사유서" })).not.toBeInTheDocument());
-    await user.click(within(screen.getByRole("dialog", { name: "2026-08-21 결석인원" })).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog", { name: "2026년 8월 결석인원" })).getByRole("button", { name: "Close" }));
 
     const dayDialog = await openDay(user, 21);
     const row = within(dayDialog).getByRole("row", { name: /박지호/ });
@@ -511,7 +542,7 @@ describe("결석 사유서와 월별 메모지 자동 기록", () => {
     resolution: "보강" | "패스",
     memo?: string,
   ) {
-    const absenceDialog = await screen.findByRole("dialog", { name: "2026-08-21 결석인원" });
+    const absenceDialog = await screen.findByRole("dialog", { name: "2026년 8월 결석인원" });
     await user.click(within(absenceDialog).getByRole("button", { name: `${studentName} 결석확인` }));
     const sheet = await screen.findByRole("dialog", { name: "결석 사유서" });
     await user.click(within(sheet).getByRole("radio", { name: resolution }));

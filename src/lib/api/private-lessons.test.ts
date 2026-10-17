@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   fetchAcademyLessonRegistrationOptions,
@@ -342,9 +342,78 @@ describe("markPrivateLessonAttendance", () => {
           p_instrument_id: "violin",
           p_status: "present",
           p_marked_at: "2026-08-21T18:05:00+09:00",
+          p_reason: null,
         },
       },
     ]);
+  });
+
+  it("결석 사유는 앞뒤 공백을 뺀 뒤 RPC로 보내고, 비어 있으면 null로 보내 서버가 기본 문구를 쓰게 한다", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const client = {
+      async rpc(_functionName: string, payload: Record<string, unknown>) {
+        payloads.push(payload);
+
+        return { data: null, error: null };
+      },
+    };
+    const base = {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      studentId: "student-1",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      status: "absent" as const,
+      markedAt: "2026-08-21T18:05:00+09:00",
+    };
+
+    await markPrivateLessonAttendance(client, { ...base, reason: "  감기로 결석  " });
+    await markPrivateLessonAttendance(client, { ...base, reason: "   " });
+    await markPrivateLessonAttendance(client, base);
+
+    expect(payloads.map((payload) => payload.p_reason)).toEqual(["감기로 결석", null, null]);
+  });
+
+  it("출석 처리에는 사유를 보내지 않는다", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const client = {
+      async rpc(_functionName: string, payload: Record<string, unknown>) {
+        payloads.push(payload);
+
+        return { data: null, error: null };
+      },
+    };
+
+    await markPrivateLessonAttendance(client, {
+      academyId: "academy-1",
+      lessonEventId: "lesson-1",
+      studentId: "student-1",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      status: "present",
+      markedAt: "2026-08-21T18:05:00+09:00",
+      reason: "무시됨",
+    });
+
+    expect(payloads[0].p_reason).toBeNull();
+  });
+
+  it("사유가 100자를 넘으면 RPC를 부르지 않고 안내한다", async () => {
+    const rpc = vi.fn();
+
+    await expect(
+      markPrivateLessonAttendance({ rpc } as never, {
+        academyId: "academy-1",
+        lessonEventId: "lesson-1",
+        studentId: "student-1",
+        instrumentId: "violin",
+        instrumentName: "바이올린",
+        status: "absent",
+        markedAt: "2026-08-21T18:05:00+09:00",
+        reason: "가".repeat(101),
+      }),
+    ).rejects.toThrow("사유는 100자 이하로 입력해 주세요.");
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("회차권 차감 RPC 오류를 사용자 메시지로 변환한다", async () => {

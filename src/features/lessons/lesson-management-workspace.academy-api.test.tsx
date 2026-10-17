@@ -61,7 +61,7 @@ async function renderConnectedWorkspace() {
 
 async function openResolutionSheet(user: User) {
   await user.click(screen.getByRole("button", { name: "결석인원" }));
-  const absenceDialog = await screen.findByRole("dialog", { name: "2026-08-21 결석인원" });
+  const absenceDialog = await screen.findByRole("dialog", { name: "2026년 8월 결석인원" });
   await user.click(within(absenceDialog).getByRole("button", { name: "박지호 결석확인" }));
 
   return screen.findByRole("dialog", { name: "결석 사유서" });
@@ -184,7 +184,7 @@ describe("학원 레슨표 서버 연결", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "결석 사유서" })).not.toBeInTheDocument());
   });
 
-  it("서버에서 이미 처리된 결석은 새로 불러와도 결석인원 목록에 다시 나타나지 않는다", async () => {
+  it("서버에서 이미 처리된 결석은 새로 불러와도 다시 처리할 수 없다", async () => {
     const user = userEvent.setup();
     const [firstSheet, ...otherSheets] = demoLessonWorkspaceData.academySheets;
     api.fetchWorkspace.mockResolvedValue({
@@ -202,9 +202,11 @@ describe("학원 레슨표 서버 연결", () => {
     await renderConnectedWorkspace();
 
     await user.click(screen.getByRole("button", { name: "결석인원" }));
-    const absenceDialog = await screen.findByRole("dialog", { name: "2026-08-21 결석인원" });
+    const absenceDialog = await screen.findByRole("dialog", { name: "2026년 8월 결석인원" });
 
-    expect(absenceDialog).toHaveTextContent("이 날짜에 처리할 결석이 없습니다.");
+    const row = within(absenceDialog).getByRole("row", { name: /박지호/ });
+    expect(within(row).getByText("보강 완료")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "박지호 결석확인" })).not.toBeInTheDocument();
   });
 
   it("보강 후보가 다음 달로 넘어가면 다음 달 등원 인원을 조회해 추천에 반영한다", async () => {

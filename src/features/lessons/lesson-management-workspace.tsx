@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { usePageHeaderActions } from "@/components/layout/page-actions";
 import {
   checkAcademyLessonEditable,
-  findUnresolvedAbsences,
   formatAcademyLessonOriginLabel,
   type DailyAcademyAttendanceRow,
   type DailyAcademyAttendanceSheet,
@@ -34,6 +33,10 @@ import {
 } from "@/domain/academy-makeup-recommendation";
 import { buildWeekdayAttendanceSummary } from "@/domain/academy-weekday-summary";
 import { compareKoreanNames } from "@/domain/common-list";
+import {
+  buildMonthlyAcademyAbsences,
+  buildMonthlyPrivateAbsences,
+} from "@/domain/monthly-lesson-absence";
 import { appendMonthlyMemoLine } from "@/domain/monthly-memo";
 import { toUserMessage } from "@/lib/errors/user-message";
 import type { AcademyLessonAttendanceSupabaseClient } from "@/lib/api/academy-lessons";
@@ -41,7 +44,6 @@ import {
   buildPrivateLessonSessionLabels,
   buildPrivateLessonStudentSearchResults,
   describePrivateAttendanceCancellation,
-  describePrivateAttendanceChange,
   type PrivateLesson,
   type PrivateLessonStatus,
 } from "@/domain/private-lesson";
@@ -96,6 +98,7 @@ import {
   LessonToolbar,
   LessonViewTabs,
 } from "@/features/lessons/lesson-toolbar";
+import { PrivateAbsenceDialog } from "@/features/lessons/private-absence-dialog";
 import { PrivateDayAttendanceDialog } from "@/features/lessons/private-day-attendance-dialog";
 import { PrivateLessonTableView } from "@/features/lessons/private-lesson-table-view";
 import { ScheduleDialog } from "@/features/lessons/private-schedule-dialog";
@@ -113,6 +116,8 @@ import {
   compareAcademyAttendanceRows,
   comparePrivateLessonsByTime,
   toRegisteredPrivateLesson,
+  describePrivateAttendanceMark,
+  toPrivateAbsenceReason,
   toCalendarAriaLabel,
   getTodayDate,
   toSeoulDate,
@@ -150,6 +155,8 @@ type LessonManagementWorkspaceProps = {
   onMarkPrivateLessonAttendance?: (
     lessonId: string,
     status: "present" | "absent",
+    /** 결석 사유(선택). 이미 결석인 레슨의 사유 수정도 같은 호출로 전달한다. */
+    reason?: string,
   ) => void;
   /** 등원 확인을 취소해 예정 상태로 되돌리고 회차권 1회를 복구한다. */
   onCancelPrivateLessonAttendance?: (lessonId: string) => void;
@@ -292,6 +299,7 @@ export function LessonManagementWorkspace({
     [calendarMemos],
   );
   const [absentOpen, setAbsentOpen] = useState(false);
+  const [privateAbsentOpen, setPrivateAbsentOpen] = useState(false);
   const [academyEventOpen, setAcademyEventOpen] = useState(false);
   const [academyDayOpen, setAcademyDayOpen] = useState(false);
   const [privateDayOpen, setPrivateDayOpen] = useState(false);
@@ -364,7 +372,14 @@ export function LessonManagementWorkspace({
   );
   const selectedAcademyMemoTargets = toAcademyMemoTargetOptions(selectedAcademyEvents);
   const selectedPrivateMemoTargets = toPrivateMemoTargetOptions(selectedPrivateLessons);
-  const unresolvedAbsences = findUnresolvedAbsences(selectedAcademyEvents);
+  const monthlyAcademyAbsences = useMemo(
+    () => buildMonthlyAcademyAbsences(academyTableRows, selectedMonth),
+    [academyTableRows, selectedMonth],
+  );
+  const monthlyPrivateAbsences = useMemo(
+    () => buildMonthlyPrivateAbsences(privateLessons, selectedMonth),
+    [privateLessons, selectedMonth],
+  );
   const weekdaySummary = useMemo(
     () => buildWeekdayAttendanceSummary(academyTableRows, selectedMonth),
     [academyTableRows, selectedMonth],
@@ -394,16 +409,7 @@ export function LessonManagementWorkspace({
       return markPrivateLessonAttendance(supabaseClientState.client, input);
     },
     onSuccess: (_data, input) => {
-      setPrivateLessonsOverride((current) =>
-        (current ?? privateLessons).map((candidate) =>
-          candidate.id === input.lessonEventId
-            ? {
-                ...candidate,
-                status: input.status,
-              }
-            : candidate,
-        ),
-      );
+      setPrivateLessonStatus(input.lessonEventId, input.status, input.reason);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
@@ -418,10 +424,16 @@ export function LessonManagementWorkspace({
     },
     onSettled: (_data, _error, input) => finishPrivateAttendanceRequest(input.lessonEventId),
   });
-  const setPrivateLessonStatus = (lessonId: string, status: PrivateLessonStatus) => {
+  const setPrivateLessonStatus = (
+    lessonId: string,
+    status: PrivateLessonStatus,
+    reason?: string,
+  ) => {
     setPrivateLessonsOverride((current) =>
       (current ?? privateLessons).map((candidate) =>
-        candidate.id === lessonId ? { ...candidate, status } : candidate,
+        candidate.id === lessonId
+          ? { ...candidate, status, absenceReason: toPrivateAbsenceReason(status, reason) }
+          : candidate,
       ),
     );
   };
@@ -663,9 +675,9 @@ export function LessonManagementWorkspace({
     [academyTableRows, nextMonthAttendeeCounts.data, resolutionDraft],
   );
 
-  const selectAcademyDate = (date: string) =>
-    updateSelectedDate(date, {
-      selectedMonth,
+  const changeSelectedMonth = (month: string) =>
+    updateSelectedMonth(month, {
+      selectedDate,
       setSelectedDate,
       resetOverrides: resetWorkspaceOverrides,
     });
@@ -722,11 +734,17 @@ export function LessonManagementWorkspace({
     }
   };
 
-  const markPrivateLesson = (lesson: PrivateLesson, status: "present" | "absent") => {
+  /** 저장에 성공했는지를 돌려준다. 실패하면 false라 호출한 쪽이 입력을 그대로 둘 수 있다(오류 토스트는 mutation이 띄운다). */
+  const markPrivateLesson = async (
+    lesson: PrivateLesson,
+    status: "present" | "absent",
+    reason?: string,
+  ): Promise<boolean> => {
     if (!onMarkPrivateLessonAttendance && supabaseClientState?.client) {
-      if (!beginPrivateAttendanceRequest(lesson.id)) return;
-      savePrivateAttendanceMutation.mutate(
-        {
+      if (!beginPrivateAttendanceRequest(lesson.id)) return false;
+
+      try {
+        await savePrivateAttendanceMutation.mutateAsync({
           academyId,
           lessonEventId: lesson.id,
           studentId: lesson.studentId,
@@ -734,18 +752,20 @@ export function LessonManagementWorkspace({
           instrumentName: lesson.instrumentName,
           status,
           markedAt: new Date().toISOString(),
-        },
-        {
-          onSuccess: () =>
-            toast.success(describePrivateAttendanceChange(lesson.status, status)),
-        },
-      );
-      return;
+          reason,
+        });
+      } catch {
+        return false;
+      }
+
+      toast.success(describePrivateAttendanceMark(lesson.status, status));
+      return true;
     }
 
-    onMarkPrivateLessonAttendance?.(lesson.id, status);
-    setPrivateLessonStatus(lesson.id, status);
-    toast.success(describePrivateAttendanceChange(lesson.status, status));
+    onMarkPrivateLessonAttendance?.(lesson.id, status, reason);
+    setPrivateLessonStatus(lesson.id, status, reason);
+    toast.success(describePrivateAttendanceMark(lesson.status, status));
+    return true;
   };
 
   const cancelPrivateLessonCheckIn = (lesson: PrivateLesson) => {
@@ -841,11 +861,11 @@ export function LessonManagementWorkspace({
         ) : null}
         <Button
           type="button"
-          variant="outline"
-          onClick={() => setPrivateStudentSearchOpen(true)}
+          variant="destructive"
+          onClick={() => setPrivateAbsentOpen(true)}
         >
-          <Search aria-hidden="true" />
-          레슨원생 검색
+          <X aria-hidden="true" />
+          결석인원
         </Button>
         <Button
           type="button"
@@ -861,7 +881,7 @@ export function LessonManagementWorkspace({
       canManage,
       headerPrivateRegisterOpen,
       privateRegistrationProps,
-      setPrivateStudentSearchOpen,
+      setPrivateAbsentOpen,
       setScheduleOpen,
     ],
   );
@@ -943,13 +963,7 @@ export function LessonManagementWorkspace({
               memoCounts={academyMemoCounts}
               variant="academy"
               onMoveEvent={canManage ? dropAcademyEvent : undefined}
-              onChangeMonth={(month) => {
-                updateSelectedMonth(month, {
-                  selectedDate,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-              }}
+              onChangeMonth={changeSelectedMonth}
               onSelectDate={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
@@ -987,6 +1001,16 @@ export function LessonManagementWorkspace({
             labelPrefix="개인레슨"
             value={privateView}
             onValueChange={setPrivateView}
+            actions={
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPrivateStudentSearchOpen(true)}
+              >
+                <Search aria-hidden="true" />
+                레슨원생 검색
+              </Button>
+            }
           />
           {monthlyNotePostit}
           {privateView === "calendar" ? (
@@ -996,13 +1020,7 @@ export function LessonManagementWorkspace({
               events={privateEvents}
               memoCounts={privateMemoCounts}
               variant="private"
-              onChangeMonth={(month) => {
-                updateSelectedMonth(month, {
-                  selectedDate,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-              }}
+              onChangeMonth={changeSelectedMonth}
               onSelectDate={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
@@ -1017,13 +1035,7 @@ export function LessonManagementWorkspace({
               selectedMonth={selectedMonth}
               selectedDate={selectedDate}
               lessons={privateTableRows}
-              onChangeMonth={(month) => {
-                updateSelectedMonth(month, {
-                  selectedDate,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-              }}
+              onChangeMonth={changeSelectedMonth}
               onOpenDay={(date) => {
                 updateSelectedDate(date, {
                   selectedMonth,
@@ -1039,11 +1051,11 @@ export function LessonManagementWorkspace({
 
       <AcademyAbsenceDialog
         open={absentOpen}
-        date={selectedDate}
-        rows={unresolvedAbsences}
+        month={selectedMonth}
+        absences={monthlyAcademyAbsences}
         isBusy={academyActions.isBusy}
         onOpenChange={setAbsentOpen}
-        onChangeDate={selectAcademyDate}
+        onChangeMonth={changeSelectedMonth}
         onConfirmAbsence={(row) =>
           setResolutionDraft({
             row,
@@ -1186,6 +1198,14 @@ export function LessonManagementWorkspace({
         registrationOptions={privateRegistrationOptions}
         selectedDate={selectedDate}
         onOpenChange={setScheduleOpen}
+      />
+
+      <PrivateAbsenceDialog
+        open={privateAbsentOpen}
+        month={selectedMonth}
+        absences={monthlyPrivateAbsences}
+        onOpenChange={setPrivateAbsentOpen}
+        onChangeMonth={changeSelectedMonth}
       />
 
       <PrivateLessonStudentSearchDialog

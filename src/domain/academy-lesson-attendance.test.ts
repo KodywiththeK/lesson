@@ -5,6 +5,7 @@ import {
   checkAcademyLessonEditable,
   checkAcademyLessonMoveTarget,
   findUnresolvedAbsences,
+  formatAbsenceReason,
   formatAcademyLessonOriginLabel,
   markAllAcademyLessonAttendance,
   markStudentAcademyLessonAttendance,
@@ -254,5 +255,19 @@ describe("checkAcademyLessonMoveTarget", () => {
 
     expect(checkAcademyLessonMoveTarget(row, "2026-09-01")).toEqual({ ok: false, reason: message });
     expect(checkAcademyLessonMoveTarget(row, "2027-08-21")).toEqual({ ok: false, reason: message });
+  });
+});
+
+describe("formatAbsenceReason", () => {
+  it("사유가 없거나 기본 문구(결석 확인)면 -로 보여 준다", () => {
+    expect(formatAbsenceReason(undefined)).toBe("-");
+    expect(formatAbsenceReason("")).toBe("-");
+    expect(formatAbsenceReason("   ")).toBe("-");
+    expect(formatAbsenceReason("결석 확인")).toBe("-");
+  });
+
+  it("직접 입력한 사유는 그대로 보여 준다", () => {
+    expect(formatAbsenceReason("감기로 결석")).toBe("감기로 결석");
+    expect(formatAbsenceReason(" 가족 여행 ")).toBe("가족 여행");
   });
 });

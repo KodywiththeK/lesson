@@ -782,6 +782,8 @@ function readAttendanceStatus(row: LessonWorkspaceEventRow): "present" | "absent
 }
 
 function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
+  const status = readAttendanceStatus(row) ?? "scheduled";
+
   return {
     id: row.id,
     academyId: row.academy_id,
@@ -793,7 +795,8 @@ function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
     teacherName: row.teachers?.name?.trim() || "선생님 없음",
     startAt: row.starts_at,
     endAt: row.ends_at,
-    status: readAttendanceStatus(row) ?? "scheduled",
+    status,
+    absenceReason: status === "absent" ? row.attendance_records?.[0]?.absence_reason ?? undefined : undefined,
     origin: normalizeOrigin(row.origin, row.lesson_kind),
     originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),
   };

@@ -28,9 +28,20 @@ export type PrivateLesson = {
   startAt: string;
   endAt: string;
   status: PrivateLessonStatus;
+  /** 결석 사유. 결석이 아니면 없다. 사유를 비우고 저장한 결석은 기본 문구(결석 확인)다. */
+  absenceReason?: string;
   origin?: LessonEventOrigin;
   originLabel?: string;
 };
+
+export const PRIVATE_ABSENCE_REASON_MAX_LENGTH = 100;
+
+/** 결석 사유는 선택이며 100자까지 입력할 수 있다. */
+export function getPrivateAbsenceReasonError(reason: string | undefined) {
+  return (reason?.trim().length ?? 0) > PRIVATE_ABSENCE_REASON_MAX_LENGTH
+    ? `사유는 ${PRIVATE_ABSENCE_REASON_MAX_LENGTH}자 이하로 입력해 주세요.`
+    : null;
+}
 
 export type PrivateLessonRegistrationDraft = {
   academyId: string;

@@ -1,12 +1,14 @@
 import { type Dispatch, type SetStateAction } from "react";
 
 import {
+  DEFAULT_ABSENCE_REASON,
   formatAcademyLessonOriginLabel,
   type DailyAcademyAttendanceRow,
 } from "@/domain/academy-lesson-attendance";
 import type { MakeupLessonTimes } from "@/domain/academy-lesson-absence";
 import { compareKoreanNames } from "@/domain/common-list";
 import {
+  describePrivateAttendanceChange,
   formatKoreanTimeLabel,
   type PrivateLesson,
   type PrivateLessonStudentSearchResult,
@@ -316,6 +318,24 @@ export function getEventTone(
   }
 
   return "bg-primary/10 text-primary";
+}
+
+/**
+ * 출석 처리 결과 문구. 이미 결석인 수업을 다시 결석으로 저장하는 것은 사유 수정이므로
+ * "이미 결석 처리된 수업" 대신 사유를 고쳤다고 알린다.
+ */
+export function describePrivateAttendanceMark(
+  previous: PrivateLesson["status"],
+  next: "present" | "absent",
+) {
+  return previous === "absent" && next === "absent"
+    ? "결석 사유를 수정했습니다."
+    : describePrivateAttendanceChange(previous, next);
+}
+
+/** 화면에 반영할 결석 사유. 결석이면 입력한 사유 또는 기본 문구, 그 밖의 상태는 사유가 없다. */
+export function toPrivateAbsenceReason(status: PrivateLesson["status"], reason?: string) {
+  return status === "absent" ? reason?.trim() || DEFAULT_ABSENCE_REASON : undefined;
 }
 
 export function formatPrivateLessonStatus(status: PrivateLesson["status"]) {

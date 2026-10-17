@@ -93,7 +93,7 @@ describe("개인레슨 출석 확인과 취소 (명세 3.4)", () => {
     await user.click(within(dialog).getByRole("button", { name: "한서아 개인레슨 등원 확인" }));
     await user.click(within(dialog).getByRole("button", { name: "한서아 개인레슨 등원 확인 취소" }));
 
-    expect(onMark).toHaveBeenCalledWith("private-lesson-1", "present");
+    expect(onMark).toHaveBeenCalledWith("private-lesson-1", "present", undefined);
     expect(onCancel).toHaveBeenCalledWith("private-lesson-1");
   });
 });

@@ -9,6 +9,8 @@ import {
   describePrivateAttendanceCancellation,
   describePrivateAttendanceChange,
   filterTeachersForInstrument,
+  getPrivateAbsenceReasonError,
+  PRIVATE_ABSENCE_REASON_MAX_LENGTH,
   findPrivateLessonConflictNotice,
   formatKoreanTimeLabel,
   formatPrivateLessonScheduleCopyText,
@@ -690,5 +692,19 @@ describe("pickDefaultTeacherId", () => {
 
     expect(pickDefaultTeacherId({ instrumentName: "피아노" }, manyPiano)).toBe("");
     expect(pickDefaultTeacherId({ instrumentName: "첼로" }, teachers)).toBe("");
+  });
+});
+
+describe("getPrivateAbsenceReasonError", () => {
+  it("비어 있거나 100자 이하이면 통과한다", () => {
+    expect(getPrivateAbsenceReasonError(undefined)).toBeNull();
+    expect(getPrivateAbsenceReasonError("")).toBeNull();
+    expect(getPrivateAbsenceReasonError("가".repeat(PRIVATE_ABSENCE_REASON_MAX_LENGTH))).toBeNull();
+  });
+
+  it("앞뒤 공백을 뺀 길이가 100자를 넘으면 안내한다", () => {
+    expect(PRIVATE_ABSENCE_REASON_MAX_LENGTH).toBe(100);
+    expect(getPrivateAbsenceReasonError(`  ${"가".repeat(100)}  `)).toBeNull();
+    expect(getPrivateAbsenceReasonError("가".repeat(101))).toBe("사유는 100자 이하로 입력해 주세요.");
   });
 });

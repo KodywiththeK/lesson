@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { DailyAcademyAttendanceRow } from "@/domain/academy-lesson-attendance";
-import { toMovedAcademyAttendanceRow } from "@/features/lessons/workspace-helpers";
+import {
+  describePrivateAttendanceMark,
+  toMovedAcademyAttendanceRow,
+  toPrivateAbsenceReason,
+} from "@/features/lessons/workspace-helpers";
 
 function buildRow(overrides: Partial<DailyAcademyAttendanceRow> = {}): DailyAcademyAttendanceRow {
   return {
@@ -68,5 +72,36 @@ describe("toMovedAcademyAttendanceRow", () => {
     });
 
     expect(moved.timeUnspecified).toBeUndefined();
+  });
+});
+
+describe("describePrivateAttendanceMark", () => {
+  it("이미 결석인 수업을 다시 결석으로 저장하면 사유만 수정했다고 알린다", () => {
+    expect(describePrivateAttendanceMark("absent", "absent")).toBe("결석 사유를 수정했습니다.");
+  });
+
+  it("그 밖의 변경은 회차권 변화를 알리는 기존 문구를 쓴다", () => {
+    expect(describePrivateAttendanceMark("scheduled", "absent")).toBe(
+      "결석 처리했습니다. 회차권은 차감되지 않습니다.",
+    );
+    expect(describePrivateAttendanceMark("present", "absent")).toBe(
+      "결석으로 바꾸고 회차권 1회를 복구했습니다.",
+    );
+    expect(describePrivateAttendanceMark("scheduled", "present")).toBe(
+      "출석 처리하고 회차권 1회를 차감했습니다.",
+    );
+  });
+});
+
+describe("toPrivateAbsenceReason", () => {
+  it("결석이면 입력한 사유, 비었으면 기본 문구를 쓴다", () => {
+    expect(toPrivateAbsenceReason("absent", " 감기 ")).toBe("감기");
+    expect(toPrivateAbsenceReason("absent", "  ")).toBe("결석 확인");
+    expect(toPrivateAbsenceReason("absent", undefined)).toBe("결석 확인");
+  });
+
+  it("출석이나 예정이면 사유를 남기지 않는다", () => {
+    expect(toPrivateAbsenceReason("present", "감기")).toBeUndefined();
+    expect(toPrivateAbsenceReason("scheduled", undefined)).toBeUndefined();
   });
 });
