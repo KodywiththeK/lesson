@@ -221,6 +221,28 @@ describe("AppShell", () => {
     );
   });
 
+  it("교재 하위 탭은 /books의 하위 주소에서도 각자 현재 탭으로 표시한다(재고 탭만 선택되어 보이지 않는다)", () => {
+    for (const [pathname, current] of [
+      ["/books", "재고"],
+      ["/books/shipments", "출고"],
+      ["/books/paid", "결제 완료"],
+    ] as const) {
+      window.history.pushState(null, "", pathname);
+      const { unmount } = render(
+        <AppShell academyName="더 클래식" permissionContext={{ role: "owner" }} />,
+      );
+
+      const tabs = screen.getByRole("navigation", { name: "교재 하위 메뉴" });
+      const currentTabs = within(tabs)
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page")
+        .map((link) => link.textContent);
+
+      expect(currentTabs).toEqual([current]);
+      unmount();
+    }
+  });
+
   it("header action slot에 등록된 페이지 액션만 보여준다", () => {
     window.history.pushState(null, "", "/passes");
 

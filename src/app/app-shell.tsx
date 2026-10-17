@@ -351,7 +351,7 @@ function isForbiddenRoute(pathname: string, permissionContext: PermissionContext
 
 function findRouteItem(items: NavigationItem[], pathname: string): NavigationItem | undefined {
   for (const item of items) {
-    const child = item.children?.find((candidate) => isActivePath(pathname, candidate.href));
+    const child = findBestMatch(item.children, pathname);
     if (child) {
       return child;
     }
@@ -365,9 +365,7 @@ function findRouteItem(items: NavigationItem[], pathname: string): NavigationIte
 
 function getActiveRoute(items: VisibleNavigationItem[], pathname: string) {
   for (const item of items) {
-    const activeChild = item.children?.find((child) =>
-      isActivePath(pathname, child.href),
-    );
+    const activeChild = findBestMatch(item.children, pathname);
 
     if (activeChild) {
       return {
@@ -388,6 +386,19 @@ function getActiveRoute(items: VisibleNavigationItem[], pathname: string) {
     parent: null,
     item: null,
   };
+}
+
+/**
+ * 주소와 맞는 메뉴가 여럿이면(`/books`와 `/books/shipments`처럼 한쪽이 다른 쪽의 앞부분) 가장 긴 주소를 고른다.
+ * 첫 번째로 맞는 메뉴를 고르면 하위 주소에서도 상위(첫) 탭만 선택되어 보인다.
+ */
+function findBestMatch<TItem extends { href: string }>(
+  items: TItem[] | undefined,
+  pathname: string,
+): TItem | undefined {
+  return items
+    ?.filter((item) => isActivePath(pathname, item.href))
+    .sort((left, right) => right.href.length - left.href.length)[0];
 }
 
 function isActivePath(pathname: string, href: string) {
