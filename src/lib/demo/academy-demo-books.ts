@@ -260,7 +260,7 @@ export function deleteDemoBookRelease(state: DemoAcademyState, input: { releaseI
   };
 }
 
-/** 결제 대기 출고를 결제 완료로 바꾸고 수입 ledger를 만든다(DB `complete_book_release_payment`와 같은 규칙). */
+/** 출고 등록에서 바로 결제 완료를 선택한 경우 수입 원장을 같은 변경 안에서 만든다. */
 export function completeDemoBookRelease(
   state: DemoAcademyState,
   input: { releaseId: string; paidAt: string },

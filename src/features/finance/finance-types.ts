@@ -21,6 +21,7 @@ export type FinanceLedgerListQueryOptionsFactory = (
 export type FinanceManagementData = {
   ledgerEntries: LedgerEntry[];
   enrollments: StudentEnrollment[];
+  studentRegisteredOnById?: Record<string, string>;
   tickets: LessonTicketListItem[];
   ticketRegistrations?: LessonTicketIncomeRegistration[];
   bookSales: BookSale[];
@@ -67,10 +68,6 @@ export type FinanceDataScreenProps = {
     paidAt: string;
   }) => Promise<TuitionRecord>;
   markTuitionUnpaid?: (input: {
-    academyId: string;
-    tuitionId: string;
-  }) => Promise<TuitionRecord>;
-  clearTuitionOverdue?: (input: {
     academyId: string;
     tuitionId: string;
   }) => Promise<TuitionRecord>;

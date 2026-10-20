@@ -5,6 +5,7 @@ import {
   type BookReleaseInput,
   type BookStockRow,
 } from "@/domain/book-stock";
+import { parseWonInput } from "@/domain/money-input";
 
 /** 출고 등록 폼이 화면 밖으로 내보내는 값. 원장만 `paid`와 입금일을 보낼 수 있다. */
 export type BookReleaseRegistration = BookReleaseInput & {
@@ -53,7 +54,7 @@ export function toBookReleaseInput(values: BookShipmentValues): BookReleaseInput
   return {
     studentId: values.studentId,
     bookId: values.bookId,
-    price: Number(values.price),
+    price: parseWonInput(values.price) ?? Number.NaN,
     quantity: Number(values.quantity),
     shippedOn: values.shippedOn,
   };

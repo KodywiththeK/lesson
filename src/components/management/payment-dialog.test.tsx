@@ -143,6 +143,21 @@ describe("PaymentDialog", () => {
     expect(within(dialog).getByText("입금일을 입력해 주세요.")).toBeInTheDocument();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("입금일을 잘못 입력하면 이전 날짜로 확인하지 않는다", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(<PaymentDialog open title="입금 처리" dateLabel="입금일" onConfirm={onConfirm} onOpenChange={vi.fn()} />);
+
+    const dialog = screen.getByRole("dialog");
+    const field = within(dialog).getByLabelText("입금일");
+    await user.type(field, "x");
+    await user.tab();
+
+    expect(field).toHaveValue("2026-10-15x");
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });
 
 describe("FinanceConfirmDialog", () => {

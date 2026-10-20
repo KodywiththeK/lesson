@@ -160,8 +160,8 @@ describe("원생 수정 폼 복수 악기", () => {
     expect(within(dialog).getByLabelText("바이올린 수업 형태")).toHaveValue("private");
     expect(within(dialog).getByLabelText("피아노 월 시작 시간")).toHaveValue("15:00");
     expect(within(dialog).getByLabelText("바이올린 화 시작 시간")).toHaveValue("17:00");
-    expect(within(dialog).getByLabelText("피아노 레슨비")).toHaveValue(150000);
-    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue(200000);
+    expect(within(dialog).getByLabelText("피아노 레슨비")).toHaveValue("150000");
+    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue("200000");
     expect(within(dialog).getByLabelText("피아노 악기")).toHaveAttribute("readonly");
     expect(within(dialog).getByLabelText("바이올린 악기")).toHaveAttribute("readonly");
     // 기본 정보는 악기와 상관없이 한 번만 보여 준다.
@@ -292,7 +292,7 @@ describe("원생 수정 폼 복수 악기", () => {
       expect.objectContaining({ description: expect.stringContaining("저장되지 않았습니다.") }),
     );
     expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
-    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue(210000);
+    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue("210,000");
     expect(within(dialog).getByLabelText("피아노 금 시작 시간")).toHaveValue("16:00");
 
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
@@ -304,19 +304,20 @@ describe("원생 수정 폼 복수 악기", () => {
     );
   });
 
-  it("한 악기의 학원 수업 시간이 비면 어느 악기인지 알리고 수정완료를 막는다", async () => {
+  it("한 악기의 학원 수업 시간은 둘 다 비우거나 함께 입력해야 한다", async () => {
     const { user, dialog } = await openEditForm("한소희");
 
     await user.click(within(dialog).getByLabelText("피아노 목요일"));
 
+    expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
+    await user.type(within(dialog).getByLabelText("피아노 목 시작 시간"), "16:00");
     expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeDisabled();
     expect(
       within(dialog).getByText(
-        "피아노: 학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다.",
+        "피아노: 시작 시간과 종료 시간을 함께 입력해 주세요.",
       ),
     ).toBeVisible();
 
-    await user.type(within(dialog).getByLabelText("피아노 목 시작 시간"), "16:00");
     await user.type(within(dialog).getByLabelText("피아노 목 종료 시간"), "16:50");
 
     expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
@@ -327,10 +328,11 @@ describe("원생 수정 폼 복수 악기", () => {
 
     expect(within(dialog).queryByLabelText("피아노 담당 선생님")).not.toBeInTheDocument();
     await user.click(within(dialog).getByLabelText("목요일"));
-    expect(
-      within(dialog).getByText("학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다."),
-    ).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
     await user.type(within(dialog).getByLabelText("목 시작 시간"), "16:00");
+    expect(
+      within(dialog).getByText("시작 시간과 종료 시간을 함께 입력해 주세요."),
+    ).toBeVisible();
     await user.type(within(dialog).getByLabelText("목 종료 시간"), "16:50");
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 

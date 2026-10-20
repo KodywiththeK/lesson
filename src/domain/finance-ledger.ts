@@ -1,5 +1,6 @@
 import type { LedgerCategory, LedgerEntry } from "./book-sale";
 import { paginateItems, type ListView, compareKoreanNames } from "./common-list";
+import { parseWonInput } from "./money-input";
 
 export type { LedgerCategory };
 
@@ -160,6 +161,7 @@ export function formatLedgerEntrySource(source: LedgerEntry["source"]) {
   const labels: Record<LedgerEntry["source"], string> = {
     tuition: "수강료",
     "book-sale": "교재",
+    "book-order": "교재발주",
     "lesson-ticket": "회차권",
     payroll: "급여",
     manual: "수동",
@@ -181,6 +183,7 @@ export function toDefaultLedgerCategory(
   const categoryBySource: Record<LedgerEntry["source"], LedgerCategory> = {
     tuition: "tuition",
     "book-sale": "book-sale",
+    "book-order": "book-order",
     "lesson-ticket": "lesson-ticket",
     payroll: "payroll",
     manual: "other",
@@ -490,9 +493,9 @@ function getLedgerAmountBlockReason(amountText: string) {
     return "금액을 입력해 주세요.";
   }
 
-  const amount = Number(amountText);
+  const amount = parseWonInput(amountText);
 
-  if (!Number.isInteger(amount) || amount < 1) {
+  if (amount === null || amount < 1) {
     return "금액은 1원 이상의 정수로 입력해 주세요.";
   }
 

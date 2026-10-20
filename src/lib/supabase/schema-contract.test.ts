@@ -38,6 +38,13 @@ const domainTables = [
   "audit_events",
 ];
 
+describe("원생 학년 기준 연도", () => {
+  it("저장된 학년의 기준 연도를 보존하고 학년이 바뀔 때만 갱신한다", () => {
+    expect(migrationSql).toContain("add column if not exists grade_as_of_year integer");
+    expect(migrationSql).toContain("before insert or update of grade on public.students");
+  });
+});
+
 describe("교재 출고 원장 연동", () => {
   it("단일 트랜잭션에서 출고와 결제 수입을 기록한다", () => {
     expect(migrationSql).toContain("create function public.register_book_release");
@@ -388,6 +395,17 @@ describe("Supabase schema contract", () => {
     expect(migrationSql).toContain(
       "grant execute on function public.register_student_with_enrollments",
     );
+  });
+
+  it("두 번째 연락처는 등록·수정 RPC 안에서 함께 저장하고 비우면 삭제한다", () => {
+    expect(migrationSql).toContain("create function public.register_student_with_contacts");
+    expect(migrationSql).toContain("create function public.update_student_with_contacts");
+    expect(migrationSql).toContain("public.register_student_with_enrollments(");
+    expect(migrationSql).toContain("public.update_student_with_enrollments(");
+    expect(migrationSql).toContain("delete from public.student_contacts");
+    expect(migrationSql).toContain("revoke delete on public.student_contacts from authenticated");
+    expect(migrationSql).toMatch(/create function public\.update_student_with_contacts\([\s\S]*?security definer/);
+    expect(migrationSql).toContain("private.has_academy_role(");
   });
 
   it("휴원/퇴원/삭제 정책은 RPC로 제한한다", () => {

@@ -598,7 +598,7 @@ describe("재무 목록 반응형 표", () => {
 
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
     const row = await within(table).findByRole("row", { name: /김민지/ });
-    expectRowLabels(row, ["이름", "레슨종류", "악기", "진도", "레슨비", "할인", "최종금액", "입금 상태"]);
+    expectRowLabels(row, ["이름", "최초 등록일", "레슨종류", "악기", "진도", "레슨비", "할인", "최종금액", "입금 상태"]);
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("학원 레슨수입 간략 목록")).not.toBeInTheDocument();
     expect(within(table).getByRole("button", { name: "김민지 피아노 입금 처리" })).toBeInTheDocument();

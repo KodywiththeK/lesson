@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_MONTHLY_MEMO_PANEL_STATE,
   formatAbsenceResolutionMemoLine,
   appendMonthlyMemoLine,
-  getInitialMonthlyMemoPanelState,
-  moveMonthlyMemoPanel,
-  resizeMonthlyMemoPanel,
   markMonthlyMemoRead,
   saveMonthlyMemo,
 } from "./monthly-memo";
@@ -183,54 +179,6 @@ describe("markMonthlyMemoRead", () => {
     );
 
     expect(memos[0]).toMatchObject({ unread: false });
-  });
-});
-
-describe("getInitialMonthlyMemoPanelState", () => {
-  it("새로고침 후 월별 메모 패널 위치와 크기는 기본값으로 초기화한다", () => {
-    const previousState = {
-      x: 320,
-      y: 180,
-      width: 520,
-      height: 420,
-    };
-
-    expect(getInitialMonthlyMemoPanelState(previousState)).toEqual(
-      DEFAULT_MONTHLY_MEMO_PANEL_STATE,
-    );
-  });
-});
-
-describe("메모지 이동과 크기 조절", () => {
-  const panel = { x: 100, y: 100, width: 360, height: 300 };
-
-  it("이동은 화면 왼쪽과 위쪽 밖으로 나가지 않는다", () => {
-    expect(moveMonthlyMemoPanel(panel, { dx: 40, dy: -30 })).toEqual({
-      ...panel,
-      x: 140,
-      y: 70,
-    });
-    expect(moveMonthlyMemoPanel(panel, { dx: -500, dy: -500 })).toEqual({
-      ...panel,
-      x: 0,
-      y: 0,
-    });
-  });
-
-  it("크기 조절은 최소와 최대 크기 안으로 보정한다", () => {
-    expect(resizeMonthlyMemoPanel(panel, { dx: 40, dy: 20 })).toEqual({
-      ...panel,
-      width: 400,
-      height: 320,
-    });
-    expect(resizeMonthlyMemoPanel(panel, { dx: -1000, dy: -1000 })).toMatchObject({
-      width: 240,
-      height: 160,
-    });
-    expect(resizeMonthlyMemoPanel(panel, { dx: 1000, dy: 1000 })).toMatchObject({
-      width: 640,
-      height: 640,
-    });
   });
 });
 

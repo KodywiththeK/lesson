@@ -96,15 +96,15 @@ describe("BookShipmentsPage", () => {
     expect(await screen.findByRole("option", { name: "바이엘 상 (남은 재고 10권)" })).toBeInTheDocument();
   });
 
-  it("원장은 결제 완료 처리로 출고목록에서 건을 넘길 수 있다", async () => {
+  it("기존 출고에는 나중 결제 버튼이 없고 등록할 때만 결제 완료를 선택한다", async () => {
     const user = userEvent.setup();
     renderShipmentsPage();
 
-    await user.click(await screen.findByRole("button", { name: "김민지 바이엘 상 결제 완료 처리" }));
-    const dialog = await screen.findByRole("dialog", { name: "결제 완료 처리" });
-    expect(within(dialog).getByLabelText("입금일")).toHaveValue("2026-08-20");
-    await user.click(within(dialog).getByRole("button", { name: "결제 완료 처리" }));
-
-    expect(await screen.findByText("대기 중인 출고 내역이 없습니다.")).toBeInTheDocument();
+    await screen.findByRole("row", { name: /김민지/ });
+    expect(screen.queryByRole("button", { name: /결제 완료 처리/ })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("이름(원생)"), "student-2");
+    await user.selectOptions(screen.getByLabelText("도서명"), "book-2");
+    await user.selectOptions(screen.getByLabelText("결제 상태"), "paid");
+    expect(screen.getByLabelText("입금일")).toHaveValue("2026-08-20");
   });
 });

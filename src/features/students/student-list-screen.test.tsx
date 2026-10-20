@@ -318,7 +318,7 @@ describe("StudentListScreen", () => {
     });
   });
 
-  it("학원레슨은 선택한 모든 요일의 수업 시간을 채워야 등록할 수 있다", async () => {
+  it("학원레슨은 시간을 비워 등록할 수 있지만 시작·종료 중 하나만 입력하면 막는다", async () => {
     const user = userEvent.setup();
     renderStudentListScreen(
       (options) => ({
@@ -334,9 +334,10 @@ describe("StudentListScreen", () => {
     await user.type(within(dialog).getByLabelText("연락처"), "010-7777-8888");
     await user.click(within(dialog).getByLabelText("피아노 월요일"));
     await user.type(within(dialog).getByLabelText("피아노 레슨비"), "135000");
-    expect(within(dialog).getByRole("button", { name: "등록" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "등록" })).toBeEnabled();
 
     await user.type(within(dialog).getByLabelText("피아노 월 시작 시간"), "14:00");
+    expect(within(dialog).getByRole("button", { name: "등록" })).toBeDisabled();
     await user.type(within(dialog).getByLabelText("피아노 월 종료 시간"), "14:50");
     expect(within(dialog).getByRole("button", { name: "등록" })).toBeEnabled();
   });
@@ -542,7 +543,7 @@ describe("StudentListScreen", () => {
 
     await waitFor(() => expect(rpc).toHaveBeenCalledTimes(1));
     expect(rpc).toHaveBeenCalledWith(
-      "update_student_with_enrollments",
+      "update_student_with_contacts",
       expect.objectContaining({
         p_academy_id: "academy-1",
         p_student_id: "student-1",
@@ -685,14 +686,16 @@ describe("StudentListScreen", () => {
     expect(within(dialog).getByLabelText("월 종료 시간")).toHaveValue("15:50");
   });
 
-  it("학원 수업에서 시간이 빠진 요일이 있으면 수정완료를 막고 이유를 알려 준다", async () => {
+  it("학원 수업에서 시작 시간만 입력하면 수정완료를 막고 이유를 알려 준다", async () => {
     const { user, dialog } = await openEditForm("김민지");
 
     await user.click(within(dialog).getByLabelText("목요일"));
+    expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeEnabled();
+    await user.type(within(dialog).getByLabelText("목 시작 시간"), "16:00");
 
     expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeDisabled();
     expect(
-      within(dialog).getByText("학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다."),
+      within(dialog).getByText("시작 시간과 종료 시간을 함께 입력해 주세요."),
     ).toBeInTheDocument();
   });
 
@@ -1025,6 +1028,8 @@ describe("StudentListScreen", () => {
               occupation: "학생",
               contactRelationship: "부",
               contactPhone: "010-5555-6666",
+              secondaryContactRelationship: "",
+              secondaryContactPhone: "",
             },
           }),
         );
@@ -1087,14 +1092,14 @@ describe("StudentListScreen", () => {
     it("저장된 레슨비를 그대로 보여 주고 진도를 가격표 목록에서 바꾸면 다시 계산한다", async () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지");
 
-      expect(within(dialog).getByLabelText("레슨비")).toHaveValue(150000);
+      expect(within(dialog).getByLabelText("레슨비")).toHaveValue("150000");
       expect(within(dialog).getByLabelText("진도")).toHaveValue("체르니 100");
       expect(
         within(dialog).getByText("가격표에 없는 진도라 레슨비를 직접 입력해 주세요."),
       ).toBeVisible();
 
       await user.selectOptions(within(dialog).getByLabelText("진도"), "체르니30");
-      expect(within(dialog).getByLabelText("레슨비")).toHaveValue(160000);
+      expect(within(dialog).getByLabelText("레슨비")).toHaveValue("160000");
 
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
       await waitFor(() => {
@@ -1109,7 +1114,7 @@ describe("StudentListScreen", () => {
     it("이전에 종류 없이 저장된 할인액은 기존 할인으로 남기고 최종 수강료에 그대로 반영한다", async () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지");
 
-      expect(within(dialog).getByLabelText("기존 할인액")).toHaveValue(10000);
+      expect(within(dialog).getByLabelText("기존 할인액")).toHaveValue("10000");
       expect(within(dialog).getByLabelText("최종 수강료")).toHaveValue(140000);
 
       await user.click(within(dialog).getByRole("checkbox", { name: "두 자녀 할인" }));

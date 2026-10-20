@@ -43,6 +43,7 @@ describe("createMonthlyTuitionSnapshot", () => {
         month: "2026-08",
         studentId: "student-1",
         studentName: "김민지",
+        registeredOn: "2026-08-06",
         enrollmentId: "student-1:piano",
         instrumentId: "piano",
         instrumentName: "피아노",

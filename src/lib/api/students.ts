@@ -68,6 +68,7 @@ export type StudentInstrumentWeeklyScheduleSupabaseRow = {
 
 export type StudentContactSupabaseRow = {
   id?: string | null;
+  created_at?: string | null;
   relationship: string | null;
   phone: string | null;
   phone_last4?: string | null;
@@ -87,6 +88,7 @@ export type StudentSupabaseRow = {
   age?: number | null;
   age_as_of_year?: number | null;
   grade?: string | null;
+  grade_as_of_year?: number | null;
   school?: string | null;
   occupation?: string | null;
   attendance_code?: string | null;
@@ -150,6 +152,7 @@ export type RegisterStudentEnrollmentInput = {
     relationship: string;
     phone: string;
   };
+  secondaryContact?: { relationship: string; phone: string };
   instruments: RegisterStudentEnrollmentInstrumentInput[];
 };
 
@@ -175,7 +178,7 @@ export type RegisterStudentWeeklyScheduleInput = {
 
 export type StudentRegistrationSupabaseClient = {
   rpc(
-    functionName: "register_student_with_enrollments",
+    functionName: "register_student_with_contacts",
     payload: RegisterStudentEnrollmentRpcPayload,
   ): PromiseLike<SupabaseQueryResult<string>>;
 };
@@ -190,6 +193,7 @@ type RegisterStudentEnrollmentRpcPayload = {
   p_occupation: string | null;
   p_contact_relationship: string;
   p_contact_phone: string;
+  p_secondary_contact: { relationship: string; phone: string } | null;
   p_enrollments: Array<{
     instrument_id: string;
     instrument_name: string;
@@ -213,7 +217,7 @@ type RegisterStudentEnrollmentRpcPayload = {
 
 export type StudentUpdateSupabaseClient = {
   rpc(
-    functionName: "update_student_with_enrollments",
+    functionName: "update_student_with_contacts",
     payload: UpdateStudentEnrollmentsRpcPayload,
   ): PromiseLike<SupabaseQueryResult<UpdateStudentEnrollmentsRpcResult>>;
   rpc(
@@ -263,6 +267,8 @@ type UpdateStudentEnrollmentsRpcPayload = {
     occupation: string | null;
     contact_relationship: string;
     contact_phone: string;
+    secondary_contact_relationship?: string;
+    secondary_contact_phone?: string;
   } | null;
   p_instruments: EnrollmentRpcChange[];
 };
@@ -273,7 +279,7 @@ type UpdateStudentEnrollmentsRpcResult = {
 };
 
 const STUDENT_LIST_SELECT =
-  "id, academy_id, name, age, age_as_of_year, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+  "id, academy_id, name, age, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
 const STATUS_TRANSITION_SELECT =
   "entity_type, entity_id, to_status, reason, changed_at";
 
@@ -416,7 +422,7 @@ export async function updateStudentEnrollments(
     throw new Error(validationError);
   }
 
-  const { data, error } = await supabase.rpc("update_student_with_enrollments", {
+  const { data, error } = await supabase.rpc("update_student_with_contacts", {
     p_academy_id: input.academyId,
     p_student_id: input.studentId,
     p_name: input.name.trim(),
@@ -446,6 +452,12 @@ function toBasicInfoPayload(basicInfo: StudentBasicInfoInput) {
     occupation: normalizeOptionalText(basicInfo.occupation),
     contact_relationship: basicInfo.contactRelationship.trim() || "본인",
     contact_phone: basicInfo.contactPhone.trim(),
+    ...(basicInfo.secondaryContactRelationship !== undefined || basicInfo.secondaryContactPhone !== undefined
+      ? {
+          secondary_contact_relationship: basicInfo.secondaryContactRelationship?.trim() ?? "",
+          secondary_contact_phone: basicInfo.secondaryContactPhone?.trim() ?? "",
+        }
+      : {}),
   };
 }
 
@@ -563,7 +575,7 @@ export async function registerStudentEnrollment(
   }
 
   const { data: studentId, error } = await supabase.rpc(
-    "register_student_with_enrollments",
+    "register_student_with_contacts",
     {
       p_academy_id: input.academyId,
       p_name: trimmedName,
@@ -574,6 +586,7 @@ export async function registerStudentEnrollment(
       p_occupation: normalizeOptionalText(input.occupation),
       p_contact_relationship: input.contact.relationship.trim() || "본인",
       p_contact_phone: input.contact.phone.trim(),
+      p_secondary_contact: input.secondaryContact ?? null,
       p_enrollments: input.instruments.map((instrument) => ({
         instrument_id: instrument.instrumentId,
         instrument_name: instrument.instrumentName,
@@ -645,6 +658,7 @@ export async function registerStudentEnrollment(
     age: input.age,
     ageAsOfYear: input.age === undefined ? undefined : getCurrentFinanceYear(),
     grade: input.grade,
+    gradeAsOfYear: input.grade ? getCurrentFinanceYear() : undefined,
     school: input.school,
     occupation: input.occupation,
     registeredOn: input.registeredAt,
@@ -729,6 +743,7 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     age: row.age ?? undefined,
     ageAsOfYear: row.age_as_of_year ?? undefined,
     grade: row.grade ?? undefined,
+    gradeAsOfYear: row.grade_as_of_year ?? undefined,
     school: row.school ?? undefined,
     occupation: row.occupation ?? undefined,
     attendanceCode: row.attendance_code ?? undefined,
@@ -738,7 +753,12 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     withdrawnAt: row.withdrawn_at ?? undefined,
     retentionUntil: row.retention_until ?? undefined,
     archivedAt: row.archived_at ?? undefined,
-    contacts: (row.student_contacts ?? []).map((contact) => ({
+    contacts: [...(row.student_contacts ?? [])]
+      .sort((left, right) =>
+        (left.created_at ?? "").localeCompare(right.created_at ?? "") ||
+        (left.id ?? "").localeCompare(right.id ?? ""),
+      )
+      .map((contact) => ({
       contactId: contact.id ?? "",
       relationship: contact.relationship ?? "",
       phone: contact.phone ?? "",

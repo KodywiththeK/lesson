@@ -53,7 +53,7 @@ export type LedgerEntry = {
   ledgerId: string;
   occurredOn: string;
   type: "income" | "expense";
-  source: "book-sale" | "tuition" | "payroll" | "manual" | "lesson-ticket";
+  source: "book-sale" | "book-order" | "tuition" | "payroll" | "manual" | "lesson-ticket";
   category?: LedgerCategory;
   amount: number;
   description: string;

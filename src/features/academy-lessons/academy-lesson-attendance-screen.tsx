@@ -273,7 +273,7 @@ function DailyAttendanceDialogBody({
           {sheet.rows.map((row) => (
             <TableRow key={row.lessonEventId}>
               <TableCell label="시간">
-                {row.startTime}-{row.endTime}
+                {row.timeUnspecified ? "시간 미정" : `${row.startTime}-${row.endTime}`}
               </TableCell>
               <TableCell label="원생" className="font-medium">{row.studentName}</TableCell>
               <TableCell label="악기">{row.instrumentName}</TableCell>

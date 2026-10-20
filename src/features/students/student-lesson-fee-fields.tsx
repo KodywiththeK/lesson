@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from "react";
+
 import { MonthField } from "@/components/operations/date-time-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { parseWonInput } from "@/domain/money-input";
 import {
   describeManualLessonFee,
   getLessonFeeSubmission,
@@ -51,6 +54,26 @@ export function StudentLessonFeeFields({
   const isFeeReadOnly =
     priceResult.status === "priced" ||
     (priceResult.status === "manual" && priceResult.reason === "no-weekdays");
+  const [feeText, setFeeText] = useState(String(draft.lessonFee));
+  const lastInputFee = useRef(draft.lessonFee);
+  const [legacyDiscountText, setLegacyDiscountText] = useState(String(draft.otherDiscount.amount));
+  const [isEditingLegacyDiscount, setIsEditingLegacyDiscount] = useState(false);
+  const lastInputDiscount = useRef(draft.otherDiscount.amount);
+  const showLegacyDiscount = draft.otherDiscount.amount > 0 || isEditingLegacyDiscount;
+
+  useEffect(() => {
+    if (draft.lessonFee !== lastInputFee.current) {
+      lastInputFee.current = draft.lessonFee;
+      setFeeText(String(draft.lessonFee));
+    }
+  }, [draft.lessonFee]);
+
+  useEffect(() => {
+    if (draft.otherDiscount.amount !== lastInputDiscount.current) {
+      lastInputDiscount.current = draft.otherDiscount.amount;
+      setLegacyDiscountText(String(draft.otherDiscount.amount));
+    }
+  }, [draft.otherDiscount.amount]);
 
   function updatePricingInput(patch: Partial<LessonFeeDraft>) {
     onChange(repriceLessonFee({ ...draft, ...patch }, context));
@@ -122,12 +145,24 @@ export function StudentLessonFeeFields({
           <Input
             aria-label={withPrefix("레슨비")}
             aria-describedby={feeNoticeId}
-            min={0}
-            step={1}
-            type="number"
+            type="text"
+            inputMode="numeric"
+            pattern="(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)"
+            required={!isFeeReadOnly}
+            aria-invalid={!isFeeReadOnly && (parseWonInput(feeText) ?? 0) <= 0}
             readOnly={isFeeReadOnly}
-            value={draft.lessonFee}
-            onChange={(event) => onChange(setLessonFeeManually(draft, Number(event.target.value)))}
+            value={feeText}
+            onChange={(event) => {
+              const text = event.target.value;
+              const amount = parseWonInput(text) ?? 0;
+              lastInputFee.current = amount;
+              setFeeText(text);
+              onChange(setLessonFeeManually(draft, amount));
+            }}
+            onBlur={() => {
+              const amount = parseWonInput(feeText);
+              if (amount !== null) setFeeText(amount.toLocaleString("ko-KR"));
+            }}
           />
         </Label>
         <Label className="grid gap-1">
@@ -180,21 +215,27 @@ export function StudentLessonFeeFields({
         </Label>
       ) : null}
 
-      {draft.otherDiscount.amount > 0 ? (
+      {showLegacyDiscount ? (
         <Label className="grid max-w-xs gap-1">
           <span>{draft.otherDiscount.label} (매달, 이전에 입력한 금액)</span>
           <Input
             aria-label={withPrefix("기존 할인액")}
-            min={0}
-            step={1}
-            type="number"
-            value={draft.otherDiscount.amount}
-            onChange={(event) =>
+            type="text"
+            inputMode="numeric"
+            pattern="(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)"
+            aria-invalid={legacyDiscountText !== "" && parseWonInput(legacyDiscountText) === null}
+            value={legacyDiscountText}
+            onChange={(event) => {
+              const text = event.target.value;
+              const amount = parseWonInput(text) ?? 0;
+              lastInputDiscount.current = amount;
+              setIsEditingLegacyDiscount(true);
+              setLegacyDiscountText(text);
               onChange({
                 ...draft,
-                otherDiscount: { ...draft.otherDiscount, amount: Number(event.target.value) },
-              })
-            }
+                otherDiscount: { ...draft.otherDiscount, amount },
+              });
+            }}
           />
         </Label>
       ) : null}

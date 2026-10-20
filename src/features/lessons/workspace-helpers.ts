@@ -168,7 +168,7 @@ export function toAcademyCalendarEvent(row: DailyAcademyAttendanceRow): Calendar
     endTime: row.endTime,
     title: row.studentName,
     subtitle: row.instrumentName,
-    status: row.status,
+    status: row.absenceResolution === "pass" ? "passed" : row.status,
     origin: row.origin,
     originLabel: row.originLabel,
     timeUnspecified: row.timeUnspecified,
@@ -192,10 +192,7 @@ export function toPrivateCalendarEvent(
     endTime: toSeoulHourMinute(lesson.endAt),
     title: lesson.studentName,
     subtitle: lesson.teacherName,
-    status:
-      lesson.status === "present" || lesson.status === "absent"
-        ? lesson.status
-        : "scheduled",
+    status: lesson.status === "makeup" ? "scheduled" : lesson.status,
     origin: lesson.origin,
     originLabel: lesson.originLabel,
   };
@@ -282,11 +279,11 @@ function toDateInputValue(date: Date) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
-/** `15:00-15:50`. 보강 시간을 입력하지 않은 일정은 시간을 보여 주지 않는다. */
+/** 수업 시간이 정해지지 않은 일정은 실제 시각처럼 보이지 않게 표시한다. */
 export function formatLessonTimeRange(
   row: Pick<DailyAcademyAttendanceRow, "startTime" | "endTime" | "timeUnspecified">,
 ) {
-  return row.timeUnspecified ? "-" : `${row.startTime}-${row.endTime}`;
+  return row.timeUnspecified ? "시간 미정" : `${row.startTime}-${row.endTime}`;
 }
 
 export function getTodayDate() {
@@ -313,11 +310,32 @@ export function getEventTone(
     return "bg-destructive/10 text-destructive";
   }
 
+  if (status === "passed" || status === "cancelled") {
+    return "bg-muted text-muted-foreground";
+  }
+
   if (variant === "private") {
     return "bg-secondary text-secondary-foreground";
   }
 
   return "bg-primary/10 text-primary";
+}
+
+export function isHiddenCalendarRecord(event: CalendarEvent) {
+  return event.status === "absent" || event.status === "passed" || event.status === "cancelled";
+}
+
+const CALENDAR_EVENT_STATUS_LABELS: Record<CalendarEvent["status"], string> = {
+  scheduled: "예정",
+  pending: "출석 대기",
+  present: "출석",
+  absent: "결석",
+  passed: "패스",
+  cancelled: "취소",
+};
+
+export function getCalendarEventStatusLabel(status: CalendarEvent["status"]) {
+  return CALENDAR_EVENT_STATUS_LABELS[status];
 }
 
 /**

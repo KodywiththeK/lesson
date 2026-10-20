@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { DailyAcademyAttendanceRow } from "@/domain/academy-lesson-attendance";
 import {
   describePrivateAttendanceMark,
+  formatLessonTimeRange,
+  toAcademyCalendarEvent,
+  toPrivateCalendarEvent,
   toMovedAcademyAttendanceRow,
   toPrivateAbsenceReason,
 } from "@/features/lessons/workspace-helpers";
@@ -24,6 +27,19 @@ function buildRow(overrides: Partial<DailyAcademyAttendanceRow> = {}): DailyAcad
     ...overrides,
   };
 }
+
+it("시간 미정 수업은 표와 출석 명단에 문구로 표시한다", () => {
+  expect(formatLessonTimeRange(buildRow({ timeUnspecified: true }))).toBe("시간 미정");
+});
+
+it("패스와 취소 상태를 예정 일정으로 바꾸지 않는다", () => {
+  expect(toAcademyCalendarEvent(buildRow({ status: "absent", absenceResolution: "pass" })).status).toBe("passed");
+  expect(toPrivateCalendarEvent({
+    id: "private-1", academyId: "academy-1", studentId: "student-1", studentName: "김민지",
+    instrumentId: "piano", instrumentName: "피아노", teacherId: "teacher-1", teacherName: "이선생",
+    startAt: "2026-10-16T10:00:00+09:00", endAt: "2026-10-16T11:00:00+09:00", status: "cancelled",
+  }).status).toBe("cancelled");
+});
 
 describe("toMovedAcademyAttendanceRow", () => {
   it("정기 일정을 옮기면 이동 일정이 되고 처리 기록은 비운다", () => {

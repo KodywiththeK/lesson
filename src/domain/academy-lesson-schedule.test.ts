@@ -7,6 +7,24 @@ import {
 } from "./academy-lesson-schedule";
 
 describe("generateAcademyLessonEvents", () => {
+  it("시간 미정 수업도 날짜에 표시하고 시간 미정 표식을 남긴다", () => {
+    const events = generateAcademyLessonEvents([{
+      academyId: "academy-1",
+      studentId: "student-1",
+      studentName: "김민지",
+      instrumentId: "piano",
+      instrumentName: "피아노",
+      lessonType: "academy",
+      active: true,
+      weekdays: ["monday"],
+      startTime: "",
+      endTime: "",
+    }], { academyId: "academy-1", month: "2026-08" });
+
+    expect(events).toHaveLength(5);
+    expect(events[0]).toMatchObject({ date: "2026-08-03", timeUnspecified: true });
+  });
+
   it("원생의 학원 수업 요일을 기준으로 해당 월 반복 일정을 만든다", () => {
     const events = generateAcademyLessonEvents(
       [

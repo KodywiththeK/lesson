@@ -213,6 +213,36 @@ describe("applyStudentEnrollmentSave", () => {
     ]);
   });
 
+  it("두 번째 연락처를 모두 비우면 삭제하고, 다시 입력하면 기존 id를 유지한다", () => {
+    const withContacts: StudentListRow = {
+      ...student,
+      contacts: [
+        { contactId: "c-1", relationship: "모", phone: "010-1111-2222" },
+        { contactId: "c-2", relationship: "부", phone: "010-3333-4444" },
+      ],
+    };
+    const basicInfo = {
+      registeredOn: "2026-03-01",
+      contactRelationship: "모",
+      contactPhone: "010-1111-2222",
+      secondaryContactRelationship: "",
+      secondaryContactPhone: "",
+    };
+
+    expect(applyStudentEnrollmentSave(withContacts, { ...buildInput([]), basicInfo }).contacts).toHaveLength(1);
+    const updated = applyStudentEnrollmentSave(withContacts, {
+      ...buildInput([]),
+      basicInfo: {
+        ...basicInfo,
+        secondaryContactRelationship: "조모",
+        secondaryContactPhone: "010-5555-6666",
+      },
+    });
+    expect(updated.contacts?.[1]).toEqual({
+      contactId: "c-2", relationship: "조모", phone: "010-5555-6666", phoneLast4: "6666",
+    });
+  });
+
   it("악기 변경이 없으면 이름만 바꾸고 악기는 그대로 둔다", () => {
     const merged = applyStudentEnrollmentSave(student, { ...buildInput([]), name: "김민지B" });
 

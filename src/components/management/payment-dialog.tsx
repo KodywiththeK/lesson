@@ -101,6 +101,7 @@ export function PaymentDateForm({
   onCancel: () => void;
 }) {
   const [paidAt, setPaidAt] = useState(getFinanceToday);
+  const [isDateDraftValid, setIsDateDraftValid] = useState(true);
   const isMissing = paidAt === "";
   const recordedMonth = paidAt.slice(0, 7);
   const showsOtherMonth = !isMissing && contextMonth !== undefined && recordedMonth !== contextMonth;
@@ -111,7 +112,12 @@ export function PaymentDateForm({
     <>
       <Label className="grid gap-1 text-sm font-medium">
         <span>{dateLabel}</span>
-        <DateField aria-label={dateLabel} value={paidAt} onValueChange={setPaidAt} />
+        <DateField
+          aria-label={dateLabel}
+          value={paidAt}
+          onValueChange={setPaidAt}
+          onValidityChange={setIsDateDraftValid}
+        />
       </Label>
       {dateError ? (
         <p role="alert" className="text-sm text-destructive">
@@ -132,7 +138,7 @@ export function PaymentDateForm({
         <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           취소
         </Button>
-        <Button type="button" disabled={pending || dateError !== null} onClick={() => onConfirm(paidAt)}>
+        <Button type="button" disabled={pending || dateError !== null || !isDateDraftValid} onClick={() => onConfirm(paidAt)}>
           {pending ? "처리 중" : confirmLabel}
         </Button>
       </DialogFooter>

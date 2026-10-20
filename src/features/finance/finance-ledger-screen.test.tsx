@@ -117,10 +117,10 @@ describe("등록 폼", () => {
     expect(within(dialog).getByLabelText("분류")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("설명")).toBeInTheDocument();
     expect(within(dialog).queryByLabelText("출처")).not.toBeInTheDocument();
-    const amount = within(dialog).getByRole("spinbutton", { name: "금액" });
-    expect(amount).toHaveValue(null);
+    const amount = within(dialog).getByRole("textbox", { name: "금액" });
+    expect(amount).toHaveValue("");
     expect(amount).toHaveAttribute("placeholder", "금액(원)");
-    expect(amount).toHaveAttribute("max", "1999999999");
+    expect(amount).toHaveAttribute("inputmode", "numeric");
   });
 
   it("유형에 맞는 분류만 보여 주고 유형을 바꾸면 분류를 기본값으로 되돌린다", async () => {
@@ -149,7 +149,7 @@ describe("등록 폼", () => {
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription("금액을 입력해 주세요.");
 
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "70000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "70000" } });
     expect(submit).toHaveAccessibleDescription("설명을 입력해 주세요.");
 
     await user.type(within(dialog).getByLabelText("설명"), "추가 수강료");
@@ -162,11 +162,26 @@ describe("등록 폼", () => {
     renderLedger();
     const dialog = await openRegisterForm(user);
 
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "2000000000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "2000000000" } });
     await user.type(within(dialog).getByLabelText("설명"), "너무 큰 금액");
 
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     expect(within(dialog).getByText("금액은 20억 원 미만으로 입력해 주세요.")).toBeInTheDocument();
+  });
+
+  it("쉼표가 있는 금액을 그대로 입력해도 정확한 원 단위로 저장한다", async () => {
+    const user = userEvent.setup();
+    const registerManualLedgerEntry = vi.fn().mockResolvedValue(undefined);
+    renderLedger(entries, { registerManualLedgerEntry });
+    const dialog = await openRegisterForm(user);
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "140,000" } });
+    await user.type(within(dialog).getByLabelText("설명"), "수강료");
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(registerManualLedgerEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 140000 }),
+    ));
   });
 
   it("입력한 값을 출처 없이 등록하고 다이얼로그를 닫는다", async () => {
@@ -177,7 +192,7 @@ describe("등록 폼", () => {
 
     await user.selectOptions(within(dialog).getByLabelText("유형"), "expense");
     await user.selectOptions(within(dialog).getByLabelText("분류"), "supplies");
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "45000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "45000" } });
     await user.type(within(dialog).getByLabelText("설명"), "  현악기 줄 교체비  ");
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
@@ -202,7 +217,7 @@ describe("등록 폼", () => {
     renderLedger(entries, { registerManualLedgerEntry });
     const dialog = await openRegisterForm(user);
 
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "1000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "1000" } });
     await user.type(within(dialog).getByLabelText("설명"), "임시 수입");
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
@@ -220,7 +235,7 @@ describe("등록 폼", () => {
     renderLedger();
     const dialog = await openRegisterForm(user);
 
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "1000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "1000" } });
     await user.type(within(dialog).getByLabelText("설명"), "임시 수입");
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
@@ -261,7 +276,7 @@ describe("수정 폼과 목록 버튼", () => {
     const dialog = await screen.findByRole("dialog", { name: "입출금 내역 수정" });
 
     expect(within(dialog).getByLabelText("유형")).toBeEnabled();
-    expect(within(dialog).getByRole("spinbutton", { name: "금액" })).toHaveValue(70000);
+    expect(within(dialog).getByRole("textbox", { name: "금액" })).toHaveValue("70000");
     expect(within(dialog).queryByText(/원본에는 반영되지 않습니다/)).not.toBeInTheDocument();
 
     await user.selectOptions(within(dialog).getByLabelText("분류"), "supplies");
@@ -290,7 +305,7 @@ describe("수정 폼과 목록 버튼", () => {
       ),
     ).toBeInTheDocument();
 
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "금액" }), { target: { value: "850000" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "금액" }), { target: { value: "850000" } });
     await user.click(within(dialog).getByRole("button", { name: "수정 저장" }));
 
     await waitFor(() =>
@@ -468,7 +483,7 @@ describe("CSV 내보내기", () => {
     try {
       renderLedger([entry({ ledgerId: "formula", occurredOn: "2026-08-05", description: "=1+1" })]);
       await screen.findByRole("table", { name: "입출금 내역" });
-      await user.click(screen.getByRole("button", { name: "CSV 내보내기" }));
+      await user.click(screen.getByRole("button", { name: "엑셀 내보내기" }));
 
       const bytes = await new Promise<Uint8Array>((resolve) => {
         const reader = new FileReader();

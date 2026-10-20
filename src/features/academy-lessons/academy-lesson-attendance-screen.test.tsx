@@ -74,6 +74,23 @@ const dailySheet = {
 };
 
 describe("AcademyLessonAttendanceScreen", () => {
+  it("시간 미정 수업은 임시 저장 시각 대신 시간 미정으로 표시한다", async () => {
+    const user = userEvent.setup();
+    renderAcademyLessonAttendanceScreen((options) => ({
+      queryKey: ["daily-attendance", options.academyId, options.date],
+      queryFn: async () => ({
+        ...dailySheet,
+        rows: [{ ...dailySheet.rows[0], timeUnspecified: true, startTime: "00:00", endTime: "00:01" }],
+      }),
+    }));
+    await user.clear(screen.getByLabelText("출석 날짜"));
+    await user.type(screen.getByLabelText("출석 날짜"), "2026-08-21");
+    await user.click(screen.getByRole("button", { name: "출석 확인" }));
+    const dialog = await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" });
+    expect(within(dialog).getByText("시간 미정")).toBeInTheDocument();
+    expect(within(dialog).queryByText("00:00-00:01")).not.toBeInTheDocument();
+  });
+
   it("날짜 선택 후 출석 확인 모달에서 예상 출석 원생을 보여준다", async () => {
     const user = userEvent.setup();
 

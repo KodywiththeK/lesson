@@ -1843,6 +1843,7 @@ export type Database = {
       ledger_entry_source:
         | "tuition"
         | "book-sale"
+        | "book-order"
         | "payroll"
         | "manual"
         | "lesson-ticket"
@@ -1983,6 +1984,7 @@ export const Constants = {
       ledger_entry_source: [
         "tuition",
         "book-sale",
+        "book-order",
         "payroll",
         "manual",
         "lesson-ticket",

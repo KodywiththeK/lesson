@@ -54,6 +54,44 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("교재 내역 화면", () => {
+  it("발주·입고·지급을 같은 월 교재 화면에서 조회하고 원장 불일치를 경고한다", async () => {
+    const financeData: FinanceManagementData = { ledgerEntries: [], enrollments: [], tickets: [], teachers: [], bookSales: [] };
+    render(<QueryClientProvider client={new QueryClient()}>
+      <FinanceBooksScreen academyId="academy-1" financeData={financeData} bookOrdersQueryOptions={{
+        queryKey: ["orders", "academy-1"],
+        queryFn: async () => [{
+          id: "order-1", academyId: "academy-1", vendorId: "vendor-1", vendorName: "음악서점",
+          orderedOn: "2026-08-01", receivedOn: "2026-08-04", paidOn: "2026-08-09",
+          paidLedgerEntryId: "ledger-1", ledgerMismatch: true, status: "received" as const,
+          items: [{ id: "item-1", bookId: "book-1", title: "바이엘 1", quantity: 2, purchasePrice: 5000, salePrice: 12000 }],
+        }],
+      }} />
+    </QueryClientProvider>);
+    expect(await screen.findByText("음악서점")).toBeInTheDocument();
+    expect(screen.getByText("원장 불일치")).toBeInTheDocument();
+    expect(screen.getByText("2026-08-04")).toBeInTheDocument();
+    expect(screen.getByText("2026-08-09")).toBeInTheDocument();
+  });
+  it("같은 날 출고된 두 품목을 한 행으로 묶고 원장 기준 수입·지출·차액을 보여 준다", () => {
+    const financeData: FinanceManagementData = {
+      ledgerEntries: [
+        { academyId: "academy-1", ledgerId: "sale", occurredOn: "2026-08-12", type: "income", source: "book-sale", category: "book-sale", amount: 18000, description: "교재", refId: "sale" },
+        { academyId: "academy-1", ledgerId: "order", occurredOn: "2026-08-14", type: "expense", source: "manual", category: "book-order", amount: 7000, description: "발주", refId: "order" },
+      ],
+      enrollments: [], tickets: [], teachers: [],
+      bookSales: [buildSale({ saleId: "one" }), buildSale({ saleId: "two", bookTitle: "체르니", price: 6000 })],
+    };
+    render(<QueryClientProvider client={new QueryClient()}>
+      <FinanceBooksScreen academyId="academy-1" financeData={financeData} />
+    </QueryClientProvider>);
+    const cashFlow = screen.getByLabelText("교재 원장 수지");
+    expect(within(cashFlow).getByText("18,000원")).toBeInTheDocument();
+    expect(within(cashFlow).getByText("7,000원")).toBeInTheDocument();
+    expect(within(cashFlow).getByText("11,000원")).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "교재내역" })).getAllByRole("row")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /품목/ }));
+    expect(screen.getByText(/체르니 · 1권/)).toBeInTheDocument();
+  });
   it("입금 완료인데 원장 연결이 null인 교재에만 원장 기록 없음 배지를 보여 준다", () => {
     renderBooks([
       buildSale({ saleId: "linked", studentName: "김민지", paidLedgerEntryId: "ledger-1" }),

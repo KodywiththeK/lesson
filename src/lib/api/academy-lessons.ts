@@ -33,6 +33,7 @@ export type AcademyLessonAttendanceSupabaseRow = {
   instrument_name: string;
   starts_at: string;
   ends_at: string;
+  time_unspecified?: boolean | null;
   status: string;
   attendance_records: AcademyLessonAttendanceRecordSupabaseRow[] | null;
 };
@@ -101,7 +102,7 @@ type AcademyLessonAttendanceUpsertRow = {
 };
 
 const ACADEMY_LESSON_ATTENDANCE_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, time_unspecified, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)";
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 
 export async function fetchDailyAcademyLessonAttendance(
@@ -229,6 +230,7 @@ function toDailyAttendanceRow(row: AcademyLessonAttendanceSupabaseRow) {
     date: toSeoulDate(row.starts_at),
     startTime: toSeoulHourMinute(row.starts_at),
     endTime: toSeoulHourMinute(row.ends_at),
+    timeUnspecified: row.time_unspecified === true,
     status,
     absenceReason:
       status === "absent" ? attendance?.absence_reason?.trim() : undefined,

@@ -68,6 +68,23 @@ const events: AcademyLessonEvent[] = [
 ];
 
 describe("buildDailyAcademyAttendance", () => {
+  it("시간 미정 수업도 실제 시각 입력 없이 출석 처리한다", () => {
+    const sheet = buildDailyAcademyAttendance([{
+      ...events[0],
+      startTime: "",
+      endTime: "",
+      timeUnspecified: true,
+    }], { academyId: "academy-1", date: "2026-08-20" });
+    expect(sheet.rows[0].timeUnspecified).toBe(true);
+
+    const checked = markStudentAcademyLessonAttendance(sheet, {
+      lessonEventId: "lesson-2",
+      status: "present",
+      markedAt: "2026-08-20T17:00:00+09:00",
+    });
+    expect(checked.rows[0]).toMatchObject({ status: "present", timeUnspecified: true });
+  });
+
   it("선택한 날짜의 예상 출석 원생을 시간과 이름 순서로 보여준다", () => {
     const sheet = buildDailyAcademyAttendance(events, {
       academyId: "academy-1",

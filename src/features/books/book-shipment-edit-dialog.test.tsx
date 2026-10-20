@@ -56,7 +56,7 @@ describe("BookShipmentEditDialog", () => {
 
     expect(within(dialog).getByLabelText("이름(원생)")).toHaveValue("student-1");
     expect(within(dialog).getByLabelText("도서명")).toHaveValue("book-1");
-    expect(within(dialog).getByLabelText("가격(원)")).toHaveValue(12000);
+    expect(within(dialog).getByLabelText("가격(원)")).toHaveValue("12000");
     expect(within(dialog).getByLabelText("수량")).toHaveValue(2);
     expect(within(dialog).getByLabelText("출고일")).toHaveValue("2026-10-01");
 
@@ -104,7 +104,7 @@ describe("BookShipmentEditDialog", () => {
     const { dialog } = renderDialog();
 
     await user.selectOptions(within(dialog).getByLabelText("도서명"), "book-2");
-    expect(within(dialog).getByLabelText("가격(원)")).toHaveValue(18000);
+    expect(within(dialog).getByLabelText("가격(원)")).toHaveValue("18000");
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
 
     await user.clear(within(dialog).getByLabelText("수량"));

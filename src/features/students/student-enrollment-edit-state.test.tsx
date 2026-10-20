@@ -596,7 +596,7 @@ describe("getBlockedSectionLabels", () => {
         studentInstrumentId: "si-piano",
         draft: {
           ...initial.drafts["si-piano"],
-          schedules: [...initial.drafts["si-piano"].schedules, { weekday: "thursday" }],
+          schedules: [...initial.drafts["si-piano"].schedules, { weekday: "thursday", startTime: "16:00" }],
         },
       },
       { type: "addInstrument", instrument: cello, teachers, startedOn: "2026-10-17" },

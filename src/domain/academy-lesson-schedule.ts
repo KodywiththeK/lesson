@@ -40,6 +40,7 @@ export type AcademyLessonEvent = {
   startTime: string;
   endTime: string;
   generatedFromEnrollment: boolean;
+  timeUnspecified?: boolean;
   status?: "scheduled" | "deleted";
 };
 
@@ -109,6 +110,7 @@ export function generateAcademyLessonEvents(
           startTime: enrollment.startTime,
           endTime: enrollment.endTime,
           generatedFromEnrollment: true,
+          timeUnspecified: !enrollment.startTime && !enrollment.endTime,
         })),
     )
     .sort(compareAcademyLessonEvents);

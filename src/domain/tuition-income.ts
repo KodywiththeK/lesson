@@ -29,6 +29,8 @@ export type TuitionRecord = {
   month: string;
   studentId: string;
   studentName: string;
+  /** 학원 최초 등록일. 비어 있으면 과거 자료에서 확인되지 않은 값이다. */
+  registeredOn?: string;
   enrollmentId: string;
   instrumentId: string;
   instrumentName: string;
@@ -61,6 +63,7 @@ export function createMonthlyTuitionSnapshot(
       month: options.month,
       studentId: source.studentId,
       studentName: source.studentName,
+      registeredOn: source.registeredOn,
       enrollmentId: source.enrollmentId,
       instrumentId: source.instrumentId,
       instrumentName: source.instrumentName,

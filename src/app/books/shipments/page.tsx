@@ -39,7 +39,6 @@ export default function BookShipmentsPage() {
             registerBookRelease={useTestDemo ? demo.registerBookRelease : undefined}
             updateBookRelease={useTestDemo ? demo.updateBookRelease : undefined}
             deleteBookRelease={useTestDemo ? demo.deleteBookRelease : undefined}
-            completeBookPayment={useTestDemo ? demo.completeBookPayment : undefined}
           />
         </AppShell>
       )}

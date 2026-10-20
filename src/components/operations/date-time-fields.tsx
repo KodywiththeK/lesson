@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { format, isValid, parse } from "date-fns";
 import { ko } from "date-fns/locale";
 import { CalendarDays, Clock3 } from "lucide-react";
@@ -17,6 +17,8 @@ type FieldProps = {
   "aria-label": string;
   value: string;
   onValueChange: (value: string) => void;
+  /** 버튼형 제출 화면은 아직 확정되지 않은 입력 초안도 검증할 수 있다. */
+  onValidityChange?: (valid: boolean) => void;
   className?: string;
   disabled?: boolean;
   id?: string;
@@ -38,6 +40,26 @@ const YEAR_RANGE = 20;
 const PICKER_CONTENT_CLASS_NAME = "z-[70] w-auto max-w-[calc(100vw-2rem)] p-0";
 const CALENDAR_START_MONTH = new Date(1900, 0);
 const CALENDAR_END_MONTH = new Date(2100, 11);
+
+function normalizeTimeInput(value: string): string | null {
+  const match = /^(\d{1,2})(?::(\d{0,2}))?$/.exec(value.trim());
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2] || "0");
+  if (hour > 23 || minute > 59) return null;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function normalizeIncompleteTime(kind: FieldKind, value: string): string | null {
+  if (kind === "time") return normalizeTimeInput(value);
+  if (kind !== "dateTime") return null;
+
+  const [date, time, extra] = value.split("T");
+  const normalizedTime = extra === undefined && isValidDate(date) ? normalizeTimeInput(time) : null;
+  return normalizedTime ? `${date}T${normalizedTime}` : null;
+}
 
 function parseDate(value: string): Date | undefined {
   if (!DATE_PATTERN.test(value)) return undefined;
@@ -153,6 +175,7 @@ function PickerField({
   panel,
   value,
   onValueChange,
+  onValidityChange,
   className,
   disabled,
   id,
@@ -163,12 +186,15 @@ function PickerField({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(value);
   const [syncedValue, setSyncedValue] = useState(value);
+  const [showError, setShowError] = useState(false);
+  const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const { icon: Icon, triggerName, placeholder, invalidMessage, isValid: isValidKind } = FIELD_KINDS[kind];
   // max는 월 필드만 반영한다. 날짜·시간 문자열과 비교하면 형식이 달라 잘못 막힌다.
   const monthMax = kind === "month" ? max : undefined;
   const isValidValue = (candidate: string) => isValidKind(candidate) && (!monthMax || candidate <= monthMax);
   const invalid = text !== "" && !isValidValue(text);
+  const isDraftValid = text === "" ? !required : !invalid;
 
   if (value !== syncedValue) {
     setSyncedValue(value);
@@ -179,24 +205,34 @@ function PickerField({
     inputRef.current?.setCustomValidity(invalid ? invalidMessage : "");
   }, [invalid, invalidMessage]);
 
+  useEffect(() => {
+    onValidityChange?.(isDraftValid);
+  }, [isDraftValid, onValidityChange]);
+
   function commit(next: string) {
     setText(next);
+    setShowError(false);
     onValueChange(next);
   }
 
   function handleTextChange(next: string) {
     setText(next);
+    if (showError) setShowError(next === "" ? Boolean(required) : !isValidValue(next));
     // 필수 필드는 비운 값을 올리지 않는다. 화면 state가 빈 값이 되어 조회·계산이 깨지는 것을 막는다.
     const canCommit = next === "" ? !required : isValidValue(next);
     if (canCommit) onValueChange(next);
   }
 
-  /** 완성되지 않은 글자를 남기고 떠나면 화면이 실제 값과 달라지므로 마지막 값으로 되돌린다. */
-  function handleBlur() {
-    const isIncomplete = text === "" ? required : !isValidValue(text);
-    if (isIncomplete) {
-      setText(value);
+  function validateDraft() {
+    const normalized = normalizeIncompleteTime(kind, text);
+    if (normalized && isValidValue(normalized)) {
+      commit(normalized);
+      return true;
     }
+
+    const hasError = text === "" ? Boolean(required) : !isValidValue(text);
+    setShowError(hasError);
+    return !hasError;
   }
 
   return (
@@ -207,6 +243,7 @@ function PickerField({
           id={id}
           aria-label={label}
           aria-invalid={invalid || undefined}
+          aria-describedby={showError ? errorId : undefined}
           type="text"
           inputMode="numeric"
           autoComplete="off"
@@ -215,7 +252,13 @@ function PickerField({
           disabled={disabled}
           required={required}
           onChange={(event) => handleTextChange(event.target.value)}
-          onBlur={handleBlur}
+          onBlur={validateDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (!isValidValue(text) || text === "")) {
+              event.preventDefault();
+              validateDraft();
+            }
+          }}
           className="min-w-0 flex-1 tabular-nums"
         />
         <PopoverTrigger asChild>
@@ -224,6 +267,11 @@ function PickerField({
           </Button>
         </PopoverTrigger>
       </div>
+      {showError ? (
+        <p id={errorId} role="alert" className="text-xs text-destructive">
+          {text === "" ? `${label}을(를) 입력해 주세요.` : invalidMessage}
+        </p>
+      ) : null}
       <PopoverContent align="end" className={PICKER_CONTENT_CLASS_NAME}>
         {panel({ commit, close: () => setOpen(false) })}
       </PopoverContent>
@@ -260,7 +308,7 @@ function TimeSelects({
 }) {
   return (
     <div className="flex items-center gap-2 p-3">
-      <NativeSelect aria-label="시" value={hour} onChange={(event) => onChange({ hour: event.target.value })}>
+      <NativeSelect aria-label="시" value={hour} onChange={(event) => onChange(minute ? { hour: event.target.value } : { hour: event.target.value, minute: "00" })}>
         <NativeSelectOption value="" disabled>--</NativeSelectOption>
         {HOURS.map((item) => <NativeSelectOption key={item} value={item}>{item}시</NativeSelectOption>)}
       </NativeSelect>

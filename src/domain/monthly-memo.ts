@@ -23,27 +23,6 @@ export type MarkMonthlyMemoReadInput = {
   month: string;
 };
 
-export type MonthlyMemoPanelState = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-export const DEFAULT_MONTHLY_MEMO_PANEL_STATE: MonthlyMemoPanelState = {
-  x: 24,
-  y: 88,
-  width: 360,
-  height: 300,
-};
-
-const MONTHLY_MEMO_PANEL_LIMITS = {
-  minWidth: 240,
-  minHeight: 160,
-  maxWidth: 640,
-  maxHeight: 640,
-};
-
 export function saveMonthlyMemo(
   memos: MonthlyMemo[],
   input: SaveMonthlyMemoInput,
@@ -84,36 +63,6 @@ export function appendMonthlyMemoLine(content: string, line: string): string {
   return content.trim() === "" ? line : `${content}\n${line}`;
 }
 
-export function moveMonthlyMemoPanel(
-  state: MonthlyMemoPanelState,
-  delta: { dx: number; dy: number },
-): MonthlyMemoPanelState {
-  return {
-    ...state,
-    x: Math.max(0, state.x + delta.dx),
-    y: Math.max(0, state.y + delta.dy),
-  };
-}
-
-export function resizeMonthlyMemoPanel(
-  state: MonthlyMemoPanelState,
-  delta: { dx: number; dy: number },
-): MonthlyMemoPanelState {
-  return {
-    ...state,
-    width: clamp(state.width + delta.dx, MONTHLY_MEMO_PANEL_LIMITS.minWidth, MONTHLY_MEMO_PANEL_LIMITS.maxWidth),
-    height: clamp(state.height + delta.dy, MONTHLY_MEMO_PANEL_LIMITS.minHeight, MONTHLY_MEMO_PANEL_LIMITS.maxHeight),
-  };
-}
-
-export function getInitialMonthlyMemoPanelState(
-  previousState?: MonthlyMemoPanelState,
-): MonthlyMemoPanelState {
-  void previousState;
-
-  return { ...DEFAULT_MONTHLY_MEMO_PANEL_STATE };
-}
-
 function isSameMonthlyMemo(
   memo: MonthlyMemo,
   input: Pick<MonthlyMemo, "academyId" | "lessonKind" | "month">,
@@ -123,10 +72,6 @@ function isSameMonthlyMemo(
     memo.lessonKind === input.lessonKind &&
     memo.month === input.month
   );
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
 }
 
 function assertMonth(month: string) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasSameStudentName, registerStudent } from "./student-registration";
+import { getAcademyScheduleValidationError, hasSameStudentName, registerStudent } from "./student-registration";
 
 describe("registerStudent", () => {
   it("원생 기본 정보와 악기별 수강 설정을 등록 결과로 만든다", () => {
@@ -212,8 +212,8 @@ describe("registerStudent", () => {
     ).toThrow("최종 수강료가 레슨비와 할인 합계와 일치하지 않습니다.");
   });
 
-  it("시간이 없는 학원레슨 요일은 등록하지 않는다", () => {
-    expect(() => registerStudent({
+  it("시간 미정 학원레슨은 요일별 반복 일정으로 등록한다", () => {
+    const result = registerStudent({
       academyId: "academy-1",
       studentId: "student-1",
       name: "김민지",
@@ -234,7 +234,18 @@ describe("registerStudent", () => {
           finalMonthlyFee: 160000,
         },
       ],
-    })).toThrow("학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다.");
+    });
+    expect(result.scheduleSources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ startTime: "", endTime: "" }),
+    ]));
+  });
+
+  it("학원레슨은 시작·종료 시간 중 하나만 입력하면 저장하지 않는다", () => {
+    expect(getAcademyScheduleValidationError({
+      lessonType: "academy",
+      teacherId: "teacher-1",
+      weeklySchedules: [{ startTime: "15:00" }],
+    })).toBe("시작 시간과 종료 시간을 함께 입력해 주세요.");
   });
 
   it("학원 수업은 하나 이상의 수업 요일이 필요하다", () => {

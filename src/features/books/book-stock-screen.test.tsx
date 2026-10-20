@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildBookStockList, type BookStockRow } from "@/domain/book-stock";
 import { getFinanceToday } from "@/domain/finance-date";
 import { queryKeys } from "@/lib/api/query-keys";
-import { expectWholeWonInput } from "@/test/expect-whole-won-input";
 
 import { BookStockScreen, type BookStockListQueryOptionsFactory } from "./book-stock-screen";
 
@@ -106,7 +105,7 @@ async function fillRegisterForm(
   values: { title: string; price: string; quantity: string },
 ) {
   await user.type(within(dialog).getByRole("textbox", { name: "도서명" }), values.title);
-  await user.type(within(dialog).getByRole("spinbutton", { name: "가격(원)" }), values.price);
+  await user.type(within(dialog).getByRole("textbox", { name: "가격(원)" }), values.price);
   await user.type(within(dialog).getByRole("spinbutton", { name: "권수" }), values.quantity);
 }
 
@@ -267,7 +266,7 @@ describe("BookStockScreen", () => {
       const dialog = await openRegisterDialog(user);
 
       expect(within(dialog).getByRole("textbox", { name: "도서명" })).toHaveValue("");
-      expect(within(dialog).getByRole("spinbutton", { name: "가격(원)" })).toHaveValue(null);
+      expect(within(dialog).getByRole("textbox", { name: "가격(원)" })).toHaveValue("");
       expect(within(dialog).getByRole("spinbutton", { name: "권수" })).toHaveValue(null);
       expect(within(dialog).getByRole("textbox", { name: "입고일" })).toHaveValue(getFinanceToday());
       const registerButton = within(dialog).getByRole("button", { name: "등록" });
@@ -279,7 +278,7 @@ describe("BookStockScreen", () => {
         "가격은 1원 이상 9,999,999원 이하의 정수로 입력해 주세요.",
       );
 
-      await user.type(within(dialog).getByRole("spinbutton", { name: "가격(원)" }), "14000");
+      await user.type(within(dialog).getByRole("textbox", { name: "가격(원)" }), "14000");
       expect(registerButton).toHaveAccessibleDescription(
         "권수는 0권 이상 9,999권 이하의 정수로 입력해 주세요.",
       );
@@ -288,13 +287,16 @@ describe("BookStockScreen", () => {
       expect(registerButton).toBeEnabled();
     });
 
-    it("가격은 1원 단위 양의 정수만 제약 검증으로 허용한다", async () => {
+    it("가격은 빈 입력과 쉼표를 허용하고 저장 시 검증한다", async () => {
       const user = userEvent.setup();
       renderScreen({ registerBook: vi.fn() });
 
       const dialog = await openRegisterDialog(user);
 
-      expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "가격(원)" }));
+      const price = within(dialog).getByRole("textbox", { name: "가격(원)" });
+      expect(price).toHaveAttribute("inputmode", "numeric");
+      await user.type(price, "140,000");
+      expect(price).toHaveValue("140,000");
     });
 
     it("가격 140000원도 등록 버튼으로 저장할 수 있다", async () => {
@@ -432,7 +434,7 @@ describe("BookStockScreen", () => {
       const dialog = await screen.findByRole("dialog", { name: "교재 수정" });
 
       expect(within(dialog).getByRole("textbox", { name: "도서명" })).toHaveValue("바이엘 상");
-      expect(within(dialog).getByRole("spinbutton", { name: "가격(원)" })).toHaveValue(12000);
+      expect(within(dialog).getByRole("textbox", { name: "가격(원)" })).toHaveValue("12000");
       expect(within(dialog).getByRole("spinbutton", { name: "권수" })).toHaveValue(9);
       expect(within(dialog).getByRole("textbox", { name: "입고일" })).toHaveValue("2026-08-01");
       expect(within(dialog).getByText("이미 출고된 건에는 반영되지 않습니다.")).toBeInTheDocument();
@@ -448,8 +450,8 @@ describe("BookStockScreen", () => {
       expect(within(dialog).getByRole("spinbutton", { name: "권수" })).toHaveValue(0);
       await user.clear(within(dialog).getByRole("textbox", { name: "도서명" }));
       await user.type(within(dialog).getByRole("textbox", { name: "도서명" }), "체르니 100 개정판");
-      await user.clear(within(dialog).getByRole("spinbutton", { name: "가격(원)" }));
-      await user.type(within(dialog).getByRole("spinbutton", { name: "가격(원)" }), "16000");
+      await user.clear(within(dialog).getByRole("textbox", { name: "가격(원)" }));
+      await user.type(within(dialog).getByRole("textbox", { name: "가격(원)" }), "16000");
       await user.clear(within(dialog).getByRole("spinbutton", { name: "권수" }));
       await user.type(within(dialog).getByRole("spinbutton", { name: "권수" }), "7");
       await user.click(within(dialog).getByRole("button", { name: "수정" }));

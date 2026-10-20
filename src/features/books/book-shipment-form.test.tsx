@@ -3,8 +3,6 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { expectWholeWonInput } from "@/test/expect-whole-won-input";
-
 import { BookShipmentForm } from "./book-shipment-form";
 import { testBooks, testStudents } from "./book-shipment-test-data";
 
@@ -55,20 +53,32 @@ describe("BookShipmentForm", () => {
     renderForm();
 
     await user.selectOptions(screen.getByLabelText("도서명"), "book-1");
-    expect(screen.getByLabelText("가격(원)")).toHaveValue(12000);
+    expect(screen.getByLabelText("가격(원)")).toHaveValue("12000");
 
     await user.clear(screen.getByLabelText("가격(원)"));
     await user.type(screen.getByLabelText("가격(원)"), "10000");
-    expect(screen.getByLabelText("가격(원)")).toHaveValue(10000);
+    expect(screen.getByLabelText("가격(원)")).toHaveValue("10000");
 
     await user.selectOptions(screen.getByLabelText("도서명"), "book-2");
-    expect(screen.getByLabelText("가격(원)")).toHaveValue(18000);
+    expect(screen.getByLabelText("가격(원)")).toHaveValue("18000");
   });
 
-  it("가격은 1원 단위 양의 정수만 허용한다", () => {
-    renderForm();
+  it("쉼표 금액을 입력해도 정확한 가격으로 출고 등록한다", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderForm();
+    await fillValidRelease(user);
 
-    expectWholeWonInput(screen.getByRole("spinbutton", { name: "가격(원)" }));
+    await user.clear(screen.getByLabelText("가격(원)"));
+    await user.type(screen.getByLabelText("가격(원)"), "140,000");
+    expect(screen.getByLabelText("가격(원)")).toHaveValue("140,000");
+    await user.click(screen.getByRole("button", { name: "출고 등록" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ price: 140000 }));
+  });
+
+  it("가격은 텍스트 입력을 유지하고 유효성은 폼에서 검사한다", () => {
+    renderForm();
+    expect(screen.getByRole("textbox", { name: "가격(원)" })).toHaveAttribute("inputmode", "numeric");
   });
 
   it("입력이 부족하면 등록을 막고 이유를 버튼과 연결해 알려 준다", async () => {

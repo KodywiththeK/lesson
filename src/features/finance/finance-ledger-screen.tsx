@@ -130,9 +130,14 @@ export function FinanceLedgerListScreen({
           onOpenChange={setIsManualOpen}
           onSubmit={(values) => registerEntry({ academyId, ...values })}
         />
-        <Button type="button" variant="outline" onClick={() => downloadFinanceCsv(entries, dateRange)}>
+        <Button
+          type="button"
+          variant="outline"
+          title="엑셀에서 열 수 있는 CSV 파일"
+          onClick={() => downloadFinanceCsv(entries, dateRange)}
+        >
           <Download aria-hidden="true" />
-          CSV 내보내기
+          엑셀 내보내기
         </Button>
       </>
     ),

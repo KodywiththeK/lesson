@@ -372,21 +372,25 @@ describe("회차권 등록 폼", () => {
   });
 
   it("결제 금액은 선택 입력이고 0원과 1원 단위 정수를 허용하며 음수·소수는 거절한다", async () => {
-    const { dialog } = await openRegistrationDialog();
-    const amountInput = within(dialog).getByRole<HTMLInputElement>("spinbutton", { name: "결제 금액" });
+    const { user, dialog } = await openRegistrationDialog();
+    const amountInput = within(dialog).getByRole<HTMLInputElement>("textbox", { name: "결제 금액" });
 
     expect(amountInput).not.toBeRequired();
-    expect(amountInput).toHaveValue(null);
+    expect(amountInput).toHaveValue("");
     for (const [value, isValid] of [
       ["0", true],
       ["1", true],
       ["140000", true],
+      ["140,000", true],
       ["-1000", false],
       ["1.5", false],
     ] as const) {
       fireEvent.change(amountInput, { target: { value } });
       expect(amountInput.checkValidity(), `${value}원 입력의 제약 검증`).toBe(isValid);
     }
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(amountInput, { target: { value: "2147483648" } });
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     expect(
       within(dialog).getByText("입력하면 수입 내역에 기록됩니다(원장만 입력 가능)."),
     ).toBeInTheDocument();
@@ -453,8 +457,8 @@ describe("회차권 등록 폼", () => {
     });
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
-      target: { value: "150000" },
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "결제 금액" }), {
+      target: { value: "150,000" },
     });
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
@@ -517,7 +521,7 @@ describe("회차권 등록 폼", () => {
     });
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-    fireEvent.change(within(dialog).getByRole("spinbutton", { name: "결제 금액" }), {
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "결제 금액" }), {
       target: { value: "1000" },
     });
     await user.click(within(dialog).getByRole("button", { name: "저장" }));

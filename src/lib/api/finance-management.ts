@@ -145,6 +145,7 @@ type FixedIncomeSnapshotFinanceRow = {
   discount_label?: string | null;
   progress?: string | null;
   paid_ledger_entry_id?: string | null;
+  students?: { registered_on: string | null } | null;
 };
 
 type SalarySettlementFinanceRow = {
@@ -166,6 +167,7 @@ type SalarySettlementFinanceRow = {
 export type FinanceManagementQueryData = {
   ledgerEntries: LedgerEntry[];
   enrollments: StudentEnrollment[];
+  studentRegisteredOnById: Record<string, string>;
   tickets: LessonTicketListItem[];
   ticketRegistrations: LessonTicketIncomeRegistration[];
   bookSales: BookSale[];
@@ -188,7 +190,7 @@ const FINANCE_LESSON_EVENT_SELECT =
 const FINANCE_SALARY_SETTLEMENT_SELECT =
   "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids, paid_ledger_entry_id";
 const FINANCE_TUITION_SNAPSHOT_SELECT =
-  "id, academy_id, month, student_id, student_instrument_id, student_name, instrument_id, instrument_name, progress, lesson_fee, discount_total, discount_label, amount, due_on, status, paid_at, paid_ledger_entry_id";
+  "id, academy_id, month, student_id, student_instrument_id, student_name, instrument_id, instrument_name, progress, lesson_fee, discount_total, discount_label, amount, due_on, status, paid_at, paid_ledger_entry_id, students!fixed_income_snapshots_academy_student_fk(registered_on)";
 const FINANCE_TICKET_REGISTRATION_SELECT =
   "id, academy_id, lesson_ticket_grant_id, registered_at, granted_count, valid_until, original_paid_amount, ledger_entry_id";
 
@@ -200,7 +202,7 @@ export async function fetchFinanceManagementData(
   const [
     monthLedgerEntries,
     lessonTicketLedgerEntries,
-    enrollments,
+    studentFinance,
     tickets,
     ticketRegistrations,
     bookSales,
@@ -228,7 +230,8 @@ export async function fetchFinanceManagementData(
 
   return {
     ledgerEntries,
-    enrollments,
+    enrollments: studentFinance.enrollments,
+    studentRegisteredOnById: studentFinance.registeredOnById,
     tickets,
     ticketRegistrations,
     bookSales,
@@ -536,7 +539,10 @@ async function fetchFinanceEnrollments(
       .range(from, to),
   );
 
-  return rows.flatMap(toStudentEnrollments);
+  return {
+    enrollments: rows.flatMap(toStudentEnrollments),
+    registeredOnById: Object.fromEntries(rows.map((row) => [row.id, row.registered_on])),
+  };
 }
 
 /** 그 달에 결제 완료된 교재 판매만 읽는다(수입은 결제일 기준). */
@@ -629,6 +635,7 @@ function toStudentEnrollments(row: StudentFinanceRow): StudentEnrollment[] {
         enrollmentId: instrument.id,
         studentId: row.id,
         studentName: row.name,
+        registeredOn: row.registered_on,
         instrumentId: instrument.instrument_id,
         instrumentName: instrument.instrument_name,
         teacherId: instrument.teacher_id ?? "",
@@ -677,6 +684,7 @@ function toTuitionRecord(row: FixedIncomeSnapshotFinanceRow): TuitionRecord {
     month: row.month,
     studentId: row.student_id,
     studentName: row.student_name,
+    registeredOn: row.students?.registered_on ?? undefined,
     enrollmentId: row.student_instrument_id ?? row.instrument_id,
     instrumentId: row.instrument_id,
     instrumentName: row.instrument_name,

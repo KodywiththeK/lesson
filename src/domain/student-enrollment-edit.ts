@@ -23,6 +23,8 @@ export type StudentBasicInfoInput = {
   occupation?: string;
   contactRelationship: string;
   contactPhone: string;
+  secondaryContactRelationship?: string;
+  secondaryContactPhone?: string;
 };
 
 export type StudentWeeklyScheduleChange = {
@@ -206,7 +208,7 @@ export function applyStudentEnrollmentSave(
   result?: StudentEnrollmentSaveResult,
 ): StudentListRow {
   const patch = buildStudentEnrollmentPatch(input, result);
-  const merged = withFirstContactUpdated(current, mergeStudentUpdate(current, patch), patch);
+  const merged = withContactsUpdated(current, mergeStudentUpdate(current, patch), patch, input.basicInfo);
   const endedIds = input.changes.flatMap((change) =>
     change.action === "end" ? [change.studentInstrumentId] : [],
   );
@@ -221,29 +223,28 @@ export function applyStudentEnrollmentSave(
   );
 }
 
-/** 서버는 첫 연락처만 바꾸므로 화면도 첫 연락처의 관계·번호만 바꾸고 id와 나머지 연락처는 남긴다. */
-function withFirstContactUpdated(
+/** 저장 요청의 연락처 목록을 기존 ID와 합쳐 수정·삭제 결과를 즉시 보여 준다. */
+function withContactsUpdated(
   current: StudentListRow | null | undefined,
   merged: StudentListRow,
   patch: StudentListRow,
+  basicInfo?: StudentBasicInfoInput,
 ): StudentListRow {
-  const [firstContact, ...otherContacts] = current?.contacts ?? [];
-  const [savedContact] = patch.contacts ?? [];
-
-  if (!firstContact || !savedContact) {
-    return merged;
-  }
+  const currentContacts = current?.contacts ?? [];
+  const savedContacts = patch.contacts;
+  if (!savedContacts) return merged;
 
   return {
     ...merged,
     contacts: [
-      {
-        ...firstContact,
-        relationship: savedContact.relationship,
-        phone: savedContact.phone,
-        phoneLast4: savedContact.phoneLast4,
-      },
-      ...otherContacts,
+      ...savedContacts.map((contact, index) => ({
+        ...contact,
+        contactId: currentContacts[index]?.contactId ?? contact.contactId,
+      })),
+      ...(basicInfo?.secondaryContactRelationship === undefined
+        && basicInfo?.secondaryContactPhone === undefined
+        ? currentContacts.slice(savedContacts.length)
+        : []),
     ],
   };
 }
@@ -304,8 +305,19 @@ function toBasicInfoFields(basicInfo: StudentBasicInfoInput): Partial<StudentLis
     age: basicInfo.age,
     ageAsOfYear: basicInfo.age === undefined ? undefined : Number(getFinanceToday().slice(0, 4)),
     grade: basicInfo.grade?.trim() || undefined,
+    gradeAsOfYear: basicInfo.grade ? Number(getFinanceToday().slice(0, 4)) : undefined,
     school: basicInfo.school?.trim() || undefined,
     occupation: basicInfo.occupation?.trim() || undefined,
-    ...(contactPhone ? { contacts: [contact] } : {}),
+    contacts: [
+      ...(contactPhone ? [contact] : []),
+      ...(basicInfo.secondaryContactRelationship?.trim() && basicInfo.secondaryContactPhone?.trim()
+        ? [{
+            contactId: "",
+            relationship: basicInfo.secondaryContactRelationship.trim(),
+            phone: basicInfo.secondaryContactPhone.trim(),
+            phoneLast4: basicInfo.secondaryContactPhone.replace(/\D/g, "").slice(-4) || undefined,
+          }]
+        : []),
+    ],
   };
 }

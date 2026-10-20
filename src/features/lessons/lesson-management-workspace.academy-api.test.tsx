@@ -241,7 +241,7 @@ describe("학원 레슨표 서버 연결", () => {
     api.markAttendance.mockResolvedValue(undefined);
     await renderConnectedWorkspace();
 
-    await user.click(within(screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" })).getByRole("gridcell", { name: /^21/ }));
+    await user.click(within(screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" })).getByRole("gridcell", { name: "2026-08-21" }));
     const dialog = await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" });
     await user.click(within(dialog).getByRole("radio", { name: "이서윤 결석" }));
     await user.click(within(dialog).getByRole("radio", { name: "박지호 등원" }));
@@ -263,7 +263,7 @@ describe("학원 레슨표 서버 연결", () => {
     api.deleteEvent.mockResolvedValueOnce(undefined);
     await renderConnectedWorkspace();
 
-    await user.click(within(screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" })).getByRole("gridcell", { name: /^21/ }));
+    await user.click(within(screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" })).getByRole("gridcell", { name: "2026-08-21" }));
     const dialog = await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" });
     await user.click(within(dialog).getByRole("button", { name: "이서윤 일정 삭제" }));
     const confirm = await screen.findByRole("alertdialog", { name: "이 일정을 삭제할까요?" });

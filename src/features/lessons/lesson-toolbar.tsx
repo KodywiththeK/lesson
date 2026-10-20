@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   shiftMonth,
-  formatMonthLabel,
   toLessonView,
   toControlId,
 } from "@/features/lessons/workspace-helpers";
@@ -74,14 +73,16 @@ export function LessonMonthControl({
   variantLabel,
   selectedMonth,
   onChangeMonth,
+  onToday,
 }: {
   variantLabel: string;
   selectedMonth: string;
   onChangeMonth: (month: string) => void;
+  onToday?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="outline"
@@ -111,10 +112,12 @@ export function LessonMonthControl({
         >
           <ChevronRight aria-hidden="true" />
         </Button>
+        {onToday ? (
+          <Button type="button" variant="outline" size="sm" onClick={onToday}>
+            오늘로 이동
+          </Button>
+        ) : null}
       </div>
-      <p className="text-sm font-medium text-muted-foreground">
-        {formatMonthLabel(selectedMonth)}
-      </p>
     </div>
   );
 }

@@ -34,7 +34,7 @@ const typeFilterOptions = (["income", "expense"] as const).map((value) => ({
   label: formatLedgerEntryType(value),
 }));
 
-const sourceFilterOptions = (["tuition", "book-sale", "lesson-ticket", "payroll", "manual"] as const).map(
+const sourceFilterOptions = (["tuition", "book-sale", "book-order", "lesson-ticket", "payroll", "manual"] as const).map(
   (value) => ({ value, label: formatLedgerEntrySource(value) }),
 );
 

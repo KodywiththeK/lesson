@@ -93,6 +93,7 @@ export type DemoStudentRegistrationInput = {
     relationship: string;
     phone: string;
   };
+  secondaryContact?: { relationship: string; phone: string };
   instruments: DemoStudentRegistrationInstrumentInput[];
 };
 
@@ -427,6 +428,12 @@ export function registerDemoAcademyStudent(
             phone: input.contact.phone,
             phoneLast4: getPhoneLast4(input.contact.phone),
           },
+          ...(input.secondaryContact ? [{
+            contactId: `contact-demo-${studentId}-secondary`,
+            relationship: input.secondaryContact.relationship,
+            phone: input.secondaryContact.phone,
+            phoneLast4: getPhoneLast4(input.secondaryContact.phone),
+          }] : []),
         ],
         teacherNames: uniqueNonEmpty(input.instruments.map((item) => item.teacherName)),
         instrumentNames: uniqueNonEmpty(input.instruments.map((item) => item.instrumentName)),

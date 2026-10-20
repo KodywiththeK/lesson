@@ -256,6 +256,7 @@ describe("buildFinanceLedgerList", () => {
     expect(formatLedgerEntryType("expense")).toBe("지출");
     expect(formatLedgerEntrySource("tuition")).toBe("수강료");
     expect(formatLedgerEntrySource("book-sale")).toBe("교재");
+    expect(formatLedgerEntrySource("book-order")).toBe("교재발주");
     expect(formatLedgerEntrySource("payroll")).toBe("급여");
     expect(formatLedgerEntrySource("manual")).toBe("수동");
   });
@@ -440,6 +441,13 @@ describe("getLedgerDraftBlockReason", () => {
 
   it("모두 채워지면 막을 이유가 없다", () => {
     expect(getLedgerDraftBlockReason(valid)).toBeNull();
+  });
+
+  it("쉼표가 포함된 원 단위 금액을 유효한 정수로 받는다", () => {
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "140,000" })).toBeNull();
+    expect(getLedgerDraftBlockReason({ ...valid, amountText: "14,00" })).toBe(
+      "금액은 1원 이상의 정수로 입력해 주세요.",
+    );
   });
 
   it("비어 있거나 잘못된 입력은 다음 행동을 알려 준다", () => {

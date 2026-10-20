@@ -9,7 +9,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { CalendarPlus, Search, Send, X } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -90,6 +90,9 @@ import { AcademyLessonTableView } from "@/features/lessons/academy-lesson-table-
 import { MoveAcademyLessonDialog } from "@/features/lessons/academy-move-dialog";
 import { AcademyWeekdaySummary } from "@/features/lessons/academy-weekday-summary";
 import { LessonMonthCalendar } from "@/features/lessons/lesson-month-calendar";
+import { LessonCalendarSidePanel } from "@/features/lessons/lesson-calendar-side-panel";
+import { LessonAuditHistory } from "@/features/lessons/lesson-audit-history";
+import { lessonAuditQueryKey, type LessonAuditSupabaseClient } from "@/lib/api/lesson-audit";
 import { LessonMonthlyNotePostit } from "@/features/lessons/lesson-monthly-note";
 import { useAcademyLessonActions } from "@/features/lessons/use-academy-lesson-actions";
 import { useLessonMonthlyNote } from "@/features/lessons/use-lesson-monthly-note";
@@ -172,6 +175,7 @@ type LessonWorkspaceClient = LessonWorkspaceSupabaseClient &
   CancelPrivateLessonAttendanceSupabaseClient &
   AssignedLessonTicketBalanceSupabaseClient &
   LessonMemoSupabaseClient &
+  LessonAuditSupabaseClient &
   LessonMonthlyNoteSupabaseClient;
 
 type SupabaseClientState =
@@ -252,6 +256,13 @@ export function LessonManagementWorkspace({
     queryFn: workspaceQueryOptions?.queryFn ?? (async () => emptyWorkspaceData),
     enabled: Boolean(workspaceQueryOptions),
   });
+  useEffect(() => {
+    if (workspaceQuery.dataUpdatedAt === 0 || !canManage) return;
+    void queryClient.invalidateQueries(
+      { queryKey: lessonAuditQueryKey({ academyId, date: selectedDate, lessonKind }) },
+      { cancelRefetch: false },
+    );
+  }, [academyId, canManage, lessonKind, queryClient, selectedDate, workspaceQuery.dataUpdatedAt]);
   const assignedTicketQueryOptions = assignedTicketBalancesQueryFactory?.(academyId) ??
     (!canManage && !hasInjectedData && supabaseClientState?.client
       ? createAssignedLessonTicketBalancesQueryOptions(supabaseClientState.client, academyId)
@@ -681,6 +692,12 @@ export function LessonManagementWorkspace({
       setSelectedDate,
       resetOverrides: resetWorkspaceOverrides,
     });
+  const goToToday = () =>
+    updateSelectedDate(getTodayDate(), {
+      selectedMonth,
+      setSelectedDate,
+      resetOverrides: resetWorkspaceOverrides,
+    });
   const requestAcademyMove = (row: DailyAcademyAttendanceRow) => {
     const editable = checkAcademyLessonEditable(row, "move");
 
@@ -945,7 +962,6 @@ export function LessonManagementWorkspace({
             value={academyView}
             onValueChange={setAcademyView}
           />
-          {monthlyNotePostit}
           {canManage ? null : (
             <Alert>
               <AlertDescription>
@@ -956,43 +972,58 @@ export function LessonManagementWorkspace({
           )}
           <AcademyWeekdaySummary month={selectedMonth} summary={weekdaySummary} />
           {academyView === "calendar" ? (
-            <LessonMonthCalendar
-              ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
-              selectedDate={selectedDate}
-              events={academyEvents}
-              memoCounts={academyMemoCounts}
-              variant="academy"
-              onMoveEvent={canManage ? dropAcademyEvent : undefined}
-              onChangeMonth={changeSelectedMonth}
-              onSelectDate={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-                setAcademyDayOpen(true);
-              }}
-            />
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+              <LessonMonthCalendar
+                ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
+                selectedDate={selectedDate}
+                events={academyEvents}
+                memoCounts={academyMemoCounts}
+                variant="academy"
+                onMoveEvent={canManage ? dropAcademyEvent : undefined}
+                onChangeMonth={changeSelectedMonth}
+                onToday={goToToday}
+                onSelectDate={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setAcademyDayOpen(true);
+                }}
+              />
+              <LessonCalendarSidePanel
+                date={selectedDate}
+                events={academyEvents.filter((event) => event.date === selectedDate)}
+                memo={monthlyNotePostit}
+                history={supabaseClientState?.client && canManage ? (
+                  <LessonAuditHistory academyId={academyId} date={selectedDate} lessonKind="academy" client={supabaseClientState.client} />
+                ) : undefined}
+                onOpenDay={() => setAcademyDayOpen(true)}
+              />
+            </div>
           ) : (
-            <AcademyLessonTableView
-              selectedDate={selectedDate}
-              rows={selectedAcademyEvents}
-              onChangeDate={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-              }}
-              onOpenDay={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-                setAcademyDayOpen(true);
-              }}
-            />
+            <>
+              {monthlyNotePostit}
+              <AcademyLessonTableView
+                selectedDate={selectedDate}
+                rows={selectedAcademyEvents}
+                onChangeDate={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                }}
+                onOpenDay={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setAcademyDayOpen(true);
+                }}
+              />
+            </>
           )}
         </div>
       ) : (
@@ -1012,39 +1043,53 @@ export function LessonManagementWorkspace({
               </Button>
             }
           />
-          {monthlyNotePostit}
           {privateView === "calendar" ? (
-            <LessonMonthCalendar
-              ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
-              selectedDate={selectedDate}
-              events={privateEvents}
-              memoCounts={privateMemoCounts}
-              variant="private"
-              onChangeMonth={changeSelectedMonth}
-              onSelectDate={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-                setPrivateDayOpen(true);
-              }}
-            />
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+              <LessonMonthCalendar
+                ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
+                selectedDate={selectedDate}
+                events={privateEvents}
+                memoCounts={privateMemoCounts}
+                variant="private"
+                onChangeMonth={changeSelectedMonth}
+                onToday={goToToday}
+                onSelectDate={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setPrivateDayOpen(true);
+                }}
+              />
+              <LessonCalendarSidePanel
+                date={selectedDate}
+                events={privateEvents.filter((event) => event.date === selectedDate)}
+                memo={monthlyNotePostit}
+                history={supabaseClientState?.client && canManage ? (
+                  <LessonAuditHistory academyId={academyId} date={selectedDate} lessonKind="private" client={supabaseClientState.client} />
+                ) : undefined}
+                onOpenDay={() => setPrivateDayOpen(true)}
+              />
+            </div>
           ) : (
-            <PrivateLessonTableView
-              selectedMonth={selectedMonth}
-              selectedDate={selectedDate}
-              lessons={privateTableRows}
-              onChangeMonth={changeSelectedMonth}
-              onOpenDay={(date) => {
-                updateSelectedDate(date, {
-                  selectedMonth,
-                  setSelectedDate,
-                  resetOverrides: resetWorkspaceOverrides,
-                });
-                setPrivateDayOpen(true);
-              }}
-            />
+            <>
+              {monthlyNotePostit}
+              <PrivateLessonTableView
+                selectedMonth={selectedMonth}
+                selectedDate={selectedDate}
+                lessons={privateTableRows}
+                onChangeMonth={changeSelectedMonth}
+                onOpenDay={(date) => {
+                  updateSelectedDate(date, {
+                    selectedMonth,
+                    setSelectedDate,
+                    resetOverrides: resetWorkspaceOverrides,
+                  });
+                  setPrivateDayOpen(true);
+                }}
+              />
+            </>
           )}
         </div>
       )}

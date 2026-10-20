@@ -41,7 +41,7 @@ function getCalendar() {
 
 function getDayCell(day: number) {
   return within(getCalendar()).getByRole("gridcell", {
-    name: new RegExp(`^${day}(\\s|$)`),
+    name: `2026-08-${String(day).padStart(2, "0")}`,
     hidden: true,
   });
 }
@@ -386,7 +386,10 @@ describe("학원 레슨표 결석인원과 결석 사유서", () => {
     });
     expect(within(passedRow).getByText("패스 완료")).toBeInTheDocument();
     expect(within(passedRow).queryByRole("button", { name: "박지호 결석확인" })).not.toBeInTheDocument();
-    expect(within(getCalendar()).getAllByText("박지호")).toHaveLength(1);
+    expect(within(getCalendar()).queryByText("박지호")).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog", { name: "2026년 8월 결석인원" })).getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("switch", { name: "전체 기록 보기" }));
+    expect(within(getCalendar()).getByText("박지호")).toBeInTheDocument();
   });
 
   it("보강을 고르면 추천 보강일 5개를 인원과 함께 보여 주고 1순위를 기본 선택한다", async () => {
@@ -705,6 +708,8 @@ describe("일정 이동·삭제는 원생 기본 정보를 바꾸지 않는다",
     await waitFor(() => expect(within(getDayCell(24)).getByText("이서윤")).toBeInTheDocument());
 
     expect(within(getDayCell(21)).getByText("김민지")).toBeInTheDocument();
+    expect(within(getDayCell(21)).queryByText("박지호")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "전체 기록 보기" }));
     expect(within(getDayCell(21)).getByText("박지호")).toBeInTheDocument();
     await expectStudentStillRegistrable(user);
   });

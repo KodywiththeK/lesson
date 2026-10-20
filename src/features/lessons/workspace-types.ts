@@ -11,7 +11,7 @@ export type CalendarEvent = {
   endTime: string;
   title: string;
   subtitle: string;
-  status: "present" | "absent" | "pending" | "scheduled";
+  status: "present" | "absent" | "passed" | "cancelled" | "pending" | "scheduled";
   origin?: LessonEventOrigin;
   originLabel?: string;
   /** 달력 칸에 쓰는 `오후 2시` 같은 시작 시간. 있으면 `detailLabel`과 함께 상세 형태로 그린다. */

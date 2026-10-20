@@ -35,6 +35,7 @@ function buildTuition(overrides: Partial<TuitionRecord> = {}): TuitionRecord {
     lessonFee: 160000,
     discountTotal: 10000,
     amount: 150000,
+    registeredOn: "2026-01-04",
     dueOn: "2026-08-06",
     status: "unpaid",
     ...overrides,
@@ -81,6 +82,14 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("학원 고정 수입 화면 구성", () => {
+  it("레슨수입 표에 원생의 학원 최초 등록일을 보여 준다", async () => {
+    renderScreen([buildTuition()]);
+
+    await screen.findByText("김민지");
+    const row = within(getIncomeTable()).getByRole("row", { name: /김민지/ });
+    expect(within(row).getByRole("cell", { name: "2026-01-04" })).toHaveAttribute("data-label", "최초 등록일");
+  });
+
   it("명세의 제목과 설명, 파란색 전체 금액 합산을 보여 준다", async () => {
     renderScreen([
       buildTuition({ amount: 150000 }),
@@ -202,7 +211,7 @@ describe("학원 고정 수입 입금 상태", () => {
 
     await user.click(await screen.findByRole("button", { name: "김민지 피아노 입금 처리" }));
     const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
-    expect(within(dialog).getByText("확인하면 입출입내역에 수입이 기록됩니다.")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("확인하면 입출입내역에 수입이 기록됩니다.");
     expect(within(dialog).getByLabelText("입금일")).toHaveValue("2026-08-21");
 
     fireEvent.change(within(dialog).getByLabelText("입금일"), { target: { value: "2026-09-02" } });
@@ -237,18 +246,22 @@ describe("학원 고정 수입 입금 상태", () => {
     expect(toast.success).toHaveBeenCalledWith("미납으로 기록했습니다.");
   });
 
-  it("미납 해제는 입금 취소와 다른 전용 처리(clearTuitionOverdue)로 확인 없이 미입금으로 되돌린다", async () => {
+  it("미납 해제는 입금일 확인 후 수납 완료로 처리한다", async () => {
     const user = userEvent.setup();
-    const clearTuitionOverdue = vi.fn().mockResolvedValue(buildTuition({ status: "unpaid" }));
+    const markTuitionPaid = vi.fn().mockResolvedValue(buildTuition({ status: "paid" }));
     const markTuitionUnpaid = vi.fn();
-    renderScreen([buildTuition({ status: "overdue" })], { clearTuitionOverdue, markTuitionUnpaid });
+    renderScreen([buildTuition({ status: "overdue" })], { markTuitionPaid, markTuitionUnpaid });
 
     await user.click(await screen.findByRole("button", { name: "김민지 피아노 미납 해제" }));
-
-    await waitFor(() =>
-      expect(clearTuitionOverdue).toHaveBeenCalledWith({ academyId: "academy-1", tuitionId: "snapshot-1" }),
-    );
-    // 입금 완료 건을 취소하는 처리와 섞이지 않는다.
+    const dialog = await screen.findByRole("dialog", { name: "미납 수강료 입금 확인" });
+    expect(dialog).toHaveTextContent("김민지");
+    expect(dialog).toHaveTextContent("피아노");
+    await user.clear(within(dialog).getByRole("textbox", { name: "입금일" }));
+    await user.type(within(dialog).getByRole("textbox", { name: "입금일" }), "2026-08-25");
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await waitFor(() => expect(markTuitionPaid).toHaveBeenCalledWith({
+      academyId: "academy-1", tuitionId: "snapshot-1", paidAt: "2026-08-25",
+    }));
     expect(markTuitionUnpaid).not.toHaveBeenCalled();
   });
 

@@ -158,7 +158,8 @@ describe("날짜와 시간 선택 필드", () => {
     expect(input).toBeInvalid();
 
     await user.tab();
-    expect(input).toHaveValue("2026-10");
+    expect(input).toHaveValue("2026-11");
+    expect(screen.getByRole("alert")).toHaveTextContent("YYYY-MM");
   });
 
   it("max는 월 필드에만 적용되고 날짜 필드의 값은 제한하지 않는다", async () => {
@@ -174,7 +175,7 @@ describe("날짜와 시간 선택 필드", () => {
     expect(input).toBeValid();
   });
 
-  it("필수 필드를 지워도 빈 값은 전달하지 않고 포커스를 잃으면 마지막 값으로 되돌린다", async () => {
+  it("필수 필드를 지워도 빈 값은 전달하지 않고 오류를 보여 준다", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
     render(<MonthField aria-label="조회 월" value="2026-10" required onValueChange={onValueChange} />);
@@ -185,15 +186,16 @@ describe("날짜와 시간 선택 필드", () => {
     expect(input).toHaveValue("");
 
     await user.tab();
-    expect(input).toHaveValue("2026-10");
+    expect(input).toHaveValue("");
+    expect(screen.getByRole("alert")).toHaveTextContent("입력해 주세요");
   });
 
   it.each([
     ["날짜", DateField, "2026-10-15", "2026-10-2"],
-    ["시간", TimeField, "09:05", "9:"],
+    ["시간", TimeField, "09:05", "25:"],
     ["월", MonthField, "2026-10", "2026-1"],
-    ["일시", DateTimeField, "2026-10-15T09:05", "2026-10-15T9"],
-  ] as const)("%s 필드에 잘못된 글자를 남기고 포커스를 잃으면 마지막 유효 값으로 되돌린다", async (_name, Field, valid, typed) => {
+    ["일시", DateTimeField, "2026-10-15T09:05", "2026-10-15T25"],
+  ] as const)("%s 필드의 잘못된 글자는 포커스를 잃어도 유지해 고칠 수 있다", async (_name, Field, valid, typed) => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
     render(<Field aria-label="값" value={valid} onValueChange={onValueChange} />);
@@ -204,8 +206,9 @@ describe("날짜와 시간 선택 필드", () => {
     expect(input).toHaveValue(typed);
     await user.tab();
 
-    expect(input).toHaveValue(valid);
-    expect((input as HTMLInputElement).checkValidity()).toBe(true);
+    expect(input).toHaveValue(typed);
+    expect((input as HTMLInputElement).checkValidity()).toBe(false);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 
   it("입력 중이던 미완성 값은 선택기로 같은 값을 골라도 선택한 값으로 바로잡는다", async () => {
@@ -267,7 +270,7 @@ describe("날짜와 시간 선택 필드", () => {
     expect(input).toHaveValue("");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "시" }), "09");
-    expect(input).toHaveValue("");
+    expect(input).toHaveValue("2026-10-20T09:00");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "분" }), "05");
     expect(input).toHaveValue("2026-10-20T09:05");
@@ -297,17 +300,39 @@ describe("날짜와 시간 선택 필드", () => {
     expect(screen.getByRole("textbox", { name: "수업 시간" })).toHaveValue("2026-10-15T16:00");
   });
 
-  it("빈 시간은 시와 분을 모두 고를 때까지 값을 채우지 않는다", async () => {
+  it("빈 시간에서 시를 고르면 00분으로 확정하고 이후 분을 바꿀 수 있다", async () => {
     const user = userEvent.setup();
     render(<Controlled Field={TimeField} initial="" label="시작 시간" />);
     const input = screen.getByRole("textbox", { name: "시작 시간" });
 
     await user.click(screen.getByRole("button", { name: "시작 시간 시간 선택 열기" }));
     await user.selectOptions(screen.getByRole("combobox", { name: "시" }), "15");
-    expect(input).toHaveValue("");
+    expect(input).toHaveValue("15:00");
 
     await user.selectOptions(screen.getByRole("combobox", { name: "분" }), "37");
     expect(input).toHaveValue("15:37");
+  });
+
+  it.each(["9", "09", "9:", "09:"])("시간 %s 입력 후 탭하면 00분으로 확정한다", async (typed) => {
+    const user = userEvent.setup();
+    render(<Controlled Field={TimeField} initial="" label="시작 시간" />);
+    const input = screen.getByRole("textbox", { name: "시작 시간" });
+
+    await user.type(input, typed);
+    await user.tab();
+
+    expect(input).toHaveValue("09:00");
+  });
+
+  it("시만 입력하고 Enter를 누르면 폼을 제출하지 않고 00분으로 확정한다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(<form onSubmit={onSubmit}><Controlled Field={TimeField} initial="" label="시작 시간" /></form>);
+
+    await user.type(screen.getByRole("textbox", { name: "시작 시간" }), "15{Enter}");
+
+    expect(screen.getByRole("textbox", { name: "시작 시간" })).toHaveValue("15:00");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("월 선택은 연도만 바꿔서는 값을 바꾸지 않고 월을 누르면 확정한다", async () => {

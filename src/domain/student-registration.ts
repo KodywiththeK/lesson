@@ -64,8 +64,8 @@ export function getAcademyScheduleValidationError(input: {
   if (input.weeklySchedules.length === 0) {
     return "학원레슨 요일을 선택해야 합니다.";
   }
-  if (input.weeklySchedules.some(({ startTime, endTime }) => !startTime || !endTime)) {
-    return "학원레슨의 모든 요일에 시작 시간과 종료 시간을 입력해야 합니다.";
+  if (input.weeklySchedules.some(({ startTime, endTime }) => Boolean(startTime) !== Boolean(endTime))) {
+    return "시작 시간과 종료 시간을 함께 입력해 주세요.";
   }
   if (input.weeklySchedules.some(({ startTime, endTime }) =>
     Boolean(startTime && endTime && endTime <= startTime)
@@ -108,6 +108,7 @@ export type StudentEnrollment = {
   enrollmentId: string;
   studentId: string;
   studentName: string;
+  registeredOn?: string;
   instrumentId: string;
   instrumentName: string;
   teacherId: string;

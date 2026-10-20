@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppProviders } from "../providers";
-import { expectWholeWonInput } from "@/test/expect-whole-won-input";
 import { nextRedirectMock } from "@/test/setup";
 import { resetFinanceMonthForTest } from "@/features/finance/finance-shared";
 import FinancePage from "./page";
@@ -44,7 +43,7 @@ describe("Finance routes", () => {
       within(subNavigation).getByRole("link", { name: "입출입내역" }),
     ).toHaveAttribute("href", "/finance/ledger");
     expect(
-      screen.getByRole("button", { name: "CSV 내보내기" }),
+      screen.getByRole("button", { name: "엑셀 내보내기" }),
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("입출금 월 선택"), {
       target: { value: "2026-08" },
@@ -124,7 +123,7 @@ describe("Finance routes", () => {
     await user.click(screen.getByRole("button", { name: "수동 입출금 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "수동 입출금 등록" });
 
-    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "금액" }));
+    expect(within(dialog).getByRole("textbox", { name: "금액" })).toHaveAttribute("inputmode", "numeric");
   });
 
   it("입금 다이얼로그의 입금일은 열 때마다 학원 기준 오늘 날짜로 시작한다", async () => {

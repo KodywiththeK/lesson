@@ -279,7 +279,7 @@ describe("입출금 내역 목록 나누기", () => {
     expect(within(calendar).getByText("25,000원")).toBeInTheDocument();
   });
 
-  it("CSV 내보내기는 현재 페이지가 아니라 필터 결과 전체를 담는다", async () => {
+  it("엑셀 내보내기는 현재 페이지가 아니라 필터 결과 전체를 담는다", async () => {
     const user = userEvent.setup();
     const createObjectURL = vi.fn((blob: Blob) => {
       void blob;
@@ -296,7 +296,7 @@ describe("입출금 내역 목록 나누기", () => {
     try {
       renderLedger(buildLedgerEntries("2026-08", 25));
       await screen.findByRole("table", { name: "입출금 내역" });
-      await user.click(screen.getByRole("button", { name: "CSV 내보내기" }));
+      await user.click(screen.getByRole("button", { name: "엑셀 내보내기" }));
 
       const csvText = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -398,7 +398,7 @@ describe("학원 레슨수입 목록 나누기", () => {
 
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
     expect(columnTexts(table, 0)).toEqual(["김민지", "김민지", "한서아"]);
-    expect(columnTexts(table, 2)).toEqual(["바이올린", "첼로", "피아노"]);
+    expect(columnTexts(table, 3)).toEqual(["바이올린", "첼로", "피아노"]);
   });
 
   it("페이지당 20건을 고르면 1페이지로 돌아가 12건을 모두 보여준다", async () => {

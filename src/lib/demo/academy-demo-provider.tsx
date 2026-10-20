@@ -83,7 +83,6 @@ import {
 } from "./academy-demo-state";
 import {
   cancelDemoBookPayment,
-  completeDemoBookRelease,
   deleteDemoBook,
   deleteDemoBookRelease,
   registerDemoBookRelease,
@@ -128,7 +127,6 @@ type DemoAcademyContextValue = {
   registerBookRelease: (input: DemoBookReleaseRegisterInput) => void;
   updateBookRelease: (input: DemoBookReleaseUpdateInput) => void;
   deleteBookRelease: (input: { releaseId: string }) => void;
-  completeBookPayment: (input: { releaseId: string; paidAt: string }) => void;
   cancelBookPayment: (input: { releaseId: string; reason: string }) => void;
   createStudentListQueryOptions: (options: Parameters<typeof buildStudentList>[1]) => {
     queryKey: QueryKey;
@@ -351,9 +349,6 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       deleteBookRelease(input) {
         commitBookChange((current) => deleteDemoBookRelease(current, input));
-      },
-      completeBookPayment(input) {
-        commitBookChange((current) => completeDemoBookRelease(current, input));
       },
       cancelBookPayment(input) {
         commitBookChange((current) => cancelDemoBookPayment(current, input));

@@ -15,10 +15,10 @@ import {
   formatLedgerEntryType,
   getLedgerCategoryOptions,
   getLedgerDraftBlockReason,
-  LEDGER_AMOUNT_LIMIT,
   toDefaultLedgerCategory,
   toDefaultLedgerCategoryForType,
 } from "@/domain/finance-ledger";
+import { parseWonInput } from "@/domain/money-input";
 
 export type LedgerFormValues = {
   occurredOn: string;
@@ -155,8 +155,9 @@ export function LedgerEntryForm({
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
+        const amount = parseWonInput(draft.amountText);
 
-        if (blockReason || pending) {
+        if (blockReason || amount === null || pending) {
           return;
         }
 
@@ -164,7 +165,7 @@ export function LedgerEntryForm({
           occurredOn: draft.occurredOn,
           type: draft.type,
           category: draft.category,
-          amount: Number(draft.amountText),
+          amount,
           description: draft.description.trim(),
         });
       }}
@@ -229,16 +230,19 @@ export function LedgerEntryForm({
           <span>금액</span>
           <Input
             aria-label="금액"
-            type="number"
+            type="text"
             inputMode="numeric"
-            min={1}
-            max={LEDGER_AMOUNT_LIMIT - 1}
-            step={1}
             placeholder="금액(원)"
             value={draft.amountText}
             onChange={(event) => {
               const amountText = event.target.value;
               setDraft((current) => ({ ...current, amountText }));
+            }}
+            onBlur={() => {
+              const amount = parseWonInput(draft.amountText);
+              if (amount !== null) {
+                setDraft((current) => ({ ...current, amountText: amount.toLocaleString("ko-KR") }));
+              }
             }}
           />
         </Label>

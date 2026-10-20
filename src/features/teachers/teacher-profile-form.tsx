@@ -13,6 +13,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { getFinanceToday } from "@/domain/finance-date";
+import { parseWonInput } from "@/domain/money-input";
 import type { TeacherPayType, TeacherWorkScheduleInput } from "@/domain/teacher";
 import {
   buildTeacherPartFormOptions,
@@ -103,6 +104,8 @@ export function TeacherProfileForm({
     ? validateResidentRegistration(residentRegistration)
     : undefined;
   const hasInvalidResidentRegistration = residentRegistrationResult?.ok === false;
+  const salaryAmount = payType === "monthly" ? parseWonInput(monthlySalary) : parseWonInput(hourlyRate);
+  const hasValidSalary = payType === "ratio" || (salaryAmount !== null && salaryAmount > 0);
   const canSubmit =
     Boolean(
       name.trim() &&
@@ -113,6 +116,7 @@ export function TeacherProfileForm({
         contractEndOn,
     ) &&
     (!isOwner || payType !== "ratio" || ratioTotal === 10) &&
+    (!isOwner || hasValidSalary) &&
     !hasInvalidResidentRegistration;
 
   function buildSubmitInput(): TeacherFormInput {
@@ -142,9 +146,8 @@ export function TeacherProfileForm({
     return {
       ...profile,
       payType,
-      monthlySalary:
-        payType === "monthly" ? Number(monthlySalary || 0) : undefined,
-      hourlyRate: payType === "hourly" ? Number(hourlyRate || 0) : undefined,
+      monthlySalary: payType === "monthly" ? (parseWonInput(monthlySalary) ?? 0) : undefined,
+      hourlyRate: payType === "hourly" ? (parseWonInput(hourlyRate) ?? 0) : undefined,
       ratioAcademyShare:
         payType === "ratio" ? Number(ratioAcademyShare || 0) : undefined,
       ratioTeacherShare:
@@ -424,8 +427,8 @@ function SalaryFields({
           <span>월급</span>
           <Input
             aria-label="월급"
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={monthlySalary}
             onChange={(event) => onMonthlySalaryChange(event.target.value)}
           />
@@ -436,8 +439,8 @@ function SalaryFields({
           <span>시급</span>
           <Input
             aria-label="시급"
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={hourlyRate}
             onChange={(event) => onHourlyRateChange(event.target.value)}
           />

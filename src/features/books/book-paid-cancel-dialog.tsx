@@ -38,7 +38,7 @@ export function BookPaidCancelDialog({ sale, isCancelling, onClose, onConfirm }:
             <AlertDialogDescription>
               {sale.studentName}의 {sale.bookTitle} {formatQuantity(sale.quantity)}({formatWon(sale.amount)}) 결제를
               취소합니다. 연결된 입출입내역의 수입 기록이 삭제되고 출고 탭의 결제 대기로 돌아갑니다. 재고에는 영향이
-              없습니다.
+              없습니다. 다시 결제를 확정하려면 출고를 삭제하고 새로 등록해 주세요.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <CancelReasonForm sale={sale} isCancelling={isCancelling} onConfirm={onConfirm} />

@@ -2,8 +2,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { expectWholeWonInput } from "@/test/expect-whole-won-input";
-
 import { AppProviders } from "../providers";
 import BooksPage from "./page";
 
@@ -29,7 +27,7 @@ async function fillRegisterForm(
   values: { title: string; price: string; quantity: string },
 ) {
   await user.type(within(dialog).getByRole("textbox", { name: "도서명" }), values.title);
-  await user.type(within(dialog).getByRole("spinbutton", { name: "가격(원)" }), values.price);
+  await user.type(within(dialog).getByRole("textbox", { name: "가격(원)" }), values.price);
   await user.type(within(dialog).getByRole("spinbutton", { name: "권수" }), values.quantity);
 }
 
@@ -45,10 +43,12 @@ describe("BooksPage", () => {
       "재고",
       "출고",
       "결제 완료",
+      "발주·입고",
     ]);
     expect(within(tabs).getByRole("link", { name: "재고" })).toHaveAttribute("href", "/books");
     expect(within(tabs).getByRole("link", { name: "출고" })).toHaveAttribute("href", "/books/shipments");
     expect(within(tabs).getByRole("link", { name: "결제 완료" })).toHaveAttribute("href", "/books/paid");
+    expect(within(tabs).getByRole("link", { name: "발주·입고" })).toHaveAttribute("href", "/books/orders");
     expect(screen.getByRole("heading", { name: "교재 등록 관리" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "교재 재고 상태" })).toBeInTheDocument();
     expect(screen.getByRole("searchbox", { name: "도서명 검색" })).toBeInTheDocument();
@@ -96,13 +96,15 @@ describe("BooksPage", () => {
     expect(within(rows[0]).getByRole("cell", { name: "13,000원" })).toBeInTheDocument();
   });
 
-  it("교재 가격은 1원 단위 양의 정수를 제약 검증으로 허용한다", async () => {
+  it("교재 가격은 쉼표를 포함한 금액 입력을 유지한다", async () => {
     const user = userEvent.setup();
     renderBooksPage();
 
     const dialog = await openRegisterDialog(user);
 
-    expectWholeWonInput(within(dialog).getByRole("spinbutton", { name: "가격(원)" }));
+    const price = within(dialog).getByRole("textbox", { name: "가격(원)" });
+    await user.type(price, "140,000");
+    expect(price).toHaveValue("140,000");
   });
 
   it("교재 가격 140000원도 등록 버튼으로 저장할 수 있다", async () => {

@@ -15,6 +15,7 @@ import {
   type StudentListSupabaseClient,
   type StudentUpdateSupabaseClient,
   type StudentRegistrationSupabaseClient,
+  type RegisterStudentEnrollmentInput,
 } from "./students";
 
 function createSupabaseStub(
@@ -156,7 +157,7 @@ describe("fetchStudentList", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, age, age_as_of_year, grade, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
+          "id, academy_id, name, age, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
         eq: [
           ["academy_id", "academy-1"],
           ["status", "enrolled"],
@@ -240,7 +241,7 @@ describe("registerStudentEnrollment", () => {
 
     expect(calls).toEqual([
       {
-        functionName: "register_student_with_enrollments",
+        functionName: "register_student_with_contacts",
         payload: {
           p_academy_id: "academy-1",
           p_name: "김민지",
@@ -251,6 +252,7 @@ describe("registerStudentEnrollment", () => {
           p_occupation: "학생",
           p_contact_relationship: "모",
           p_contact_phone: "010-1111-2222",
+          p_secondary_contact: null,
           p_enrollments: [
             {
               instrument_id: "piano",
@@ -288,12 +290,12 @@ describe("registerStudentEnrollment", () => {
     });
   });
 
-  it("학원레슨에 선생님이나 시간이 없으면 RPC 호출 전에 거부한다", async () => {
+  it("학원레슨은 선생님이 없거나 시간을 한쪽만 입력하면 RPC 전에 거부한다", async () => {
     let called = false;
     const client: StudentRegistrationSupabaseClient = {
       async rpc() { called = true; return { data: "student-1", error: null }; },
     };
-    const input = {
+    const input: RegisterStudentEnrollmentInput = {
       academyId: "academy-1", name: "윤라온", registeredAt: "2026-08-21",
       contact: { relationship: "모", phone: "010-1111-2222" },
       instruments: [{
@@ -308,7 +310,11 @@ describe("registerStudentEnrollment", () => {
     await expect(registerStudentEnrollment(client, input)).rejects.toThrow("학원레슨");
     expect(called).toBe(false);
     input.instruments[0].teacherId = "teacher-1";
-    await expect(registerStudentEnrollment(client, input)).rejects.toThrow("모든 요일");
+    await expect(registerStudentEnrollment(client, input)).resolves.toMatchObject({ studentId: "student-1" });
+    expect(called).toBe(true);
+    called = false;
+    input.instruments[0].weeklySchedules[0].startTime = "15:00";
+    await expect(registerStudentEnrollment(client, input)).rejects.toThrow("시작 시간과 종료 시간을 함께");
     expect(called).toBe(false);
   });
 });
@@ -776,7 +782,7 @@ describe("updateStudentEnrollments", () => {
     });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].functionName).toBe("update_student_with_enrollments");
+    expect(calls[0].functionName).toBe("update_student_with_contacts");
     expect(calls[0].payload).toEqual({
       p_academy_id: "academy-1",
       p_student_id: "student-1",

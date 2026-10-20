@@ -1,4 +1,4 @@
-import { CircleCheck, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,20 +17,15 @@ type BookShipmentTableProps = {
   shipments: BookShipmentRow[];
   /** 검색어가 있어 비어 보이는 것인지, 대기 건이 정말 없는 것인지 빈 안내를 가른다. */
   isSearching: boolean;
-  /** 결제 완료 처리는 원장만 한다. */
-  canRecordPayment: boolean;
   onEdit: (shipment: BookShipmentRow) => void;
   onDelete: (shipment: BookShipmentRow) => void;
-  onCompletePayment: (shipment: BookShipmentRow) => void;
 };
 
 export function BookShipmentTable({
   shipments,
   isSearching,
-  canRecordPayment,
   onEdit,
   onDelete,
-  onCompletePayment,
 }: BookShipmentTableProps) {
   if (shipments.length === 0) {
     return (
@@ -99,17 +94,6 @@ export function BookShipmentTable({
                     <Trash2 aria-hidden="true" />
                     삭제
                   </Button>
-                  {canRecordPayment ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-label={`${rowName} 결제 완료 처리`}
-                      onClick={() => onCompletePayment(shipment)}
-                    >
-                      <CircleCheck aria-hidden="true" />
-                      결제 완료 처리
-                    </Button>
-                  ) : null}
                 </div>
               </TableCell>
             </TableRow>

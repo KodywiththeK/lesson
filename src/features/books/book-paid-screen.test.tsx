@@ -201,6 +201,7 @@ describe("BookPaidScreen", () => {
       const confirm = within(confirmation).getByRole("button", { name: "결제 취소" });
 
       expect(confirmation).toHaveTextContent("재고에는 영향이 없습니다");
+      expect(confirmation).toHaveTextContent("다시 결제를 확정하려면 출고를 삭제하고 새로 등록해 주세요");
       expect(confirm).toBeDisabled();
       expect(confirm).toHaveAccessibleDescription("취소 사유를 입력해 주세요.");
 
@@ -225,7 +226,7 @@ describe("BookPaidScreen", () => {
       );
       await waitFor(() =>
         expect(toastMock.success).toHaveBeenCalledWith(
-          "결제를 취소했습니다. 출고 탭에서 다시 수정하거나 결제 처리할 수 있습니다.",
+          "결제를 취소했습니다. 다시 결제를 확정하려면 출고를 삭제하고 새로 등록해 주세요.",
         ),
       );
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();

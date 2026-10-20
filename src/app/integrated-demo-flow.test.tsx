@@ -117,9 +117,7 @@ describe("integrated demo flow", () => {
       target: { value: "2026-08" },
     });
     await user.click(
-      screen.getByRole("gridcell", {
-        name: /21(?: 메모 \d+)? 한서 오후 6시 \d+\/\d+ 한서아 \(바이올린\) - 오유진 선생님/,
-      }),
+      screen.getByRole("button", { name: /2026-08-21 일정 \d+건/ }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "2026-08-21 개인레슨 출석 확인",
@@ -157,9 +155,7 @@ describe("integrated demo flow", () => {
       target: { value: "2026-08" },
     });
     await user.click(
-      screen.getByRole("gridcell", {
-        name: /21(?: 메모 \d+)? 한서 오후 6시 \d+\/\d+ 한서아 \(바이올린\) - 오유진 선생님/,
-      }),
+      screen.getByRole("button", { name: /2026-08-21 일정 \d+건/ }),
     );
     const dialog = await screen.findByRole("dialog", {
       name: "2026-08-21 개인레슨 출석 확인",

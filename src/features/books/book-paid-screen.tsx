@@ -78,7 +78,7 @@ export function BookPaidScreen({
     },
     onSuccess: () => {
       setCancelingSale(null);
-      toast.success("결제를 취소했습니다. 출고 탭에서 다시 수정하거나 결제 처리할 수 있습니다.");
+      toast.success("결제를 취소했습니다. 다시 결제를 확정하려면 출고를 삭제하고 새로 등록해 주세요.");
       invalidateAfterBookChange(queryClient, academyId);
     },
     onError: (error) => {

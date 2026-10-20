@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -114,6 +114,17 @@ describe("LessonMonthlyNotePostit", () => {
     expect(screen.getByRole("textbox", { name: "7월 메모 내용" })).toHaveValue(
       "7월 휴강 안내",
     );
+
+    rerender(
+      <LessonMonthlyNotePostit
+        lessonKind="academy"
+        month="2026-08"
+        note={{ ...UNREAD_NOTE, unread: false }}
+        onSave={onSave}
+        onMarkRead={onMarkRead}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "8월 메모 내용" })).toHaveValue("김하늘 학부모님 전화 옴 추가");
   });
 
   it("불러오는 중에는 입력을 막고 안내한다", () => {
@@ -143,33 +154,33 @@ describe("LessonMonthlyNotePostit", () => {
     expect(screen.getByRole("textbox", { name: "8월 메모 내용" })).toBeInTheDocument();
   });
 
-  it("제목줄을 끌어 위치를 옮기고 모서리 손잡이를 끌어 크기를 바꾼다", () => {
+  it("패널은 이동·크기 조절 손잡이 없이 제자리에 표시된다", () => {
     renderPostit();
     const postit = screen.getByRole("region", { name: "8월 학원레슨 메모지" });
-    const readVar = (name: string) => postit.style.getPropertyValue(name);
 
-    expect(readVar("--memo-x")).toBe("24px");
-    expect(readVar("--memo-width")).toBe("360px");
+    expect(postit).not.toHaveStyle({ position: "absolute" });
+    expect(screen.queryByTitle("메모지 크기 조절")).not.toBeInTheDocument();
+  });
 
-    const title = screen.getByText("8월 학원레슨 메모지");
-    firePointer("pointerdown", title, 100, 100);
-    firePointer("pointermove", title, 160, 130);
-    firePointer("pointerup", title, 160, 130);
+  it("외부 저장본이 바뀌어도 작성 초안을 유지하고 명시적으로 선택하게 한다", async () => {
+    const user = userEvent.setup();
+    const { rerender, onSave, onMarkRead } = renderPostit({ note: UNREAD_NOTE });
+    await user.type(screen.getByRole("textbox", { name: "8월 메모 내용" }), " 내 초안");
 
-    expect(readVar("--memo-x")).toBe("84px");
-    expect(readVar("--memo-y")).toBe("118px");
+    rerender(
+      <LessonMonthlyNotePostit
+        lessonKind="academy"
+        month="2026-08"
+        note={{ content: "다른 직원의 메모", unread: false, updatedAt: "2026-08-20T10:00:00+09:00" }}
+        onSave={onSave}
+        onMarkRead={onMarkRead}
+      />,
+    );
 
-    const handle = screen.getByTitle("메모지 크기 조절");
-    firePointer("pointerdown", handle, 400, 400);
-    firePointer("pointermove", handle, 450, 420);
-    firePointer("pointerup", handle, 450, 420);
-
-    expect(readVar("--memo-width")).toBe("410px");
-    expect(readVar("--memo-height")).toBe("320px");
+    expect(screen.getByRole("textbox", { name: "8월 메모 내용" })).toHaveValue("김하늘 학부모님 전화 옴 내 초안");
+    expect(screen.getByRole("alert")).toHaveTextContent("다른 직원의 메모");
+    expect(screen.getByRole("button", { name: "저장" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "서버 내용 사용" }));
+    expect(screen.getByRole("textbox", { name: "8월 메모 내용" })).toHaveValue("다른 직원의 메모");
   });
 });
-
-// jsdom에는 PointerEvent가 없어 좌표를 가진 MouseEvent를 포인터 이벤트 이름으로 보낸다.
-function firePointer(type: string, element: Element, clientX: number, clientY: number) {
-  fireEvent(element, new MouseEvent(type, { bubbles: true, clientX, clientY }));
-}

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { getFinanceToday } from "@/domain/finance-date";
+import { getSuggestedStudentGrade, getSuggestedStudentOccupation, STUDENT_GRADE_OPTIONS } from "@/domain/student-grade";
 import {
   hasSameStudentName,
   type StudentInstrumentDiscountSelection,
@@ -34,6 +35,8 @@ import {
   type StudentRegistrationInstrumentDraft,
 } from "./student-registration-instrument";
 import { StudentRegistrationInstrumentCard } from "./student-registration-instrument-card";
+import { StudentSecondaryContactFields } from "./student-secondary-contact-fields";
+import { getSecondaryContactErrors } from "./student-secondary-contact";
 
 /**
  * 등록 폼이 내보내는 입력. 데모 등록 입력에 악기별 할인 선택(종류·소개 달)을 더한 상위 타입이라
@@ -112,11 +115,15 @@ function StudentRegistrationForm({
   const [age, setAge] = useState(
     initialValues?.age === undefined ? "" : String(initialValues.age),
   );
-  const [grade, setGrade] = useState("");
+  const [grade, setGrade] = useState(() => getSuggestedStudentGrade(initialValues?.age ?? NaN));
+  const gradeWasSelected = useRef(false);
   const [school, setSchool] = useState(initialValues?.school ?? "");
-  const [occupation, setOccupation] = useState("");
+  const [occupation, setOccupation] = useState(getSuggestedStudentOccupation(initialValues?.age === undefined ? "" : String(initialValues.age)));
+  const occupationWasEdited = useRef(false);
   const [contactRelationship, setContactRelationship] = useState("모");
   const [contactPhone, setContactPhone] = useState(initialValues?.phone ?? "");
+  const [secondaryRelationship, setSecondaryRelationship] = useState("");
+  const [secondaryPhone, setSecondaryPhone] = useState("");
   const [initialInstruments] = useState(() =>
     pickInitialInstruments(initialValues?.instrumentNames),
   );
@@ -142,6 +149,7 @@ function StudentRegistrationForm({
     name.trim() &&
       registeredAt &&
       contactPhone.replace(/\D/g, "").length >= 4 &&
+      Object.keys(getSecondaryContactErrors(secondaryRelationship, secondaryPhone)).length === 0 &&
       orderedDrafts.length > 0 &&
       orderedDrafts.every((draft) =>
         isRegistrationInstrumentReady(draft, teachers, referenceMonth),
@@ -169,6 +177,9 @@ function StudentRegistrationForm({
             relationship: contactRelationship.trim() || "본인",
             phone: contactPhone.trim(),
           },
+          ...(secondaryRelationship.trim() && secondaryPhone.trim()
+            ? { secondaryContact: { relationship: secondaryRelationship.trim(), phone: secondaryPhone.trim() } }
+            : {}),
           instruments: orderedDrafts.map((draft) =>
             buildRegistrationInstrument(draft, teachers, referenceMonth),
           ),
@@ -207,17 +218,30 @@ function StudentRegistrationForm({
             min={0}
             type="number"
             value={age}
-            onChange={(event) => setAge(event.target.value)}
+            onChange={(event) => {
+              const nextAge = event.target.value;
+              setAge(nextAge);
+              if (!gradeWasSelected.current) setGrade(getSuggestedStudentGrade(Number(nextAge)));
+              const suggestedOccupation = getSuggestedStudentOccupation(nextAge);
+              if (!occupationWasEdited.current && suggestedOccupation) setOccupation(suggestedOccupation);
+            }}
           />
         </Label>
         <Label className="grid gap-1">
           <span>학년</span>
-          <Input
+          <NativeSelect
             aria-label="학년"
             value={grade}
-            onChange={(event) => setGrade(event.target.value)}
-            placeholder="초등 1학년"
-          />
+            onChange={(event) => {
+              gradeWasSelected.current = true;
+              setGrade(event.target.value);
+            }}
+          >
+            <NativeSelectOption value="">학년 선택</NativeSelectOption>
+            {STUDENT_GRADE_OPTIONS.map((option) => (
+              <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
+            ))}
+          </NativeSelect>
         </Label>
         <Label className="grid gap-1">
           <span>학교</span>
@@ -232,7 +256,10 @@ function StudentRegistrationForm({
           <Input
             aria-label="직업"
             value={occupation}
-            onChange={(event) => setOccupation(event.target.value)}
+            onChange={(event) => {
+              occupationWasEdited.current = true;
+              setOccupation(event.target.value);
+            }}
           />
         </Label>
       </div>
@@ -262,6 +289,15 @@ function StudentRegistrationForm({
           />
         </Label>
       </div>
+
+      <StudentSecondaryContactFields
+        relationship={secondaryRelationship}
+        phone={secondaryPhone}
+        onChange={(patch) => {
+          if (patch.relationship !== undefined) setSecondaryRelationship(patch.relationship);
+          if (patch.phone !== undefined) setSecondaryPhone(patch.phone);
+        }}
+      />
 
       <fieldset className="grid gap-2">
         <legend className="text-sm font-semibold">

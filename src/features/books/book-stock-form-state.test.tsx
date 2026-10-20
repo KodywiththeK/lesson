@@ -49,6 +49,13 @@ describe("evaluateBookStockForm", () => {
     expect(state.input).toEqual({ title: "체르니 30", price: 14000, quantity: 5, stockedOn: "2026-10-17" });
   });
 
+  it("쉼표가 포함된 가격을 원 단위 정수로 해석한다", () => {
+    const state = evaluateBookStockForm({ ...validValues, price: "140,000" }, context);
+
+    expect(state.blockReason).toBeNull();
+    expect(state.input.price).toBe(140000);
+  });
+
   it("비워 둔 항목은 도메인 오류 문구로 막는다. 권수를 비워도 0권으로 보지 않는다", () => {
     expect(evaluateBookStockForm({ ...validValues, title: " " }, context).blockReason).toBe(
       BOOK_MESSAGES.titleRequired,

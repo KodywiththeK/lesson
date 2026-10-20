@@ -225,7 +225,7 @@ describe("원생 수정 폼 수강 종료", () => {
     await user.click(within(dialog).getByRole("button", { name: "바이올린 되돌리기" }));
 
     expect(within(dialog).queryByText("바이올린 수강 종료 예정")).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue(210000);
+    expect(within(dialog).getByLabelText("바이올린 레슨비")).toHaveValue("210000");
 
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
@@ -260,6 +260,7 @@ describe("원생 수정 폼 수강 종료", () => {
     const { user, dialog } = await openEditForm("한소희");
 
     await user.click(within(dialog).getByLabelText("피아노 목요일"));
+    await user.type(within(dialog).getByLabelText("피아노 목 시작 시간"), "16:00");
     expect(within(dialog).getByRole("button", { name: "수정완료" })).toBeDisabled();
 
     const confirmation = await confirmEnd(user, dialog, "피아노");

@@ -7,6 +7,7 @@ import {
   type BookStockRow,
   type RestockPreview,
 } from "@/domain/book-stock";
+import { parseWonInput } from "@/domain/money-input";
 
 import { formatBookPrice, formatBookQuantity } from "./book-stock-format";
 
@@ -59,7 +60,7 @@ export function evaluateBookStockForm(
 ): BookStockFormState {
   const input: BookStockInput = {
     title: values.title.trim(),
-    price: toNumber(values.price),
+    price: parseWonInput(values.price) ?? Number.NaN,
     quantity: toNumber(values.quantity),
     stockedOn: values.stockedOn,
   };

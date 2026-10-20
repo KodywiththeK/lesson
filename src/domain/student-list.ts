@@ -16,6 +16,7 @@ export type StudentListRow = {
   /** `age`를 입력한 해(KST). 표시 나이는 `getStudentDisplayAge`로 계산한다. */
   ageAsOfYear?: number;
   grade?: string;
+  gradeAsOfYear?: number;
   school?: string;
   occupation?: string;
   attendanceCode?: string;

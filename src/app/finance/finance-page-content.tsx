@@ -16,9 +16,9 @@ import {
 import { readFreshData, useFinanceMonth } from "@/features/finance/finance-shared";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { createFinanceLedgerListQueryOptions } from "@/lib/api/finance";
+import { bookOrderQueryKey, fetchBookOrders, type BookOrderReadClient } from "@/lib/api/book-orders";
 import {
   cancelPayrollSettlementPaid,
-  clearMonthlyTuitionOverdue,
   createMonthlyTuitionSnapshotsQueryOptions,
   createYearlyTuitionSnapshotsQueryOptions,
   fetchFinanceManagementData,
@@ -130,11 +130,6 @@ function renderFinanceScreen(
                 ? (input) => markMonthlyTuitionAsOverdue(client, input)
                 : undefined
             }
-            clearTuitionOverdue={
-              client
-                ? (input) => clearMonthlyTuitionOverdue(client, input)
-                : undefined
-            }
             tuitionSnapshotsQueryOptionsFactory={
               client
                 ? (month) =>
@@ -157,10 +152,14 @@ function renderFinanceScreen(
         fallbackData={fallbackData}
         useTestDemo={context.useTestDemo}
       >
-        {(financeData) => (
+        {(financeData, client) => (
           <FinanceBooksScreen
             academyId={context.academyId}
             financeData={financeData}
+            bookOrdersQueryOptions={client ? {
+              queryKey: bookOrderQueryKey(context.academyId),
+              queryFn: () => fetchBookOrders(client as unknown as BookOrderReadClient, context.academyId),
+            } : undefined}
           />
         )}
       </FinanceDataScreen>

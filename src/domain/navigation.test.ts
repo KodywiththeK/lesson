@@ -59,15 +59,16 @@ describe("mainNavigation", () => {
     ]);
   });
 
-  it("교재 메뉴는 재고, 출고, 결제 완료 하위 메뉴를 가진다", () => {
+  it("교재 메뉴는 재고, 출고, 결제 완료, 발주·입고 하위 메뉴를 가진다", () => {
     const bookNavigation = mainNavigation.find((item) => item.label === "교재");
 
     expect(bookNavigation?.href).toBe("/books");
-    expect(bookNavigation?.children?.map((item) => item.label)).toEqual(["재고", "출고", "결제 완료"]);
+    expect(bookNavigation?.children?.map((item) => item.label)).toEqual(["재고", "출고", "결제 완료", "발주·입고"]);
     expect(bookNavigation?.children?.map((item) => item.href)).toEqual([
       "/books",
       "/books/shipments",
       "/books/paid",
+      "/books/orders",
     ]);
   });
 

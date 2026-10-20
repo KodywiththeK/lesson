@@ -55,7 +55,9 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import type { ListView } from "@/domain/common-list";
+import { getFinanceToday } from "@/domain/finance-date";
 import { STUDENT_DISCOUNTS } from "@/domain/lesson-pricing";
+import { getStudentDisplayGrade } from "@/domain/student-grade";
 import {
   applyStudentEnrollmentSave,
   getRemainingEventNotice,
@@ -249,6 +251,7 @@ export function StudentListScreen({
         school: input.school,
         occupation: input.occupation,
         contact: input.contact,
+        secondaryContact: input.secondaryContact,
         instruments: input.instruments,
       } satisfies RegisterStudentEnrollmentInput);
     },
@@ -591,7 +594,7 @@ function StudentDetailDialog({
               <DetailItem label="등록일" value={student.registeredOn ?? "-"} />
               <DetailItem label="출석 ID" value={student.attendanceCode ?? "-"} />
               <DetailItem label="나이" value={formatAge(getStudentDisplayAge(student))} />
-              <DetailItem label="학년" value={student.grade ?? "-"} />
+              <DetailItem label="학년" value={getStudentDisplayGrade(student, getFinanceToday()) || "-"} />
               <DetailItem label="학교" value={student.school ?? "-"} />
               <DetailItem label="직업" value={student.occupation ?? "-"} />
               <DetailItem

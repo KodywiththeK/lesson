@@ -64,7 +64,7 @@ describe("fetchDailyAcademyLessonAttendance", () => {
       {
         table: "lesson_events",
         select:
-          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)",
+          "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), teacher_id, teachers!lesson_events_academy_teacher_fk(name), instrument_id, instrument_name, starts_at, ends_at, time_unspecified, status, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at)",
         eq: [
           ["academy_id", "academy-1"],
           ["lesson_kind", "academy"],

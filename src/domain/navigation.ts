@@ -129,6 +129,13 @@ export const mainNavigation: NavigationItem[] = [
         icon: BookOpen,
         feature: "books",
       },
+      {
+        label: "발주·입고",
+        href: "/books/orders",
+        description: "거래처 발주와 입고·지급 내역을 관리합니다.",
+        icon: BookOpen,
+        feature: "books",
+      },
     ],
   },
   {

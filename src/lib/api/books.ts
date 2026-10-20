@@ -233,7 +233,6 @@ type BookRpcArgs = {
     p_shipped_on: string;
   };
   delete_book_release: { p_academy_id: string; p_release_id: string };
-  complete_book_release_payment: { p_academy_id: string; p_release_id: string; p_paid_at: string };
   cancel_book_release_payment: { p_academy_id: string; p_release_id: string; p_reason: string };
 };
 
@@ -244,7 +243,6 @@ type BookRpcResult = {
   register_book_release: BookReleaseSupabaseRow;
   update_book_release: BookReleaseSupabaseRow;
   delete_book_release: null;
-  complete_book_release_payment: BookReleaseSupabaseRow;
   cancel_book_release_payment: BookReleaseSupabaseRow;
 };
 
@@ -414,28 +412,6 @@ export async function deleteBookRelease(
   if (error) {
     throw new Error(`교재 출고를 삭제하지 못했습니다: ${error.message}`);
   }
-}
-
-/** 결제 대기 교재를 결제 완료로 바꾼다. 상태 변경과 수입 원장 등록은 DB 함수 안에서 한 트랜잭션으로 처리한다. */
-export async function completeBookReleasePayment(
-  supabase: BookMutationSupabaseClient,
-  input: { academyId: string; releaseId: string; paidAt: string },
-): Promise<BookSale> {
-  const { data, error } = await supabase.rpc("complete_book_release_payment", {
-    p_academy_id: input.academyId,
-    p_release_id: input.releaseId,
-    p_paid_at: input.paidAt,
-  });
-
-  if (error) {
-    throw new Error(`교재 결제 완료 처리에 실패했습니다: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error("교재 결제 완료 처리 후 반환된 데이터가 없습니다.");
-  }
-
-  return toBookSale(data);
 }
 
 /** 결제 완료를 취소해 결제 대기로 되돌린다(원장). 연결된 입출입내역 수입 행도 서버가 함께 지운다. */

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   cancelBookReleasePayment,
-  completeBookReleasePayment,
   createBookOptionsQueryOptions,
   createBookStockListQueryOptions,
   deleteBook,
@@ -334,18 +333,6 @@ describe("교재·출고 변경 RPC", () => {
       name: "delete_book_release",
       args: { p_academy_id: "academy-1", p_release_id: "sale-1" },
     });
-
-    const pay = createMutationClient(releaseRow({ status: "paid", paid_at: "2026-10-12" }));
-    const paid = await completeBookReleasePayment(pay.client, {
-      academyId: "academy-1",
-      releaseId: "sale-1",
-      paidAt: "2026-10-12",
-    });
-    expect(pay.calls[0]).toEqual({
-      name: "complete_book_release_payment",
-      args: { p_academy_id: "academy-1", p_release_id: "sale-1", p_paid_at: "2026-10-12" },
-    });
-    expect(paid).toMatchObject({ status: "paid", paidAt: "2026-10-12" });
 
     const cancel = createMutationClient(releaseRow());
     const cancelled = await cancelBookReleasePayment(cancel.client, {

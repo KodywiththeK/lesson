@@ -100,6 +100,40 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   await expect(page.getByRole("dialog", { name: "레슨 일정 등록" })).toBeVisible();
 });
 
+test("학원레슨 달력과 선택 날짜 패널은 각 화면 폭에서 겹치거나 가로로 넘치지 않는다", async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date("2026-10-16T12:00:00+09:00"));
+  for (const width of [320, 480, 767, 768, 1023, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/lessons/academy");
+    const calendar = page.getByRole("grid", { name: "2026년 10월 학원레슨 캘린더" });
+    const panel = page.getByRole("complementary", { name: /선택 날짜/ });
+    await expect(calendar).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect.poll(async () => Boolean(await calendar.boundingBox())).toBe(true);
+    await expect.poll(async () => Boolean(await panel.boundingBox())).toBe(true);
+    const calendarBox = await calendar.boundingBox();
+    const panelBox = await panel.boundingBox();
+    expect(calendarBox).not.toBeNull();
+    expect(panelBox).not.toBeNull();
+    if (width >= 1280) {
+      expect(panelBox!.x).toBeGreaterThanOrEqual(calendarBox!.x + calendarBox!.width);
+      expect(calendarBox!.width).toBeGreaterThanOrEqual(520);
+    } else {
+      expect(panelBox!.y).toBeGreaterThanOrEqual(calendarBox!.y + calendarBox!.height);
+    }
+    const todayButton = page.getByRole("button", { name: "오늘로 이동" });
+    const todayBox = await todayButton.boundingBox();
+    const calendarContainerBox = await calendar.locator("..").boundingBox();
+    expect(todayBox).not.toBeNull();
+    expect(calendarContainerBox).not.toBeNull();
+    expect(todayBox!.x + todayBox!.width).toBeLessThanOrEqual(calendarContainerBox!.x + calendarContainerBox!.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    if ([320, 768, 1024].includes(width)) {
+      await page.screenshot({ path: testInfo.outputPath(`academy-calendar-${width}.png`) });
+    }
+  }
+});
+
 test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
@@ -291,6 +325,28 @@ test("교재 메뉴에서 재고, 출고, 결제 완료 탭으로 이동할 수 
 
   await mainNavigation(page).getByRole("link", { name: "결제 완료", exact: true }).click();
   await expect(page).toHaveURL(/\/books\/paid$/);
+});
+
+test("작은 모바일에서 교재 쉼표 금액을 입력하고 출고의 나중 결제 버튼은 보이지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/books");
+  await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
+  await page.getByRole("dialog", { name: "페이지 작업" }).getByRole("button", { name: "교재 등록" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "교재 등록" });
+  const price = dialog.getByRole("textbox", { name: "가격(원)" });
+  await price.fill("140,000");
+  await expect(price).toHaveValue("140,000");
+  await expect(dialog.getByRole("button", { name: "등록" })).toBeVisible();
+
+  await page.goto("/books/shipments");
+  await expect(page.getByRole("button", { name: /결제 완료 처리/ })).toHaveCount(0);
+});
+
+test("데모의 발주·입고 탭은 운영 DB를 호출하지 않고 빈 목록을 보여 준다", async ({ page }) => {
+  await page.goto("/books/orders");
+  await expect(page.getByText("발주 내역이 없습니다.")).toBeVisible();
+  await expect(page.getByText("교재 발주를 불러오지 못했습니다.")).toHaveCount(0);
 });
 
 test("수입 관리 메뉴는 학원 고정 수입을 기본으로 열고 입출입내역 탭으로 이동할 수 있다", async ({ page }) => {

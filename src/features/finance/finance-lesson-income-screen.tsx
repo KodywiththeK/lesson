@@ -40,6 +40,7 @@ export type LessonIncomeRow = {
   id: string;
   studentId: string;
   studentName: string;
+  registeredOn: string;
   instrumentName: string;
   progress: string;
   lessonFee: number;
@@ -54,7 +55,7 @@ type TuitionRow = Extract<LessonIncomeRow, { source: "tuition" }>;
 type TuitionActionKind = TuitionAction["action"];
 type TuitionCommand =
   | { kind: "pay"; row: TuitionRow; paidAt: string }
-  | { kind: "overdue" | "clear-overdue" | "cancel-payment"; row: TuitionRow };
+  | { kind: "overdue" | "cancel-payment"; row: TuitionRow };
 
 const UNSUPPORTED_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
 const LEDGER_MISSING_LABEL = "원장 기록 없음";
@@ -62,7 +63,6 @@ const LEDGER_MISSING_LABEL = "원장 기록 없음";
 const COMMAND_MESSAGES: Record<TuitionCommand["kind"], { success: string; failure: string }> = {
   pay: { success: "입금 처리했습니다.", failure: "입금 처리에 실패했습니다." },
   overdue: { success: "미납으로 기록했습니다.", failure: "미납 처리에 실패했습니다." },
-  "clear-overdue": { success: "미납을 해제했습니다.", failure: "미납 해제에 실패했습니다." },
   "cancel-payment": { success: "입금을 취소했습니다.", failure: "입금 취소에 실패했습니다." },
 };
 
@@ -86,7 +86,6 @@ export function FinanceLessonIncomeScreen({
   academyId,
   financeData,
   markTuitionOverdue,
-  clearTuitionOverdue,
   markTuitionPaid,
   markTuitionUnpaid,
   tuitionSnapshotsQueryOptionsFactory,
@@ -133,8 +132,6 @@ export function FinanceLessonIncomeScreen({
         await markTuitionPaid({ ...target, paidAt: command.paidAt });
       } else if (command.kind === "overdue" && markTuitionOverdue) {
         await markTuitionOverdue(target);
-      } else if (command.kind === "clear-overdue" && clearTuitionOverdue) {
-        await clearTuitionOverdue(target);
       } else if (command.kind === "cancel-payment" && markTuitionUnpaid) {
         await markTuitionUnpaid(target);
       } else {
@@ -155,7 +152,7 @@ export function FinanceLessonIncomeScreen({
   });
 
   function requestTuitionAction(action: TuitionActionKind, row: TuitionRow) {
-    if (action === "pay") {
+    if (action === "pay" || action === "clear-overdue") {
       setPayTarget(row);
     } else if (action === "cancel-payment") {
       setCancelTarget(row);
@@ -208,6 +205,7 @@ export function FinanceLessonIncomeScreen({
           <TableHeader className="bg-muted text-muted-foreground">
             <TableRow>
               <TableHead className="px-4 py-3">이름</TableHead>
+              <TableHead className="px-4 py-3">최초 등록일</TableHead>
               <TableHead className="px-4 py-3">레슨종류</TableHead>
               <TableHead className="px-4 py-3">악기</TableHead>
               <TableHead className="px-4 py-3">진도</TableHead>
@@ -221,6 +219,7 @@ export function FinanceLessonIncomeScreen({
             {rowsView.items.map((row) => (
               <TableRow key={row.id}>
                 <TableCell label="이름" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
+                <TableCell label="최초 등록일" className="px-4 py-3 tabular-nums">{row.registeredOn || "확인 필요"}</TableCell>
                 <TableCell label="레슨종류" className="px-4 py-3">{row.lessonKindLabel}</TableCell>
                 <TableCell label="악기" className="px-4 py-3">{row.instrumentName}</TableCell>
                 <TableCell label="진도" className="px-4 py-3">{row.progress}</TableCell>
@@ -255,8 +254,10 @@ export function FinanceLessonIncomeScreen({
       </div>
       <PaymentDialog
         open={Boolean(payTarget)}
-        title="입금 처리"
-        description="확인하면 입출입내역에 수입이 기록됩니다."
+        title={payTarget?.record.status === "overdue" ? "미납 수강료 입금 확인" : "입금 처리"}
+        description={payTarget
+          ? `${payTarget.studentName} · ${payTarget.instrumentName} · ${formatWon(payTarget.finalAmount)}. 확인하면 입출입내역에 수입이 기록됩니다.`
+          : "확인하면 입출입내역에 수입이 기록됩니다."}
         dateLabel="입금일"
         contextMonth={month}
         pending={tuitionCommand.isPending}
@@ -416,6 +417,7 @@ export function buildLessonIncomeRows(
   month: string,
   tuitionSnapshots?: TuitionRecord[],
 ): LessonIncomeRow[] {
+  const registrationDates = data.studentRegisteredOnById ?? {};
   const academyRows = (
     tuitionSnapshots ?? buildFallbackTuitionSnapshots(data, academyId, month)
   ).map((snapshot) => ({
@@ -423,6 +425,7 @@ export function buildLessonIncomeRows(
     studentId: snapshot.studentId,
     source: "tuition" as const,
     studentName: snapshot.studentName,
+    registeredOn: snapshot.registeredOn ?? registrationDates[snapshot.studentId] ?? "",
     lessonKindLabel: "학원레슨 월수강료" as const,
     instrumentName: snapshot.instrumentName,
     progress: snapshot.progress,
@@ -439,7 +442,11 @@ export function buildLessonIncomeRows(
     month,
   );
 
-  return [...academyRows, ...privateRows].sort(
+  return [...academyRows, ...privateRows.map((row) => ({
+    ...row,
+    registeredOn: registrationDates[row.studentId] ??
+      data.enrollments.find((enrollment) => enrollment.studentId === row.studentId)?.registeredOn ?? "",
+  }))].sort(
     (left, right) =>
       compareKoreanNames(left.studentName, right.studentName) ||
       compareKoreanNames(getLessonIncomeTieBreaker(left), getLessonIncomeTieBreaker(right)),
@@ -476,7 +483,7 @@ export function buildFallbackTuitionSnapshots(
       instrumentId: enrollment.instrumentId,
       instrumentName: enrollment.instrumentName,
       monthlyAmount: enrollment.finalMonthlyFee,
-      registeredOn: `${month}-01`,
+      registeredOn: enrollment.registeredOn ?? `${month}-01`,
       lessonFee: enrollment.lessonFee,
       discountTotal: enrollment.discountTotal,
       discountLabel: enrollment.discountLabel,

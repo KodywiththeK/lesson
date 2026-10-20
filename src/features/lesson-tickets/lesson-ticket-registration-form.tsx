@@ -16,6 +16,8 @@ import {
   calculateLessonTicketValidUntil,
   MAX_LESSON_TICKET_VALID_DAYS,
 } from "@/domain/lesson-ticket";
+import { LEDGER_AMOUNT_MAX } from "@/domain/book-stock";
+import { parseWonInput } from "@/domain/money-input";
 import type {
   LessonTicketRegistrationStudentOption,
   RegisterLessonTicketInput,
@@ -62,11 +64,10 @@ export function LessonTicketRegistrationForm({
   );
   const grantedCount = parseNumberInput(grantedCountText);
   const validDays = parseNumberInput(validDaysText);
-  const paidAmount = !canRecordPayment || paidAmountText === "" ? undefined : parseNumberInput(paidAmountText);
+  const paidAmount = !canRecordPayment || paidAmountText === "" ? undefined : parseWonInput(paidAmountText);
   const hasValidGrantedCount = Number.isInteger(grantedCount) && grantedCount >= 1;
   const hasValidValidDays = Number.isInteger(validDays) && validDays >= 1 && validDays <= MAX_LESSON_TICKET_VALID_DAYS;
-  const hasValidPaidAmount =
-    paidAmount === undefined || (Number.isInteger(paidAmount) && paidAmount >= 0);
+  const hasValidPaidAmount = paidAmount === undefined || (paidAmount !== null && paidAmount <= LEDGER_AMOUNT_MAX);
   const validUntil =
     hasValidValidDays && registeredAt
       ? calculateLessonTicketValidUntil(registeredAt, validDays)
@@ -98,7 +99,7 @@ export function LessonTicketRegistrationForm({
           grantedCount,
           validDays,
           registeredAt,
-          ...(paidAmount === undefined ? {} : { paidAmount }),
+          ...(paidAmount == null ? {} : { paidAmount }),
         });
       }}
     >
@@ -207,9 +208,10 @@ export function LessonTicketRegistrationForm({
           <Input
             aria-label="결제 금액"
             aria-describedby={paidAmountHintId}
-            type="number"
-            min={0}
-            step={1}
+            type="text"
+            inputMode="numeric"
+            pattern="(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)"
+            aria-invalid={!hasValidPaidAmount}
             value={paidAmountText}
             onChange={(event) => setPaidAmountText(event.target.value)}
           />
@@ -217,6 +219,7 @@ export function LessonTicketRegistrationForm({
         <p id={paidAmountHintId} className="text-xs text-muted-foreground">
           입력하면 수입 내역에 기록됩니다(원장만 입력 가능).
         </p>
+        {!hasValidPaidAmount ? <p className="text-xs text-destructive">결제 금액은 0~{LEDGER_AMOUNT_MAX.toLocaleString("ko-KR")}원 사이의 정수로 입력해 주세요.</p> : null}
       </div> : null}
 
       <DialogFooter>

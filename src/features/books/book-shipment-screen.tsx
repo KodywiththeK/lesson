@@ -23,7 +23,6 @@ import { BookShipmentDeleteDialog } from "./book-shipment-delete-dialog";
 import { BookShipmentEditDialog } from "./book-shipment-edit-dialog";
 import { BookShipmentForm } from "./book-shipment-form";
 import { createBookShipmentOperations, type BookShipmentOperationOverrides } from "./book-shipment-operations";
-import { BookShipmentPaymentDialog } from "./book-shipment-payment-dialog";
 import { createBookSupabaseClientState, orUnavailableQueryOptions } from "./book-supabase";
 import { BookShipmentTable } from "./book-shipment-table";
 
@@ -41,7 +40,7 @@ type BookOptionsQueryOptions = {
 
 type BookShipmentScreenProps = BookShipmentOperationOverrides & {
   academyId: string;
-  /** 원장만 결제 완료 처리와 바로 결제 완료 등록을 할 수 있다. */
+  /** 원장만 출고 등록 시 바로 결제 완료를 선택할 수 있다. */
   canRecordPayment: boolean;
   queryOptionsFactory?: BookShipmentQueryOptionsFactory;
   /** 출고 폼의 도서 선택지(보관하지 않은 교재 전체). 없으면 Supabase에서 조회한다. */
@@ -53,7 +52,7 @@ type BookShipmentScreenProps = BookShipmentOperationOverrides & {
 const NO_BOOKS: BookStockRow[] = [];
 const NO_STUDENTS: StudentListRow[] = [];
 
-/** 출고 탭: 출고 등록 폼과 결제 대기 출고목록(수정·삭제·결제 완료 처리). */
+/** 출고 탭: 출고 등록 폼과 결제 대기 출고목록(수정·삭제). */
 export function BookShipmentScreen({
   academyId,
   canRecordPayment,
@@ -63,7 +62,6 @@ export function BookShipmentScreen({
   registerBookRelease,
   updateBookRelease,
   deleteBookRelease,
-  completeBookPayment,
 }: BookShipmentScreenProps) {
   const queryClient = useQueryClient();
   const purchaseHeadingId = useId();
@@ -73,7 +71,6 @@ export function BookShipmentScreen({
   const [formVersion, setFormVersion] = useState(0);
   const [editingShipment, setEditingShipment] = useState<BookShipmentRow | null>(null);
   const [deletingShipment, setDeletingShipment] = useState<BookShipmentRow | null>(null);
-  const [payingShipment, setPayingShipment] = useState<BookShipmentRow | null>(null);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const clientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createBookSupabaseClientState()),
@@ -84,7 +81,6 @@ export function BookShipmentScreen({
     registerBookRelease,
     updateBookRelease,
     deleteBookRelease,
-    completeBookPayment,
   });
 
   const listOptions: BuildBookShipmentListOptions = { academyId, search, page, pageSize };
@@ -141,17 +137,6 @@ export function BookShipmentScreen({
       toast.error("출고 내역 삭제에 실패했습니다.", { description: toUserMessage(error) });
     },
   });
-  const completePaymentMutation = useMutation({
-    mutationFn: operations.completePayment,
-    onSuccess: () => {
-      setPayingShipment(null);
-      toast.success("교재 결제 완료 처리를 했습니다.");
-      invalidateAfterBookChange(queryClient, academyId);
-    },
-    onError: (error) => {
-      toast.error("교재 결제 완료 처리에 실패했습니다.", { description: toUserMessage(error) });
-    },
-  });
 
   const shipmentsView = shipmentsQuery.data;
   const optionLoadError = clientState?.error ?? bookOptionsQuery.error ?? studentOptionsQuery.error;
@@ -162,7 +147,7 @@ export function BookShipmentScreen({
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <section aria-labelledby={purchaseHeadingId} className="grid gap-3 rounded-lg border border-border bg-card p-4">
         <h2 id={purchaseHeadingId} className="text-lg font-semibold">
           도서 구매 목록
@@ -180,17 +165,17 @@ export function BookShipmentScreen({
         />
       </section>
 
-      <section aria-labelledby={shipmentsHeadingId} className="grid gap-3">
+      <section aria-labelledby={shipmentsHeadingId} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
         <div>
           <h2 id={shipmentsHeadingId} className="text-lg font-semibold">
             출고목록
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            등록된 출고 내역을 확인 및 수정·삭제하거나, 최종확인하여 결제 완료 단계로 넘길 수 있습니다.
+            결제 대기 출고를 확인·수정·삭제할 수 있습니다.
           </p>
         </div>
 
-        <div className="rounded-lg border border-border bg-card">
+        <div className="min-w-0 rounded-lg border border-border bg-card">
           <div className="border-b border-border p-4 sm:max-w-md">
             <ListSearchField
               label="출고 검색"
@@ -213,10 +198,8 @@ export function BookShipmentScreen({
               <BookShipmentTable
                 shipments={shipmentsView.items}
                 isSearching={search.trim() !== ""}
-                canRecordPayment={canRecordPayment}
                 onEdit={setEditingShipment}
                 onDelete={setDeletingShipment}
-                onCompletePayment={setPayingShipment}
               />
               <ListPagination
                 itemLabel="출고"
@@ -243,14 +226,6 @@ export function BookShipmentScreen({
         isDeleting={deleteMutation.isPending}
         onClose={() => setDeletingShipment(null)}
         onConfirm={(shipment) => deleteMutation.mutate({ releaseId: shipment.saleId })}
-      />
-      <BookShipmentPaymentDialog
-        shipment={payingShipment}
-        isPending={completePaymentMutation.isPending}
-        onClose={() => setPayingShipment(null)}
-        onConfirm={(shipment, paidAt) =>
-          completePaymentMutation.mutate({ releaseId: shipment.saleId, paidAt })
-        }
       />
     </div>
   );

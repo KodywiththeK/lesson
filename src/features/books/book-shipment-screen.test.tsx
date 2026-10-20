@@ -34,7 +34,6 @@ function renderScreen(props: Partial<ComponentProps<typeof BookShipmentScreen>> 
     registerBookRelease: vi.fn(),
     updateBookRelease: vi.fn(),
     deleteBookRelease: vi.fn(),
-    completeBookPayment: vi.fn(),
   };
 
   render(
@@ -82,7 +81,7 @@ describe("BookShipmentScreen", () => {
       expect(screen.getByRole("heading", { name: "도서 구매 목록" })).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "출고목록" })).toBeInTheDocument();
       expect(
-        screen.getByText("등록된 출고 내역을 확인 및 수정·삭제하거나, 최종확인하여 결제 완료 단계로 넘길 수 있습니다."),
+        screen.getByText("결제 대기 출고를 확인·수정·삭제할 수 있습니다."),
       ).toBeInTheDocument();
       expect(await screen.findByRole("table", { name: "출고 목록" })).toBeInTheDocument();
     });
@@ -109,13 +108,13 @@ describe("BookShipmentScreen", () => {
       expect(await findShipmentRow(/박지우/)).toBeInTheDocument();
     });
 
-    it("원장은 수정·삭제·결제 완료 처리를 볼 수 있다", async () => {
+    it("원장도 결제 대기 출고에서는 수정·삭제만 할 수 있다", async () => {
       renderScreen({ canRecordPayment: true });
       const row = await findShipmentRow(/김민지/);
 
       expect(within(row).getByRole("button", { name: "김민지 바이엘 상 수정" })).toBeInTheDocument();
       expect(within(row).getByRole("button", { name: "김민지 바이엘 상 삭제" })).toBeInTheDocument();
-      expect(within(row).getByRole("button", { name: "김민지 바이엘 상 결제 완료 처리" })).toBeInTheDocument();
+      expect(within(row).queryByRole("button", { name: /결제 완료 처리/ })).not.toBeInTheDocument();
     });
 
     it("데스크에게는 결제 완료 처리와 바로 결제 완료 선택지를 보이지 않는다", async () => {
@@ -331,86 +330,6 @@ describe("BookShipmentScreen", () => {
         }),
       );
       expect(screen.getByRole("alertdialog", { name: "출고 내역을 삭제할까요?" })).toBeInTheDocument();
-    });
-  });
-
-  describe("결제 완료 처리", () => {
-    async function openPayment(user: ReturnType<typeof userEvent.setup>) {
-      await user.click(
-        within(await findShipmentRow(/김민지/)).getByRole("button", { name: "김민지 바이엘 상 결제 완료 처리" }),
-      );
-
-      return screen.findByRole("dialog", { name: "결제 완료 처리" });
-    }
-
-    it("입금일은 오늘이 기본이고 어느 달 내역에 반영되는지 안내한다", async () => {
-      const user = userEvent.setup();
-      renderScreen();
-
-      const dialog = await openPayment(user);
-
-      expect(within(dialog).getByLabelText("입금일")).toHaveValue("2026-10-15");
-      expect(
-        within(dialog).getByText("입금일이 속한 10월의 입출입내역과 교재 내역에 반영됩니다."),
-      ).toBeInTheDocument();
-    });
-
-    it("입금일이 출고일과 다른 달이면 그 사실을 강조해 안내한다", async () => {
-      const user = userEvent.setup();
-      renderScreen();
-      const dialog = await openPayment(user);
-
-      await user.clear(within(dialog).getByLabelText("입금일"));
-      await user.type(within(dialog).getByLabelText("입금일"), "2026-11-03");
-
-      expect(
-        within(dialog).getByText(
-          "입금일이 속한 11월의 입출입내역과 교재 내역에 반영됩니다. 출고일(10월)과 다른 달입니다.",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("입금일이 출고일보다 이르면 막고 이유를 알린다", async () => {
-      const user = userEvent.setup();
-      const { completeBookPayment } = renderScreen();
-      const dialog = await openPayment(user);
-
-      await user.clear(within(dialog).getByLabelText("입금일"));
-      await user.type(within(dialog).getByLabelText("입금일"), "2026-09-30");
-
-      expect(within(dialog).getByText("입금일은 출고일(2026-10-01) 이후여야 합니다.")).toBeInTheDocument();
-      expect(within(dialog).getByRole("button", { name: "결제 완료 처리" })).toBeDisabled();
-      expect(completeBookPayment).not.toHaveBeenCalled();
-    });
-
-    it("입금일을 확인하면 결제 완료 처리하고 알린다", async () => {
-      const user = userEvent.setup();
-      const { completeBookPayment, invalidateQueries } = renderScreen();
-      const dialog = await openPayment(user);
-
-      await user.click(within(dialog).getByRole("button", { name: "결제 완료 처리" }));
-
-      await waitFor(() =>
-        expect(completeBookPayment).toHaveBeenCalledWith({ releaseId: "sale-1", paidAt: "2026-10-15" }),
-      );
-      await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("교재 결제 완료 처리를 했습니다."));
-      expect(screen.queryByRole("dialog", { name: "결제 완료 처리" })).not.toBeInTheDocument();
-      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: queryKeys.finance.all(TEST_ACADEMY_ID) });
-    });
-
-    it("실패하면 이유를 알리고 다이얼로그를 유지한다", async () => {
-      const user = userEvent.setup();
-      renderScreen({ completeBookPayment: vi.fn().mockRejectedValue(new Error("이미 결제 완료된 출고입니다.")) });
-      const dialog = await openPayment(user);
-
-      await user.click(within(dialog).getByRole("button", { name: "결제 완료 처리" }));
-
-      await waitFor(() =>
-        expect(toastMock.error).toHaveBeenCalledWith("교재 결제 완료 처리에 실패했습니다.", {
-          description: "이미 결제 완료된 출고입니다.",
-        }),
-      );
-      expect(screen.getByRole("dialog", { name: "결제 완료 처리" })).toBeInTheDocument();
     });
   });
 

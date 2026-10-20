@@ -65,10 +65,8 @@ export function BookShipmentFields({ values, students, books, onChange }: BookSh
         <span>가격(원)</span>
         <Input
           aria-label="가격(원)"
-          type="number"
-          min={1}
-          max={BOOK_LIMITS.priceMax}
-          step={1}
+          type="text"
+          inputMode="numeric"
           value={values.price}
           onChange={(event) => changeField("price", event.target.value)}
         />

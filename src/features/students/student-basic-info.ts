@@ -1,4 +1,6 @@
 import { getStudentDisplayAge, type StudentListRow } from "@/domain/student-list";
+import { getFinanceToday } from "@/domain/finance-date";
+import { getStudentDisplayGrade } from "@/domain/student-grade";
 import type { StudentBasicInfoInput } from "@/domain/student-enrollment-edit";
 
 import { contactRelationshipOptions } from "./student-form-options";
@@ -16,21 +18,26 @@ export type StudentBasicFormValues = {
   occupation: string;
   contactRelationship: string;
   contactPhone: string;
+  secondaryContactRelationship: string;
+  secondaryContactPhone: string;
 };
 
 export function createBasicFormValues(student: StudentListRow): StudentBasicFormValues {
   const primaryContact = student.contacts?.[0];
+  const secondaryContact = student.contacts?.[1];
   const displayAge = getStudentDisplayAge(student);
 
   return {
     name: student.name,
     registeredOn: student.registeredOn ?? "",
     age: displayAge === undefined ? "" : String(displayAge),
-    grade: student.grade ?? "",
+    grade: getStudentDisplayGrade(student, getFinanceToday()),
     school: student.school ?? "",
     occupation: student.occupation ?? "",
     contactRelationship: primaryContact?.relationship || DEFAULT_CONTACT_RELATIONSHIP,
     contactPhone: primaryContact?.phone ?? "",
+    secondaryContactRelationship: secondaryContact?.relationship ?? "",
+    secondaryContactPhone: secondaryContact?.phone ?? "",
   };
 }
 
@@ -44,6 +51,8 @@ export function toBasicInfoInput(values: StudentBasicFormValues): StudentBasicIn
     occupation: values.occupation,
     contactRelationship: values.contactRelationship,
     contactPhone: values.contactPhone,
+    secondaryContactRelationship: values.secondaryContactRelationship,
+    secondaryContactPhone: values.secondaryContactPhone,
   };
 }
 

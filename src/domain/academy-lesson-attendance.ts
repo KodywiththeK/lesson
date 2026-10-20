@@ -242,6 +242,7 @@ function toPendingRow(event: AcademyLessonEvent): DailyAcademyAttendanceRow {
     startTime: event.startTime,
     endTime: event.endTime,
     status: "pending",
+    timeUnspecified: event.timeUnspecified,
   };
 }
 
