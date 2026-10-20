@@ -78,7 +78,8 @@
 
 - UI 기본 부품(input, select, popover, calendar, dialog 등)은 설치된 shadcn/ui(`src/components/ui/`)를 먼저 쓰고, 도메인에 맞춘 조합만 `src/components/operations/`·`management/`나 feature 안에 둔다. 기본 HTML 요소나 브라우저 기본 입력(`type="date|time|datetime-local|month"`)을 쓰는 예외는 이유를 evidence에 기록한다.
 - 날짜·월·시간·일시 입력은 `src/components/operations/date-time-fields.tsx`의 공통 필드를 쓴다. 필드는 형식만 책임지고 시작<종료 같은 의미 검증은 화면의 도메인 helper에 둔다.
-- 원 단위 금액 `type="number"`는 `step={1}`을 사용하고 `min`은 도메인 정책에 맞춘다(필수 결제 `1`, 선택형 0원 등록 `0`). `step`은 허용 간격이 아니라 `min` 기준 유효값 격자라 `step={1000}`은 `140000`을 거부한다.
+- 원 단위 금액은 편집 중 빈 문자열과 `140,000` 같은 천 단위 구분 입력을 허용하는 문자열 draft로 다룬다. 저장 경계에서 `src/domain/money-input.ts`의 정수 파서와 도메인별 범위를 검증한다. 기본 `type="number"`의 `min`/`step` 조합에 UI 정책을 맡기지 않는다.
+- 시간 입력은 직접 타이핑과 시·분 선택을 모두 지원한다. 시만 입력하고 Enter·Tab·포커스 이동 시 `:00`으로 완성하되 잘못 입력한 값은 조용히 이전 값으로 되돌리지 않고 오류와 함께 draft를 보존한다.
 - 단일 필드 검증은 필드 가까이에 둔다.
 - 여러 필드 조합 검증은 schema 또는 도메인 helper로 모은다.
 - submit handler는 입력 수집, 검증, mutation, toast/navigation을 읽기 쉬운 순서로 분리한다.

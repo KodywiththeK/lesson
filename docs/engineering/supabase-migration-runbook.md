@@ -212,6 +212,22 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 적용 후 읽기 전용 카탈로그 확인: `student_instruments`에 옛 4컬럼 unique 제약이 사라지고 PK와 `(academy_id, id)` unique만 남았으며 활성 한정 unique index `student_instruments_active_enrollment_key`가 있다. `started_on`·`ended_on` 컬럼 존재. `update_student_with_enrollments`(5인자)는 authenticated만 실행 가능, `private.insert_student_enrollment`·`end_student_enrollment`·`mark_private_lesson_attendance_impl`은 anon·authenticated 실행 불가, `mark_private_lesson_attendance`는 7인자 하나만 있다(옛 6인자 없음, 오버로드 없음). `ensure_monthly_fixed_income_snapshots`가 시작·종료 달 조건과 `created_at desc, id desc` 정렬을 포함한다.
 - 한계: 운영 데이터 행은 읽지 않았다. **원자 롤백, 시리즈 닫기·정기 일정 취소, 종료 행과 활성 행 공존·재추가, snapshot 결과, 결석 재호출의 회차권 영향은 앱에서 직접 확인해야 한다.**
 
+## 운영 화면·입력 흐름 migration (20261020090200~20261020090700) — 2026-10-20 적용 완료
+
+사용자 요청으로 원격 운영 DB에 7개 migration을 적용했다. `pnpm supabase db push --dry-run`에서 대기 파일이 아래 7개뿐임을 확인한 뒤 `pnpm supabase db push --yes`로 적용했다. 이번에는 CLI를 사용해 로컬 파일명과 원격 version을 일치시켰다. 원격 history에서 모두 같은 version으로 확인했다.
+
+| 순서 | 파일 | 주요 변경 |
+| --- | --- | --- |
+| 1 | `20261020090200_student_grade_anchor.sql` | 학년 기준연도 컬럼·기존 학년 보정·변경 트리거 |
+| 2 | `20261020090300_student_secondary_contact.sql` | 두 번째 연락처 등록·수정 RPC, 직접 삭제 권한 회수 |
+| 3 | `20261020090350_book_order_ledger_source.sql` | 발주 원장 source enum 값 추가 |
+| 4 | `20261020090400_book_orders.sql` | 발주·품목 테이블, 입고·지급·취소 RPC, RLS·권한 |
+| 5 | `20261020090500_lesson_audit_history.sql` | 결석 감사 트리거, 원장·데스크용 변경 이력 RPC |
+| 6 | `20261020090600_time_unspecified_academy_lessons.sql` | 시간 미정 학원레슨 생성·원생 등록/수정·상태 처리 RPC 재정의 |
+| 7 | `20261020090700_book_payment_at_registration_only.sql` | 나중 교재 결제 완료 RPC 실행 권한 회수 |
+
+적용 후 원격 카탈로그에서 컬럼·트리거·RLS·정책·권한·함수 시그니처를 확인했다. 기존 학년의 기준연도 누락은 0건이고 새 발주/품목은 각 0건이다. 스키마 계약/API 테스트는 통과했다. 실제 역할별 JWT로 발주·입고·지급·취소, 출석, 연락처를 실행하는 테스트와 동시성·롤백 검증은 별도 테스트 DB 부재로 못 했다. 자세한 검증과 남은 위험은 `docs/harness/evidence/2026-10-20-operations-input-improvements.md`를 본다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.
