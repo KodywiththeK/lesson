@@ -17,6 +17,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import {
@@ -359,7 +361,7 @@ export function TeacherListScreen({
         {registrationAction}
       </PageHeaderActionFallback>
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div
           className={
             isOwner
@@ -429,9 +431,9 @@ export function TeacherListScreen({
         ) : null}
 
         {teacherListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <EmptyState>
             선생님 목록을 불러오는 중입니다.
-          </p>
+          </EmptyState>
         ) : null}
 
         {teacherListView ? (
@@ -453,7 +455,7 @@ export function TeacherListScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       <Dialog
         open={Boolean(selectedTeacher)}

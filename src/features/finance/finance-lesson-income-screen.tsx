@@ -4,6 +4,8 @@ import { useId, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UsersRound } from "lucide-react";
 import { toast } from "sonner";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { ListPagination } from "@/components/management/list-pagination";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +28,6 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { FinanceDataScreenProps, FinanceManagementData } from "./finance-types";
 import { FinanceConfirmDialog, PaymentDialog } from "@/components/management/payment-dialog";
 import {
-  EmptyListMessage,
   FinanceAmount,
   FinanceListSearch,
   FinanceMonthSummary,
@@ -163,12 +164,11 @@ export function FinanceLessonIncomeScreen({
 
   return (
     <section className="grid gap-4" aria-labelledby={headingId}>
-      <div>
-        <h2 id={headingId} className="text-lg font-semibold">학원 고정 수입 (원생 레슨 수입)</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          원생/선생님 관리에서 작성된 레슨비 및 할인 정보를 직관적으로 보여줍니다.
-        </p>
-      </div>
+      <SectionHeader
+        headingId={headingId}
+        title="학원 고정 수입 (원생 레슨 수입)"
+        description="원생/선생님 관리에서 작성된 레슨비 및 할인 정보를 직관적으로 보여줍니다."
+      />
       <FinanceMonthSummary
         amount={totalAmount}
         label="전체 금액 합산"
@@ -200,35 +200,35 @@ export function FinanceLessonIncomeScreen({
       {tuitionSnapshotsQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">월별 수강료를 불러오는 중입니다.</p>
       ) : null}
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <Table aria-label="학원 레슨수입">
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-4 py-3">이름</TableHead>
-              <TableHead className="px-4 py-3">최초 등록일</TableHead>
-              <TableHead className="px-4 py-3">레슨종류</TableHead>
-              <TableHead className="px-4 py-3">악기</TableHead>
-              <TableHead className="px-4 py-3">진도</TableHead>
-              <TableHead className="px-4 py-3">레슨비</TableHead>
-              <TableHead className="px-4 py-3">할인</TableHead>
-              <TableHead className="px-4 py-3">최종금액</TableHead>
-              <TableHead className="px-4 py-3 text-right">입금 상태</TableHead>
+              <TableHead>이름</TableHead>
+              <TableHead>최초 등록일</TableHead>
+              <TableHead>레슨종류</TableHead>
+              <TableHead>악기</TableHead>
+              <TableHead>진도</TableHead>
+              <TableHead>레슨비</TableHead>
+              <TableHead>할인</TableHead>
+              <TableHead>최종금액</TableHead>
+              <TableHead className="text-right">입금 상태</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rowsView.items.map((row) => (
               <TableRow key={row.id}>
-                <TableCell label="이름" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                <TableCell label="최초 등록일" className="px-4 py-3 tabular-nums">{row.registeredOn || "확인 필요"}</TableCell>
-                <TableCell label="레슨종류" className="px-4 py-3">{row.lessonKindLabel}</TableCell>
-                <TableCell label="악기" className="px-4 py-3">{row.instrumentName}</TableCell>
-                <TableCell label="진도" className="px-4 py-3">{row.progress}</TableCell>
-                <TableCell label="레슨비" className="px-4 py-3">{formatWon(row.lessonFee)}</TableCell>
-                <TableCell label="할인" className="px-4 py-3">{formatWon(row.discountTotal)}</TableCell>
-                <TableCell label="최종금액" className="px-4 py-3 font-semibold">
+                <TableCell label="이름" className="font-medium">{row.studentName}</TableCell>
+                <TableCell label="최초 등록일" className="tabular-nums">{row.registeredOn || "확인 필요"}</TableCell>
+                <TableCell label="레슨종류">{row.lessonKindLabel}</TableCell>
+                <TableCell label="악기">{row.instrumentName}</TableCell>
+                <TableCell label="진도">{row.progress}</TableCell>
+                <TableCell label="레슨비">{formatWon(row.lessonFee)}</TableCell>
+                <TableCell label="할인">{formatWon(row.discountTotal)}</TableCell>
+                <TableCell label="최종금액" className="font-semibold">
                   {formatWon(row.finalAmount)}
                 </TableCell>
-                <TableCell label="입금 상태" className="px-4 py-3 text-right">
+                <TableCell label="입금 상태" className="text-right">
                   <LessonIncomePaymentStatus
                     row={row}
                     disabled={tuitionCommand.isPending}
@@ -241,7 +241,7 @@ export function FinanceLessonIncomeScreen({
         </Table>
         {tuitionSnapshotsQuery.isSuccess ? (
           <>
-            {emptyMessage ? <EmptyListMessage>{emptyMessage}</EmptyListMessage> : null}
+            {emptyMessage ? <EmptyState>{emptyMessage}</EmptyState> : null}
             <ListPagination
               itemLabel="레슨수입"
               countUnit="건"
@@ -251,7 +251,7 @@ export function FinanceLessonIncomeScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
       <PaymentDialog
         open={Boolean(payTarget)}
         title={payTarget?.record.status === "overdue" ? "미납 수강료 입금 확인" : "입금 처리"}

@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from "lucide-react";
 
+import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -29,23 +30,23 @@ export function BookShipmentTable({
 }: BookShipmentTableProps) {
   if (shipments.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         {isSearching ? "조건에 맞는 출고 내역이 없습니다." : "대기 중인 출고 내역이 없습니다."}
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <Table aria-label="출고 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">이름</TableHead>
-          <TableHead className="px-4 py-3">도서명</TableHead>
-          <TableHead className="px-4 py-3">가격</TableHead>
-          <TableHead className="px-4 py-3">수량</TableHead>
-          <TableHead className="px-4 py-3">금액</TableHead>
-          <TableHead className="px-4 py-3">출고일</TableHead>
-          <TableHead className="px-4 py-3">관리</TableHead>
+          <TableHead>이름</TableHead>
+          <TableHead>도서명</TableHead>
+          <TableHead>가격</TableHead>
+          <TableHead>수량</TableHead>
+          <TableHead>금액</TableHead>
+          <TableHead>출고일</TableHead>
+          <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -54,25 +55,25 @@ export function BookShipmentTable({
 
           return (
             <TableRow key={shipment.saleId}>
-              <TableCell label="이름" className="px-4 py-3 font-medium">
+              <TableCell label="이름" className="font-medium">
                 {shipment.studentName}
               </TableCell>
-              <TableCell label="도서명" className="px-4 py-3">
+              <TableCell label="도서명">
                 {shipment.bookTitle}
               </TableCell>
-              <TableCell label="가격" className="px-4 py-3 tabular-nums">
+              <TableCell label="가격" className="tabular-nums">
                 {formatWon(shipment.price)}
               </TableCell>
-              <TableCell label="수량" className="px-4 py-3 tabular-nums">
+              <TableCell label="수량" className="tabular-nums">
                 {formatQuantity(shipment.quantity)}
               </TableCell>
-              <TableCell label="금액" className="px-4 py-3 tabular-nums">
+              <TableCell label="금액" className="tabular-nums">
                 {formatWon(shipment.amount)}
               </TableCell>
-              <TableCell label="출고일" className="px-4 py-3 tabular-nums">
+              <TableCell label="출고일" className="tabular-nums">
                 {shipment.shippedAt}
               </TableCell>
-              <TableCell label="관리" className="px-4 py-3">
+              <TableCell label="관리">
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"

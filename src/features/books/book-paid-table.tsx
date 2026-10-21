@@ -1,5 +1,6 @@
 import { Undo2 } from "lucide-react";
 
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,58 +27,58 @@ type BookPaidTableProps = {
 export function BookPaidTable({ sales, isSearching, canCancelPayment, onCancelPayment }: BookPaidTableProps) {
   if (sales.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         {isSearching ? "조건에 맞는 결제 완료 내역이 없습니다." : "결제 완료 내역이 없습니다."}
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <Table aria-label="결제 완료 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">이름</TableHead>
-          <TableHead className="px-4 py-3">도서명</TableHead>
-          <TableHead className="px-4 py-3">가격</TableHead>
-          <TableHead className="px-4 py-3">수량</TableHead>
-          <TableHead className="px-4 py-3">금액</TableHead>
-          <TableHead className="px-4 py-3">출고일</TableHead>
-          <TableHead className="px-4 py-3">입금일</TableHead>
-          <TableHead className="px-4 py-3">상태</TableHead>
-          <TableHead className="px-4 py-3">관리</TableHead>
+          <TableHead>이름</TableHead>
+          <TableHead>도서명</TableHead>
+          <TableHead>가격</TableHead>
+          <TableHead>수량</TableHead>
+          <TableHead>금액</TableHead>
+          <TableHead>출고일</TableHead>
+          <TableHead>입금일</TableHead>
+          <TableHead>상태</TableHead>
+          <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {sales.map((sale) => (
           <TableRow key={sale.saleId}>
-            <TableCell label="이름" className="px-4 py-3 font-medium">
+            <TableCell label="이름" className="font-medium">
               {sale.studentName}
             </TableCell>
-            <TableCell label="도서명" className="px-4 py-3">
+            <TableCell label="도서명">
               {sale.bookTitle}
             </TableCell>
-            <TableCell label="가격" className="px-4 py-3 tabular-nums">
+            <TableCell label="가격" className="tabular-nums">
               {formatWon(sale.price)}
             </TableCell>
-            <TableCell label="수량" className="px-4 py-3 tabular-nums">
+            <TableCell label="수량" className="tabular-nums">
               {formatQuantity(sale.quantity)}
             </TableCell>
-            <TableCell label="금액" className="px-4 py-3 tabular-nums">
+            <TableCell label="금액" className="tabular-nums">
               {formatWon(sale.amount)}
             </TableCell>
-            <TableCell label="출고일" className="px-4 py-3 tabular-nums">
+            <TableCell label="출고일" className="tabular-nums">
               {sale.shippedAt}
             </TableCell>
-            <TableCell label="입금일" className="px-4 py-3 tabular-nums">
+            <TableCell label="입금일" className="tabular-nums">
               {sale.paidAt}
             </TableCell>
-            <TableCell label="상태" className="px-4 py-3">
+            <TableCell label="상태">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{formatBookSaleStatus("paid")}</Badge>
                 {sale.ledgerMissing ? <Badge variant="destructive">원장 기록 없음</Badge> : null}
               </div>
             </TableCell>
-            <TableCell label="관리" className="px-4 py-3">
+            <TableCell label="관리">
               {canCancelPayment ? (
                 <Button
                   type="button"

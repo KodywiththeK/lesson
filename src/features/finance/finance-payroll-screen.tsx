@@ -3,6 +3,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { StatTile } from "@/components/shared/stat-tile";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +24,6 @@ import { hasLessonRecordChangedSincePayment } from "./finance-payroll-changes";
 import { FinanceDataScreenProps, FinanceManagementData } from "./finance-types";
 import { FinanceConfirmDialog, PaymentDialog } from "@/components/management/payment-dialog";
 import {
-  EmptyListMessage,
   FinanceAmount,
   FinanceListSearch,
   FinanceMonthSummary,
@@ -132,10 +134,7 @@ export function FinancePayrollScreen({
 
   return (
     <section className="grid gap-4" aria-label="선생님 월급">
-      <div>
-        <h2 className="text-lg font-semibold">선생님 월급 관리</h2>
-        <p className="text-sm text-muted-foreground">등록된 선생님별 급여를 설정하고 관리합니다.</p>
-      </div>
+      <SectionHeader title="선생님 월급 관리" description="등록된 선생님별 급여를 설정하고 관리합니다." />
       <FinanceMonthSummary
         amount={pendingPayTotal}
         label="지급 예정 급여"
@@ -147,24 +146,21 @@ export function FinancePayrollScreen({
           paging.resetPage();
         }}
       />
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm font-medium text-muted-foreground">지급 완료 급여</p>
-        <p className="mt-1 text-xl font-semibold">
-          <FinanceAmount amount={paidPayTotal} />
-        </p>
-      </div>
+      <StatTile label="지급 완료 급여" emphasized={false}>
+        <FinanceAmount amount={paidPayTotal} />
+      </StatTile>
       <FinanceListSearch
         label="선생님 월급 검색"
         placeholder="선생님 이름"
         value={search}
         onChange={changeSearch}
       />
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <Table aria-label="선생님 월급">
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
               {PAYROLL_COLUMNS.map((column) => (
-                <TableHead key={column} className="px-4 py-3">{column}</TableHead>
+                <TableHead key={column}>{column}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -180,9 +176,9 @@ export function FinancePayrollScreen({
           </TableBody>
         </Table>
         {rowsView.totalItems === 0 ? (
-          <EmptyListMessage>
+          <EmptyState>
             {rows.length === 0 ? "등록된 선생님이 없습니다." : "조건에 맞는 선생님이 없습니다."}
-          </EmptyListMessage>
+          </EmptyState>
         ) : null}
         <ListPagination
           itemLabel="선생님 월급"
@@ -191,7 +187,7 @@ export function FinancePayrollScreen({
           onPageChange={paging.goToPage}
           onPageSizeChange={paging.changePageSize}
         />
-      </div>
+      </SectionCard>
       <PaymentDialog
         open={Boolean(paymentTarget)}
         title="급여 지급 확정"
@@ -250,19 +246,19 @@ function PayrollTableRow({
 
   return (
     <TableRow>
-      <TableCell label={teacher} className="px-4 py-3 font-medium">{payroll.teacherName}</TableCell>
-      <TableCell label={part} className="px-4 py-3">{row.part}</TableCell>
-      <TableCell label={setting} className="px-4 py-3">{row.paySetting}</TableCell>
-      <TableCell label={basePay} className="px-4 py-3">{formatWon(payroll.basePay)}</TableCell>
-      <TableCell label={tax} className="px-4 py-3">{formatWon(payroll.withholdingTax)}</TableCell>
-      <TableCell label={netPay} className="px-4 py-3 font-semibold">{formatWon(payroll.netPay)}</TableCell>
-      <TableCell label={basis} className="px-4 py-3 whitespace-normal">
+      <TableCell label={teacher} className="font-medium">{payroll.teacherName}</TableCell>
+      <TableCell label={part}>{row.part}</TableCell>
+      <TableCell label={setting}>{row.paySetting}</TableCell>
+      <TableCell label={basePay}>{formatWon(payroll.basePay)}</TableCell>
+      <TableCell label={tax}>{formatWon(payroll.withholdingTax)}</TableCell>
+      <TableCell label={netPay} className="font-semibold">{formatWon(payroll.netPay)}</TableCell>
+      <TableCell label={basis} className="whitespace-normal">
         <PayrollBasis row={row} />
       </TableCell>
-      <TableCell label={status} className="px-4 py-3">
+      <TableCell label={status}>
         <PayrollStatus payroll={payroll} />
       </TableCell>
-      <TableCell label={manage} className="px-4 py-3 whitespace-normal">
+      <TableCell label={manage} className="whitespace-normal">
         <PayrollActions payroll={payroll} onRequestPayment={onRequestPayment} onRequestCancel={onRequestCancel} />
       </TableCell>
     </TableRow>

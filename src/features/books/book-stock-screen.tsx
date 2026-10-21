@@ -16,6 +16,8 @@ import {
   PageHeaderActionFallback,
   usePageHeaderActions,
 } from "@/components/layout/page-actions";
+import { EmptyState } from "@/components/shared/empty-state";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { ListSearchField, ListStatusAlert } from "@/components/management/list-controls";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
@@ -180,19 +182,19 @@ export function BookStockScreen({
 
   return (
     <section className="grid gap-4" aria-label="교재 재고">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="grid gap-1">
-          <h2 className="text-lg font-semibold">교재 등록 관리</h2>
-          <p className="text-sm text-muted-foreground">새로운 교재를 입고 및 등록합니다.</p>
-        </div>
-        <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
-          {registrationAction}
-        </PageHeaderActionFallback>
-      </div>
+      <SectionHeader
+        title="교재 등록 관리"
+        description="새로운 교재를 입고 및 등록합니다."
+        actions={
+          <PageHeaderActionFallback isMounted={isHeaderActionMounted}>
+            {registrationAction}
+          </PageHeaderActionFallback>
+        }
+      />
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[1fr_minmax(12rem,20rem)_auto] lg:items-end">
-          <h2 className="text-lg font-semibold">교재 재고 상태</h2>
+          <SectionHeader title="교재 재고 상태" />
           <ListSearchField
             label="도서명 검색"
             value={search}
@@ -224,7 +226,7 @@ export function BookStockScreen({
         ) : null}
 
         {stockListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">교재 재고를 불러오는 중입니다.</p>
+          <EmptyState>교재 재고를 불러오는 중입니다.</EmptyState>
         ) : null}
 
         {listView && !stockListQuery.isError ? (
@@ -244,7 +246,7 @@ export function BookStockScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       {editingBook ? (
         <BookStockFormDialog

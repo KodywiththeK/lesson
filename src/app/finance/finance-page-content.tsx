@@ -3,6 +3,8 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { SectionCard } from "@/components/shared/section-card";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import {
@@ -310,9 +312,9 @@ function FinanceDataScreen({
 
   if (dataQuery.isLoading) {
     return (
-      <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-        수입 관리 데이터를 불러오는 중입니다.
-      </p>
+      <SectionCard padded={false}>
+        <EmptyState>수입 관리 데이터를 불러오는 중입니다.</EmptyState>
+      </SectionCard>
     );
   }
 

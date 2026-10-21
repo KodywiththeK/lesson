@@ -14,6 +14,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import {
@@ -389,7 +391,7 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
   onTransition: (transition: PendingTransition) => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <SectionCard padded={false}>
       <div className="grid gap-3 border-b border-border p-4 md:grid-cols-[auto_minmax(12rem,20rem)] md:items-end md:justify-between">
         <Tabs value={value} onValueChange={(next) => onValueChange(next as TStatus)}>
           <TabsList aria-label="상태">
@@ -415,9 +417,9 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
         />
       ) : null}
       {isLoading ? (
-        <p className="p-4 text-sm text-muted-foreground">
+        <EmptyState>
           관리 목록을 불러오는 중입니다.
-        </p>
+        </EmptyState>
       ) : null}
       {view && !error ? (
         <>
@@ -435,7 +437,7 @@ function ManagedStatusPanel<TStatus extends StudentStatus | TeacherStatus>({
           />
         </>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }
 
@@ -452,24 +454,24 @@ function StatusManagementTable({
     useState<StatusManagementListItem | null>(null);
 
   if (items.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">{emptyMessage}</p>;
+    return <EmptyState>{emptyMessage}</EmptyState>;
   }
 
   return (
     <>
       <Table aria-label="휴원/퇴원 관리 목록" className="lg:table-fixed">
-        <TableHeader className="bg-muted text-muted-foreground">
+        <TableHeader>
           <TableRow>
-            <TableHead className="px-4 py-3 lg:w-[28%]">대상</TableHead>
-            <TableHead className="px-4 py-3 lg:w-[24%]">처리/보관</TableHead>
-            <TableHead className="px-4 py-3 lg:w-[28%]">처리 메모</TableHead>
-            <TableHead className="px-4 py-3 text-right lg:w-[20%]">관리</TableHead>
+            <TableHead className="lg:w-[28%]">대상</TableHead>
+            <TableHead className="lg:w-[24%]">처리/보관</TableHead>
+            <TableHead className="lg:w-[28%]">처리 메모</TableHead>
+            <TableHead className="text-right lg:w-[20%]">관리</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((item) => (
             <TableRow key={`${item.entityType}-${item.entityId}`}>
-              <TableCell label="대상" className="px-4 py-3 whitespace-normal">
+              <TableCell label="대상" className="whitespace-normal">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{item.name}</span>
@@ -487,7 +489,7 @@ function StatusManagementTable({
                   ) : null}
                 </div>
               </TableCell>
-              <TableCell label="처리/보관" className="px-4 py-3 text-sm whitespace-normal">
+              <TableCell label="처리/보관" className="text-sm whitespace-normal">
                 <div className="grid gap-1">
                   <span>처리일 {item.changedOn}</span>
                   <span className="text-muted-foreground">
@@ -495,12 +497,12 @@ function StatusManagementTable({
                   </span>
                 </div>
               </TableCell>
-              <TableCell label="처리 메모" className="px-4 py-3 text-sm whitespace-normal">
+              <TableCell label="처리 메모" className="text-sm whitespace-normal">
                 <span className="line-clamp-2 text-muted-foreground">
                   {item.statusReason || "-"}
                 </span>
               </TableCell>
-              <TableCell label="관리" className="px-4 py-3 whitespace-normal">
+              <TableCell label="관리" className="whitespace-normal">
                 <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
                   <Button
                     type="button"

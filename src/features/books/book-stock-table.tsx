@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from "lucide-react";
 
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,39 +25,39 @@ type BookStockTableProps = {
 
 export function BookStockTable({ books, emptyMessage, onEdit, onDelete }: BookStockTableProps) {
   if (books.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">{emptyMessage}</p>;
+    return <EmptyState>{emptyMessage}</EmptyState>;
   }
 
   return (
     <Table aria-label="교재 재고 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">도서명</TableHead>
-          <TableHead className="px-4 py-3">가격</TableHead>
-          <TableHead className="px-4 py-3">권수</TableHead>
-          <TableHead className="px-4 py-3">입고일</TableHead>
-          <TableHead className="px-4 py-3">관리</TableHead>
+          <TableHead>도서명</TableHead>
+          <TableHead>가격</TableHead>
+          <TableHead>권수</TableHead>
+          <TableHead>입고일</TableHead>
+          <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {books.map((book) => (
           <TableRow key={book.bookId}>
-            <TableCell label="도서명" className="px-4 py-3 font-medium break-words">
+            <TableCell label="도서명" className="font-medium break-words">
               {book.title}
             </TableCell>
-            <TableCell label="가격" className="px-4 py-3 tabular-nums">
+            <TableCell label="가격" className="tabular-nums">
               {formatBookPrice(book.price)}
             </TableCell>
-            <TableCell label="권수" className="px-4 py-3 tabular-nums">
+            <TableCell label="권수" className="tabular-nums">
               <span className="inline-flex flex-wrap items-center gap-2">
                 {book.quantity}
                 {book.isOutOfStock ? <Badge variant="destructive">재고 없음</Badge> : null}
               </span>
             </TableCell>
-            <TableCell label="입고일" className="px-4 py-3 tabular-nums">
+            <TableCell label="입고일" className="tabular-nums">
               {book.stockedOn}
             </TableCell>
-            <TableCell label="관리" className="px-4 py-3">
+            <TableCell label="관리">
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"

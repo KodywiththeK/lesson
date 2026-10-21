@@ -2,6 +2,7 @@
 
 import { Eye } from "lucide-react";
 
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,9 +40,9 @@ type TeacherListTableProps = {
 export function TeacherListTable({ teachers, isOwner, onSelectTeacher }: TeacherListTableProps) {
   if (teachers.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         조건에 맞는 선생님이 없습니다.
-      </p>
+      </EmptyState>
     );
   }
 
@@ -50,10 +51,10 @@ export function TeacherListTable({ teachers, isOwner, onSelectTeacher }: Teacher
 
   return (
     <Table aria-label="선생님 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
           {columns.map((column) => (
-            <TableHead key={column} className={column === "관리" ? "px-4 py-3 text-right" : "px-4 py-3"}>
+            <TableHead key={column} className={column === "관리" ? "text-right" : undefined}>
               {column}
             </TableHead>
           ))}
@@ -65,33 +66,33 @@ export function TeacherListTable({ teachers, isOwner, onSelectTeacher }: Teacher
 
           return (
             <TableRow key={teacher.teacherId}>
-              <TableCell label={name} className="px-4 py-3 font-medium">
+              <TableCell label={name} className="font-medium">
                 {teacher.name}
               </TableCell>
-              <TableCell label={status} className="px-4 py-3">
+              <TableCell label={status}>
                 <Badge variant={currentStatus === "employed" ? "default" : "outline"}>
                   {formatTeacherStatus(currentStatus)}
                 </Badge>
               </TableCell>
-              <TableCell label={part} className="px-4 py-3">{teacher.part}</TableCell>
-              <TableCell label={contact} className="px-4 py-3">
+              <TableCell label={part}>{teacher.part}</TableCell>
+              <TableCell label={contact}>
                 {teacher.contact || "-"}
               </TableCell>
-              <TableCell label={registeredAt} className="px-4 py-3 tabular-nums">
+              <TableCell label={registeredAt} className="tabular-nums">
                 {teacher.registeredAt}
               </TableCell>
-              <TableCell label={residentRegistration} className="px-4 py-3 tabular-nums">
+              <TableCell label={residentRegistration} className="tabular-nums">
                 {teacher.residentRegistrationMasked || "-"}
               </TableCell>
-              <TableCell label={workSchedule} className="px-4 py-3">
+              <TableCell label={workSchedule}>
                 {teacher.workScheduleSummary ?? "-"}
               </TableCell>
               {isOwner ? (
-                <TableCell label={SALARY_COLUMN} className="px-4 py-3">
+                <TableCell label={SALARY_COLUMN}>
                   {teacher.salarySummary ?? formatTeacherPayType(teacher.payType)}
                 </TableCell>
               ) : null}
-              <TableCell label="관리" className="px-4 py-3 text-right">
+              <TableCell label="관리" className="text-right">
                 <Button
                   type="button"
                   variant="outline"

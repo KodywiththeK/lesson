@@ -20,6 +20,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import { Button } from "@/components/ui/button";
@@ -242,7 +244,7 @@ export function ConsultationListScreen({
         {registrationAction}
       </PageHeaderActionFallback>
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">
           <ListSearchField
             label="상담 검색"
@@ -286,7 +288,7 @@ export function ConsultationListScreen({
         ) : null}
 
         {consultationListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">상담 목록을 불러오는 중입니다.</p>
+          <EmptyState>상담 목록을 불러오는 중입니다.</EmptyState>
         ) : null}
 
         {listView && !consultationListQuery.isError ? (
@@ -306,7 +308,7 @@ export function ConsultationListScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       {editingConsultation ? (
         <ConsultationFormDialog

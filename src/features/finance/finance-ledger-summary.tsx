@@ -1,3 +1,4 @@
+import { StatTile } from "@/components/shared/stat-tile";
 import type { LedgerMonthTotals } from "@/domain/finance-ledger";
 import { FinanceAmount, type FinanceAmountTone } from "./finance-shared";
 
@@ -22,11 +23,8 @@ function SummaryCard({
   tone: FinanceAmountTone;
 }) {
   return (
-    <div role="group" aria-label={label} className="rounded-lg border border-border bg-card p-4">
-      <p className="text-sm font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">
-        {amount === undefined ? "-" : <FinanceAmount amount={amount} tone={tone} />}
-      </p>
-    </div>
+    <StatTile role="group" aria-label={label} label={label}>
+      {amount === undefined ? "-" : <FinanceAmount amount={amount} tone={tone} />}
+    </StatTile>
   );
 }

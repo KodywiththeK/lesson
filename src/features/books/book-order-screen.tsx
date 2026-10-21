@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -128,39 +130,41 @@ export function BookOrderScreen({ academyId, canPay, demoReadOnly = false, clien
       {loadError ? <ListStatusAlert message="교재 발주를 불러오지 못했습니다." detail={toUserMessage(loadError)} /> : null}
       {actionError ? <p role="alert" className="text-sm text-destructive">{actionError}</p> : null}
       {ordersQuery.isPending && client ? <p className="text-sm text-muted-foreground">발주 목록을 불러오는 중입니다.</p> : null}
-      {ordersQuery.isSuccess && orders.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">발주 내역이 없습니다.</p> : null}
+      {ordersQuery.isSuccess && orders.length === 0 ? <SectionCard padded={false}><EmptyState>발주 내역이 없습니다.</EmptyState></SectionCard> : null}
       {orders.length > 0 ? (
-        <Table>
-          <TableHeader><TableRow>
-            <TableHead>발주일</TableHead><TableHead>거래처</TableHead><TableHead>품목</TableHead>
-            <TableHead>매입액</TableHead><TableHead>입고</TableHead><TableHead>지급</TableHead><TableHead>관리</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>{orders.map((order) => {
-            const actions = getBookOrderActions(order);
-            return (
-              <TableRow key={order.id}>
-                <TableCell label="발주일">{order.orderedOn}</TableCell>
-                <TableCell label="거래처" className="font-medium">{order.vendorName}</TableCell>
-                <TableCell label="품목" className="max-w-72 whitespace-normal">
-                  {order.items.map((item) => `${item.title} ${item.quantity}권`).join(", ")}
-                </TableCell>
-                <TableCell label="매입액" className="tabular-nums">{formatWon(calculateBookOrderTotal(order.items))}</TableCell>
-                <TableCell label="입고">{order.receivedOn ?? (order.status === "cancelled" ? "취소" : "미입고")}</TableCell>
-                <TableCell label="지급">
-                  {order.paidOn ?? "미지급"}
-                  {order.ledgerMismatch ? <span className="block text-destructive">원장 불일치 · 입출금 내역을 정정해 주세요.</span> : null}
-                </TableCell>
-                <TableCell label="관리"><div className="flex flex-wrap gap-1">
-                  {actions.canEdit ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setFormOrder(order); }}>수정</Button> : null}
-                  {actions.canReceive ? <Button variant="outline" size="sm" aria-label={`${order.vendorName} 입고 확인`} onClick={() => { setActionError(null); setAction({ order, kind: "receive" }); }}>입고</Button> : null}
-                  {actions.canPay && canPay ? <Button variant="outline" size="sm" aria-label={`${order.vendorName} 지급`} onClick={() => { setActionError(null); setAction({ order, kind: "pay" }); }}>지급</Button> : null}
-                  {actions.canUndoPayment && canPay ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setAction({ order, kind: "undo-payment" }); }}>지급 취소</Button> : null}
-                  {actions.canCancel && (!order.paidOn || canPay) ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setAction({ order, kind: "cancel" }); }}>발주 취소</Button> : null}
-                </div></TableCell>
-              </TableRow>
-            );
-          })}</TableBody>
-        </Table>
+        <SectionCard padded={false}>
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>발주일</TableHead><TableHead>거래처</TableHead><TableHead>품목</TableHead>
+              <TableHead>매입액</TableHead><TableHead>입고</TableHead><TableHead>지급</TableHead><TableHead>관리</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{orders.map((order) => {
+              const actions = getBookOrderActions(order);
+              return (
+                <TableRow key={order.id}>
+                  <TableCell label="발주일">{order.orderedOn}</TableCell>
+                  <TableCell label="거래처" className="font-medium">{order.vendorName}</TableCell>
+                  <TableCell label="품목" className="max-w-72 whitespace-normal">
+                    {order.items.map((item) => `${item.title} ${item.quantity}권`).join(", ")}
+                  </TableCell>
+                  <TableCell label="매입액" className="tabular-nums">{formatWon(calculateBookOrderTotal(order.items))}</TableCell>
+                  <TableCell label="입고">{order.receivedOn ?? (order.status === "cancelled" ? "취소" : "미입고")}</TableCell>
+                  <TableCell label="지급">
+                    {order.paidOn ?? "미지급"}
+                    {order.ledgerMismatch ? <span className="block text-destructive">원장 불일치 · 입출금 내역을 정정해 주세요.</span> : null}
+                  </TableCell>
+                  <TableCell label="관리"><div className="flex flex-wrap gap-1">
+                    {actions.canEdit ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setFormOrder(order); }}>수정</Button> : null}
+                    {actions.canReceive ? <Button variant="outline" size="sm" aria-label={`${order.vendorName} 입고 확인`} onClick={() => { setActionError(null); setAction({ order, kind: "receive" }); }}>입고</Button> : null}
+                    {actions.canPay && canPay ? <Button variant="outline" size="sm" aria-label={`${order.vendorName} 지급`} onClick={() => { setActionError(null); setAction({ order, kind: "pay" }); }}>지급</Button> : null}
+                    {actions.canUndoPayment && canPay ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setAction({ order, kind: "undo-payment" }); }}>지급 취소</Button> : null}
+                    {actions.canCancel && (!order.paidOn || canPay) ? <Button variant="outline" size="sm" onClick={() => { setActionError(null); setAction({ order, kind: "cancel" }); }}>발주 취소</Button> : null}
+                  </div></TableCell>
+                </TableRow>
+              );
+            })}</TableBody>
+          </Table>
+        </SectionCard>
       ) : null}
       {formOrder ? (
         <BookOrderFormDialog

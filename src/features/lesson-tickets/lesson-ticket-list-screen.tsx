@@ -16,6 +16,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import {
@@ -318,7 +320,7 @@ export function LessonTicketListScreen({
         {registrationAction}
       </PageHeaderActionFallback>
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">
           <ListSearchField
             label="회차권 검색"
@@ -360,9 +362,9 @@ export function LessonTicketListScreen({
         ) : null}
 
         {lessonTicketListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <EmptyState>
             회차권 목록을 불러오는 중입니다.
-          </p>
+          </EmptyState>
         ) : null}
 
         {ticketListView && !lessonTicketListQuery.isError ? (
@@ -387,7 +389,7 @@ export function LessonTicketListScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
     </section>
   );
 }
@@ -498,26 +500,26 @@ function LessonTicketTable({
 }) {
   if (tickets.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         조건에 맞는 회차권이 없습니다.
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <Table aria-label="회차권 목록" className="lg:min-w-[60rem]">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">원생</TableHead>
-          <TableHead className="px-4 py-3">악기</TableHead>
-          <TableHead className="px-4 py-3">총 부여</TableHead>
-          <TableHead className="px-4 py-3">사용</TableHead>
-          <TableHead className="px-4 py-3">잔여</TableHead>
-          <TableHead className="px-4 py-3">등록일</TableHead>
-          <TableHead className="px-4 py-3">만료일</TableHead>
-          <TableHead className="px-4 py-3">남은 일수</TableHead>
-          <TableHead className="px-4 py-3">상태</TableHead>
-          <TableHead className="px-4 py-3">관리</TableHead>
+          <TableHead>원생</TableHead>
+          <TableHead>악기</TableHead>
+          <TableHead>총 부여</TableHead>
+          <TableHead>사용</TableHead>
+          <TableHead>잔여</TableHead>
+          <TableHead>등록일</TableHead>
+          <TableHead>만료일</TableHead>
+          <TableHead>남은 일수</TableHead>
+          <TableHead>상태</TableHead>
+          <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -529,32 +531,32 @@ function LessonTicketTable({
               key={ticket.ticketId}
               className={needsAttention ? "bg-destructive/5" : undefined}
             >
-              <TableCell label="원생" className="px-4 py-3 font-medium">
+              <TableCell label="원생" className="font-medium">
                 {ticket.studentName}
               </TableCell>
-              <TableCell label="악기" className="px-4 py-3">
+              <TableCell label="악기">
                 {ticket.instrumentName}
               </TableCell>
-              <TableCell label="총 부여" className="px-4 py-3">
+              <TableCell label="총 부여">
                 {formatCount(ticket.totalGrantedCount)}
               </TableCell>
-              <TableCell label="사용" className="px-4 py-3">
+              <TableCell label="사용">
                 {formatCount(ticket.totalGrantedCount - ticket.remainingCount)}
               </TableCell>
               <TableCell
                 label="잔여"
                 className={
                   needsAttention
-                    ? "px-4 py-3 font-semibold text-destructive"
-                    : "px-4 py-3"
+                    ? "font-semibold text-destructive"
+                    : undefined
                 }
               >
                 {formatCount(ticket.remainingCount)}
               </TableCell>
-              <TableCell label="등록일" className="px-4 py-3">{ticket.registeredAt}</TableCell>
-              <TableCell label="만료일" className="px-4 py-3">{ticket.validUntil}</TableCell>
-              <TableCell label="남은 일수" className="px-4 py-3">{describeLessonTicketRemainingDays(ticket.validUntil, today)}</TableCell>
-              <TableCell label="상태" className="px-4 py-3">
+              <TableCell label="등록일">{ticket.registeredAt}</TableCell>
+              <TableCell label="만료일">{ticket.validUntil}</TableCell>
+              <TableCell label="남은 일수">{describeLessonTicketRemainingDays(ticket.validUntil, today)}</TableCell>
+              <TableCell label="상태">
                 <span className="flex flex-wrap gap-1">
                   {ticket.statuses.length > 0 ? (
                     ticket.statuses.map((status) => (
@@ -567,7 +569,7 @@ function LessonTicketTable({
                   )}
                 </span>
               </TableCell>
-              <TableCell label="관리" className="px-4 py-3">
+              <TableCell label="관리">
                 <LessonTicketAdjustDialog
                   ticket={ticket}
                   isSaving={isAdjusting}

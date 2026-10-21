@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { ChevronDown, RotateCcw } from "lucide-react";
+import { SectionCard } from "@/components/shared/section-card";
 import { ListFilterSelect, ListSearchField } from "@/components/management/list-controls";
 import { DateField, MonthField } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
@@ -95,101 +96,99 @@ export function FinanceLedgerFilters({
   const isRangeReversed = dateRange.from > dateRange.to;
 
   return (
-    <Collapsible
-      open={isDetailOpen}
-      onOpenChange={setIsDetailOpen}
-      className="grid gap-3 rounded-lg border border-border bg-card p-4"
-    >
-      <div className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_11rem_9rem_auto]">
-        <ListSearchField
-          label="입출금 내역 검색"
-          value={filters.search}
-          onChange={(search) => onChange({ search })}
-          placeholder="발생일, 설명, 유형, 출처, 분류"
-        />
-        <Label className="grid gap-1 text-sm font-medium">
-          <span>월 선택</span>
-          <MonthField
-            aria-label="입출금 월 선택"
-            required
-            max={maxMonth}
-            value={month}
-            onValueChange={onChangeMonth}
+    <Collapsible open={isDetailOpen} onOpenChange={setIsDetailOpen} asChild>
+      <SectionCard className="grid gap-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_11rem_9rem_auto]">
+          <ListSearchField
+            label="입출금 내역 검색"
+            value={filters.search}
+            onChange={(search) => onChange({ search })}
+            placeholder="발생일, 설명, 유형, 출처, 분류"
           />
-        </Label>
-        <ListFilterSelect
-          label="유형 필터"
-          value={filters.type}
-          options={typeFilterOptions}
-          onChange={(type) => onChange({ type: type as LedgerFilterState["type"] })}
-        />
-        <div className="flex flex-wrap items-end gap-2">
-          <CollapsibleTrigger asChild>
-            <Button type="button" variant="outline">
-              상세 필터
-              <ChevronDown aria-hidden="true" className={isDetailOpen ? "rotate-180" : undefined} />
+          <Label className="grid gap-1 text-sm font-medium">
+            <span>월 선택</span>
+            <MonthField
+              aria-label="입출금 월 선택"
+              required
+              max={maxMonth}
+              value={month}
+              onValueChange={onChangeMonth}
+            />
+          </Label>
+          <ListFilterSelect
+            label="유형 필터"
+            value={filters.type}
+            options={typeFilterOptions}
+            onChange={(type) => onChange({ type: type as LedgerFilterState["type"] })}
+          />
+          <div className="flex flex-wrap items-end gap-2">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="outline">
+                상세 필터
+                <ChevronDown aria-hidden="true" className={isDetailOpen ? "rotate-180" : undefined} />
+              </Button>
+            </CollapsibleTrigger>
+            <Button type="button" variant="outline" onClick={onReset}>
+              <RotateCcw aria-hidden="true" />
+              초기화
             </Button>
-          </CollapsibleTrigger>
-          <Button type="button" variant="outline" onClick={onReset}>
-            <RotateCcw aria-hidden="true" />
-            초기화
-          </Button>
+          </div>
         </div>
-      </div>
-      {hasActiveFilter ? <Badge variant="secondary">필터 적용 중</Badge> : null}
-      <CollapsibleContent className="grid gap-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[9rem_9rem_11rem_11rem_11rem]">
-          <ListFilterSelect
-            label="출처 필터"
-            value={filters.source}
-            options={sourceFilterOptions}
-            onChange={(source) => onChange({ source: source as LedgerFilterState["source"] })}
-          />
-          <ListFilterSelect
-            label="분류 필터"
-            value={filters.category}
-            options={ledgerCategoryOptions}
-            onChange={(category) => onChange({ category: category as LedgerFilterState["category"] })}
-          />
-          <Label className="grid gap-1 text-sm font-medium">
-            <span>시작일</span>
-            <DateField
-              aria-label="입출금 시작일"
-              required
-              value={dateRange.from}
-              onValueChange={(from) => onChange({ customRange: { ...dateRange, from } })}
+        {hasActiveFilter ? <Badge variant="secondary">필터 적용 중</Badge> : null}
+        <CollapsibleContent className="grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[9rem_9rem_11rem_11rem_11rem]">
+            <ListFilterSelect
+              label="출처 필터"
+              value={filters.source}
+              options={sourceFilterOptions}
+              onChange={(source) => onChange({ source: source as LedgerFilterState["source"] })}
             />
-          </Label>
-          <Label className="grid gap-1 text-sm font-medium">
-            <span>종료일</span>
-            <DateField
-              aria-label="입출금 종료일"
-              required
-              value={dateRange.to}
-              onValueChange={(to) => onChange({ customRange: { ...dateRange, to } })}
+            <ListFilterSelect
+              label="분류 필터"
+              value={filters.category}
+              options={ledgerCategoryOptions}
+              onChange={(category) => onChange({ category: category as LedgerFilterState["category"] })}
             />
-          </Label>
-          <Label className="grid gap-1 text-sm font-medium">
-            <span>정렬</span>
-            <NativeSelect
-              aria-label="입출금 정렬"
-              value={filters.sortValue}
-              onChange={(event) => onChange({ sortValue: event.target.value })}
-            >
-              {sortOptions.map((option) => (
-                <NativeSelectOption key={option.value} value={option.value}>
-                  {option.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Label>
-        </div>
-        {isRangeReversed ? (
-          <p className="text-sm text-destructive">
-            시작일이 종료일보다 늦습니다. 기간을 다시 골라 주세요.
-          </p>
-        ) : null}
-      </CollapsibleContent>
+            <Label className="grid gap-1 text-sm font-medium">
+              <span>시작일</span>
+              <DateField
+                aria-label="입출금 시작일"
+                required
+                value={dateRange.from}
+                onValueChange={(from) => onChange({ customRange: { ...dateRange, from } })}
+              />
+            </Label>
+            <Label className="grid gap-1 text-sm font-medium">
+              <span>종료일</span>
+              <DateField
+                aria-label="입출금 종료일"
+                required
+                value={dateRange.to}
+                onValueChange={(to) => onChange({ customRange: { ...dateRange, to } })}
+              />
+            </Label>
+            <Label className="grid gap-1 text-sm font-medium">
+              <span>정렬</span>
+              <NativeSelect
+                aria-label="입출금 정렬"
+                value={filters.sortValue}
+                onChange={(event) => onChange({ sortValue: event.target.value })}
+              >
+                {sortOptions.map((option) => (
+                  <NativeSelectOption key={option.value} value={option.value}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Label>
+          </div>
+          {isRangeReversed ? (
+            <p className="text-sm text-destructive">
+              시작일이 종료일보다 늦습니다. 기간을 다시 골라 주세요.
+            </p>
+          ) : null}
+        </CollapsibleContent>
+      </SectionCard>
     </Collapsible>
   );
 }

@@ -4,6 +4,8 @@ import { useId, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { ListSearchField, ListStatusAlert } from "@/components/management/list-controls";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
@@ -99,17 +101,13 @@ export function BookPaidScreen({
 
   return (
     <section aria-labelledby={headingId} className="grid gap-3">
-      <div>
-        <h2 id={headingId} className="text-lg font-semibold">
-          결제 완료
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          최종 확인이 완료된 도서 출고 기록입니다. 수정·삭제는 불가능하며 기록으로 남습니다. 결제를 잘못 확인했다면
-          원장이 결제를 취소할 수 있습니다.
-        </p>
-      </div>
+      <SectionHeader
+        headingId={headingId}
+        title="결제 완료"
+        description="최종 확인이 완료된 도서 출고 기록입니다. 수정·삭제는 불가능하며 기록으로 남습니다. 결제를 잘못 확인했다면 원장이 결제를 취소할 수 있습니다."
+      />
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-[12rem_minmax(12rem,24rem)]">
           <Label className="grid gap-1 text-sm font-medium">
             <span>조회 월</span>
@@ -132,7 +130,7 @@ export function BookPaidScreen({
         ) : null}
 
         {paidQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">결제 완료 목록을 불러오는 중입니다.</p>
+          <EmptyState>결제 완료 목록을 불러오는 중입니다.</EmptyState>
         ) : null}
 
         {paidView && !paidQuery.isError ? (
@@ -152,7 +150,7 @@ export function BookPaidScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       <BookPaidCancelDialog
         sale={cancelingSale}

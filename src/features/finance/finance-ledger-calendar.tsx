@@ -1,3 +1,4 @@
+import { SectionCard } from "@/components/shared/section-card";
 import type { LedgerEntry } from "@/domain/book-sale";
 import { buildFinanceCalendarDays } from "@/domain/finance-ledger";
 import { FinanceAmount } from "./finance-shared";
@@ -16,7 +17,7 @@ export function FinanceLedgerCalendar({
   const [year, monthIndex] = month.split("-").map(Number);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <SectionCard className="p-3">
       <div
         role="grid"
         aria-label={`${year}년 ${monthIndex}월 입출금 캘린더`}
@@ -48,6 +49,6 @@ export function FinanceLedgerCalendar({
           </div>
         ))}
       </div>
-    </div>
+    </SectionCard>
   );
 }

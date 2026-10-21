@@ -15,6 +15,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import {
@@ -379,7 +381,7 @@ export function StudentListScreen({
         {registrationAction}
       </PageHeaderActionFallback>
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div
           role="group"
           aria-label="검색·필터·정렬"
@@ -493,9 +495,9 @@ export function StudentListScreen({
         ) : null}
 
         {studentListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <EmptyState>
             원생 목록을 불러오는 중입니다.
-          </p>
+          </EmptyState>
         ) : null}
 
         {studentListView && !studentListQuery.isError ? (
@@ -513,7 +515,7 @@ export function StudentListScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       <StudentDetailDialog
         student={detailStudent}
@@ -935,39 +937,39 @@ function StudentListTable({
 }) {
   if (students.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         조건에 맞는 원생이 없습니다.
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <Table aria-label="원생 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">원생</TableHead>
-          <TableHead className="px-4 py-3">선생님</TableHead>
-          <TableHead className="px-4 py-3">악기</TableHead>
-          <TableHead className="px-4 py-3">정기 요일</TableHead>
-          <TableHead className="px-4 py-3 text-right">관리</TableHead>
+          <TableHead>원생</TableHead>
+          <TableHead>선생님</TableHead>
+          <TableHead>악기</TableHead>
+          <TableHead>정기 요일</TableHead>
+          <TableHead className="text-right">관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {students.map((student) => (
           <TableRow key={student.studentId}>
-            <TableCell label="원생" className="px-4 py-3 font-medium">
+            <TableCell label="원생" className="font-medium">
               {student.name}
             </TableCell>
-            <TableCell label="선생님" className="px-4 py-3">
+            <TableCell label="선생님">
               {formatJoinedValue(student.teacherNames)}
             </TableCell>
-            <TableCell label="악기" className="px-4 py-3">
+            <TableCell label="악기">
               {formatJoinedValue(student.instrumentNames)}
             </TableCell>
-            <TableCell label="정기 요일" className="px-4 py-3">
+            <TableCell label="정기 요일">
               {formatJoinedValue(student.weekdayLabels)}
             </TableCell>
-            <TableCell label="관리" className="px-4 py-3 text-right">
+            <TableCell label="관리" className="text-right">
               <Button
                 type="button"
                 variant="outline"

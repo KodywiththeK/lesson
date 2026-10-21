@@ -3,6 +3,8 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ListSearchField } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { StatFigure } from "@/components/shared/stat-tile";
 import { useListPaging } from "@/components/management/use-list-paging";
 import { MonthField } from "@/components/operations/date-time-fields";
 import { Label } from "@/components/ui/label";
@@ -32,13 +34,10 @@ export function FinanceMonthSummary({
   tone?: FinanceAmountTone;
 }) {
   return (
-    <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-      <div>
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        <p className="mt-1 text-2xl font-semibold">
-          <FinanceAmount amount={amount} tone={tone} />
-        </p>
-      </div>
+    <SectionCard className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <StatFigure label={label}>
+        <FinanceAmount amount={amount} tone={tone} />
+      </StatFigure>
       <Label className="grid gap-1 text-sm font-medium sm:min-w-44">
         <span>월 선택</span>
         <MonthField
@@ -49,7 +48,7 @@ export function FinanceMonthSummary({
           onValueChange={onChangeMonth}
         />
       </Label>
-    </div>
+    </SectionCard>
   );
 }
 
@@ -65,19 +64,15 @@ export function FinanceListSearch({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4 sm:max-w-md">
+    <SectionCard className="sm:max-w-md">
       <ListSearchField
         label={label}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
       />
-    </div>
+    </SectionCard>
   );
-}
-
-export function EmptyListMessage({ children }: { children: string }) {
-  return <p className="p-4 text-sm text-muted-foreground">{children}</p>;
 }
 
 /** 이름 검색이 있는 표의 상태. 검색어가 바뀌면 보던 페이지가 의미를 잃으므로 1페이지로 돌아간다. */

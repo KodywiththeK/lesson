@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { StatTile } from "@/components/shared/stat-tile";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -68,7 +70,7 @@ export function FinanceOverviewScreen({
 
   return (
     <section className="grid gap-4" aria-label="전체수입">
-      <div className="rounded-lg border border-border bg-card p-4">
+      <SectionCard>
         <Label className="grid w-fit gap-1 text-sm font-medium">
           <span>연도</span>
           <NativeSelect aria-label="연도" value={year} onChange={(event) => setYear(Number(event.target.value))}>
@@ -79,7 +81,7 @@ export function FinanceOverviewScreen({
             ))}
           </NativeSelect>
         </Label>
-      </div>
+      </SectionCard>
       {yearlyLedgerOptions && yearlyLedgerQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">연간 입출입내역을 불러오는 중입니다.</p>
       ) : null}
@@ -102,30 +104,30 @@ export function FinanceOverviewScreen({
         ledgerEntries={academyLedgerEntries}
         yearlyTuitionQueryOptionsFactory={yearlyTuitionQueryOptionsFactory}
       />
-      <section className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <Table aria-label="월별 수입·지출·순수익">
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-4 py-3">월</TableHead>
-              <TableHead className="px-4 py-3">수입</TableHead>
-              <TableHead className="px-4 py-3">지출</TableHead>
-              <TableHead className="px-4 py-3">순수익</TableHead>
+              <TableHead>월</TableHead>
+              <TableHead>수입</TableHead>
+              <TableHead>지출</TableHead>
+              <TableHead>순수익</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {monthlyTotals.map((month) => (
               <TableRow key={month.month}>
-                <TableCell label="월" className="px-4 py-3 font-medium">{month.month}</TableCell>
-                <TableCell label="수입" className="px-4 py-3">{formatWon(month.income)}</TableCell>
-                <TableCell label="지출" className="px-4 py-3">{formatWon(month.expense)}</TableCell>
-                <TableCell label="순수익" className="px-4 py-3 font-semibold">{formatWon(month.netIncome)}</TableCell>
+                <TableCell label="월" className="font-medium">{month.month}</TableCell>
+                <TableCell label="수입">{formatWon(month.income)}</TableCell>
+                <TableCell label="지출">{formatWon(month.expense)}</TableCell>
+                <TableCell label="순수익" className="font-semibold">{formatWon(month.netIncome)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </section>
-      <section aria-label="분류별 수입" className="rounded-lg border border-border bg-card p-4">
-        <h2 className="text-base font-semibold">분류별 수입</h2>
+      </SectionCard>
+      <SectionCard role="region" aria-label="분류별 수입">
+        <SectionHeader title="분류별 수입" />
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {categoryTotals.map((item) => (
             <div key={item.category} className="rounded-md border border-border p-3">
@@ -136,7 +138,7 @@ export function FinanceOverviewScreen({
             </div>
           ))}
         </div>
-      </section>
+      </SectionCard>
     </section>
   );
 }
@@ -179,7 +181,7 @@ function YearlyMetricSection({
   });
 
   return (
-    <section aria-label="월별 그래프" className="grid gap-3 rounded-lg border border-border bg-card p-4">
+    <SectionCard role="region" aria-label="월별 그래프" className="grid gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <ToggleGroup
           type="single"
@@ -232,7 +234,7 @@ function YearlyMetricSection({
           </p>
         </>
       ) : null}
-    </section>
+    </SectionCard>
   );
 }
 
@@ -257,12 +259,9 @@ export function OverviewTotal({
   emphasized?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={emphasized ? "mt-1 text-2xl font-semibold" : "mt-1 text-xl font-semibold"}>
-        <FinanceAmount amount={amount} tone={tone} />
-      </p>
-    </div>
+    <StatTile label={label} emphasized={emphasized}>
+      <FinanceAmount amount={amount} tone={tone} />
+    </StatTile>
   );
 }
 

@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
+import { SectionCard } from "@/components/shared/section-card";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { useListPaging } from "@/components/management/use-list-paging";
 import { PageHeaderActionFallback, usePageHeaderActions } from "@/components/layout/page-actions";
@@ -195,9 +197,9 @@ export function FinanceLedgerListScreen({
         </TabsList>
         <TabsContent value="list" className="min-w-0">
           {ledgerListQuery.isLoading ? (
-            <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-              입출금 내역을 불러오는 중입니다.
-            </p>
+            <SectionCard padded={false}>
+              <EmptyState>입출금 내역을 불러오는 중입니다.</EmptyState>
+            </SectionCard>
           ) : null}
           {!ledgerListQuery.isLoading && !ledgerListQuery.isError && isQueryEnabled ? (
             <FinanceLedgerTable

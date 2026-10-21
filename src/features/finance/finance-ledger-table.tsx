@@ -1,4 +1,6 @@
 import { Pencil, Trash2 } from "lucide-react";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import {
   AlertDialog,
@@ -16,7 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { LedgerEntry } from "@/domain/book-sale";
 import { type ListView, type PageSizeOption } from "@/domain/common-list";
 import { formatLedgerCategory, formatLedgerEntrySource, formatLedgerEntryType } from "@/domain/finance-ledger";
-import { EmptyListMessage, FinanceAmount, formatWon } from "./finance-shared";
+import { FinanceAmount, formatWon } from "./finance-shared";
 
 /** 같은 이름의 버튼이 여러 개 생기지 않도록 날짜와 금액까지 담은 행 이름. */
 function describeLedgerEntry(entry: LedgerEntry) {
@@ -42,44 +44,44 @@ export function FinanceLedgerTable({
   onPageSizeChange: (pageSize: PageSizeOption) => void;
 }) {
   return (
-    <div aria-busy={isRefreshing} className="rounded-lg border border-border bg-card">
+    <SectionCard padded={false} aria-busy={isRefreshing}>
       {view.items.length === 0 ? (
-        <EmptyListMessage>{emptyMessage}</EmptyListMessage>
+        <EmptyState>{emptyMessage}</EmptyState>
       ) : (
         <Table aria-label="입출금 내역">
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-4 py-3">발생일</TableHead>
-              <TableHead className="px-4 py-3">유형</TableHead>
-              <TableHead className="px-4 py-3">출처</TableHead>
-              <TableHead className="px-4 py-3">분류</TableHead>
-              <TableHead className="px-4 py-3">금액</TableHead>
-              <TableHead className="px-4 py-3">설명</TableHead>
-              <TableHead className="px-4 py-3 text-right">관리</TableHead>
+              <TableHead>발생일</TableHead>
+              <TableHead>유형</TableHead>
+              <TableHead>출처</TableHead>
+              <TableHead>분류</TableHead>
+              <TableHead>금액</TableHead>
+              <TableHead>설명</TableHead>
+              <TableHead className="text-right">관리</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {view.items.map((entry) => (
               <TableRow key={entry.ledgerId}>
-                <TableCell label="발생일" className="px-4 py-3">{entry.occurredOn}</TableCell>
-                <TableCell label="유형" className="px-4 py-3">
+                <TableCell label="발생일">{entry.occurredOn}</TableCell>
+                <TableCell label="유형">
                   <Badge variant={entry.type === "income" ? "secondary" : "outline"}>
                     {formatLedgerEntryType(entry.type)}
                   </Badge>
                 </TableCell>
-                <TableCell label="출처" className="px-4 py-3">
+                <TableCell label="출처">
                   {formatLedgerEntrySource(entry.source)}
                 </TableCell>
-                <TableCell label="분류" className="px-4 py-3">
+                <TableCell label="분류">
                   {formatLedgerCategory(entry.category)}
                 </TableCell>
-                <TableCell label="금액" className="px-4 py-3">
+                <TableCell label="금액">
                   <FinanceAmount amount={entry.amount} tone={entry.type} />
                 </TableCell>
-                <TableCell label="설명" className="px-4 py-3 font-medium">
+                <TableCell label="설명" className="font-medium">
                   {entry.description}
                 </TableCell>
-                <TableCell label="관리" className="px-4 py-3">
+                <TableCell label="관리">
                   <div className="flex justify-end gap-2">
                     <Button
                       type="button"
@@ -115,7 +117,7 @@ export function FinanceLedgerTable({
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
       />
-    </div>
+    </SectionCard>
   );
 }
 

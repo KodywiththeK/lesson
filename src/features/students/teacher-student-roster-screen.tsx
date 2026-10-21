@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery, type QueryKey } from "@tanstack/react-query";
 
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListSearchField, ListStatusAlert } from "@/components/management/list-controls";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
@@ -71,7 +73,7 @@ export function TeacherStudentRosterScreen({
 
   return (
     <section className="grid gap-4" aria-label="담당 원생">
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="border-b border-border p-4">
           <ListSearchField
             label="원생 검색"
@@ -99,7 +101,7 @@ export function TeacherStudentRosterScreen({
         ) : null}
 
         {rosterQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">담당 원생 명단을 불러오는 중입니다.</p>
+          <EmptyState>담당 원생 명단을 불러오는 중입니다.</EmptyState>
         ) : null}
 
         {listView && !rosterQuery.isError ? (
@@ -114,35 +116,35 @@ export function TeacherStudentRosterScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
     </section>
   );
 }
 
 function RosterTable({ rows }: { rows: TeacherStudentRosterRow[] }) {
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-muted-foreground">담당 원생이 없습니다.</p>;
+    return <EmptyState>담당 원생이 없습니다.</EmptyState>;
   }
 
   return (
     <Table aria-label="담당 원생 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">원생</TableHead>
-          <TableHead className="px-4 py-3">악기</TableHead>
-          <TableHead className="px-4 py-3">정기 요일</TableHead>
+          <TableHead>원생</TableHead>
+          <TableHead>악기</TableHead>
+          <TableHead>정기 요일</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.studentId}>
-            <TableCell label="원생" className="px-4 py-3 font-medium">
+            <TableCell label="원생" className="font-medium">
               {row.name}
             </TableCell>
-            <TableCell label="악기" className="px-4 py-3">
+            <TableCell label="악기">
               {row.instrumentNames.join(", ") || "-"}
             </TableCell>
-            <TableCell label="정기 요일" className="px-4 py-3">
+            <TableCell label="정기 요일">
               {row.weekdayLabels.join(", ") || "-"}
             </TableCell>
           </TableRow>

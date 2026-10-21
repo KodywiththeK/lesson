@@ -16,6 +16,8 @@ import {
   ListSearchField,
   ListStatusAlert,
 } from "@/components/management/list-controls";
+import { SectionCard } from "@/components/shared/section-card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
 import {
@@ -230,7 +232,7 @@ export function VendorListScreen({
         {registrationAction}
       </PageHeaderActionFallback>
 
-      <div className="rounded-lg border border-border bg-card">
+      <SectionCard padded={false}>
         <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(12rem,1fr)_12rem_auto]">
           <ListSearchField
             label="거래처 검색"
@@ -275,9 +277,9 @@ export function VendorListScreen({
         ) : null}
 
         {vendorListQuery.isLoading ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <EmptyState>
             거래처 목록을 불러오는 중입니다.
-          </p>
+          </EmptyState>
         ) : null}
 
         {listView && !vendorListQuery.isError ? (
@@ -295,7 +297,7 @@ export function VendorListScreen({
             />
           </>
         ) : null}
-      </div>
+      </SectionCard>
 
       <Dialog
         open={editingVendor !== null}
@@ -463,33 +465,33 @@ function VendorListTable({
 }) {
   if (vendors.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <EmptyState>
         조건에 맞는 거래처가 없습니다.
-      </p>
+      </EmptyState>
     );
   }
 
   return (
     <Table aria-label="거래처 목록">
-      <TableHeader className="bg-muted text-muted-foreground">
+      <TableHeader>
         <TableRow>
-          <TableHead className="px-4 py-3">거래처</TableHead>
-          <TableHead className="px-4 py-3">연락처</TableHead>
-          <TableHead className="px-4 py-3">종류</TableHead>
-          <TableHead className="px-4 py-3">비고</TableHead>
-          <TableHead className="px-4 py-3">관리</TableHead>
+          <TableHead>거래처</TableHead>
+          <TableHead>연락처</TableHead>
+          <TableHead>종류</TableHead>
+          <TableHead>비고</TableHead>
+          <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {vendors.map((vendor) => (
           <TableRow key={vendor.vendorId}>
-            <TableCell label="거래처" className="px-4 py-3 font-medium">
+            <TableCell label="거래처" className="font-medium">
               {vendor.name}
             </TableCell>
-            <TableCell label="연락처" className="px-4 py-3">{vendor.contact || "-"}</TableCell>
-            <TableCell label="종류" className="px-4 py-3">{vendor.kind || "-"}</TableCell>
-            <TableCell label="비고" className="px-4 py-3">{vendor.memo || "-"}</TableCell>
-            <TableCell label="관리" className="px-4 py-3">
+            <TableCell label="연락처">{vendor.contact || "-"}</TableCell>
+            <TableCell label="종류">{vendor.kind || "-"}</TableCell>
+            <TableCell label="비고">{vendor.memo || "-"}</TableCell>
+            <TableCell label="관리">
               <Button
                 type="button"
                 variant="outline"

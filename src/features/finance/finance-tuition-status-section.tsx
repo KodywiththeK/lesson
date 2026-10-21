@@ -1,6 +1,7 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { MonthField } from "@/components/operations/date-time-fields";
 import { Label } from "@/components/ui/label";
@@ -27,10 +28,9 @@ export function TuitionStatusSection({
 }: Pick<FinanceDataScreenProps, "tuitionSnapshotsQueryOptionsFactory">) {
   if (!tuitionSnapshotsQueryOptionsFactory) {
     return (
-      <section aria-label="수납 현황" className="rounded-lg border border-border bg-card p-4">
-        <h2 className="text-base font-semibold">수납/미납 현황</h2>
-        <p className="mt-2 text-sm text-muted-foreground">수납 현황은 실제 데이터에서만 볼 수 있습니다.</p>
-      </section>
+      <SectionCard role="region" aria-label="수납 현황">
+        <SectionHeader title="수납/미납 현황" description="수납 현황은 실제 데이터에서만 볼 수 있습니다." />
+      </SectionCard>
     );
   }
 
@@ -46,14 +46,16 @@ function LiveTuitionStatus({
   const snapshotsQuery = useQuery({ ...queryOptionsFactory(month), placeholderData: keepPreviousData });
 
   return (
-    <section aria-label="수납 현황" className="grid gap-3 rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-base font-semibold">수납/미납 현황</h2>
-        <Label className="grid gap-1 text-sm font-medium sm:min-w-44">
-          <span>조회 월</span>
-          <MonthField aria-label="수납 현황 월 선택" required max={maxMonth} value={month} onValueChange={setMonth} />
-        </Label>
-      </div>
+    <SectionCard role="region" aria-label="수납 현황" className="grid gap-3">
+      <SectionHeader
+        title="수납/미납 현황"
+        actions={
+          <Label className="grid gap-1 text-sm font-medium sm:min-w-44">
+            <span>조회 월</span>
+            <MonthField aria-label="수납 현황 월 선택" required max={maxMonth} value={month} onValueChange={setMonth} />
+          </Label>
+        }
+      />
       {snapshotsQuery.isError ? (
         <ListStatusAlert
           message="월 수납 현황을 불러오지 못했습니다."
@@ -65,7 +67,7 @@ function LiveTuitionStatus({
         <p className="text-sm text-muted-foreground">월 수납 현황을 불러오는 중입니다.</p>
       ) : null}
       {snapshotsQuery.isSuccess ? <TuitionStatusDetail records={snapshotsQuery.data} /> : null}
-    </section>
+    </SectionCard>
   );
 }
 

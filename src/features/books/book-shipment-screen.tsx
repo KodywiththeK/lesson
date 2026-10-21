@@ -4,6 +4,8 @@ import { useId, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { EmptyState } from "@/components/shared/empty-state";
+import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { ListSearchField, ListStatusAlert } from "@/components/management/list-controls";
 import { ListPagination } from "@/components/management/list-pagination";
 import { useListPaging } from "@/components/management/use-list-paging";
@@ -148,10 +150,8 @@ export function BookShipmentScreen({
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
-      <section aria-labelledby={purchaseHeadingId} className="grid gap-3 rounded-lg border border-border bg-card p-4">
-        <h2 id={purchaseHeadingId} className="text-lg font-semibold">
-          도서 구매 목록
-        </h2>
+      <SectionCard role="region" aria-labelledby={purchaseHeadingId} className="grid gap-3">
+        <SectionHeader headingId={purchaseHeadingId} title="도서 구매 목록" />
         {optionLoadError ? (
           <ListStatusAlert message="원생 또는 도서 목록을 불러오지 못했습니다." detail={toUserMessage(optionLoadError)} />
         ) : null}
@@ -163,26 +163,25 @@ export function BookShipmentScreen({
           isSubmitting={registerMutation.isPending}
           onSubmit={(registration) => registerMutation.mutate(registration)}
         />
-      </section>
+      </SectionCard>
 
       <section aria-labelledby={shipmentsHeadingId} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
-        <div>
-          <h2 id={shipmentsHeadingId} className="text-lg font-semibold">
-            출고목록
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            결제 대기 출고를 확인·수정·삭제할 수 있습니다.
-          </p>
-        </div>
+        <SectionHeader
+          headingId={shipmentsHeadingId}
+          title="출고목록"
+          description="결제 대기 출고를 확인·수정·삭제할 수 있습니다."
+        />
 
-        <div className="min-w-0 rounded-lg border border-border bg-card">
-          <div className="border-b border-border p-4 sm:max-w-md">
-            <ListSearchField
-              label="출고 검색"
-              value={search}
-              onChange={changeSearch}
-              placeholder="이름 또는 도서명"
-            />
+        <SectionCard padded={false} className="min-w-0">
+          <div className="border-b border-border p-4">
+            <div className="sm:max-w-md">
+              <ListSearchField
+                label="출고 검색"
+                value={search}
+                onChange={changeSearch}
+                placeholder="이름 또는 도서명"
+              />
+            </div>
           </div>
 
           {shipmentsQuery.isError ? (
@@ -190,7 +189,7 @@ export function BookShipmentScreen({
           ) : null}
 
           {shipmentsQuery.isLoading ? (
-            <p className="p-4 text-sm text-muted-foreground">출고 목록을 불러오는 중입니다.</p>
+            <EmptyState>출고 목록을 불러오는 중입니다.</EmptyState>
           ) : null}
 
           {shipmentsView && !shipmentsQuery.isError ? (
@@ -210,7 +209,7 @@ export function BookShipmentScreen({
               />
             </>
           ) : null}
-        </div>
+        </SectionCard>
       </section>
 
       <BookShipmentEditDialog
