@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,21 +18,15 @@ import {
   type LessonCalendarMemoPayload,
   type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
-import {
-  AcademyAttendanceChecklist,
-  isAttendanceEditable,
-  type AttendanceChoice,
-  type AttendanceDraft,
-} from "@/features/lessons/academy-attendance-checklist";
+import { AcademyAttendanceChecklist } from "@/features/lessons/academy-attendance-checklist";
 import { LessonMemoTabPanel } from "@/features/lessons/lesson-memo-tab-panel";
+import { useAcademyAttendanceDraft } from "@/features/lessons/use-academy-attendance-draft";
 import type {
   AttendanceSelection,
   LessonMemoTargetOptions,
 } from "@/features/lessons/workspace-types";
 
-type DayTab = "attendance" | "memos";
-
-type DateDraft = { date: string; choices: AttendanceDraft };
+type DayTab = "attendance" | "memos" | "history";
 
 export function AcademyDayAttendanceDialog({
   open,
@@ -42,6 +36,7 @@ export function AcademyDayAttendanceDialog({
   memos,
   memoTargets,
   canManage,
+  history,
   isBusy,
   onOpenChange,
   onCreateMemo,
@@ -60,6 +55,8 @@ export function AcademyDayAttendanceDialog({
   memoTargets: LessonMemoTargetOptions;
   /** false면 조회만 한다(선생님). 출결 선택·이동·삭제·초기화를 보여 주지 않는다. */
   canManage: boolean;
+  /** 이 날짜의 변경 이력. 있으면(관리 권한일 때만) "변경 이력" 탭에서 보여 준다. */
+  history?: ReactNode;
   isBusy: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
@@ -72,32 +69,24 @@ export function AcademyDayAttendanceDialog({
   onDelete: (row: DailyAcademyAttendanceRow) => void;
 }) {
   const [tab, setTab] = useState<DayTab>("attendance");
-  const [dateDraft, setDateDraft] = useState<DateDraft>({ date, choices: {} });
-  // 날짜가 바뀌면(일정 이동으로 다른 날을 보게 될 때) 이전 날짜에서 고른 값은 쓰지 않는다.
-  const choices = dateDraft.date === date ? dateDraft.choices : NO_CHOICES;
-  const selections = rows.flatMap((row) => {
-    const status = choices[row.lessonEventId];
-
-    return status && status !== row.status && isAttendanceEditable(row) ? [{ row, status }] : [];
-  });
+  const draft = useAcademyAttendanceDraft({ date, rows, onConfirmAttendance });
   const isAttendanceTab = tab === "attendance" && canManage;
+  const hasHistoryTab = canManage && history !== undefined;
 
-  const updateChoices = (update: (current: AttendanceDraft) => AttendanceDraft) =>
-    setDateDraft({ date, choices: update(choices) });
   const closeAndDiscard = () => {
-    setDateDraft({ date, choices: {} });
+    draft.discard();
     setTab("attendance");
     onOpenChange(false);
   };
   const confirmAttendance = async () => {
-    if (await onConfirmAttendance(selections)) {
+    if (await draft.confirm()) {
       closeAndDiscard();
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : closeAndDiscard())}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
+      <DialogContent className="max-h-[90vh] min-h-[60vh] grid-rows-[auto_1fr_auto] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{date} 출석 확인</DialogTitle>
           <DialogDescription>
@@ -108,24 +97,21 @@ export function AcademyDayAttendanceDialog({
         </DialogHeader>
         <Tabs value={tab} onValueChange={(value) => setTab(value as DayTab)} className="gap-3">
           {canManage ? (
-            <TabsList className="grid h-auto w-full grid-cols-2 sm:w-fit">
+            <TabsList className={`grid h-auto w-full sm:w-fit ${hasHistoryTab ? "grid-cols-3" : "grid-cols-2"}`}>
               <TabsTrigger value="attendance">출석관리</TabsTrigger>
               <TabsTrigger value="memos">메모 {memos.length}</TabsTrigger>
+              {hasHistoryTab ? <TabsTrigger value="history">변경 이력</TabsTrigger> : null}
             </TabsList>
           ) : null}
-          <TabsContent value="attendance" className="grid gap-3 overflow-hidden">
+          <TabsContent value="attendance" className="grid content-start gap-3 overflow-hidden">
             <AcademyAttendanceChecklist
               date={date}
               rows={rows}
-              draft={choices}
+              draft={draft.choices}
               canManage={canManage}
               isBusy={isBusy}
-              onChoose={(row, choice) =>
-                updateChoices((current) => withChoice(current, [row], choice))
-              }
-              onChooseMany={(targetRows, choice) =>
-                updateChoices((current) => withChoice(current, targetRows, choice))
-              }
+              onChoose={draft.choose}
+              onChooseMany={draft.chooseMany}
               onReset={onReset}
               onMove={onMove}
               onDelete={onDelete}
@@ -145,6 +131,7 @@ export function AcademyDayAttendanceDialog({
               />
             </TabsContent>
           ) : null}
+          {hasHistoryTab ? <TabsContent value="history">{history}</TabsContent> : null}
         </Tabs>
         <DialogFooter>
           {isAttendanceTab ? (
@@ -154,7 +141,7 @@ export function AcademyDayAttendanceDialog({
               </Button>
               <Button
                 type="button"
-                disabled={isBusy || selections.length === 0}
+                disabled={isBusy || draft.selections.length === 0}
                 onClick={() => void confirmAttendance()}
               >
                 확인
@@ -169,25 +156,4 @@ export function AcademyDayAttendanceDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-const NO_CHOICES: AttendanceDraft = {};
-
-/** choice가 null이면 그 원생의 임시 선택을 지워 저장된 상태로 되돌린다. */
-function withChoice(
-  current: AttendanceDraft,
-  rows: DailyAcademyAttendanceRow[],
-  choice: AttendanceChoice | null,
-): AttendanceDraft {
-  const next = { ...current };
-
-  for (const row of rows) {
-    if (choice) {
-      next[row.lessonEventId] = choice;
-    } else {
-      delete next[row.lessonEventId];
-    }
-  }
-
-  return next;
 }

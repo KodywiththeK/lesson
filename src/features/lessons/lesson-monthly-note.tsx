@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
+import { StickyNote } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -8,17 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { MonthlyMemoLessonKind } from "@/domain/monthly-memo";
+import { MEMO_LESSON_KIND_LABELS, MemoPaperDialog, RULED_PAPER_STYLE } from "@/features/lessons/memo-paper-dialog";
 import type { LessonMonthlyNote } from "@/lib/api/lesson-monthly-notes";
-import { cn } from "@/lib/utils";
-
-const LESSON_KIND_LABELS: Record<MonthlyMemoLessonKind, string> = {
-  academy: "학원레슨",
-  private: "개인레슨",
-};
 
 type NoteDraft = { content: string; baseContent: string; baseVersion: string };
 
-type LessonMonthlyNotePostitProps = {
+type LessonMonthlyNoteDialogProps = {
   lessonKind: MonthlyMemoLessonKind;
   /** YYYY-MM */
   month: string;
@@ -32,10 +27,10 @@ type LessonMonthlyNotePostitProps = {
 };
 
 /**
- * 선택한 달의 특이사항을 적는 포스트잇.
- * 월별 메모지는 캘린더 옆에 고정한다. 다른 달의 초안과 외부 갱신 충돌을 구분해 작성 중인 내용을 지킨다.
+ * 선택한 달의 특이사항을 적는 메모지. 버튼을 누르면 노란 메모지 모양의 다이얼로그가 열린다.
+ * 다이얼로그를 닫아도 적던 초안은 이 컴포넌트에 남고, 다른 달의 초안과 외부 갱신 충돌은 구분해 작성 중인 내용을 지킨다.
  */
-export function LessonMonthlyNotePostit({
+export function LessonMonthlyNoteDialog({
   lessonKind,
   month,
   note,
@@ -45,8 +40,8 @@ export function LessonMonthlyNotePostit({
   loadErrorMessage,
   onSave,
   onMarkRead,
-}: LessonMonthlyNotePostitProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+}: LessonMonthlyNoteDialogProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, NoteDraft>>({});
   const draftKey = `${lessonKind}:${month}`;
   const savedContent = note?.content ?? "";
@@ -60,7 +55,7 @@ export function LessonMonthlyNotePostit({
       storedDraft.content !== savedContent,
   );
   const monthNumber = Number(month.slice(5));
-  const title = `${monthNumber}월 ${LESSON_KIND_LABELS[lessonKind]} 메모지`;
+  const title = `${monthNumber}월 ${MEMO_LESSON_KIND_LABELS[lessonKind]} 메모지`;
   const isUnread = note?.unread === true;
 
   function changeDraft(content: string) {
@@ -82,56 +77,47 @@ export function LessonMonthlyNotePostit({
   }
 
   return (
-    <section
-      aria-label={title}
-      className={cn(
-        "flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-accent/40",
-      )}
-    >
-      <div
-        className="flex items-center gap-2 border-b border-border bg-accent/60 px-3 py-2"
-      >
-        <StickyNote className="size-4 shrink-0" aria-hidden />
-        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</h3>
+    <>
+      <Button type="button" variant="outline" onClick={() => setIsOpen(true)}>
+        <StickyNote aria-hidden="true" />
+        {monthNumber}월 메모지
         {isUnread ? <Badge variant="destructive">미확인</Badge> : null}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={isCollapsed ? "메모지 펼치기" : "메모지 접기"}
-          aria-expanded={!isCollapsed}
-          onClick={() => setIsCollapsed((current) => !current)}
-        >
-          {isCollapsed ? <ChevronDown aria-hidden /> : <ChevronUp aria-hidden />}
-        </Button>
-      </div>
-
-      <div hidden={isCollapsed} className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-        <PostitBody
-          monthNumber={monthNumber}
-          note={note}
-          isLoading={isLoading}
-          isSaving={isSaving}
-          isMarkingRead={isMarkingRead}
-          loadErrorMessage={loadErrorMessage}
-          onSave={onSave}
-          onMarkRead={onMarkRead}
-          draft={draft}
-          hasConflict={hasConflict}
-          savedContent={savedContent}
-          onDraftChange={changeDraft}
-          onUseSavedContent={useSavedContent}
-        />
-      </div>
-    </section>
+      </Button>
+      <MemoPaperDialog
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title={title}
+        description="이 달의 특이사항을 적어 두세요."
+      >
+        <div className="flex min-h-0 flex-col gap-2">
+          <PostitBody
+            monthNumber={monthNumber}
+            note={note}
+            isLoading={isLoading}
+            isSaving={isSaving}
+            isMarkingRead={isMarkingRead}
+            loadErrorMessage={loadErrorMessage}
+            onSave={onSave}
+            onMarkRead={onMarkRead}
+            onClose={() => setIsOpen(false)}
+            draft={draft}
+            hasConflict={hasConflict}
+            savedContent={savedContent}
+            onDraftChange={changeDraft}
+            onUseSavedContent={useSavedContent}
+          />
+        </div>
+      </MemoPaperDialog>
+    </>
   );
 }
 
 type PostitBodyProps = Pick<
-  LessonMonthlyNotePostitProps,
+  LessonMonthlyNoteDialogProps,
   "note" | "isLoading" | "isSaving" | "isMarkingRead" | "loadErrorMessage" | "onSave" | "onMarkRead"
 > & {
   monthNumber: number;
+  onClose: () => void;
   draft: string;
   savedContent: string;
   hasConflict: boolean;
@@ -148,6 +134,7 @@ function PostitBody({
   loadErrorMessage,
   onSave,
   onMarkRead,
+  onClose,
   draft,
   savedContent,
   hasConflict,
@@ -174,6 +161,7 @@ function PostitBody({
       isMarkingRead={isMarkingRead}
       onSave={onSave}
       onMarkRead={onMarkRead}
+      onClose={onClose}
       draft={draft}
       savedContent={savedContent}
       hasConflict={hasConflict}
@@ -190,6 +178,7 @@ function PostitEditor({
   isMarkingRead,
   onSave,
   onMarkRead,
+  onClose,
   draft,
   savedContent,
   hasConflict,
@@ -197,7 +186,7 @@ function PostitEditor({
   onUseSavedContent,
 }: Pick<
   PostitBodyProps,
-  "monthNumber" | "note" | "isSaving" | "isMarkingRead" | "onSave" | "onMarkRead" |
+  "monthNumber" | "note" | "isSaving" | "isMarkingRead" | "onSave" | "onMarkRead" | "onClose" |
   "draft" | "savedContent" | "hasConflict" | "onDraftChange" | "onUseSavedContent"
 >) {
   const canSave = draft !== savedContent && !isSaving;
@@ -205,14 +194,15 @@ function PostitEditor({
   return (
     <>
       {note === null ? (
-        <p className="text-xs text-muted-foreground">이 달의 메모가 없습니다.</p>
+        <p className="text-xs text-warning-soft-foreground/80">이 달의 메모가 없습니다.</p>
       ) : null}
       <Textarea
         aria-label={`${monthNumber}월 메모 내용`}
         placeholder="예) ○○ 학부모님 전화 옴"
         value={draft}
         onChange={(event) => onDraftChange(event.target.value)}
-        className="min-h-24 flex-1 resize-y bg-background/70"
+        style={RULED_PAPER_STYLE}
+        className="min-h-56 flex-1 resize-none rounded-sm border-warning/30 bg-transparent px-2 py-0 shadow-none focus-visible:border-warning focus-visible:ring-warning/30 dark:bg-transparent"
       />
       {hasConflict ? (
         <Alert variant="destructive">
@@ -225,7 +215,10 @@ function PostitEditor({
           </div>
         </Alert>
       ) : null}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          닫기
+        </Button>
         {note?.unread ? (
           <Button
             type="button"

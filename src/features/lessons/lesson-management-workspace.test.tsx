@@ -17,22 +17,6 @@ type RenderWorkspaceOptions = {
   demoData?: LessonWorkspaceDemoData;
 };
 
-// 시간 순서와 가나다 순서가 반대가 되도록 둔 이름. 8월 1일 레슨이 가장 뒤 이름이다.
-const TIME_ORDERED_STUDENT_NAMES = [
-  "타라",
-  "카이",
-  "차미",
-  "자람",
-  "아름",
-  "사랑",
-  "바다",
-  "마루",
-  "라온",
-  "다온",
-  "나은",
-  "가온",
-];
-
 function buildPrivateLesson(
   id: string,
   studentName: string,
@@ -52,28 +36,6 @@ function buildPrivateLesson(
     status: "scheduled",
     origin: "private",
     originLabel: "개인레슨",
-  };
-}
-
-function buildPagedPrivateLessonData(): LessonWorkspaceDemoData {
-  const augustLessons = TIME_ORDERED_STUDENT_NAMES.map((name, index) =>
-    buildPrivateLesson(
-      `aug-${index + 1}`,
-      name,
-      `2026-08-${String(index + 1).padStart(2, "0")}T10:00:00+09:00`,
-    ),
-  );
-  const septemberLessons = ["하늘", "구름", "나래"].map((name, index) =>
-    buildPrivateLesson(
-      `sep-${index + 1}`,
-      name,
-      `2026-09-${String(index + 1).padStart(2, "0")}T10:00:00+09:00`,
-    ),
-  );
-
-  return {
-    ...demoLessonWorkspaceData,
-    privateLessons: [...septemberLessons, ...augustLessons],
   };
 }
 
@@ -138,7 +100,6 @@ describe("LessonManagementWorkspace", () => {
     const todayCell = screen.getByRole("gridcell", { name: /5 오늘/ });
 
     expect(todayCell).toHaveAttribute("aria-current", "date");
-    expect(todayCell.className).toContain("border-primary");
   });
 
   it("레슨 캘린더에서 이전/다음 달과 임의 연월로 이동한다", async () => {
@@ -163,7 +124,7 @@ describe("LessonManagementWorkspace", () => {
     ).toBeInTheDocument();
   });
 
-  it("학원 레슨표는 월간 캘린더와 선택 일자 테이블뷰를 함께 제공한다", async () => {
+  it("학원 레슨표는 월별 캘린더와 모달 없이 출석까지 처리하는 일별 테이블뷰를 함께 제공한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace();
@@ -172,23 +133,39 @@ describe("LessonManagementWorkspace", () => {
       screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "학원레슨 테이블뷰" }));
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
 
-    const table = screen.getByRole("table", {
-      name: "2026-08-21 학원 레슨 테이블",
-    });
-    expect(within(table).getByRole("cell", { name: "김민지" })).toBeInTheDocument();
-    expect(within(table).queryByRole("cell", { name: "정하린" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "2026-08-21 출석 확인 목록" });
+    expect(within(table).getByText("김민지")).toBeInTheDocument();
+    expect(within(table).queryByText("정하린")).not.toBeInTheDocument();
     expect(within(table).getByRole("row", { name: /김민지/ }).querySelectorAll("td[data-label]")).toHaveLength(6);
-    expect(within(table).getByRole("cell", { name: "김민지" })).toHaveAttribute("data-label", "원생");
 
-    await user.click(
-      within(table).getByRole("button", { name: "김민지 출석 확인 열기" }),
+    await user.click(within(table).getByRole("radio", { name: "김민지 등원" }));
+    await user.click(screen.getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(
+        within(within(screen.getByRole("table", { name: "2026-08-21 출석 확인 목록" })).getByRole("row", { name: /김민지/ }))
+          .getAllByText("출석").length,
+      ).toBeGreaterThan(0),
     );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 
-    expect(
-      await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" }),
-    ).toBeInTheDocument();
+  it("학원 일별 테이블뷰는 날짜를 하루씩 옮기고 오늘로 돌아온다", async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date("2026-08-05T12:00:00+09:00"));
+    renderWorkspace();
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    await user.click(screen.getByRole("button", { name: "학원 레슨 테이블 다음 날짜" }));
+
+    expect(screen.getByRole("table", { name: "2026-08-22 출석 확인 목록" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "오늘로 이동" }));
+
+    expect(screen.getByRole("table", { name: "2026-08-05 출석 확인 목록" })).toBeInTheDocument();
   });
 
   it("학원 레슨 출석 다이얼로그에서 검색, 전체 등원, 확인 저장, 출결 초기화를 수행한다", async () => {
@@ -330,26 +307,38 @@ describe("LessonManagementWorkspace", () => {
     expect(movedDayDialog).toHaveTextContent("이동");
   });
 
-  it("개인레슨표는 캘린더뷰와 테이블뷰를 함께 제공한다", async () => {
+  it("개인레슨표는 월별 캘린더와 모달 없이 출석까지 처리하는 일별 테이블뷰를 함께 제공한다", async () => {
     const user = userEvent.setup();
 
     renderWorkspace({ lessonKind: "private" });
 
-    await user.click(screen.getByRole("tab", { name: "개인레슨 테이블뷰" }));
+    await user.click(screen.getByRole("tab", { name: "개인레슨 일별 테이블뷰" }));
 
-    const table = screen.getByRole("table", { name: "2026년 8월 개인레슨 테이블" });
-    expect(within(table).getByRole("cell", { name: "최도윤" })).toBeInTheDocument();
-    expect(within(table).getByRole("cell", { name: "오유진" })).toBeInTheDocument();
-    expect(within(table).getByRole("row", { name: /최도윤/ }).querySelectorAll("td[data-label]")).toHaveLength(7);
-    expect(within(table).getByRole("cell", { name: "최도윤" })).toHaveAttribute("data-label", "원생");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "2026-08-21 개인레슨 테이블" });
+    expect(within(table).getByRole("cell", { name: /한서아/ })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: /최도윤/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole("row", { name: /한서아/ }).querySelectorAll("td[data-label]")).toHaveLength(7);
 
-    await user.click(
-      within(table).getByRole("button", { name: "최도윤 개인레슨 출석 확인 열기" }),
-    );
+    await user.click(within(table).getByRole("button", { name: "한서아 개인레슨 등원 확인" }));
 
-    expect(
-      await screen.findByRole("dialog", { name: "2026-08-22 개인레슨 출석 확인" }),
-    ).toBeInTheDocument();
+    expect(await within(table).findByRole("button", { name: "한서아 개인레슨 등원 확인 취소" })).toBeInTheDocument();
+  });
+
+  it("개인 일별 테이블뷰는 날짜를 옮기면 그날의 레슨만 보여 준다", async () => {
+    const user = userEvent.setup();
+    renderWorkspace({ lessonKind: "private" });
+    await user.click(screen.getByRole("tab", { name: "개인레슨 일별 테이블뷰" }));
+
+    await user.click(screen.getByRole("button", { name: "개인레슨 테이블 다음 날짜" }));
+
+    const table = screen.getByRole("table", { name: "2026-08-22 개인레슨 테이블" });
+    expect(within(table).getByRole("cell", { name: /최도윤/ })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: /한서아/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "개인레슨 테이블 다음 날짜" }));
+
+    expect(screen.getByText("선택한 날짜에 개인레슨이 없습니다.")).toBeInTheDocument();
   });
 
   it("학원 레슨표에서 비정기 일정을 직접 추가하고 출처를 구분한다", async () => {
@@ -395,7 +384,8 @@ describe("LessonManagementWorkspace", () => {
     renderWorkspace();
 
     expect(screen.queryByLabelText("학원레슨 특이사항 메모")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "메모지" })).not.toBeInTheDocument();
+    // 월별 메모지 버튼은 보기 전환 줄에 있고, 날짜 모달에는 따로 두지 않는다.
+    expect(screen.getByRole("button", { name: "8월 메모지" })).toBeInTheDocument();
 
     await user.click(
       within(
@@ -701,125 +691,26 @@ describe("LessonManagementWorkspace", () => {
 
     expect(within(searchDialog).getByText("최근 레슨: 2026-08-22 첼로 예정")).toBeInTheDocument();
   });
-  describe("월별 개인레슨 표 페이지 이동", () => {
-    async function openPrivateLessonTable() {
-      const user = userEvent.setup();
+  it("개인 일별 테이블뷰에서 같은 시각의 레슨은 원생 이름 가나다 순으로 보여 준다", async () => {
+    const user = userEvent.setup();
+    const sameTime = "2026-08-21T10:00:00+09:00";
 
-      renderWorkspace({
-        lessonKind: "private",
-        demoData: buildPagedPrivateLessonData(),
-      });
-      await user.click(screen.getByRole("tab", { name: "개인레슨 테이블뷰" }));
-
-      return {
-        user,
-        getTable: () =>
-          screen.getByRole("table", { name: "2026년 8월 개인레슨 테이블" }),
-      };
-    }
-
-    it("총 건수와 10건씩 보여 주고 다음 페이지에서 나머지를 시간순으로 보여 준다", async () => {
-      const { user, getTable } = await openPrivateLessonTable();
-
-      expect(screen.getByText("총 12건")).toBeInTheDocument();
-      // 헤더 행 1개 + 데이터 행 10개
-      expect(within(getTable()).getAllByRole("row")).toHaveLength(11);
-      expect(within(getTable()).getAllByRole("row")[1]).toHaveTextContent("타라");
-      expect(within(getTable()).queryByText("나은")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "이전 페이지" })).toBeDisabled();
-
-      await user.click(screen.getByRole("button", { name: "다음 페이지" }));
-
-      const rows = within(getTable()).getAllByRole("row");
-      expect(rows).toHaveLength(3);
-      expect(rows[1]).toHaveTextContent("나은");
-      expect(rows[2]).toHaveTextContent("가온");
-      expect(screen.getByRole("button", { name: "2페이지" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
+    renderWorkspace({
+      lessonKind: "private",
+      demoData: {
+        ...demoLessonWorkspaceData,
+        privateLessons: [
+          buildPrivateLesson("b", "나은", sameTime),
+          buildPrivateLesson("a", "가온", sameTime),
+        ],
+      },
     });
+    await user.click(screen.getByRole("tab", { name: "개인레슨 일별 테이블뷰" }));
 
-    it("페이지당 개수를 20으로 바꾸면 한 페이지에 모두 보여 주고 1페이지로 돌아간다", async () => {
-      const { user, getTable } = await openPrivateLessonTable();
-
-      await user.click(screen.getByRole("button", { name: "다음 페이지" }));
-      await user.selectOptions(
-        screen.getByRole("combobox", { name: "페이지당 개인레슨 수" }),
-        "20",
-      );
-
-      expect(within(getTable()).getAllByRole("row")).toHaveLength(13);
-      expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
-      expect(screen.getByRole("button", { name: "다음 페이지" })).toBeDisabled();
-    });
-
-    it("달을 옮기면 그 달의 건수만 세고 돌아오면 1페이지부터 보여 준다", async () => {
-      const { user, getTable } = await openPrivateLessonTable();
-
-      await user.click(screen.getByRole("button", { name: "다음 페이지" }));
-      await user.click(
-        screen.getByRole("button", { name: "개인레슨 테이블 다음 달" }),
-      );
-
-      expect(screen.getByText("총 3건")).toBeInTheDocument();
-      expect(
-        screen.getByRole("table", { name: "2026년 9월 개인레슨 테이블" }),
-      ).toHaveTextContent("구름");
-
-      await user.click(
-        screen.getByRole("button", { name: "개인레슨 테이블 이전 달" }),
-      );
-
-      expect(screen.getByRole("button", { name: "1페이지" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      );
-      expect(within(getTable()).getAllByRole("row")[1]).toHaveTextContent("타라");
-    });
-
-    it("등록된 개인레슨이 없는 달도 총 0건과 페이지 컨트롤을 보여 준다", async () => {
-      const user = userEvent.setup();
-
-      renderWorkspace({ lessonKind: "private" });
-      await user.click(screen.getByRole("tab", { name: "개인레슨 테이블뷰" }));
-      await user.click(
-        screen.getByRole("button", { name: "개인레슨 테이블 다음 달" }),
-      );
-
-      expect(
-        screen.getByText("해당 월에 등록된 개인레슨이 없습니다."),
-      ).toBeInTheDocument();
-      expect(screen.getByText("총 0건")).toBeInTheDocument();
-      expect(
-        screen.getByRole("combobox", { name: "페이지당 개인레슨 수" }),
-      ).toBeInTheDocument();
-    });
-
-    it("같은 시각의 레슨은 원생 이름 가나다 순으로 보여 준다", async () => {
-      const user = userEvent.setup();
-      const sameTime = "2026-08-10T10:00:00+09:00";
-
-      renderWorkspace({
-        lessonKind: "private",
-        demoData: {
-          ...demoLessonWorkspaceData,
-          privateLessons: [
-            buildPrivateLesson("b", "나은", sameTime),
-            buildPrivateLesson("a", "가온", sameTime),
-          ],
-        },
-      });
-      await user.click(screen.getByRole("tab", { name: "개인레슨 테이블뷰" }));
-
-      const rows = within(
-        screen.getByRole("table", { name: "2026년 8월 개인레슨 테이블" }),
-      ).getAllByRole("row");
-      expect(rows[1]).toHaveTextContent("가온");
-      expect(rows[2]).toHaveTextContent("나은");
-    });
+    const rows = within(
+      screen.getByRole("table", { name: "2026-08-21 개인레슨 테이블" }),
+    ).getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("가온");
+    expect(rows[2]).toHaveTextContent("나은");
   });
 });

@@ -52,7 +52,7 @@ describe("개인레슨 달력 일정 표시 (명세 3.3)", () => {
     expect(grid).toHaveTextContent("한서아 (바이올린) - 오유진 선생님");
     expect(grid).toHaveTextContent("오전 10:30");
     expect(grid).toHaveTextContent("최도윤 (첼로) - 문서준 선생님");
-    expect(grid.querySelector(".bg-purple-500")).not.toBeNull();
+    expect(grid.querySelector('[data-slot="calendar-event-dot"]')).not.toBeNull();
   });
 });
 
@@ -210,7 +210,7 @@ describe("레슨원생 검색 및 선택 (명세 3.5)", () => {
 
     await waitFor(() => expect(success).toHaveBeenCalledWith("레슨 일정을 복사했습니다."));
     expect(await navigator.clipboard.readText()).toBe("8/21 (금) - 1/4");
-    expect(within(dialog).getByRole("button", { name: "복사" }).className).toContain("bg-green");
+    expect(within(dialog).getByRole("button", { name: "복사" })).toHaveAttribute("data-variant", "success");
 
     await user.click(within(dialog).getByRole("button", { name: "초기화" }));
 
@@ -278,8 +278,8 @@ describe("선생님별 레슨시간표 (명세 3.6)", () => {
 
     await user.selectOptions(within(dialog).getByLabelText("선생님 선택"), "teacher-3");
 
-    expect(within(dialog).getByRole("button", { name: "복사" }).className).toContain("bg-green");
-    expect(within(dialog).getByRole("button", { name: "초기화" }).className).toContain("bg-secondary");
+    expect(within(dialog).getByRole("button", { name: "복사" })).toHaveAttribute("data-variant", "success");
+    expect(within(dialog).getByRole("button", { name: "초기화" })).toHaveAttribute("data-variant", "secondary");
 
     await user.click(within(dialog).getByRole("button", { name: "초기화" }));
 

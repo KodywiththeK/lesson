@@ -22,8 +22,6 @@ import {
 } from "@/domain/private-lesson";
 import { formatRecentPrivateLesson } from "@/features/lessons/workspace-helpers";
 
-const GREEN_BUTTON_CLASS_NAME = "bg-green-600 text-white hover:bg-green-700";
-
 export function PrivateLessonStudentSearchDialog({
   open,
   results,
@@ -117,7 +115,7 @@ export function PrivateLessonStudentSearchDialog({
           <div className="flex gap-2">
             <Button
               type="button"
-              className={GREEN_BUTTON_CLASS_NAME}
+              variant="success"
               disabled={!canCopy}
               onClick={copySchedule}
             >

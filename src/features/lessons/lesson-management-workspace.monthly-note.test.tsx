@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,14 +63,52 @@ function renderWorkspace({
   );
 }
 
+type User = ReturnType<typeof userEvent.setup>;
+
+async function openNote(user: User) {
+  await user.click(await screen.findByRole("button", { name: /^\d+월 메모지/ }));
+
+  return screen.findByRole("dialog", { name: /메모지$/ });
+}
+
 describe("월별 메모지 (데모 경로)", () => {
+  it("메모지는 보기 전환 줄의 버튼으로 열고, 평소에는 화면에 펼쳐 두지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "8월 메모 내용" })).not.toBeInTheDocument();
+
+    const dialog = await openNote(user);
+
+    expect(dialog).toHaveAccessibleName("8월 학원레슨 메모지");
+    expect(within(dialog).getByText("이 달의 메모가 없습니다.")).toBeInTheDocument();
+  });
+
+  it("월별 메모지 버튼은 달력 헤더의 오늘로 이동 바로 옆에 두고 N월 메모지라고 부른다", () => {
+    renderWorkspace();
+
+    const button = screen.getByRole("button", { name: "8월 메모지" });
+
+    expect(screen.getByRole("button", { name: "오늘로 이동" }).nextElementSibling).toBe(button);
+    expect(button.closest("[role='tablist']")).toBeNull();
+  });
+
+  it("일별 테이블뷰에는 월별 메모지 대신 그 날짜의 메모지 버튼이 있다", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    expect(screen.queryByRole("button", { name: "8월 메모지" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^8월 21일 메모지/ })).toBeInTheDocument();
+  });
+
   it("학원레슨표에서 메모를 저장하면 미확인으로 표시하고, 확인 버튼을 눌러야 해제한다", async () => {
     const user = userEvent.setup();
     renderWorkspace();
 
-    expect(screen.getByRole("region", { name: "8월 학원레슨 메모지" })).toBeInTheDocument();
-    expect(screen.getByText("이 달의 메모가 없습니다.")).toBeInTheDocument();
-
+    await openNote(user);
     await user.type(screen.getByRole("textbox", { name: "8월 메모 내용" }), "김하늘 학부모님 전화 옴");
     await user.click(screen.getByRole("button", { name: "저장" }));
 
@@ -89,28 +127,33 @@ describe("월별 메모지 (데모 경로)", () => {
     const user = userEvent.setup();
     renderWorkspace();
 
+    await openNote(user);
     await user.type(screen.getByRole("textbox", { name: "8월 메모 내용" }), "8월 특이사항");
     await user.click(screen.getByRole("button", { name: "저장" }));
+    await user.click(screen.getByRole("button", { name: "닫기" }));
 
     await user.click(screen.getByRole("button", { name: "학원 레슨 캘린더 다음 달" }));
-    expect(screen.getByRole("region", { name: "9월 학원레슨 메모지" })).toBeInTheDocument();
+    expect(await openNote(user)).toHaveAccessibleName("9월 학원레슨 메모지");
     expect(screen.getByText("이 달의 메모가 없습니다.")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "9월 메모 내용" })).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "닫기" }));
 
     await user.click(screen.getByRole("button", { name: "학원 레슨 캘린더 이전 달" }));
+    await openNote(user);
     expect(screen.getByRole("textbox", { name: "8월 메모 내용" })).toHaveValue("8월 특이사항");
   });
 
-  it("개인레슨표에도 같은 메모지가 있다", () => {
+  it("개인레슨표에도 같은 메모지가 있다", async () => {
+    const user = userEvent.setup();
     renderWorkspace({ lessonKind: "private" });
 
-    expect(screen.getByRole("region", { name: "8월 개인레슨 메모지" })).toBeInTheDocument();
+    expect(await openNote(user)).toHaveAccessibleName("8월 개인레슨 메모지");
   });
 
   it("선생님처럼 관리 권한이 없으면 메모지를 보여 주지 않는다", () => {
     renderWorkspace({ canManage: false });
 
-    expect(screen.queryByRole("region", { name: "8월 학원레슨 메모지" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^\d+월 메모지/ })).not.toBeInTheDocument();
   });
 });
 
@@ -135,13 +178,15 @@ describe("월별 메모지 (실서비스 경로)", () => {
     });
     renderWorkspace({ lessonKind: "private", injectDemoData: false });
 
+    // 다이얼로그를 열지 않아도 버튼에서 미확인 메모가 있음을 알 수 있다.
+    expect(await screen.findByText("미확인")).toBeInTheDocument();
+    await openNote(user);
     expect(await screen.findByDisplayValue("이서윤 보강 일정 조율")).toBeInTheDocument();
     expect(fetchNote).toHaveBeenCalledWith(expect.anything(), {
       academyId: "academy-demo",
       lessonKind: "private",
       month: "2026-08",
     });
-    expect(screen.getByText("미확인")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "확인" }));
 
@@ -165,6 +210,7 @@ describe("월별 메모지 (실서비스 경로)", () => {
     });
     renderWorkspace({ injectDemoData: false });
 
+    await openNote(user);
     await user.type(await screen.findByRole("textbox", { name: "8월 메모 내용" }), "새 메모");
     await user.click(screen.getByRole("button", { name: "저장" }));
 
@@ -180,10 +226,14 @@ describe("월별 메모지 (실서비스 경로)", () => {
   });
 
   it("불러오지 못하면 사용자 문구로 알리고 레슨표는 계속 쓸 수 있다", async () => {
+    const user = userEvent.setup();
     fetchNote.mockRejectedValue(new Error("월별 메모를 불러오지 못했습니다: boom"));
     renderWorkspace({ injectDemoData: false });
 
+    await openNote(user);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
     expect(screen.getByRole("grid", { name: "2026년 8월 학원레슨 캘린더" })).toBeInTheDocument();
   });
 });

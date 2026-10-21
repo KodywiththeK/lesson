@@ -86,14 +86,13 @@ import { AcademyAbsenceResolutionDialog } from "@/features/lessons/academy-absen
 import { AcademyDayAttendanceDialog } from "@/features/lessons/academy-day-attendance-dialog";
 import { AcademyLessonDeleteDialog } from "@/features/lessons/academy-lesson-delete-dialog";
 import { AcademyLessonEventDialog } from "@/features/lessons/academy-lesson-event-dialog";
-import { AcademyLessonTableView } from "@/features/lessons/academy-lesson-table-view";
+import { AcademyLessonDayView } from "@/features/lessons/academy-lesson-day-view";
 import { MoveAcademyLessonDialog } from "@/features/lessons/academy-move-dialog";
 import { AcademyWeekdaySummary } from "@/features/lessons/academy-weekday-summary";
 import { LessonMonthCalendar } from "@/features/lessons/lesson-month-calendar";
-import { LessonCalendarSidePanel } from "@/features/lessons/lesson-calendar-side-panel";
 import { LessonAuditHistory } from "@/features/lessons/lesson-audit-history";
 import { lessonAuditQueryKey, type LessonAuditSupabaseClient } from "@/lib/api/lesson-audit";
-import { LessonMonthlyNotePostit } from "@/features/lessons/lesson-monthly-note";
+import { LessonMonthlyNoteDialog } from "@/features/lessons/lesson-monthly-note";
 import { useAcademyLessonActions } from "@/features/lessons/use-academy-lesson-actions";
 import { useLessonMonthlyNote } from "@/features/lessons/use-lesson-monthly-note";
 import type { LessonMonthlyNoteSupabaseClient } from "@/lib/api/lesson-monthly-notes";
@@ -103,7 +102,7 @@ import {
 } from "@/features/lessons/lesson-toolbar";
 import { PrivateAbsenceDialog } from "@/features/lessons/private-absence-dialog";
 import { PrivateDayAttendanceDialog } from "@/features/lessons/private-day-attendance-dialog";
-import { PrivateLessonTableView } from "@/features/lessons/private-lesson-table-view";
+import { PrivateLessonDayView } from "@/features/lessons/private-lesson-day-view";
 import { ScheduleDialog } from "@/features/lessons/private-schedule-dialog";
 import { PrivateLessonStudentSearchDialog } from "@/features/lessons/private-student-search-dialog";
 import {
@@ -357,10 +356,6 @@ export function LessonManagementWorkspace({
         .sort(compareAcademyAttendanceRows),
     [academySheets],
   );
-  const privateTableRows = useMemo(
-    () => [...privateLessons].sort(comparePrivateLessonsByTime),
-    [privateLessons],
-  );
   const selectedAcademySheet =
     academySheets[selectedDate] ?? createEmptySheet(academyId, selectedDate);
   const selectedAcademyEvents = [...selectedAcademySheet.rows].sort(
@@ -370,7 +365,7 @@ export function LessonManagementWorkspace({
   );
   const selectedPrivateLessons = privateLessons
     .filter((lesson) => toSeoulDate(lesson.startAt) === selectedDate)
-    .sort((left, right) => left.startAt.localeCompare(right.startAt));
+    .sort(comparePrivateLessonsByTime);
   const selectedAcademyMemos = getLessonMemosForDate(
     calendarMemos,
     "academy",
@@ -692,12 +687,13 @@ export function LessonManagementWorkspace({
       setSelectedDate,
       resetOverrides: resetWorkspaceOverrides,
     });
-  const goToToday = () =>
-    updateSelectedDate(getTodayDate(), {
+  const selectDate = (date: string) =>
+    updateSelectedDate(date, {
       selectedMonth,
       setSelectedDate,
       resetOverrides: resetWorkspaceOverrides,
     });
+  const goToToday = () => selectDate(getTodayDate());
   const requestAcademyMove = (row: DailyAcademyAttendanceRow) => {
     const editable = checkAcademyLessonEditable(row, "move");
 
@@ -906,8 +902,8 @@ export function LessonManagementWorkspace({
     lessonKind === "academy" ? academyHeaderActions : privateHeaderActions;
   const isHeaderActionMounted = usePageHeaderActions(lessonHeaderActions);
   // 학원 레슨 메모는 원장·데스크만 읽을 수 있어 관리 권한이 없으면 메모지를 두지 않는다.
-  const monthlyNotePostit = canManage ? (
-    <LessonMonthlyNotePostit
+  const monthlyNoteButton = canManage ? (
+    <LessonMonthlyNoteDialog
       lessonKind={lessonKind}
       month={selectedMonth}
       note={monthlyNote.note}
@@ -919,6 +915,13 @@ export function LessonManagementWorkspace({
       onMarkRead={monthlyNote.markRead}
     />
   ) : null;
+
+  // 변경 이력은 실서비스 연결이 있을 때만 읽을 수 있고, 출석 확인 다이얼로그의 탭으로 보여 준다.
+  const historyClient = supabaseClientState?.client && canManage ? supabaseClientState.client : null;
+  const renderHistory = (kind: "academy" | "private") =>
+    historyClient ? (
+      <LessonAuditHistory academyId={academyId} date={selectedDate} lessonKind={kind} client={historyClient} />
+    ) : undefined;
 
   if (!hasInjectedData && supabaseClientState?.error) {
     return (
@@ -972,58 +975,43 @@ export function LessonManagementWorkspace({
           )}
           <AcademyWeekdaySummary month={selectedMonth} summary={weekdaySummary} />
           {academyView === "calendar" ? (
-            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
-              <LessonMonthCalendar
-                ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
-                selectedDate={selectedDate}
-                events={academyEvents}
-                memoCounts={academyMemoCounts}
-                variant="academy"
-                onMoveEvent={canManage ? dropAcademyEvent : undefined}
-                onChangeMonth={changeSelectedMonth}
-                onToday={goToToday}
-                onSelectDate={(date) => {
-                  updateSelectedDate(date, {
-                    selectedMonth,
-                    setSelectedDate,
-                    resetOverrides: resetWorkspaceOverrides,
-                  });
-                  setAcademyDayOpen(true);
-                }}
-              />
-              <LessonCalendarSidePanel
-                date={selectedDate}
-                events={academyEvents.filter((event) => event.date === selectedDate)}
-                memo={monthlyNotePostit}
-                history={supabaseClientState?.client && canManage ? (
-                  <LessonAuditHistory academyId={academyId} date={selectedDate} lessonKind="academy" client={supabaseClientState.client} />
-                ) : undefined}
-                onOpenDay={() => setAcademyDayOpen(true)}
-              />
-            </div>
+            <LessonMonthCalendar
+              ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
+              selectedDate={selectedDate}
+              events={academyEvents}
+              memoCounts={academyMemoCounts}
+              variant="academy"
+              onMoveEvent={canManage ? dropAcademyEvent : undefined}
+              onChangeMonth={changeSelectedMonth}
+              onToday={goToToday}
+              headerActions={monthlyNoteButton}
+              onSelectDate={(date) => {
+                selectDate(date);
+                setAcademyDayOpen(true);
+              }}
+            />
           ) : (
-            <>
-              {monthlyNotePostit}
-              <AcademyLessonTableView
-                selectedDate={selectedDate}
-                rows={selectedAcademyEvents}
-                onChangeDate={(date) => {
-                  updateSelectedDate(date, {
-                    selectedMonth,
-                    setSelectedDate,
-                    resetOverrides: resetWorkspaceOverrides,
-                  });
-                }}
-                onOpenDay={(date) => {
-                  updateSelectedDate(date, {
-                    selectedMonth,
-                    setSelectedDate,
-                    resetOverrides: resetWorkspaceOverrides,
-                  });
-                  setAcademyDayOpen(true);
-                }}
-              />
-            </>
+            <AcademyLessonDayView
+              academyId={academyId}
+              date={selectedDate}
+              rows={selectedAcademyEvents}
+              memos={selectedAcademyMemos}
+              memoTargets={selectedAcademyMemoTargets}
+              canManage={canManage}
+              history={renderHistory("academy")}
+              isBusy={academyActions.isBusy}
+              onChangeDate={selectDate}
+              onToday={goToToday}
+              onConfirmAttendance={academyActions.saveAttendance}
+              onReset={(row) =>
+                void academyActions.resetAttendance([row], "출결을 초기화했습니다.")
+              }
+              onMove={requestAcademyMove}
+              onDelete={requestAcademyDelete}
+              onCreateMemo={createCalendarMemo}
+              onUpdateMemo={updateCalendarMemo}
+              onDeleteMemo={deleteCalendarMemo}
+            />
           )}
         </div>
       ) : (
@@ -1044,52 +1032,41 @@ export function LessonManagementWorkspace({
             }
           />
           {privateView === "calendar" ? (
-            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
-              <LessonMonthCalendar
-                ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
-                selectedDate={selectedDate}
-                events={privateEvents}
-                memoCounts={privateMemoCounts}
-                variant="private"
-                onChangeMonth={changeSelectedMonth}
-                onToday={goToToday}
-                onSelectDate={(date) => {
-                  updateSelectedDate(date, {
-                    selectedMonth,
-                    setSelectedDate,
-                    resetOverrides: resetWorkspaceOverrides,
-                  });
-                  setPrivateDayOpen(true);
-                }}
-              />
-              <LessonCalendarSidePanel
-                date={selectedDate}
-                events={privateEvents.filter((event) => event.date === selectedDate)}
-                memo={monthlyNotePostit}
-                history={supabaseClientState?.client && canManage ? (
-                  <LessonAuditHistory academyId={academyId} date={selectedDate} lessonKind="private" client={supabaseClientState.client} />
-                ) : undefined}
-                onOpenDay={() => setPrivateDayOpen(true)}
-              />
-            </div>
+            <LessonMonthCalendar
+              ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
+              selectedDate={selectedDate}
+              events={privateEvents}
+              memoCounts={privateMemoCounts}
+              variant="private"
+              onChangeMonth={changeSelectedMonth}
+              onToday={goToToday}
+              headerActions={monthlyNoteButton}
+              onSelectDate={(date) => {
+                selectDate(date);
+                setPrivateDayOpen(true);
+              }}
+            />
           ) : (
-            <>
-              {monthlyNotePostit}
-              <PrivateLessonTableView
-                selectedMonth={selectedMonth}
-                selectedDate={selectedDate}
-                lessons={privateTableRows}
-                onChangeMonth={changeSelectedMonth}
-                onOpenDay={(date) => {
-                  updateSelectedDate(date, {
-                    selectedMonth,
-                    setSelectedDate,
-                    resetOverrides: resetWorkspaceOverrides,
-                  });
-                  setPrivateDayOpen(true);
-                }}
-              />
-            </>
+            <PrivateLessonDayView
+              academyId={academyId}
+              date={selectedDate}
+              lessons={selectedPrivateLessons}
+              sessionLabels={privateSessionLabels}
+              memos={selectedPrivateMemos}
+              memoTargets={selectedPrivateMemoTargets}
+              canManage={canManage}
+              history={renderHistory("private")}
+              pendingLessonIds={pendingLessonIds}
+              assignedTicketBalances={assignedTicketBalancesQuery.data ?? []}
+              onChangeDate={selectDate}
+              onToday={goToToday}
+              onMark={markPrivateLesson}
+              onCancelAttendance={cancelPrivateLessonCheckIn}
+              onRegisterOnDate={canManage ? () => setPrivateRegisterOpen(true) : undefined}
+              onCreateMemo={createCalendarMemo}
+              onUpdateMemo={updateCalendarMemo}
+              onDeleteMemo={deleteCalendarMemo}
+            />
           )}
         </div>
       )}
@@ -1180,6 +1157,7 @@ export function LessonManagementWorkspace({
         memos={selectedAcademyMemos}
         memoTargets={selectedAcademyMemoTargets}
         canManage={canManage}
+        history={renderHistory("academy")}
         isBusy={academyActions.isBusy}
         onOpenChange={setAcademyDayOpen}
         onCreateMemo={(input) => createCalendarMemo(input)}
@@ -1209,6 +1187,7 @@ export function LessonManagementWorkspace({
         memos={selectedPrivateMemos}
         memoTargets={selectedPrivateMemoTargets}
         canManage={canManage}
+        history={renderHistory("private")}
         pendingLessonIds={pendingLessonIds}
         assignedTicketBalances={assignedTicketBalancesQuery.data ?? []}
         onOpenChange={setPrivateDayOpen}

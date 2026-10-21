@@ -100,29 +100,35 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
   await expect(page.getByRole("dialog", { name: "레슨 일정 등록" })).toBeVisible();
 });
 
-test("학원레슨 달력과 선택 날짜 패널은 각 화면 폭에서 겹치거나 가로로 넘치지 않는다", async ({ page }, testInfo) => {
+test("학원레슨 달력은 각 화면 폭에서 넘치지 않고 월별 메모지는 오늘로 이동 옆에 있다", async ({ page }, testInfo) => {
   await page.clock.setFixedTime(new Date("2026-10-16T12:00:00+09:00"));
   for (const width of [320, 480, 767, 768, 1023, 1024, 1280]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/lessons/academy");
     const calendar = page.getByRole("grid", { name: "2026년 10월 학원레슨 캘린더" });
-    const panel = page.getByRole("complementary", { name: /선택 날짜/ });
     await expect(calendar).toBeVisible();
-    await expect(panel).toBeVisible();
+    await expect(page.getByRole("complementary", { name: /선택 날짜/ })).toHaveCount(0);
     await expect.poll(async () => Boolean(await calendar.boundingBox())).toBe(true);
-    await expect.poll(async () => Boolean(await panel.boundingBox())).toBe(true);
     const calendarBox = await calendar.boundingBox();
-    const panelBox = await panel.boundingBox();
     expect(calendarBox).not.toBeNull();
-    expect(panelBox).not.toBeNull();
     if (width >= 1280) {
-      expect(panelBox!.x).toBeGreaterThanOrEqual(calendarBox!.x + calendarBox!.width);
-      expect(calendarBox!.width).toBeGreaterThanOrEqual(520);
-    } else {
-      expect(panelBox!.y).toBeGreaterThanOrEqual(calendarBox!.y + calendarBox!.height);
+      // 오른쪽 패널이 없어 달력이 본문 폭을 거의 다 쓴다.
+      expect(calendarBox!.width).toBeGreaterThanOrEqual(900);
     }
+    const memoButton = page.getByRole("button", { name: "10월 메모지" });
     const todayButton = page.getByRole("button", { name: "오늘로 이동" });
+    const memoBox = await memoButton.boundingBox();
     const todayBox = await todayButton.boundingBox();
+    expect(memoBox).not.toBeNull();
+    expect(todayBox).not.toBeNull();
+    if (width >= 768) {
+      // 한 줄에서 오늘로 이동 바로 오른쪽에 붙어 있다.
+      expect(Math.abs(memoBox!.y - todayBox!.y)).toBeLessThanOrEqual(16);
+      expect(memoBox!.x).toBeGreaterThanOrEqual(todayBox!.x + todayBox!.width);
+      // 보기 전환 탭은 높이 48px로 키웠다.
+      const tabsBox = await page.getByRole("tablist").boundingBox();
+      expect(tabsBox!.height).toBeGreaterThanOrEqual(47);
+    }
     const calendarContainerBox = await calendar.locator("..").boundingBox();
     expect(todayBox).not.toBeNull();
     expect(calendarContainerBox).not.toBeNull();
@@ -131,6 +137,56 @@ test("학원레슨 달력과 선택 날짜 패널은 각 화면 폭에서 겹치
     if ([320, 768, 1024].includes(width)) {
       await page.screenshot({ path: testInfo.outputPath(`academy-calendar-${width}.png`) });
     }
+  }
+});
+
+test("메모지는 다이얼로그로 열리고 출석 확인 모달은 화면 높이의 60% 이상으로 보인다", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-16T12:00:00+09:00"));
+  for (const route of ["/lessons/academy", "/lessons/private"]) {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(route);
+
+    await page.getByRole("button", { name: "10월 메모지" }).click();
+    const memo = page.getByRole("dialog", { name: /^10월 .*레슨 메모지$/ });
+    await expect(memo).toBeVisible();
+    await expect(memo.getByRole("textbox", { name: "10월 메모 내용" })).toBeVisible();
+    await memo.getByRole("button", { name: "닫기" }).click();
+    await expect(memo).toBeHidden();
+
+    await page.getByRole("gridcell", { name: "2026-10-16" }).click();
+    const day = page.getByRole("dialog", { name: /2026-10-16 .*출석 확인/ });
+    await expect(day).toBeVisible();
+    // 열림 애니메이션 중에는 크기가 달라 보이므로 계산된 최소 높이로 확인한다(900px의 60%).
+    await expect(day).toHaveCSS("min-height", "540px");
+  }
+});
+
+test("일별 테이블뷰는 모달 없이 날짜를 옮기고 그날의 메모지를 연다", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-16T12:00:00+09:00"));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const [route, prefix] of [
+    ["/lessons/academy", "학원레슨"],
+    ["/lessons/private", "개인레슨"],
+  ] as const) {
+    await page.goto(route);
+    await page.getByRole("tab", { name: `${prefix} 일별 테이블뷰` }).click();
+
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "10월 16일 메모지" })).toBeVisible();
+
+    await page.getByRole("button", { name: /다음 날짜$/ }).click();
+    await expect(page.getByRole("button", { name: "10월 17일 메모지" })).toBeVisible();
+    await page.getByRole("button", { name: /이전 날짜$/ }).click();
+    await page.getByRole("button", { name: /이전 날짜$/ }).click();
+    await expect(page.getByRole("button", { name: "10월 15일 메모지" })).toBeVisible();
+
+    await page.getByRole("button", { name: "오늘로 이동" }).click();
+    await page.getByRole("button", { name: "10월 16일 메모지" }).click();
+    const memo = page.getByRole("dialog", { name: /^10월 16일 .*레슨 메모지$/ });
+    await expect(memo).toBeVisible();
+    await memo.getByRole("button", { name: "Close" }).click();
+    await expect(memo).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
   }
 });
 

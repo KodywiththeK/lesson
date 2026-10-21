@@ -258,6 +258,14 @@ export function shiftMonth(month: string, delta: number) {
   return `${nextDate.getUTCFullYear()}-${pad2(nextDate.getUTCMonth() + 1)}`;
 }
 
+/** `YYYY-MM-DD` 날짜를 `delta`일만큼 옮긴다. 월·연 경계와 윤년은 UTC 달력으로 계산한다. */
+export function shiftDate(date: string, delta: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + delta));
+
+  return `${next.getUTCFullYear()}-${pad2(next.getUTCMonth() + 1)}-${pad2(next.getUTCDate())}`;
+}
+
 function getLastDayOfMonth(month: string) {
   const [year, monthIndex] = month.split("-").map(Number);
 

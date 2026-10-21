@@ -1,8 +1,9 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { useId, useMemo, useState, type DragEvent } from "react";
+import { useId, useMemo, useState, type DragEvent, type ReactNode } from "react";
 
+import { SectionCard } from "@/components/shared/section-card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
@@ -28,6 +29,7 @@ export function LessonMonthCalendar({
   onSelectDate,
   onMoveEvent,
   onToday,
+  headerActions,
 }: {
   ariaLabel: string;
   selectedDate: string;
@@ -37,6 +39,8 @@ export function LessonMonthCalendar({
   onChangeMonth: (month: string) => void;
   onSelectDate: (date: string) => void;
   onToday?: () => void;
+  /** 달력 헤더에서 "오늘로 이동" 바로 뒤에 놓을 버튼(월별 메모지 등). */
+  headerActions?: ReactNode;
   /** 주면 `movable` 일정을 다른 날짜로 끌어 옮길 수 있다. 키보드·모바일은 날짜 다이얼로그의 이동을 쓴다. */
   onMoveEvent?: (eventId: string, targetDate: string) => void;
 }) {
@@ -76,13 +80,14 @@ export function LessonMonthCalendar({
   };
 
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-2 sm:p-3">
+    <SectionCard className="min-w-0 p-2 sm:p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <LessonMonthControl
           variantLabel={variantLabel}
           selectedMonth={selectedMonth}
           onChangeMonth={onChangeMonth}
           onToday={onToday}
+          trailing={headerActions}
         />
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {hiddenCount > 0 ? <span>숨긴 일정 {hiddenCount}건</span> : null}
@@ -141,7 +146,7 @@ export function LessonMonthCalendar({
                 <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
                   <span>{Number(date.slice(-2))}</span>
                   {isToday ? (
-                    <span className="hidden rounded-sm bg-primary px-1 py-0.5 text-[10px] font-semibold text-primary-foreground sm:inline">
+                    <span className="hidden rounded-sm bg-primary px-1 py-0.5 text-2xs font-semibold text-primary-foreground sm:inline">
                       오늘
                     </span>
                   ) : null}
@@ -152,7 +157,7 @@ export function LessonMonthCalendar({
                     메모 {memoCount}
                   </span>
                 ) : null}
-                <span className="flex flex-col text-[10px] leading-tight sm:hidden">
+                <span className="flex flex-col text-2xs leading-tight sm:hidden">
                   {pendingCount > 0 ? <span className="text-primary">예정 {pendingCount}</span> : null}
                   {presentCount > 0 ? <span className="text-foreground">등원 {presentCount}</span> : null}
                   {absentCount > 0 ? <span className="text-destructive">결석 {absentCount}</span> : null}
@@ -183,7 +188,7 @@ export function LessonMonthCalendar({
                     </>
                   )}
                   {isHiddenCalendarRecord(event) ? (
-                    <span className="block text-[10px] font-normal">
+                    <span className="block text-2xs font-normal">
                       {getCalendarEventStatusLabel(event.status)}
                     </span>
                   ) : null}
@@ -198,18 +203,19 @@ export function LessonMonthCalendar({
           );
         })}
       </div>
-    </div>
+    </SectionCard>
   );
 }
 
-/** 시간 앞에 보라색 점을 두고 `원생명 (악기) - 선생님명`을 보여 주는 상세 일정 표시. */
+/** 시간 앞에 남보라 점을 두고 `원생명 (악기) - 선생님명`을 보여 주는 상세 일정 표시. */
 function CalendarEventDetail({ event }: { event: CalendarEvent }) {
   return (
     <>
       <span className="hidden items-center gap-1 truncate sm:flex">
         <span
           aria-hidden="true"
-          className="size-1.5 shrink-0 rounded-full bg-purple-500"
+          data-slot="calendar-event-dot"
+          className="size-1.5 shrink-0 rounded-full bg-chart-3"
         />
         {event.timeLabel}
         {event.sessionLabel ? (

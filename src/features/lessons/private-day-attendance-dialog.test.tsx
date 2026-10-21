@@ -14,7 +14,7 @@ const lesson = demoLessonWorkspaceData.privateLessons[0];
 function renderDialog(props: Partial<ComponentProps<typeof PrivateDayAttendanceDialog>> = {}) {
   const onMark = vi.fn();
 
-  render(
+  const { unmount } = render(
     <PrivateDayAttendanceDialog
       open
       academyId="academy-demo"
@@ -35,7 +35,7 @@ function renderDialog(props: Partial<ComponentProps<typeof PrivateDayAttendanceD
     />,
   );
 
-  return { onMark, user: userEvent.setup() };
+  return { onMark, unmount, user: userEvent.setup() };
 }
 
 describe("PrivateDayAttendanceDialog", () => {
@@ -216,5 +216,26 @@ describe("개인레슨 결석 사유 입력", () => {
     rerender(<PrivateDayAttendanceDialog {...baseProps} date="2026-08-21" />);
 
     expect(screen.queryByRole("textbox", { name: "결석 사유 (선택)" })).not.toBeInTheDocument();
+  });
+
+  it("관리 권한이 있고 이력이 주어지면 변경 이력 탭에서 이력을 볼 수 있다", async () => {
+    const { user } = renderDialog({ canManage: true, history: <p>출석 확인 취소 기록</p> });
+
+    expect(screen.queryByText("출석 확인 취소 기록")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "변경 이력" }));
+
+    expect(screen.getByText("출석 확인 취소 기록")).toBeInTheDocument();
+  });
+
+  it("이력이 없거나 관리 권한이 없으면 변경 이력 탭을 보여 주지 않는다", () => {
+    const { unmount } = renderDialog({ canManage: true });
+
+    expect(screen.queryByRole("tab", { name: "변경 이력" })).not.toBeInTheDocument();
+    unmount();
+
+    renderDialog({ canManage: false, history: <p>출석 확인 취소 기록</p> });
+
+    expect(screen.queryByRole("tab", { name: "변경 이력" })).not.toBeInTheDocument();
   });
 });

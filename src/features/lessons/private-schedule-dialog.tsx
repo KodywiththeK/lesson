@@ -26,8 +26,6 @@ import {
   toSeoulHourMinute,
 } from "@/features/lessons/workspace-helpers";
 
-const GREEN_BUTTON_CLASS_NAME = "bg-green-600 text-white hover:bg-green-700";
-
 export function ScheduleDialog({
   open,
   lessons,
@@ -89,7 +87,7 @@ export function ScheduleDialog({
         <DialogFooter>
           <Button
             type="button"
-            className={GREEN_BUTTON_CLASS_NAME}
+            variant="success"
             disabled={!teacherId}
             onClick={async () => {
               try {

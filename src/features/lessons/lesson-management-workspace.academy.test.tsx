@@ -574,7 +574,10 @@ describe("결석 사유서와 월별 메모지 자동 기록", () => {
     await resolveAbsence(user, "박지호", "패스", "보호자 요청");
     await resolveAbsence(user, "이서윤", "보강");
 
-    const note = screen.getByRole("textbox", { name: "8월 메모 내용", hidden: true });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026년 8월 결석인원" })).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /^\d+월 메모지/ }));
+    const note = await screen.findByRole("textbox", { name: "8월 메모 내용" });
     expect(note).toHaveValue(
       "박지호, 8/21 [금요일] 보호자 요청\n이서윤, 8/24 [월요일] 보강 - 8/21 [금요일]",
     );

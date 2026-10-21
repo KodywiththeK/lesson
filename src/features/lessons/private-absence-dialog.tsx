@@ -61,14 +61,14 @@ export function PrivateAbsenceDialog({
           aria-label={`${formatMonthLabel(month)} 개인레슨 결석인원 표`}
           className="lg:min-w-[52rem]"
         >
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-4 py-3">날짜</TableHead>
-              <TableHead className="px-4 py-3">시간</TableHead>
-              <TableHead className="px-4 py-3">원생</TableHead>
-              <TableHead className="px-4 py-3">악기</TableHead>
-              <TableHead className="px-4 py-3">선생님</TableHead>
-              <TableHead className="px-4 py-3">사유</TableHead>
+              <TableHead>날짜</TableHead>
+              <TableHead>시간</TableHead>
+              <TableHead>원생</TableHead>
+              <TableHead>악기</TableHead>
+              <TableHead>선생님</TableHead>
+              <TableHead>사유</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -81,14 +81,14 @@ export function PrivateAbsenceDialog({
             ) : null}
             {absences.map((lesson) => (
               <TableRow key={lesson.id}>
-                <TableCell label="날짜" className="px-4 py-3">{toSeoulDate(lesson.startAt)}</TableCell>
-                <TableCell label="시간" className="px-4 py-3">
+                <TableCell label="날짜">{toSeoulDate(lesson.startAt)}</TableCell>
+                <TableCell label="시간">
                   {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)}
                 </TableCell>
-                <TableCell label="원생" className="px-4 py-3 font-medium">{lesson.studentName}</TableCell>
-                <TableCell label="악기" className="px-4 py-3">{lesson.instrumentName}</TableCell>
-                <TableCell label="선생님" className="px-4 py-3">{lesson.teacherName}</TableCell>
-                <TableCell label="사유" className="px-4 py-3">{formatAbsenceReason(lesson.absenceReason)}</TableCell>
+                <TableCell label="원생" className="font-medium">{lesson.studentName}</TableCell>
+                <TableCell label="악기">{lesson.instrumentName}</TableCell>
+                <TableCell label="선생님">{lesson.teacherName}</TableCell>
+                <TableCell label="사유">{formatAbsenceReason(lesson.absenceReason)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

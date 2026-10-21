@@ -4,6 +4,7 @@ import type { DailyAcademyAttendanceRow } from "@/domain/academy-lesson-attendan
 import {
   describePrivateAttendanceMark,
   formatLessonTimeRange,
+  shiftDate,
   toAcademyCalendarEvent,
   toPrivateCalendarEvent,
   toMovedAcademyAttendanceRow,
@@ -119,5 +120,24 @@ describe("toPrivateAbsenceReason", () => {
   it("출석이나 예정이면 사유를 남기지 않는다", () => {
     expect(toPrivateAbsenceReason("present", "감기")).toBeUndefined();
     expect(toPrivateAbsenceReason("scheduled", undefined)).toBeUndefined();
+  });
+});
+
+describe("shiftDate", () => {
+  it("하루 앞뒤로 옮긴다", () => {
+    expect(shiftDate("2026-08-21", 1)).toBe("2026-08-22");
+    expect(shiftDate("2026-08-21", -1)).toBe("2026-08-20");
+  });
+
+  it("월·연 경계를 넘어도 올바른 날짜를 돌려준다", () => {
+    expect(shiftDate("2026-08-31", 1)).toBe("2026-09-01");
+    expect(shiftDate("2026-09-01", -1)).toBe("2026-08-31");
+    expect(shiftDate("2026-12-31", 1)).toBe("2027-01-01");
+    expect(shiftDate("2026-01-01", -1)).toBe("2025-12-31");
+  });
+
+  it("윤년의 2월 마지막 날을 지킨다", () => {
+    expect(shiftDate("2028-02-28", 1)).toBe("2028-02-29");
+    expect(shiftDate("2027-02-28", 1)).toBe("2027-03-01");
   });
 });

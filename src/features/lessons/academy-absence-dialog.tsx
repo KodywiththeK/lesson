@@ -73,16 +73,16 @@ export function AcademyAbsenceDialog({
           {summary.pass}건
         </p>
         <Table aria-label={`${formatMonthLabel(month)} 결석인원 표`} className="lg:min-w-[56rem]">
-          <TableHeader className="bg-muted text-muted-foreground">
+          <TableHeader>
             <TableRow>
-              <TableHead className="px-4 py-3">날짜</TableHead>
-              <TableHead className="px-4 py-3">시간</TableHead>
-              <TableHead className="px-4 py-3">원생</TableHead>
-              <TableHead className="px-4 py-3">악기</TableHead>
-              <TableHead className="px-4 py-3">선생님</TableHead>
-              <TableHead className="px-4 py-3">사유</TableHead>
-              <TableHead className="px-4 py-3">처리</TableHead>
-              <TableHead className="px-4 py-3 text-right">작업</TableHead>
+              <TableHead>날짜</TableHead>
+              <TableHead>시간</TableHead>
+              <TableHead>원생</TableHead>
+              <TableHead>악기</TableHead>
+              <TableHead>선생님</TableHead>
+              <TableHead>사유</TableHead>
+              <TableHead>처리</TableHead>
+              <TableHead className="text-right">작업</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,16 +95,16 @@ export function AcademyAbsenceDialog({
             ) : null}
             {absences.map((row) => (
               <TableRow key={row.lessonEventId}>
-                <TableCell label="날짜" className="px-4 py-3">{row.date}</TableCell>
-                <TableCell label="시간" className="px-4 py-3">{formatLessonTimeRange(row)}</TableCell>
-                <TableCell label="원생" className="px-4 py-3 font-medium">{row.studentName}</TableCell>
-                <TableCell label="악기" className="px-4 py-3">{row.instrumentName}</TableCell>
-                <TableCell label="선생님" className="px-4 py-3">{row.teacherName ?? "-"}</TableCell>
-                <TableCell label="사유" className="px-4 py-3">{formatAbsenceReason(row.absenceReason)}</TableCell>
-                <TableCell label="처리" className="px-4 py-3">
+                <TableCell label="날짜">{row.date}</TableCell>
+                <TableCell label="시간">{formatLessonTimeRange(row)}</TableCell>
+                <TableCell label="원생" className="font-medium">{row.studentName}</TableCell>
+                <TableCell label="악기">{row.instrumentName}</TableCell>
+                <TableCell label="선생님">{row.teacherName ?? "-"}</TableCell>
+                <TableCell label="사유">{formatAbsenceReason(row.absenceReason)}</TableCell>
+                <TableCell label="처리">
                   <ResolutionBadge resolution={row.absenceResolution} />
                 </TableCell>
-                <TableCell label="작업" className="px-4 py-3 text-right">
+                <TableCell label="작업" className="text-right">
                   {row.absenceResolution ? (
                     "-"
                   ) : (

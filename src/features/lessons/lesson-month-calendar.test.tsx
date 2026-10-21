@@ -93,6 +93,26 @@ describe("월간 레슨 캘린더", () => {
     expect(onToday).toHaveBeenCalledOnce();
   });
 
+  it("달력 헤더의 오늘로 이동 바로 옆에 받은 버튼을 둔다", () => {
+    render(
+      <LessonMonthCalendar
+        ariaLabel="2026년 10월 학원레슨 캘린더"
+        selectedDate="2026-10-16"
+        events={events}
+        memoCounts={new Map()}
+        variant="academy"
+        onChangeMonth={vi.fn()}
+        onSelectDate={vi.fn()}
+        onToday={vi.fn()}
+        headerActions={<button type="button">10월 메모지</button>}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "오늘로 이동" }).nextElementSibling).toBe(
+      screen.getByRole("button", { name: "10월 메모지" }),
+    );
+  });
+
   it("좁은 날짜 칸에는 예정·등원 건수를 나눠 표시한다", () => {
     render(
       <LessonMonthCalendar

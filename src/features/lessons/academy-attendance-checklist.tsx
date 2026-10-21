@@ -43,6 +43,7 @@ export function AcademyAttendanceChecklist({
   onReset,
   onMove,
   onDelete,
+  isScrollable = true,
 }: {
   date: string;
   rows: DailyAcademyAttendanceRow[];
@@ -54,6 +55,8 @@ export function AcademyAttendanceChecklist({
   onReset: (row: DailyAcademyAttendanceRow) => void;
   onMove: (row: DailyAcademyAttendanceRow) => void;
   onDelete: (row: DailyAcademyAttendanceRow) => void;
+  /** 모달처럼 높이가 제한된 곳에서는 표 안에서 스크롤한다. 페이지에 바로 펼칠 때는 끈다. */
+  isScrollable?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -128,18 +131,18 @@ export function AcademyAttendanceChecklist({
           </div>
         </div>
       ) : null}
-      <div className="max-h-[55vh] overflow-auto rounded-md border border-border">
+      <div className={`rounded-md border border-border ${isScrollable ? "max-h-[55vh] overflow-auto" : "overflow-x-auto"}`}>
         <Table aria-label={`${date} 출석 확인 목록`} className="lg:min-w-[56rem]">
-          <TableHeader className="sticky top-0 bg-muted text-muted-foreground">
+          <TableHeader className={isScrollable ? "sticky top-0 bg-muted" : undefined}>
             <TableRow>
-              <TableHead className="px-4 py-3">원생</TableHead>
-              <TableHead className="px-4 py-3">시간</TableHead>
-              <TableHead className="px-4 py-3">수업</TableHead>
-              <TableHead className="px-4 py-3">상태</TableHead>
+              <TableHead>원생</TableHead>
+              <TableHead>시간</TableHead>
+              <TableHead>수업</TableHead>
+              <TableHead>상태</TableHead>
               {canManage ? (
                 <>
-                  <TableHead className="px-4 py-3">등원(O) / 결석(X)</TableHead>
-                  <TableHead className="px-4 py-3 text-right">처리</TableHead>
+                  <TableHead>등원(O) / 결석(X)</TableHead>
+                  <TableHead className="text-right">처리</TableHead>
                 </>
               ) : null}
             </TableRow>
@@ -147,7 +150,7 @@ export function AcademyAttendanceChecklist({
           <TableBody>
             {visibleRows.map((row) => (
               <TableRow key={row.lessonEventId}>
-                <TableCell label="원생" className="px-4 py-3">
+                <TableCell label="원생">
                   <div className="flex flex-col gap-1">
                     <strong className="text-sm">{row.studentName}</strong>
                     <span className="text-xs text-muted-foreground">
@@ -155,14 +158,14 @@ export function AcademyAttendanceChecklist({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell label="시간" className="px-4 py-3">{formatLessonTimeRange(row)}</TableCell>
-                <TableCell label="수업" className="px-4 py-3">
+                <TableCell label="시간">{formatLessonTimeRange(row)}</TableCell>
+                <TableCell label="수업">
                   <div className="flex flex-wrap gap-1">
                     <OriginBadge label={row.originLabel} />
                     <Badge variant="secondary">{row.instrumentName}</Badge>
                   </div>
                 </TableCell>
-                <TableCell label="상태" className="px-4 py-3">
+                <TableCell label="상태">
                   <div className="flex flex-wrap gap-1">
                     <AttendanceBadge status={row.status} />
                     <ResolutionBadge resolution={row.absenceResolution} />
@@ -170,7 +173,7 @@ export function AcademyAttendanceChecklist({
                 </TableCell>
                 {canManage ? (
                   <>
-                    <TableCell label="등원(O) / 결석(X)" className="px-4 py-3">
+                    <TableCell label="등원(O) / 결석(X)">
                       <ToggleGroup
                         type="single"
                         variant="outline"
@@ -189,7 +192,7 @@ export function AcademyAttendanceChecklist({
                         </ToggleGroupItem>
                       </ToggleGroup>
                     </TableCell>
-                    <TableCell label="처리" className="px-4 py-3">
+                    <TableCell label="처리">
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button
                           type="button"
