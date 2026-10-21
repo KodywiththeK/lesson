@@ -2,9 +2,28 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { AppShell, useAppShellHeaderActions } from "./app-shell";
+import { usePageHeaderActions } from "@/components/layout/page-actions";
+import type { PermissionContext } from "@/domain/permissions";
+
+import { AppShell } from "./app-shell";
 
 describe("AppShell", () => {
+  it.each<[PermissionContext, string]>([
+    [{ role: "owner" }, "원장"],
+    [{ role: "desk" }, "데스크"],
+    [{ role: "teacher", teacherId: "teacher-1", assignedStudentIds: [] }, "선생님"],
+  ])("헤더 사용자 영역에 학원명과 역할(%j)을 표시만 한다", (permissionContext, roleLabel) => {
+    window.history.pushState(null, "", "/");
+
+    render(<AppShell academyName="더 클래식" permissionContext={permissionContext} />);
+
+    const header = screen.getByRole("banner");
+
+    expect(within(header).getByText(`더 클래식 · ${roleLabel}`)).toBeInTheDocument();
+    // "현재 학원: …" 안내는 사이드바에만 둔다.
+    expect(within(header).queryByText("현재 학원: 더 클래식")).not.toBeInTheDocument();
+  });
+
   it("owner에게 운영 전체 메뉴를 보여주고 공통 헤더 액션은 노출하지 않는다", () => {
     window.history.pushState(null, "", "/");
 
@@ -248,7 +267,7 @@ describe("AppShell", () => {
     window.history.pushState(null, "", "/passes");
 
     function HeaderActionProbe() {
-      useAppShellHeaderActions(
+      usePageHeaderActions(
         <button type="button">회차권 등록</button>,
       );
 
@@ -274,7 +293,7 @@ describe("AppShell", () => {
     window.history.pushState(null, "", "/passes");
 
     function HeaderActionProbe() {
-      useAppShellHeaderActions(<button type="button">회차권 등록</button>);
+      usePageHeaderActions(<button type="button">회차권 등록</button>);
 
       return <p>회차권 목록</p>;
     }

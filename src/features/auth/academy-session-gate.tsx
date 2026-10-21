@@ -89,7 +89,7 @@ function AcademySessionGateInner({ children }: AcademySessionGateProps) {
   if (currentAcademyQuery.isLoading) {
     return (
       <SessionShell>
-        <p className="text-sm text-muted-foreground">
+        <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-card">
           현재 학원 정보를 불러오는 중입니다.
         </p>
       </SessionShell>
@@ -141,7 +141,7 @@ function SignInPanel({
   return (
     <SessionShell>
       <form
-        className="grid gap-4 rounded-lg border border-border bg-card p-5"
+        className="grid gap-4 rounded-2xl border border-border bg-card p-6 shadow-card"
         aria-label="로그인"
         onSubmit={async (event) => {
           event.preventDefault();
