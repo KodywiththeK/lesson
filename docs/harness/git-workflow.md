@@ -52,9 +52,10 @@ chore(git): 저장소 초기화와 remote 연결
 1. `git status --short --branch`로 변경 파일을 확인한다.
 2. 관련 테스트를 먼저 실행한다.
 3. 영향이 넓으면 `pnpm test:run`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test:e2e`를 실행한다.
-4. evidence 문서 또는 최종 보고에 실행 명령과 결과를 남긴다.
-5. 생성물과 비밀 파일이 stage되지 않았는지 확인한다.
-6. 컨벤션에 맞춰 커밋한다.
+4. `/simplify`로 변경 코드를 재사용·단순화·효율·추상화 수준 관점에서 점검하고 고친 뒤, 영향받은 테스트를 다시 실행한다. 절차는 [code-quality.md](../engineering/code-quality.md)의 "마지막 simplify 필수 규칙"을 따른다.
+5. evidence 문서 또는 최종 보고에 실행 명령과 결과, simplify 결과를 남긴다.
+6. 생성물과 비밀 파일이 stage되지 않았는지 확인한다.
+7. 변경이 여러 논리 단위로 섞여 있으면 단위별로 나눠 컨벤션에 맞춰 커밋한다.
 
 ## 커밋하지 않는 파일
 
