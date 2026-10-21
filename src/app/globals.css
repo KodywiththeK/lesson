@@ -4,72 +4,112 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.99 0.004 106);
-  --foreground: oklch(0.21 0.018 264);
+  /* 배경은 연한 하늘색, 카드는 흰색으로 띄운다. 색은 모두 oklch로 정의한다. */
+  --background: oklch(0.968 0.016 250);
+  --foreground: oklch(0.25 0.04 262);
   --card: oklch(1 0 0);
   --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.36 0.08 252);
-  --primary-foreground: oklch(0.98 0.005 106);
-  --secondary: oklch(0.94 0.02 182);
-  --secondary-foreground: oklch(0.22 0.025 222);
-  --muted: oklch(0.95 0.008 264);
-  --muted-foreground: oklch(0.48 0.025 264);
-  --accent: oklch(0.9 0.04 157);
-  --accent-foreground: oklch(0.24 0.035 156);
-  --destructive: oklch(0.58 0.18 28);
-  /* 수입 관리 금액 의미 색: 합계=파랑, 수입=초록, 지출=빨강 */
-  --total: oklch(0.5 0.16 255);
+  --primary: oklch(0.546 0.215 262);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.955 0.015 255);
+  --secondary-foreground: oklch(0.3 0.05 262);
+  --muted: oklch(0.965 0.01 255);
+  --muted-foreground: oklch(0.5 0.03 262);
+  --accent: oklch(0.95 0.035 258);
+  --accent-foreground: oklch(0.42 0.15 263);
+  --destructive: oklch(0.577 0.215 27);
+  --destructive-foreground: oklch(1 0 0);
+  --destructive-soft: oklch(0.96 0.03 20);
+  --destructive-soft-foreground: oklch(0.47 0.18 27);
+  /* 상태 색: 기본색은 흰 글자 버튼·배지, soft는 연한 배경 배지에 쓴다. */
+  --success: oklch(0.52 0.14 155);
+  --success-foreground: oklch(1 0 0);
+  --success-soft: oklch(0.962 0.04 155);
+  --success-soft-foreground: oklch(0.42 0.11 155);
+  --warning: oklch(0.56 0.14 60);
+  --warning-foreground: oklch(1 0 0);
+  --warning-soft: oklch(0.97 0.05 85);
+  --warning-soft-foreground: oklch(0.44 0.1 60);
+  --info: oklch(0.55 0.13 235);
+  --info-foreground: oklch(1 0 0);
+  --info-soft: oklch(0.96 0.03 230);
+  --info-soft-foreground: oklch(0.42 0.11 240);
+  /* 수입 관리 금액 의미 색: 합계=남보라, 수입=초록, 지출=빨강 (primary 파랑과 구분한다) */
+  --total: oklch(0.46 0.17 280);
   --income: oklch(0.5 0.14 150);
   --expense: oklch(0.55 0.19 27);
-  --border: oklch(0.89 0.012 264);
-  --input: var(--border);
-  --ring: oklch(0.58 0.08 252);
-  --radius: 0.5rem;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --chart-1: oklch(0.546 0.215 262);
+  --chart-2: oklch(0.7 0.13 225);
+  --chart-3: oklch(0.46 0.17 280);
+  --chart-4: oklch(0.65 0.12 180);
+  --chart-5: oklch(0.72 0.14 75);
+  --border: oklch(0.92 0.015 255);
+  --input: oklch(0.88 0.02 255);
+  --ring: oklch(0.65 0.15 262);
+  --radius: 0.625rem;
+  --shadow-tint: 0.3 0.06 262;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.38 0.04 262);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
+/* 다크모드는 켜지 않는다(라이트 전용). 나중에 켤 때를 위해 같은 토큰 구조만 유지한다. */
 .dark {
-  --background: oklch(0.16 0.018 264);
-  --foreground: oklch(0.96 0.006 106);
-  --card: oklch(0.2 0.02 264);
+  --background: oklch(0.17 0.02 262);
+  --foreground: oklch(0.96 0.008 255);
+  --card: oklch(0.21 0.025 262);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.2 0.02 264);
+  --popover: oklch(0.21 0.025 262);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.72 0.1 252);
-  --primary-foreground: oklch(0.16 0.018 264);
-  --secondary: oklch(0.27 0.025 182);
+  --primary: oklch(0.68 0.16 262);
+  --primary-foreground: oklch(0.17 0.02 262);
+  --secondary: oklch(0.28 0.03 262);
   --secondary-foreground: var(--foreground);
-  --muted: oklch(0.26 0.018 264);
-  --muted-foreground: oklch(0.72 0.018 264);
-  --accent: oklch(0.34 0.055 157);
-  --accent-foreground: var(--foreground);
+  --muted: oklch(0.26 0.025 262);
+  --muted-foreground: oklch(0.72 0.025 262);
+  --accent: oklch(0.3 0.06 262);
+  --accent-foreground: oklch(0.88 0.06 258);
   --destructive: oklch(0.66 0.17 28);
-  --total: oklch(0.74 0.12 255);
+  --destructive-foreground: oklch(0.17 0.02 262);
+  --destructive-soft: oklch(0.3 0.06 25);
+  --destructive-soft-foreground: oklch(0.85 0.09 25);
+  --success: oklch(0.72 0.14 155);
+  --success-foreground: oklch(0.17 0.02 262);
+  --success-soft: oklch(0.29 0.05 155);
+  --success-soft-foreground: oklch(0.86 0.1 155);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.17 0.02 262);
+  --warning-soft: oklch(0.31 0.05 75);
+  --warning-soft-foreground: oklch(0.88 0.09 80);
+  --info: oklch(0.74 0.11 235);
+  --info-foreground: oklch(0.17 0.02 262);
+  --info-soft: oklch(0.3 0.05 235);
+  --info-soft-foreground: oklch(0.87 0.07 235);
+  --total: oklch(0.76 0.12 280);
   --income: oklch(0.76 0.15 150);
   --expense: oklch(0.72 0.17 27);
-  --border: oklch(0.31 0.018 264);
-  --input: var(--border);
-  --ring: oklch(0.72 0.1 252);
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --border: oklch(0.31 0.025 262);
+  --input: oklch(0.34 0.03 262);
+  --ring: oklch(0.68 0.16 262);
+  --shadow-tint: 0 0 0;
 }
 
 @theme inline {
+  /* 달력 칸 안 작은 글자처럼 text-xs(12px)보다 작아야 하는 곳에 쓴다. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 1.2;
+
+  --font-sans:
+    var(--font-pretendard), ui-sans-serif, system-ui, -apple-system,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -85,15 +125,55 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
   --color-total: var(--total);
   --color-income: var(--income);
   --color-expense: var(--expense);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
+
+  /* radius 단계: 입력·버튼=md(10px), 안쪽 박스=lg(12px), 카드=xl(16px), 셸 패널=2xl(20px) */
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --radius-2xl: calc(var(--radius) + 10px);
+
+  /* 그림자는 파란 기운이 도는 얕고 넓은 번짐으로 통일한다. */
+  --shadow-xs: 0 1px 2px 0 oklch(var(--shadow-tint) / 0.05);
+  --shadow-sm:
+    0 1px 2px 0 oklch(var(--shadow-tint) / 0.04),
+    0 2px 8px -2px oklch(var(--shadow-tint) / 0.06);
+  --shadow-md:
+    0 2px 4px -1px oklch(var(--shadow-tint) / 0.05),
+    0 8px 20px -4px oklch(var(--shadow-tint) / 0.1);
+  --shadow-lg:
+    0 4px 8px -2px oklch(var(--shadow-tint) / 0.06),
+    0 16px 36px -8px oklch(var(--shadow-tint) / 0.16);
+  --shadow-card:
+    0 1px 2px 0 oklch(var(--shadow-tint) / 0.04),
+    0 4px 20px -4px oklch(var(--shadow-tint) / 0.08);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -118,7 +198,9 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans, system-ui), sans-serif;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* 표의 데스크톱 최소 너비가 목록 필터까지 밀어내지 않도록 한다. */
@@ -192,6 +274,7 @@ div:has(> [data-responsive-table]) {
     border: 0;
     border-radius: 0;
     background: transparent;
+    box-shadow: none;
   }
 
   [data-responsive-table] {
@@ -205,7 +288,7 @@ div:has(> [data-responsive-table]) {
   [data-responsive-table] [data-slot="table-row"] {
     gap: 0;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     padding: 0.5rem;
   }
 }
