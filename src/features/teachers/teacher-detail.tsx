@@ -56,9 +56,7 @@ export function TeacherDetail({
         <InfoField label="등록일" value={teacher.registeredAt} />
         <InfoField
           label="계약기간"
-          value={`${teacher.contractStartOn ?? "-"} - ${
-            teacher.contractEndOn ?? "-"
-          }`}
+          value={formatContractPeriod(teacher.contractStartOn, teacher.contractEndOn)}
         />
         {isOwner ? <InfoField label="급여정보" value={teacher.salarySummary ?? "-"} /> : null}
         <ResidentRegistrationField
@@ -251,6 +249,19 @@ function TeacherStatusConfirmButton({
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+/** 계약기간은 선택이라, 없거나 한쪽만 있을 때도 알아볼 수 있게 보여 준다. */
+function formatContractPeriod(startOn?: string, endOn?: string) {
+  if (startOn && endOn) {
+    return `${startOn} - ${endOn}`;
+  }
+
+  if (startOn) {
+    return `${startOn}부터`;
+  }
+
+  return endOn ? `${endOn}까지` : "계약기간 없음";
 }
 
 function InfoField({ label, value }: { label: string; value: string }) {

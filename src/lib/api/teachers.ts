@@ -101,8 +101,9 @@ export type TeacherProfileMutationInput = {
   part: string;
   contact: string;
   registeredAt: string;
-  contractStartOn: string;
-  contractEndOn: string;
+  /** 계약기간은 선택이다. 비어 있으면 RPC에 null로 보낸다. */
+  contractStartOn?: string;
+  contractEndOn?: string;
   /** 급여 항목은 원장만 보낸다. `payType`이 없으면 급여 설정은 저장하지 않고 기존 값을 그대로 둔다. */
   payType?: TeacherPayType;
   monthlySalary?: number;
@@ -533,8 +534,8 @@ function buildTeacherProfilePayload(input: TeacherProfileMutationInput) {
     p_part: input.part.trim(),
     p_phone: input.contact.trim() || null,
     p_registered_on: input.registeredAt,
-    p_contract_start_on: input.contractStartOn,
-    p_contract_end_on: input.contractEndOn,
+    p_contract_start_on: input.contractStartOn || null,
+    p_contract_end_on: input.contractEndOn || null,
     p_pay_type: salary?.payType ?? null,
     p_monthly_salary:
       salary?.payType === "monthly" ? salary.monthlySalary : null,
@@ -576,8 +577,8 @@ function buildOptimisticTeacherRow(
     registeredAt: input.registeredAt,
     payType: salary?.payType ?? DEFAULT_PAY_TYPE_WITHOUT_SETTING,
     status: "employed",
-    contractStartOn: input.contractStartOn,
-    contractEndOn: input.contractEndOn,
+    contractStartOn: input.contractStartOn || undefined,
+    contractEndOn: input.contractEndOn || undefined,
     workSchedules,
     monthlySalary: salary?.payType === "monthly" ? salary.monthlySalary : undefined,
     hourlyRate: salary?.payType === "hourly" ? salary.hourlyRate : undefined,

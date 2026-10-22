@@ -231,6 +231,34 @@ describe("fetchPayrollTeachers", () => {
 });
 
 describe("teacher mutations", () => {
+  it("계약기간이 없으면 RPC에 null로 전달한다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client: TeacherMutationSupabaseClient = {
+      async rpc(functionName, payload) {
+        calls.push({ functionName, payload });
+
+        return { data: "teacher-1", error: null };
+      },
+    };
+
+    const result = await registerTeacher(client, {
+      academyId: "academy-1",
+      name: "박선생",
+      part: "피아노",
+      contact: "",
+      registeredAt: "2026-08-21",
+      payType: "monthly",
+      monthlySalary: 2500000,
+    });
+
+    expect(calls[0]).toMatchObject({
+      functionName: "register_teacher_with_profile",
+      payload: { p_contract_start_on: null, p_contract_end_on: null },
+    });
+    expect(result.contractStartOn).toBeUndefined();
+    expect(result.contractEndOn).toBeUndefined();
+  });
+
   it("선생님 등록을 계약/근무/급여 상세 RPC로 전달한다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const client: TeacherMutationSupabaseClient = {

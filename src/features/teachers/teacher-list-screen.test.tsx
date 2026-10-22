@@ -411,6 +411,71 @@ describe("TeacherListScreen", () => {
     );
   });
 
+  it("계약기간을 비워도 선생님을 등록할 수 있다", async () => {
+    const user = userEvent.setup();
+    const registerTeacher = vi.fn();
+
+    renderTeacherListScreen(
+      (options) => ({
+        queryKey: ["teachers", options.academyId, options.search ?? ""],
+        queryFn: async () => buildTeacherList(teacherRows, options),
+      }),
+      { registerTeacher },
+    );
+
+    await user.click(screen.getByRole("button", { name: "선생님 등록" }));
+    const dialog = await screen.findByRole("dialog", { name: "선생님 등록" });
+
+    await user.type(within(dialog).getByLabelText("선생님명"), "홍선생");
+    await user.clear(within(dialog).getByLabelText("연락처"));
+    await user.type(within(dialog).getByLabelText("연락처"), "010-9999-0000");
+    await user.selectOptions(within(dialog).getByLabelText("급여 형태"), "ratio");
+    await user.clear(within(dialog).getByLabelText("학원 몫"));
+    await user.type(within(dialog).getByLabelText("학원 몫"), "4");
+    await user.clear(within(dialog).getByLabelText("선생님 몫"));
+    await user.type(within(dialog).getByLabelText("선생님 몫"), "6");
+
+    expect(within(dialog).getByLabelText("계약 시작일")).toHaveValue("");
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "저장" }));
+
+    expect(registerTeacher).toHaveBeenCalledTimes(1);
+    const submitted = registerTeacher.mock.calls[0][0];
+    expect(submitted).toMatchObject({ name: "홍선생" });
+    expect(submitted.contractStartOn).toBeUndefined();
+    expect(submitted.contractEndOn).toBeUndefined();
+  });
+
+  it("상세 화면은 계약기간이 없거나 한쪽만 있을 때 알아볼 수 있게 보여 준다", async () => {
+    const user = userEvent.setup();
+    const rows = [
+      { ...teacherRows[0], contractStartOn: undefined, contractEndOn: undefined },
+    ];
+
+    const { unmount } = renderTeacherListScreen((options) => ({
+      queryKey: ["teachers", options.academyId, options.search ?? ""],
+      queryFn: async () => buildTeacherList(rows, options),
+    }));
+    await user.click(await screen.findByRole("button", { name: `${rows[0].name} 자세히보기` }));
+
+    expect(
+      within(await screen.findByRole("dialog", { name: `${rows[0].name} 상세` })).getByText("계약기간 없음"),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderTeacherListScreen((options) => ({
+      queryKey: ["teachers", options.academyId, options.search ?? "", "start-only"],
+      queryFn: async () =>
+        buildTeacherList([{ ...rows[0], contractStartOn: "2026-08-01" }], options),
+    }));
+    await user.click(await screen.findByRole("button", { name: `${rows[0].name} 자세히보기` }));
+
+    expect(
+      within(await screen.findByRole("dialog", { name: `${rows[0].name} 상세` })).getByText("2026-08-01부터"),
+    ).toBeInTheDocument();
+  });
+
   it("자세히보기 다이얼로그에서 수정과 상태 버튼 정책을 제공한다", async () => {
     const user = userEvent.setup();
 

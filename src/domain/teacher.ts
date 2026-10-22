@@ -33,8 +33,9 @@ export type RegisterTeacherInput = {
   part: string;
   contact: string;
   registeredAt: string;
-  contractStartOn: string;
-  contractEndOn: string;
+  /** 계약기간은 선택이다. 시작일·종료일을 각각 비워 둘 수 있다. */
+  contractStartOn?: string;
+  contractEndOn?: string;
   residentRegistrationNumber: SecureResidentRegistrationNumberRef;
   payType: TeacherPayType;
   monthlySalary?: number;
@@ -188,12 +189,9 @@ export function normalizeWorkSchedules(
   });
 }
 
-function validateContractPeriod(contractStartOn: string, contractEndOn: string) {
-  if (!contractStartOn || !contractEndOn) {
-    throw new Error("계약 시작일과 종료일은 필수입니다.");
-  }
-
-  if (contractEndOn < contractStartOn) {
+/** 계약기간은 선택이라, 시작일과 종료일이 모두 있을 때만 순서를 검사한다. */
+function validateContractPeriod(contractStartOn?: string, contractEndOn?: string) {
+  if (contractStartOn && contractEndOn && contractEndOn < contractStartOn) {
     throw new Error("계약 종료일은 계약 시작일보다 빠를 수 없습니다.");
   }
 }

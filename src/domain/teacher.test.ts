@@ -113,6 +113,34 @@ describe("registerTeacher", () => {
     ).toThrow("비율제는 학원 몫과 선생님 몫의 합계가 10이어야 합니다.");
   });
 
+  it("계약기간 없이도 등록하고, 한쪽만 있어도 허용하며, 둘 다 있을 때만 순서를 검사한다", () => {
+    const base = {
+      academyId: "academy-1",
+      teacherId: "teacher-1",
+      name: "박선생",
+      part: "피아노",
+      contact: "010-1234-5678",
+      registeredAt: "2026-08-21",
+      residentRegistrationNumber: {
+        encryptedValueRef: "secure-vault:teacher-1-rrn",
+        maskedValue: "900101-1******",
+      },
+      payType: "monthly" as const,
+      monthlySalary: 2500000,
+    };
+
+    expect(registerTeacher(base)).toMatchObject({ teacherId: "teacher-1" });
+    expect(registerTeacher({ ...base, contractStartOn: "2026-09-01" })).toMatchObject({
+      contractStartOn: "2026-09-01",
+    });
+    expect(registerTeacher({ ...base, contractEndOn: "2027-08-31" })).toMatchObject({
+      contractEndOn: "2027-08-31",
+    });
+    expect(() =>
+      registerTeacher({ ...base, contractStartOn: "2027-09-01", contractEndOn: "2027-08-31" }),
+    ).toThrow("계약 종료일은 계약 시작일보다 빠를 수 없습니다.");
+  });
+
   it("계약기간과 근무시간 입력 규칙을 검증한다", () => {
     expect(() =>
       registerTeacher({

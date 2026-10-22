@@ -336,8 +336,8 @@ export function TeacherListScreen({
             <DialogTitle>선생님 등록</DialogTitle>
             <DialogDescription>
               {isOwner
-                ? "계약기간, 근무시간, 급여 상세를 함께 등록합니다."
-                : "계약기간과 근무시간을 함께 등록합니다. 급여 설정은 원장이 등록합니다."}
+                ? "계약기간(선택), 근무시간, 급여 상세를 함께 등록합니다."
+                : "계약기간(선택)과 근무시간을 함께 등록합니다. 급여 설정은 원장이 등록합니다."}
             </DialogDescription>
           </DialogHeader>
           <TeacherProfileForm

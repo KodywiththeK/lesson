@@ -111,9 +111,7 @@ export function TeacherProfileForm({
       name.trim() &&
         part.trim() &&
         contact.trim() &&
-        registeredAt &&
-        contractStartOn &&
-        contractEndOn,
+        registeredAt,
     ) &&
     (!isOwner || payType !== "ratio" || ratioTotal === 10) &&
     (!isOwner || hasValidSalary) &&
@@ -134,8 +132,8 @@ export function TeacherProfileForm({
       part: part.trim(),
       contact: contact.trim(),
       registeredAt,
-      contractStartOn,
-      contractEndOn,
+      contractStartOn: contractStartOn || undefined,
+      contractEndOn: contractEndOn || undefined,
       workSchedules: selectedSchedules,
     };
 
@@ -228,7 +226,7 @@ export function TeacherProfileForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1">
-          <span>계약 시작일</span>
+          <span>계약 시작일 (선택)</span>
           <DateField
             aria-label="계약 시작일"
             value={contractStartOn}
@@ -236,7 +234,7 @@ export function TeacherProfileForm({
           />
         </Label>
         <Label className="grid gap-1">
-          <span>계약 종료일</span>
+          <span>계약 종료일 (선택)</span>
           <DateField
             aria-label="계약 종료일"
             value={contractEndOn}
@@ -302,7 +300,7 @@ export function TeacherProfileForm({
         </div>
         {isOwner && payType === "hourly" ? (
           <p className="text-xs text-muted-foreground">
-            시급제 급여는 시급 × 출근 요일·시간(계약 기간 안)으로 계산하므로 출근 시간까지 입력해 주세요.
+            시급제 급여는 시급 × 출근 요일·시간으로 계산하므로 출근 시간까지 입력해 주세요. 계약기간을 입력하면 그 기간 안의 날짜만, 입력하지 않으면 그 달 전체를 계산합니다.
           </p>
         ) : null}
       </div>
