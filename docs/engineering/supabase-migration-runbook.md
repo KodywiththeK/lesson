@@ -228,6 +228,23 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 
 적용 후 원격 카탈로그에서 컬럼·트리거·RLS·정책·권한·함수 시그니처를 확인했다. 기존 학년의 기준연도 누락은 0건이고 새 발주/품목은 각 0건이다. 스키마 계약/API 테스트는 통과했다. 실제 역할별 JWT로 발주·입고·지급·취소, 출석, 연락처를 실행하는 테스트와 동시성·롤백 검증은 별도 테스트 DB 부재로 못 했다. 자세한 검증과 남은 위험은 `docs/harness/evidence/2026-10-20-operations-input-improvements.md`를 본다.
 
+## 운영 화면 수정 migration (20261021090000~20261021090400) — 2026-10-22 적용 완료
+
+사용자 요청으로 운영 DB에 5개 migration을 적용했다. 앱 코드가 새 RPC·컬럼을 쓰므로 **적용된 상태에서만 새 앱이 동작한다**(앱을 먼저 배포하면 회차권 삭제·환불 규정 저장·거래처 삭제가 실패한다). 교재 등록은 옛 시그니처를 지우므로 옛 앱의 교재 등록·수정도 적용 즉시 실패한다. 적용 후 앱 배포를 바로 잇는다.
+
+| 순서 | 파일 | 주요 변경 |
+| --- | --- | --- |
+| 1 | `20261021090000_teacher_contract_optional.sql` | `teachers.contract_start_on·contract_end_on` NOT NULL 해제, 선생님 검증 함수 2개 재정의(둘 다 있을 때만 순서 검사) |
+| 2 | `20261021090100_vendor_delete.sql` | `delete_vendor`(원장·데스크, 감사 기록) |
+| 3 | `20261021090200_book_purchase_vendor.sql` | `books.purchase_vendor_name`, `register_book_stock`·`update_book`을 거래처 인자가 있는 시그니처로 교체(옛 시그니처 삭제) |
+| 4 | `20261021090300_academy_settings.sql` | `academy_settings`(RLS, 원장 읽기), `set_lesson_ticket_refund_policy`, `private.lesson_ticket_refund_policy` |
+| 5 | `20261021090400_lesson_ticket_delete_refund.sql` | 원장 쓰기 트리거의 회차권 예외, `register_lesson_ticket` 데스크 결제 허용, 환불 계산·`get_lesson_ticket_refund_preview`·`delete_lesson_ticket`, `lesson_ticket_usages_grant_idx` |
+
+적용 기록 (2026-10-22):
+- 방법: `pnpm supabase migration list`(대기 5개) → `pnpm supabase db push --dry-run`(대상이 위 5개뿐) → `pnpm supabase db push --yes`. 오류 없이 적용됐고 원격 history가 로컬 파일명과 일치한다. NOTICE는 `books_purchase_vendor_name_check` "존재하지 않아 건너뜀"(drop if exists) 1건뿐이다.
+- 적용 후 읽기 전용 카탈로그 확인(Management API, 운영 데이터 행은 읽지 않음): 교재 RPC는 새 7·6인자 시그니처만 존재(옛 시그니처·오버로드 없음), 신규 공개 RPC 4종과 `register_lesson_ticket`은 anon 실행 불가·authenticated 실행 가능, `private.lesson_ticket_refund_*`·`require_finance_owner_for_ledger`는 anon·authenticated 실행 불가, `academy_settings` RLS 활성, 두 컬럼 nullable, `books.purchase_vendor_name` 존재, 인덱스 `lesson_ticket_usages_grant_idx` 존재, 원장 트리거 본문에 NULL 방어(`coalesce(current_setting(...), '')`) 포함.
+- 한계: 적용 전 같은 SQL을 pglite(WASM Postgres) 하네스의 최소 스키마 스텁 위에서 실행해 동작을 확인했지만(회차권 28·기타 14 시나리오), 운영 스키마·실제 역할 JWT로는 확인하지 못했다. **앱에서 직접 확인할 것**: ① 데스크 계정의 회차권 등록(결제 금액 입력)과 삭제, 데스크가 입출입내역·수동 수입 행은 여전히 못 쓰는지, ② 원장의 환불 규정 저장·환불 처리·잘못 등록 삭제와 수입 행 감액, ③ 거래처 삭제와 과거 발주 이름 보존, ④ 교재 재입고 거래처 덮어쓰기·유지, ⑤ 계약기간 없는 선생님 등록과 급여.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

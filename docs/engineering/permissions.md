@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | 학원 피아노 레슨표 | 전체 관리 | 전체 관리 | 조회만(쓰기 버튼 숨김), 조회 범위는 배정 원생 기준 |
 | 개인레슨표 | 전체 관리 | 전체 관리 | 본인 수업 조회·출석 확인, 등록 버튼 숨김 |
-| 회차권 | 발급/수정/결제 입력 | 금액 없이 발급/수정(사유 필수, 이력 기록) | 담당 원생의 담당 악기 잔여 회수·만료일만 개인레슨표에서 조회 |
+| 회차권 | 발급/수정/삭제(환불 처리·잘못 등록)/결제 입력 | 발급/수정/삭제와 등록 시 결제 금액 입력(수정은 사유 필수, 이력 기록). 입출입내역 화면은 접근 불가 | 담당 원생의 담당 악기 잔여 회수·만료일만 개인레슨표에서 조회 |
 | 원생 | 전체 관리 | 전체 관리 | 담당 원생의 이름·악기·요일만 읽기 전용(서버 RPC `list_students_for_teacher`, 수강료·할인·연락처 제외) |
 | 선생님 | 전체 관리(급여 설정·주민등록번호 원문 포함) | 기본 정보만 등록·수정(급여 설정과 주민등록번호 원문 불가) | 접근 불가 |
 | 상담 | 전체 관리 | 전체 관리 | 접근 불가 |
@@ -49,8 +49,21 @@
 | `delete_academy_lesson_event` | owner, desk | 사유 필수, 출결 처리된 일정 거부 |
 | `move_academy_lesson_event` | owner, desk | 같은 달 안에서만 이동 |
 | `cancel_private_lesson_attendance` | owner, desk, 배정 선생님 | 차감 복구 후 출결 삭제 |
-| `register_lesson_ticket` | owner, desk | 결제 금액은 owner만, desk가 금액을 넣으면 전체 롤백 |
+| `register_lesson_ticket` | owner, desk | 결제 금액은 owner·desk 모두 입력 가능(2026-10-22). 수입 행은 트랜잭션 로컬 설정으로 원장 트리거를 통과한다 |
+| `get_lesson_ticket_refund_preview` | owner, desk | 학원 환불 규정으로 계산한 환불 가능 여부·환불 예정 금액·잘못 등록 가능 여부. 데스크가 읽을 수 없는 결제 금액은 서버만 계산 |
+| `delete_lesson_ticket` | owner, desk | `refund`(규정 검사 후 수입 행을 최근 결제부터 감액, 불가면 수입 유지)·`mistake`(사용 이력 없을 때만 수입 기록까지 삭제). 감사 기록 `lesson_ticket.deleted` |
+| `set_lesson_ticket_refund_policy` | owner | 환불 규정 변경. 설정 화면은 원장에게만 보이고 `academy_settings` 읽기도 원장 전용 |
 | `adjust_lesson_ticket` | owner, desk | 사유 필수, 조정 이력과 audit 기록 |
+
+### 원장 쓰기 트리거의 회차권 예외(2026-10-22)
+
+`ledger_entries`는 RLS와 `private.require_finance_owner_for_ledger` 트리거가 원장 외 쓰기를 막는다. 데스크가 회차권 등록 때 결제 금액을 입력하고 회차권을 삭제(환불·잘못 등록)할 수 있도록 트리거는 아래 세 조건이 **모두** 맞을 때만 통과시킨다.
+
+1. 같은 트랜잭션에서 회차권 RPC가 `set_config('app.ledger_rpc', 'lesson-ticket', true)`를 켰다(`is_local = true`, 쓰기 직후 비움).
+2. 바뀌는 행의 `source`가 `lesson-ticket`이다(수정·삭제는 기존 행도).
+3. 호출자가 그 학원의 원장 또는 데스크다.
+
+설정이 없을 때 `current_setting`이 NULL을 돌려줘 조건이 NULL이 되면 가드가 풀리므로 `coalesce(..., '')`로 맞춘다(2026-10-22 실제 Postgres 검증에서 발견한 결함). 브라우저의 직접 쓰기는 RLS(원장 전용)가 따로 막고, 데스크는 입출입내역 화면과 다른 출처의 수입 행에 접근하지 못한다.
 
 추가로 `attendance_records`의 `guard_resolved_absence_attendance` trigger가 보강·패스로 처리된 결석의 상태 변경과 직접 삭제를 모든 역할에게 거부한다(학생 삭제 같은 연쇄 삭제는 허용).
 
