@@ -36,6 +36,7 @@ export function BookStockTable({ books, emptyMessage, onEdit, onDelete }: BookSt
           <TableHead>가격</TableHead>
           <TableHead>권수</TableHead>
           <TableHead>입고일</TableHead>
+          <TableHead>구입 거래처</TableHead>
           <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
@@ -56,6 +57,9 @@ export function BookStockTable({ books, emptyMessage, onEdit, onDelete }: BookSt
             </TableCell>
             <TableCell label="입고일" className="tabular-nums">
               {book.stockedOn}
+            </TableCell>
+            <TableCell label="구입 거래처" className="break-words">
+              {book.purchaseVendorName ?? "-"}
             </TableCell>
             <TableCell label="관리">
               <div className="flex flex-wrap gap-2">

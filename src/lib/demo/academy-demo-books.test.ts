@@ -55,6 +55,31 @@ describe("교재 등록·재입고·수정·삭제", () => {
     ]);
   });
 
+  it("구입 거래처는 새 교재에 저장하고, 재입고는 입력하면 덮어쓰고 비우면 기존 값을 유지한다", () => {
+    const state = createInitialDemoAcademyState();
+    const base = { price: 10000, quantity: 1, stockedOn: "2026-10-17" };
+
+    const added = registerDemoBookStock(state, { ...base, title: "하농 1", purchaseVendorName: "예음문구" });
+    const keptOnBlank = registerDemoBookStock(added, { ...base, title: "하농 1" });
+    const overwritten = registerDemoBookStock(keptOnBlank, { ...base, title: "하농 1", purchaseVendorName: "악기마을" });
+
+    const vendorOf = (target: typeof state) => target.books.find((book) => book.title === "하농 1")?.purchaseVendorName;
+    expect(vendorOf(added)).toBe("예음문구");
+    expect(vendorOf(keptOnBlank)).toBe("예음문구");
+    expect(vendorOf(overwritten)).toBe("악기마을");
+  });
+
+  it("교재 수정은 구입 거래처를 입력한 그대로 저장하고 비우면 지운다", () => {
+    const state = createInitialDemoAcademyState();
+    const input = { bookId: "book-1", title: "바이엘 상", price: 12000, quantity: 9, stockedOn: "2026-08-01" };
+
+    const named = updateDemoBook(state, { ...input, purchaseVendorName: "예음문구" });
+    const cleared = updateDemoBook(named, input);
+
+    expect(named.books.find((book) => book.bookId === "book-1")?.purchaseVendorName).toBe("예음문구");
+    expect(cleared.books.find((book) => book.bookId === "book-1")?.purchaseVendorName).toBeUndefined();
+  });
+
   it("입력 범위를 넘거나 합계가 9,999권을 넘으면 안내 문구로 거부한다", () => {
     const state = createInitialDemoAcademyState();
 

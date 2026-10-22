@@ -29,6 +29,7 @@ type BookStockDemoInput = {
   price: number;
   quantity: number;
   stockedOn: string;
+  purchaseVendorName?: string;
 };
 
 function throwIfInvalid(message: string | null): asserts message is null {
@@ -41,11 +42,12 @@ function getActiveBook(state: DemoAcademyState, bookId: string) {
   return state.books.find((book) => book.bookId === bookId && book.active);
 }
 
-/** 교재 등록 또는 재입고. 같은 도서명이면 권수를 합산하고 입고일·가격을 갱신한다. */
+/** 교재 등록 또는 재입고. 같은 도서명이면 권수를 합산하고 입고일·가격을 갱신한다. 구입 거래처는 입력했을 때만 덮어쓴다. */
 export function registerDemoBookStock(state: DemoAcademyState, input: BookStockDemoInput): DemoAcademyState {
   throwIfInvalid(validateBookStockInput(input, getFinanceToday()));
 
   const title = input.title.trim();
+  const purchaseVendorName = input.purchaseVendorName?.trim() || undefined;
   const activeBooks = state.books.filter((book) => book.active);
   const existing = findBookByTitle(activeBooks, state.academyId, title);
 
@@ -60,7 +62,13 @@ export function registerDemoBookStock(state: DemoAcademyState, input: BookStockD
       ...state,
       books: state.books.map((book) =>
         book.bookId === existing.bookId
-          ? { ...book, quantity, price: input.price, stockedOn: input.stockedOn }
+          ? {
+              ...book,
+              quantity,
+              price: input.price,
+              stockedOn: input.stockedOn,
+              purchaseVendorName: purchaseVendorName ?? book.purchaseVendorName,
+            }
           : book,
       ),
     };
@@ -73,6 +81,7 @@ export function registerDemoBookStock(state: DemoAcademyState, input: BookStockD
     price: input.price,
     quantity: input.quantity,
     stockedOn: input.stockedOn,
+    purchaseVendorName,
     active: true,
   };
 
@@ -99,7 +108,14 @@ export function updateDemoBook(
     ...state,
     books: state.books.map((book) =>
       book.bookId === input.bookId
-        ? { ...book, title, price: input.price, quantity: input.quantity, stockedOn: input.stockedOn }
+        ? {
+            ...book,
+            title,
+            price: input.price,
+            quantity: input.quantity,
+            stockedOn: input.stockedOn,
+            purchaseVendorName: input.purchaseVendorName?.trim() || undefined,
+          }
         : book,
     ),
   };

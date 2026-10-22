@@ -40,7 +40,7 @@ const czerny: BookStockRow = {
   quantity: 0,
   stockedOn: "2026-07-20",
 };
-const books = [suzuki, czerny, bayer];
+const books = [{ ...suzuki, purchaseVendorName: "예음문구" }, czerny, bayer];
 
 const manyBooks: BookStockRow[] = Array.from({ length: 25 }, (_, index) => ({
   academyId: "academy-1",
@@ -140,6 +140,7 @@ describe("BookStockScreen", () => {
         "가격",
         "권수",
         "입고일",
+        "구입 거래처",
         "관리",
       ]);
       expect(within(rows[0]).getByRole("cell", { name: "12,000원" })).toBeInTheDocument();
@@ -422,6 +423,57 @@ describe("BookStockScreen", () => {
       expect(registerBook).toHaveBeenCalledTimes(1);
       finishRegistration();
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "교재 등록" })).not.toBeInTheDocument());
+    });
+  });
+
+  describe("구입 거래처", () => {
+    it("재고 표에 구입 거래처 열을 보여 주고 없으면 -로 표시한다", async () => {
+      renderScreen();
+
+      const table = await screen.findByRole("table", { name: "교재 재고 목록" });
+      expect(within(table).getByRole("columnheader", { name: "구입 거래처" })).toBeInTheDocument();
+      const suzukiRow = within(table).getByRole("row", { name: /스즈키 바이올린 1/ });
+      expect(within(suzukiRow).getByRole("cell", { name: "예음문구" })).toHaveAttribute("data-label", "구입 거래처");
+      expect(within(within(table).getByRole("row", { name: /바이엘 상/ })).getByText("-")).toBeInTheDocument();
+    });
+
+    it("등록 폼에서 선택 입력으로 받아 다듬어 저장한다", async () => {
+      const user = userEvent.setup();
+      const registerBook = vi.fn().mockResolvedValue(undefined);
+      renderScreen({ registerBook });
+
+      const dialog = await openRegisterDialog(user);
+      expect(within(dialog).getByRole("textbox", { name: "구입 거래처명 (선택)" })).toHaveValue("");
+      await fillRegisterForm(user, dialog, { title: "체르니 30", price: "14000", quantity: "3" });
+      await user.type(within(dialog).getByRole("textbox", { name: "구입 거래처명 (선택)" }), "  예음문구 ");
+      await user.click(within(dialog).getByRole("button", { name: "등록" }));
+
+      await waitFor(() =>
+        expect(registerBook).toHaveBeenCalledWith({
+          title: "체르니 30",
+          price: 14000,
+          quantity: 3,
+          stockedOn: getFinanceToday(),
+          purchaseVendorName: "예음문구",
+        }),
+      );
+    });
+
+    it("수정 폼은 저장된 거래처를 채우고 비우면 지운 값으로 저장한다", async () => {
+      const user = userEvent.setup();
+      const updateBook = vi.fn().mockResolvedValue(undefined);
+      renderScreen({ updateBook });
+
+      await user.click(await screen.findByRole("button", { name: "스즈키 바이올린 1 수정" }));
+      const dialog = await screen.findByRole("dialog", { name: "교재 수정" });
+      const vendor = within(dialog).getByRole("textbox", { name: "구입 거래처명 (선택)" });
+      expect(vendor).toHaveValue("예음문구");
+
+      await user.clear(vendor);
+      await user.click(within(dialog).getByRole("button", { name: "수정" }));
+
+      await waitFor(() => expect(updateBook).toHaveBeenCalledTimes(1));
+      expect(updateBook.mock.calls[0][0].purchaseVendorName).toBeUndefined();
     });
   });
 

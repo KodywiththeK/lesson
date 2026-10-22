@@ -14,6 +14,8 @@ export type BookStockRow = {
   quantity: number;
   /** 최근 입고일(재입고하면 갱신). */
   stockedOn: string;
+  /** 구입 거래처명(자유 입력, 선택). vendors와 연결하지 않아 거래처를 지워도 남는다. */
+  purchaseVendorName?: string;
 };
 
 export type BookStockListRow = BookStockRow & {
@@ -26,6 +28,7 @@ export const LEDGER_AMOUNT_MAX = 2_147_483_647;
 
 export const BOOK_LIMITS = {
   titleMaxLength: 100,
+  purchaseVendorMaxLength: 100,
   priceMax: 9_999_999,
   stockQuantityMax: 9_999,
   releaseQuantityMax: 999,
@@ -35,6 +38,7 @@ export const BOOK_LIMITS = {
 export const BOOK_MESSAGES = {
   titleRequired: "도서명을 입력해 주세요.",
   titleTooLong: "도서명은 100자 이하로 입력해 주세요.",
+  purchaseVendorTooLong: "구입 거래처명은 100자 이하로 입력해 주세요.",
   priceRange: "가격은 1원 이상 9,999,999원 이하의 정수로 입력해 주세요.",
   stockQuantityRange: "권수는 0권 이상 9,999권 이하의 정수로 입력해 주세요.",
   releaseQuantityRange: "수량은 1권 이상 999권 이하의 정수로 입력해 주세요.",
@@ -124,6 +128,7 @@ export type BookStockInput = {
   price: number;
   quantity: number;
   stockedOn: string;
+  purchaseVendorName?: string;
 };
 
 function isWholeNumberInRange(value: number, min: number, max: number) {
@@ -142,6 +147,9 @@ export function validateBookStockInput(input: BookStockInput, today: string): st
   }
   if (!input.stockedOn) return BOOK_MESSAGES.stockedOnRequired;
   if (input.stockedOn > today) return BOOK_MESSAGES.futureStockedOn;
+  if ((input.purchaseVendorName ?? "").trim().length > BOOK_LIMITS.purchaseVendorMaxLength) {
+    return BOOK_MESSAGES.purchaseVendorTooLong;
+  }
 
   return null;
 }

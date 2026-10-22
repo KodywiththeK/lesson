@@ -31,6 +31,7 @@ export type BookSupabaseRow = {
   price: number;
   quantity: number;
   stocked_on: string;
+  purchase_vendor_name: string | null;
 };
 
 export type BookReleaseSupabaseRow = {
@@ -55,7 +56,7 @@ export type BookReadSupabaseClient = {
   from(table: "book_releases"): { select(select: string): PagedSelectQuery<BookReleaseSupabaseRow> };
 };
 
-const BOOK_SELECT = "id, academy_id, title, price, quantity, stocked_on";
+const BOOK_SELECT = "id, academy_id, title, price, quantity, stocked_on, purchase_vendor_name";
 export const BOOK_RELEASE_SELECT =
   "id, academy_id, book_id, student_id, student_name, book_title, price, quantity, shipped_at, status, paid_at, paid_ledger_entry_id";
 
@@ -203,6 +204,7 @@ type BookRpcArgs = {
     p_price: number;
     p_quantity: number;
     p_stocked_on: string;
+    p_purchase_vendor_name: string | null;
   };
   update_book: {
     p_academy_id: string;
@@ -211,6 +213,7 @@ type BookRpcArgs = {
     p_price: number;
     p_quantity: number;
     p_stocked_on: string;
+    p_purchase_vendor_name: string | null;
   };
   delete_book: { p_academy_id: string; p_book_id: string };
   register_book_release: {
@@ -259,6 +262,7 @@ export type BookStockInput = {
   price: number;
   quantity: number;
   stockedOn: string;
+  purchaseVendorName?: string;
 };
 
 /** 교재 등록 또는 재입고. 같은 도서명이면 서버가 기존 교재에 권수를 합산한다. */
@@ -272,6 +276,7 @@ export async function registerBookStock(
     p_price: input.price,
     p_quantity: input.quantity,
     p_stocked_on: input.stockedOn,
+    p_purchase_vendor_name: input.purchaseVendorName ?? null,
   });
 
   if (error) {
@@ -296,6 +301,7 @@ export async function updateBook(
     p_price: input.price,
     p_quantity: input.quantity,
     p_stocked_on: input.stockedOn,
+    p_purchase_vendor_name: input.purchaseVendorName ?? null,
   });
 
   if (error) {
@@ -444,6 +450,7 @@ function toBookStockRow(row: BookSupabaseRow): BookStockRow {
     price: row.price,
     quantity: row.quantity,
     stockedOn: row.stocked_on,
+    purchaseVendorName: row.purchase_vendor_name ?? undefined,
   };
 }
 

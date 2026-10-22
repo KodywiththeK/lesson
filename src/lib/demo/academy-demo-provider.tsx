@@ -135,6 +135,7 @@ type DemoAcademyContextValue = {
   };
   createStudentStatusManagementQueryOptions: (
   deleteVendor: (input: { vendorId: string }) => void;
+  deleteVendor: (input: { vendorId: string }) => void;
     options: StatusManagementFetchOptions<"suspended" | "withdrawn">,
   ) => {
     queryKey: QueryKey;

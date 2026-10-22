@@ -84,6 +84,15 @@ describe("calculateBookAmount", () => {
 describe("validateBookStockInput", () => {
   const valid = { title: "바이엘 상", price: 12000, quantity: 10, stockedOn: "2026-10-01" };
 
+  it("구입 거래처명은 선택이고 100자까지 허용한다", () => {
+    expect(validateBookStockInput({ ...valid, purchaseVendorName: "" }, TODAY)).toBeNull();
+    expect(validateBookStockInput({ ...valid, purchaseVendorName: "예음문구" }, TODAY)).toBeNull();
+    expect(validateBookStockInput({ ...valid, purchaseVendorName: "가".repeat(100) }, TODAY)).toBeNull();
+    expect(validateBookStockInput({ ...valid, purchaseVendorName: "가".repeat(101) }, TODAY)).toBe(
+      BOOK_MESSAGES.purchaseVendorTooLong,
+    );
+  });
+
   it("올바른 입력이면 오류가 없다", () => {
     expect(validateBookStockInput(valid, TODAY)).toBeNull();
     expect(validateBookStockInput({ ...valid, quantity: 0 }, TODAY)).toBeNull();

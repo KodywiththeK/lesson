@@ -17,6 +17,7 @@ export type BookStockFormValues = {
   price: string;
   quantity: string;
   stockedOn: string;
+  purchaseVendorName: string;
 };
 
 export type BookStockFormContext = {
@@ -37,7 +38,7 @@ export type BookStockFormState = {
 };
 
 export function createEmptyBookStockFormValues(today: string): BookStockFormValues {
-  return { title: "", price: "", quantity: "", stockedOn: today };
+  return { title: "", price: "", quantity: "", stockedOn: today, purchaseVendorName: "" };
 }
 
 export function toBookStockFormValues(book: BookStockRow): BookStockFormValues {
@@ -46,6 +47,7 @@ export function toBookStockFormValues(book: BookStockRow): BookStockFormValues {
     price: String(book.price),
     quantity: String(book.quantity),
     stockedOn: book.stockedOn,
+    purchaseVendorName: book.purchaseVendorName ?? "",
   };
 }
 
@@ -63,6 +65,7 @@ export function evaluateBookStockForm(
     price: parseWonInput(values.price) ?? Number.NaN,
     quantity: toNumber(values.quantity),
     stockedOn: values.stockedOn,
+    purchaseVendorName: values.purchaseVendorName.trim() || undefined,
   };
   const isEditing = context.editingBookId !== undefined;
   const preview = isEditing ? null : calculateRestockPreview(context.books, context.academyId, input);

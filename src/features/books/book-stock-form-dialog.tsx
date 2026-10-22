@@ -184,6 +184,17 @@ function BookStockForm({
         />
       </Label>
 
+      <Label className="grid gap-1">
+        <span>구입 거래처명 (선택)</span>
+        <Input
+          aria-label="구입 거래처명 (선택)"
+          maxLength={BOOK_LIMITS.purchaseVendorMaxLength}
+          placeholder="예: 예음문구"
+          value={values.purchaseVendorName}
+          onChange={(event) => changeField("purchaseVendorName", event.target.value)}
+        />
+      </Label>
+
       <DialogFooter className="items-center sm:justify-between">
         <p id={blockReasonId} className="text-sm text-muted-foreground">
           {blockReason}

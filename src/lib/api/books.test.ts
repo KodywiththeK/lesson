@@ -30,6 +30,7 @@ function bookRow(overrides: Partial<BookSupabaseRow> = {}): BookSupabaseRow {
     price: 12000,
     quantity: 10,
     stocked_on: "2026-10-01",
+    purchase_vendor_name: null,
     ...overrides,
   };
 }
@@ -66,7 +67,7 @@ describe("교재 재고 조회", () => {
 
     expect(queriesFor("books")).toEqual([
       expect.objectContaining({
-        select: "id, academy_id, title, price, quantity, stocked_on",
+        select: "id, academy_id, title, price, quantity, stocked_on, purchase_vendor_name",
         eq: [["academy_id", "academy-1"], ["active", true]],
         order: [["title", undefined], ["id", undefined]],
         range: [[0, 999]],
@@ -222,10 +223,40 @@ describe("교재·출고 변경 RPC", () => {
           p_price: 12000,
           p_quantity: 5,
           p_stocked_on: "2026-10-17",
+          p_purchase_vendor_name: null,
         },
       },
     ]);
     expect(result).toMatchObject({ bookId: "book-1", quantity: 15, stockedOn: "2026-10-01" });
+  });
+
+  it("구입 거래처명을 RPC 인자로 보내고, 돌려받은 교재에 담는다", async () => {
+    const { client, calls } = createMutationClient(bookRow({ purchase_vendor_name: "예음문구" }));
+
+    const registered = await registerBookStock(client, {
+      academyId: "academy-1",
+      title: "바이엘 상",
+      price: 12000,
+      quantity: 5,
+      stockedOn: "2026-10-17",
+      purchaseVendorName: "예음문구",
+    });
+    const updated = await updateBook(client, {
+      academyId: "academy-1",
+      bookId: "book-1",
+      title: "바이엘 상",
+      price: 12000,
+      quantity: 5,
+      stockedOn: "2026-10-17",
+      purchaseVendorName: "예음문구",
+    });
+
+    expect(calls.map((call) => (call.args as { p_purchase_vendor_name: string }).p_purchase_vendor_name)).toEqual([
+      "예음문구",
+      "예음문구",
+    ]);
+    expect(registered.purchaseVendorName).toBe("예음문구");
+    expect(updated.purchaseVendorName).toBe("예음문구");
   });
 
   it("교재 수정·삭제 RPC 인자를 맞춘다", async () => {
@@ -247,6 +278,7 @@ describe("교재·출고 변경 RPC", () => {
         p_price: 13000,
         p_quantity: 7,
         p_stocked_on: "2026-10-02",
+        p_purchase_vendor_name: null,
       },
     });
 

@@ -38,9 +38,29 @@ const validValues: BookStockFormValues = {
   price: "14000",
   quantity: "5",
   stockedOn: "2026-10-17",
+  purchaseVendorName: "",
 };
 
 describe("evaluateBookStockForm", () => {
+  it("구입 거래처명은 앞뒤 공백을 다듬어 넘기고, 비우면 값 없음으로 둔다", () => {
+    expect(
+      evaluateBookStockForm({ ...validValues, purchaseVendorName: "  예음문구 " }, context).input,
+    ).toMatchObject({ purchaseVendorName: "예음문구" });
+    expect(evaluateBookStockForm({ ...validValues, purchaseVendorName: "   " }, context).input.purchaseVendorName)
+      .toBeUndefined();
+  });
+
+  it("구입 거래처명이 100자를 넘으면 저장을 막는다", () => {
+    expect(
+      evaluateBookStockForm({ ...validValues, purchaseVendorName: "가".repeat(101) }, context).blockReason,
+    ).toBe(BOOK_MESSAGES.purchaseVendorTooLong);
+  });
+
+  it("수정 폼은 저장된 구입 거래처명을 채운다", () => {
+    expect(toBookStockFormValues({ ...bayer, purchaseVendorName: "예음문구" }).purchaseVendorName).toBe("예음문구");
+    expect(toBookStockFormValues(bayer).purchaseVendorName).toBe("");
+  });
+
   it("모든 항목이 올바르면 막지 않고 숫자로 바꾼 입력을 돌려준다", () => {
     const state = evaluateBookStockForm({ ...validValues, title: "  체르니 30 " }, context);
 
