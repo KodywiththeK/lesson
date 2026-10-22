@@ -8,6 +8,7 @@ import {
   adjustDemoLessonTicket,
   registerDemoLessonTicket,
   registerDemoConsultation,
+  deleteDemoVendor,
   registerDemoVendor,
   deleteDemoConsultation,
   updateDemoConsultation,
@@ -305,6 +306,17 @@ describe("academy demo state", () => {
       memo: "수정 메모",
     });
     expect(next.vendors.slice(1)).toEqual(state.vendors.slice(1));
+  });
+
+  it("거래처 삭제는 대상 거래처만 목록에서 지운다", () => {
+    const state = createInitialDemoAcademyState();
+    const target = state.vendors[0];
+
+    const next = deleteDemoVendor(state, { vendorId: target.vendorId });
+
+    expect(next.vendors).toHaveLength(state.vendors.length - 1);
+    expect(next.vendors.some((vendor) => vendor.vendorId === target.vendorId)).toBe(false);
+    expect(next.vendors).toEqual(state.vendors.slice(1));
   });
 
   it("상담 데모 데이터는 반응형 표 확인을 위해 한 건 이상 있다", () => {

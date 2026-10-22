@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { Pencil, RotateCcw, UserPlus } from "lucide-react";
+import { Pencil, RotateCcw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -54,12 +54,14 @@ import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createVendorListQueryKey,
   createVendorListQueryOptions,
+  deleteVendor as deleteVendorApi,
   registerVendor as registerVendorApi,
   updateVendor as updateVendorApi,
   type VendorMutationSupabaseClient,
   type VendorListSupabaseClient,
 } from "@/lib/api/vendors";
 import { queryKeys } from "@/lib/api/query-keys";
+import { VendorDeleteDialog } from "./vendor-delete-dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type VendorListQueryOptions = {
@@ -79,6 +81,7 @@ type VendorListScreenProps = {
   queryOptionsFactory?: VendorListQueryOptionsFactory;
   registerVendor?: (input: VendorProfile) => void | Promise<void>;
   updateVendor?: (input: VendorUpdateInput) => void | Promise<void>;
+  deleteVendor?: (input: { vendorId: string }) => void | Promise<void>;
 };
 
 type VendorSupabaseClient = VendorListSupabaseClient & VendorMutationSupabaseClient;
@@ -98,6 +101,7 @@ export function VendorListScreen({
   queryOptionsFactory,
   registerVendor,
   updateVendor,
+  deleteVendor,
 }: VendorListScreenProps) {
   const queryClient = useQueryClient();
   const { page, pageSize, goToPage, changePageSize, resetPage } =
@@ -108,6 +112,7 @@ export function VendorListScreen({
   const [editingVendor, setEditingVendor] = useState<VendorListRow | null>(
     null,
   );
+  const [deletingVendor, setDeletingVendor] = useState<VendorListRow | null>(null);
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const supabaseClientState = useMemo(
     () => (hasInjectedQueryOptions ? null : createVendorListSupabaseClient()),
@@ -181,6 +186,30 @@ export function VendorListScreen({
     },
     onError: (error) => {
       toast.error("거래처 수정에 실패했습니다.", {
+        description: toUserMessage(error),
+      });
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: async (vendor: VendorListRow) => {
+      if (deleteVendor) {
+        await deleteVendor({ vendorId: vendor.vendorId });
+        return;
+      }
+
+      await deleteVendorApi(requireSupabaseClient(supabaseClientState), {
+        academyId,
+        vendorId: vendor.vendorId,
+      });
+    },
+    onSuccess: () => {
+      setDeletingVendor(null);
+      toast.success("거래처를 삭제했습니다.");
+      void invalidateVendors();
+    },
+    onError: (error) => {
+      // 확인창을 열어 둬 다시 시도할 수 있게 한다.
+      toast.error("거래처 삭제에 실패했습니다.", {
         description: toUserMessage(error),
       });
     },
@@ -287,6 +316,7 @@ export function VendorListScreen({
             <VendorListTable
               vendors={listView.items}
               onEdit={setEditingVendor}
+              onDelete={setDeletingVendor}
             />
             <ListPagination
               itemLabel="거래처"
@@ -298,6 +328,13 @@ export function VendorListScreen({
           </>
         ) : null}
       </SectionCard>
+
+      <VendorDeleteDialog
+        vendor={deletingVendor}
+        isDeleting={deleteMutation.isPending}
+        onClose={() => setDeletingVendor(null)}
+        onConfirm={(vendor) => deleteMutation.mutate(vendor)}
+      />
 
       <Dialog
         open={editingVendor !== null}
@@ -459,9 +496,11 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 function VendorListTable({
   vendors,
   onEdit,
+  onDelete,
 }: {
   vendors: VendorListRow[];
   onEdit: (vendor: VendorListRow) => void;
+  onDelete: (vendor: VendorListRow) => void;
 }) {
   if (vendors.length === 0) {
     return (
@@ -501,6 +540,17 @@ function VendorListTable({
               >
                 <Pencil aria-hidden="true" />
                 수정
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="ml-2"
+                aria-label={`${vendor.name} 삭제`}
+                onClick={() => onDelete(vendor)}
+              >
+                <Trash2 aria-hidden="true" />
+                삭제
               </Button>
             </TableCell>
           </TableRow>

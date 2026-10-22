@@ -46,6 +46,10 @@ type VendorSelectBuilder = {
 };
 
 export type VendorMutationSupabaseClient = {
+  rpc(
+    functionName: "delete_vendor",
+    payload: { p_academy_id: string; p_vendor_id: string },
+  ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
   from(table: "vendors"): {
     insert(values: Record<string, unknown>): VendorSelectBuilder;
     update(values: Record<string, unknown>): {
@@ -140,6 +144,23 @@ export async function updateVendor(
   }
 
   return toVendorListRow(data);
+}
+
+export type DeleteVendorInput = { academyId: string; vendorId: string };
+
+/** 거래처를 삭제한다. 과거 발주 내역에는 거래처 이름이 스냅샷으로 남는다(권한 확인과 감사 기록은 RPC가 한다). */
+export async function deleteVendor(
+  supabase: VendorMutationSupabaseClient,
+  input: DeleteVendorInput,
+): Promise<void> {
+  const { error } = await supabase.rpc("delete_vendor", {
+    p_academy_id: input.academyId,
+    p_vendor_id: input.vendorId,
+  });
+
+  if (error) {
+    throw new Error(`거래처를 삭제하지 못했습니다: ${error.message}`);
+  }
 }
 
 function toVendorWriteValues(profile: VendorProfile) {

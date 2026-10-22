@@ -71,6 +71,7 @@ import {
   updateDemoVendor,
   type DemoAcademyState,
   type DemoConsultationInput,
+  deleteDemoVendor,
   type DemoConsultationUpdateInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
@@ -133,6 +134,7 @@ type DemoAcademyContextValue = {
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
   };
   createStudentStatusManagementQueryOptions: (
+  deleteVendor: (input: { vendorId: string }) => void;
     options: StatusManagementFetchOptions<"suspended" | "withdrawn">,
   ) => {
     queryKey: QueryKey;
@@ -357,6 +359,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
         return {
           queryKey: [
             ...queryKeys.students.list(options.academyId, {
+      deleteVendor(input) {
+        commitState((current) => deleteDemoVendor(current, input));
+      },
               q: options.search,
               teacherName: options.filters?.teacherName,
               instrumentName: options.filters?.instrumentName,

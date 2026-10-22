@@ -28,6 +28,7 @@ export default function VendorsPage() {
             }
             registerVendor={useTestDemo ? demo.registerVendor : undefined}
             updateVendor={useTestDemo ? demo.updateVendor : undefined}
+            deleteVendor={useTestDemo ? demo.deleteVendor : undefined}
           />
         </AppShell>
       )}

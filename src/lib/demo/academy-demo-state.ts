@@ -892,6 +892,16 @@ export function registerDemoConsultation(
 ): DemoAcademyState {
   return {
     ...state,
+export function deleteDemoVendor(
+  state: DemoAcademyState,
+  { vendorId }: { vendorId: string },
+): DemoAcademyState {
+  return {
+    ...state,
+    vendors: state.vendors.filter((vendor) => vendor.vendorId !== vendorId),
+  };
+}
+
     consultations: [
       ...state.consultations,
       {

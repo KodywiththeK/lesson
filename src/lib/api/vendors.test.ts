@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createVendorListQueryOptions,
+  deleteVendor,
   fetchVendorList,
   registerVendor,
   updateVendor,
@@ -41,6 +42,7 @@ function createMutationStub(
 ) {
   const calls: MutationCall[] = [];
   const client: VendorMutationSupabaseClient = {
+    rpc: async () => ({ data: null, error: null }),
     from(table) {
       const call: MutationCall = { table, eq: [] };
       calls.push(call);
@@ -314,5 +316,33 @@ describe("updateVendor", () => {
         memo: "",
       }),
     ).rejects.toThrow("거래처를 수정했지만 반환된 데이터가 없습니다.");
+  });
+});
+
+describe("deleteVendor", () => {
+  it("삭제 RPC에 학원과 거래처를 넘긴다", async () => {
+    const calls: Array<{ name: string; payload: unknown }> = [];
+    const client = {
+      rpc(name: string, payload: unknown) {
+        calls.push({ name, payload });
+        return Promise.resolve({ data: null, error: null });
+      },
+    } as unknown as VendorMutationSupabaseClient;
+
+    await deleteVendor(client, { academyId: "academy-1", vendorId: "vendor-1" });
+
+    expect(calls).toEqual([
+      { name: "delete_vendor", payload: { p_academy_id: "academy-1", p_vendor_id: "vendor-1" } },
+    ]);
+  });
+
+  it("실패하면 사용자에게 보일 문구로 던진다", async () => {
+    const client = {
+      rpc: () => Promise.resolve({ data: null, error: new Error("권한이 없습니다.") }),
+    } as unknown as VendorMutationSupabaseClient;
+
+    await expect(
+      deleteVendor(client, { academyId: "academy-1", vendorId: "vendor-1" }),
+    ).rejects.toThrow("거래처를 삭제하지 못했습니다: 권한이 없습니다.");
   });
 });

@@ -107,6 +107,71 @@ describe("VendorListScreen", () => {
     ]);
   });
 
+  it("삭제를 누르면 확인창에서 발주 이름이 남는다고 알리고, 확인해야 삭제한다", async () => {
+    const user = userEvent.setup();
+    const deleteVendor = vi.fn();
+    renderVendorListScreen(
+      (options) => ({
+        queryKey: ["vendors", options.academyId],
+        queryFn: async () => buildVendorList(vendorRows, options),
+      }),
+      { deleteVendor },
+    );
+
+    await user.click(await screen.findByRole("button", { name: "예음문구 삭제" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "거래처를 삭제할까요?" });
+
+    expect(dialog).toHaveTextContent("예음문구");
+    expect(dialog).toHaveTextContent("과거 발주 내역에는 거래처 이름이 남습니다");
+    expect(deleteVendor).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => expect(deleteVendor).toHaveBeenCalledWith({ vendorId: "vendor-1" }));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("거래처를 삭제했습니다."));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("삭제 확인창에서 취소하면 삭제하지 않는다", async () => {
+    const user = userEvent.setup();
+    const deleteVendor = vi.fn();
+    renderVendorListScreen(
+      (options) => ({
+        queryKey: ["vendors", options.academyId],
+        queryFn: async () => buildVendorList(vendorRows, options),
+      }),
+      { deleteVendor },
+    );
+
+    await user.click(await screen.findByRole("button", { name: "예음문구 삭제" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "취소" }),
+    );
+
+    expect(deleteVendor).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("삭제에 실패하면 안내하고 확인창을 열어 둬 다시 시도할 수 있다", async () => {
+    const user = userEvent.setup();
+    const deleteVendor = vi.fn().mockRejectedValue(new Error("거래처를 삭제하지 못했습니다: 권한이 없습니다."));
+    renderVendorListScreen(
+      (options) => ({
+        queryKey: ["vendors", options.academyId],
+        queryFn: async () => buildVendorList(vendorRows, options),
+      }),
+      { deleteVendor },
+    );
+
+    await user.click(await screen.findByRole("button", { name: "예음문구 삭제" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "삭제" }),
+    );
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith("거래처 삭제에 실패했습니다.", expect.anything()));
+    expect(screen.getByRole("alertdialog", { name: "거래처를 삭제할까요?" })).toBeInTheDocument();
+  });
+
   it("거래처 목록을 표로 보여주고 연락처, 종류, 비고를 표시한다", async () => {
     renderVendorListScreen((options) => ({
       queryKey: ["vendors", options.academyId, options.search ?? ""],
