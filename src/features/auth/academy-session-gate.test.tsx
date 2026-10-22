@@ -45,6 +45,9 @@ describe("AcademySessionGate", () => {
 
     const form = await screen.findByRole("form", { name: "로그인" });
     expect(form).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "마디마디" })).toBeInTheDocument();
+    expect(screen.getByText("모든 수업의 마디마다, 더 편리한 음악학원 관리"))
+      .toBeInTheDocument();
     expect(screen.getByLabelText("이메일")).toHaveValue("");
     expect(screen.getByLabelText("비밀번호")).toHaveValue("");
     expect(screen.queryByText("Service Console")).not.toBeInTheDocument();

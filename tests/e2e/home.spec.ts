@@ -5,6 +5,45 @@ function mainNavigation(page: Page) {
   return page.getByRole("navigation", { name: "주요 메뉴" });
 }
 
+test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다", async ({ page, request }) => {
+  await page.goto("/");
+
+  await expect(page).toHaveTitle("마디마디 | 모든 수업의 마디마다, 더 편리한 음악학원 관리");
+  await expect(page.locator('link[rel="canonical"]'))
+    .toHaveAttribute("href", "https://lesson-pi-ten.vercel.app");
+  await expect(page.locator('meta[property="og:image"]'))
+    .toHaveAttribute("content", "https://lesson-pi-ten.vercel.app/brand/madimadi-thumbnail.webp");
+  await expect(page.locator('link[rel="icon"][sizes="32x32"]'))
+    .toHaveAttribute("href", "/favicon-32x32.png");
+  await expect(page.locator('link[rel="apple-touch-icon"]'))
+    .toHaveAttribute("href", "/apple-touch-icon.png");
+  await expect(page.locator('link[rel="manifest"]'))
+    .toHaveAttribute("href", "/manifest.webmanifest");
+  const thumbnailResponse = await request.get("/brand/madimadi-thumbnail.webp");
+  expect(thumbnailResponse.ok()).toBe(true);
+  expect(thumbnailResponse.headers()["content-type"]).toContain("image/webp");
+  const faviconResponse = await request.get("/favicon.ico");
+  expect(faviconResponse.ok()).toBe(true);
+  const manifestResponse = await request.get("/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBe(true);
+  expect((await manifestResponse.json()).icons).toHaveLength(2);
+
+  const desktopLogo = page.getByRole("complementary").getByRole("img", { name: "마디마디" });
+  await expect(desktopLogo).toBeVisible();
+  await expect.poll(() => desktopLogo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+
+  const managementResponse = await request.get("/finance/ledger");
+  expect(managementResponse.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+  expect((await (await request.get("/sitemap.xml")).text()))
+    .toContain("https://lesson-pi-ten.vercel.app/");
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.getByRole("button", { name: "메뉴 열기" }).click();
+  await expect(page.getByRole("dialog", { name: "주요 메뉴" }).getByRole("img", { name: "마디마디" }))
+    .toBeVisible();
+});
+
 test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있다", async ({
   page,
 }) => {

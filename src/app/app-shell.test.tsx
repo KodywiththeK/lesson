@@ -20,6 +20,8 @@ describe("AppShell", () => {
     const header = screen.getByRole("banner");
 
     expect(within(header).getByText(`더 클래식 · ${roleLabel}`)).toBeInTheDocument();
+    expect(within(screen.getByRole("complementary")).getByRole("img", { name: "마디마디" }))
+      .toBeInTheDocument();
     // "현재 학원: …" 안내는 사이드바에만 둔다.
     expect(within(header).queryByText("현재 학원: 더 클래식")).not.toBeInTheDocument();
   });
@@ -202,6 +204,7 @@ describe("AppShell", () => {
 
     const drawer = screen.getByRole("dialog", { name: "주요 메뉴" });
     expect(within(drawer).getByText("현재 학원: 더 클래식")).toBeInTheDocument();
+    expect(within(drawer).getByRole("img", { name: "마디마디" })).toBeInTheDocument();
     const navigation = within(drawer).getByRole("navigation", {
       name: "모바일 주요 메뉴",
     });

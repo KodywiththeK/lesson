@@ -4,6 +4,8 @@ PDF 요구사항, 사용자 추가 지시, 테스트, 구현 위치를 연결한
 
 | 요구사항 | 출처 | 인수 시나리오 | 테스트 | 구현 |
 | --- | --- | --- | --- | --- |
+| 마디마디 로고·대표 문구·공유 썸네일을 공개 진입점에 적용하고 내부 운영 경로는 검색에서 제외한다 | 사용자 요청 2026-10-22 | 브랜드와 검색 노출 | `src/app/layout.test.tsx`, `src/app/seo-routes.test.tsx`, `src/app/app-shell.test.tsx`, `src/features/auth/academy-session-gate.test.tsx`, `tests/e2e/home.spec.ts` | `src/app/seo.ts`, `src/app/layout.tsx`, `src/app/robots.ts`, `src/app/sitemap.ts`, `next.config.ts`, `src/components/layout/brand-logo.tsx` |
+| 제공된 파비콘·Apple·Android 아이콘을 화면과 manifest에 연결한다 | 사용자 요청 2026-10-22 | 브랜드와 검색 노출 | `src/app/layout.test.tsx`, `src/app/manifest.test.tsx`, `tests/e2e/home.spec.ts` | `src/app/layout.tsx`, `src/app/manifest.ts`, `public/favicon.ico`, `public/apple-touch-icon.png`, `public/android-chrome-192x192.png`, `public/android-chrome-512x512.png` |
 | 업무 목록은 1024px 이상 표, 768~1023px 행 중심, 481~767px 2열 카드, 480px 이하 1열 카드로 모든 값·액션을 유지한다 | 사용자 요청 2026-10-16 | 공통 목록 반응형 | `src/components/ui/table.test.tsx`, 각 목록 화면 테스트, `tests/e2e/home.spec.ts`(데모 브라우저) | `src/components/ui/table.tsx`, `src/app/globals.css`, 각 목록 화면 |
 | 출석 확인 시에만 회차권을 1회 차감한다 | PDF Part 2 전역 규칙 | 회차권 차감 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |
 | 결석은 회차권을 차감하지 않는다 | PDF Part 2 전역 규칙 | 회차권 차감 | `src/domain/lesson-ticket.test.ts` | `src/domain/lesson-ticket.ts` |

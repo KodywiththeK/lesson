@@ -25,6 +25,7 @@
 - 헤더 카드는 페이지 제목(`h1`), 하위 탭(알약형), 페이지 액션, 사용자 영역(`학원명 · 역할`)으로 구성한다. 사용자 영역은 표시 전용이며 `현재 학원: …` 문구는 sidebar와 drawer에만 둔다.
 - sidebar와 헤더 하위 탭의 활성 색은 `src/components/layout/navigation-link-styles.ts` 한 곳에서 정한다. 하위 메뉴가 활성이면 상위 메뉴는 글자색만 강조한다.
 - shell 구성 파일: `src/app/app-shell.tsx`(조합, 메뉴 가시성·활성 판정), `src/components/layout/app-sidebar.tsx`, `app-header.tsx`, `mobile-navigation-drawer.tsx`.
+- 서비스 로고는 `BrandLogo`로 데스크톱 사이드바·모바일 메뉴의 현재 학원명 위와 로그인 전 화면에 표시한다. 학원명은 서비스 브랜드와 별개이며, 검색·공유 이미지 기준은 [seo.md](./seo.md)를 따른다.
 - main content는 작은 header, toolbar filter, table 또는 calendar body를 중심으로 구성한다.
 - 수입 세부 내역이나 휴원/퇴원 상태처럼 같은 화면 안에서 하위 영역이 나뉘는 곳은 tabs를 사용한다.
 - 서로 독립된 목록 화면을 하나의 상위 업무로 묶을 때는 중첩 URL과 하위 navigation을 사용한다.

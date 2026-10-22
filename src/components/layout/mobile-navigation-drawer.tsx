@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { SidebarNavigation } from "./app-sidebar";
+import { BrandLogo } from "./brand-logo";
 import type { VisibleNavigationItem } from "./navigation-types";
 
 export function MobileNavigationDrawer({
@@ -43,6 +44,7 @@ export function MobileNavigationDrawer({
         className="w-80 max-w-[85vw] gap-0 rounded-r-2xl p-0"
       >
         <SheetHeader className="border-b border-border p-4 text-left">
+          <BrandLogo className="mb-2 w-36" />
           <SheetTitle>주요 메뉴</SheetTitle>
           <SheetDescription>현재 학원: {academyName}</SheetDescription>
         </SheetHeader>

@@ -6,6 +6,7 @@ import { LogIn } from "lucide-react";
 import { toast } from "sonner";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ import {
   type CurrentAcademySupabaseClient,
 } from "@/lib/api/current-academy";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { siteTagline } from "@/app/seo";
 
 const currentAcademyQueryKey = ["current-academy"] as const;
 
@@ -204,7 +206,13 @@ function SignInPanel({
 function SessionShell({ children }: { children: ReactNode }) {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-5">
-      <div className="w-full max-w-md">{children}</div>
+      <div className="w-full max-w-md">
+        <div className="mb-6 grid justify-items-center gap-3 text-center">
+          <BrandLogo className="w-48 max-w-full" />
+          <p className="text-sm text-muted-foreground">{siteTagline}</p>
+        </div>
+        {children}
+      </div>
     </main>
   );
 }

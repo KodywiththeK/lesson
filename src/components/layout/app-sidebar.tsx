@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Music } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { NavigationItem } from "@/domain/navigation";
 
+import { BrandLogo } from "./brand-logo";
 import { navigationLinkClassName } from "./navigation-link-styles";
 import type { VisibleNavigationItem } from "./navigation-types";
 
@@ -37,19 +38,11 @@ export function AppSidebar({
 
 function SidebarBrand({ academyName }: { academyName: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <span
-        aria-hidden="true"
-        className="flex size-10 flex-none items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs"
-      >
-        <Music className="size-5" />
-      </span>
-      <div className="min-w-0">
-        <h2 className="text-base font-semibold">학원 운영</h2>
-        <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-          현재 학원: {academyName}
-        </p>
-      </div>
+    <div className="grid min-w-0 gap-3">
+      <BrandLogo />
+      <p className="truncate text-xs font-medium text-muted-foreground">
+        현재 학원: {academyName}
+      </p>
     </div>
   );
 }
