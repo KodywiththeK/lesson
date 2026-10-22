@@ -19,6 +19,7 @@ describe("Home", () => {
       expect.stringContaining("인원·거래처"),
       expect.stringContaining("교재"),
       expect.stringContaining("수입 관리"),
+      expect.stringContaining("설정"),
     ]);
     expect(within(shortcuts).getByRole("link", { name: /수입 관리/ })).toHaveAttribute(
       "href",
@@ -58,6 +59,8 @@ describe("Home", () => {
       "교재 내역",
       "선생님 월급",
       "전체 수입",
+      "설정",
+      "회차권 설정",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),

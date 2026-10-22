@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { RotateCcw, TicketPlus } from "lucide-react";
+import { RotateCcw, TicketPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -57,11 +57,18 @@ import {
   createLessonTicketListQueryKey,
   createLessonTicketListQueryOptions,
   createLessonTicketRegistrationOptionsQueryOptions,
+  deleteLessonTicket as deleteLessonTicketRpc,
+  getLessonTicketRefundPreview as getLessonTicketRefundPreviewRpc,
   registerLessonTicket as registerLessonTicketRpc,
   type AdjustLessonTicketInput,
   type AdjustLessonTicketResult,
   type AdjustLessonTicketSupabaseClient,
+  type DeleteLessonTicketInput,
+  type DeleteLessonTicketResult,
+  type DeleteLessonTicketSupabaseClient,
   type LessonTicketListSupabaseClient,
+  type LessonTicketRefundPreview,
+  type LessonTicketRefundPreviewSupabaseClient,
   type LessonTicketRegistrationOptionsSupabaseClient,
   type LessonTicketRegistrationStudentOption,
   type RegisterLessonTicketInput,
@@ -72,6 +79,7 @@ import { queryKeys } from "@/lib/api/query-keys";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import { LessonTicketAdjustDialog } from "./lesson-ticket-adjust-dialog";
+import { LessonTicketDeleteDialog } from "./lesson-ticket-delete-dialog";
 import { LessonTicketRegistrationForm } from "./lesson-ticket-registration-form";
 
 type LessonTicketListQueryOptions = {
@@ -104,12 +112,16 @@ type LessonTicketListScreenProps = {
   adjustLessonTicket?: (
     input: AdjustLessonTicketInput,
   ) => Promise<AdjustLessonTicketResult>;
+  getLessonTicketRefundPreview?: (ticketId: string) => Promise<LessonTicketRefundPreview>;
+  deleteLessonTicket?: (input: DeleteLessonTicketInput) => Promise<DeleteLessonTicketResult>;
 };
 
 type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
   LessonTicketRegistrationOptionsSupabaseClient &
   RegisterLessonTicketSupabaseClient &
-  AdjustLessonTicketSupabaseClient;
+  AdjustLessonTicketSupabaseClient &
+  LessonTicketRefundPreviewSupabaseClient &
+  DeleteLessonTicketSupabaseClient;
 
 type SupabaseClientState =
   | {
@@ -138,22 +150,27 @@ export function LessonTicketListScreen({
   registrationOptionsQueryFactory,
   registerLessonTicket,
   adjustLessonTicket,
+  getLessonTicketRefundPreview,
+  deleteLessonTicket,
 }: LessonTicketListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<LessonTicketStatus | "">("");
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
+  const [deletingTicket, setDeletingTicket] = useState<LessonTicketListRow | null>(null);
   const { page, pageSize, goToPage, changePageSize, resetPage } = useListPaging();
   const hasInjectedQueryOptions = Boolean(queryOptionsFactory);
   const hasInjectedRegistrationOptions = Boolean(registrationOptionsQueryFactory);
   const hasInjectedRegistrationMutation = Boolean(registerLessonTicket);
   const hasInjectedAdjustMutation = Boolean(adjustLessonTicket);
+  const hasInjectedDeleteFlow = Boolean(getLessonTicketRefundPreview && deleteLessonTicket);
   const supabaseClientState = useMemo(
     () =>
       hasInjectedQueryOptions &&
       hasInjectedRegistrationOptions &&
       hasInjectedRegistrationMutation &&
-      hasInjectedAdjustMutation
+      hasInjectedAdjustMutation &&
+      hasInjectedDeleteFlow
         ? null
         : createLessonTicketSupabaseClient(),
     [
@@ -161,6 +178,7 @@ export function LessonTicketListScreen({
       hasInjectedRegistrationOptions,
       hasInjectedRegistrationMutation,
       hasInjectedAdjustMutation,
+      hasInjectedDeleteFlow,
     ],
   );
 
@@ -250,6 +268,34 @@ export function LessonTicketListScreen({
       });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (input: DeleteLessonTicketInput) => {
+      const remove =
+        deleteLessonTicket ??
+        createDefaultDeleteLessonTicket(
+          supabaseClientState ?? createMissingSupabaseClientState(),
+        );
+
+      return remove(input);
+    },
+    onSuccess: (result) => {
+      setDeletingTicket(null);
+      toast.success(describeDeletion(result));
+      invalidateTicketRelatedQueries();
+    },
+    onError: (error) => {
+      toast.error("회차권 삭제에 실패했습니다.", {
+        description: toUserMessage(error),
+      });
+    },
+  });
+  const loadRefundPreview =
+    getLessonTicketRefundPreview ??
+    createDefaultRefundPreviewLoader(
+      academyId,
+      supabaseClientState ?? createMissingSupabaseClientState(),
+    );
 
   const registrationAction = useMemo(
     () => (
@@ -379,6 +425,7 @@ export function LessonTicketListScreen({
                   { onSuccess: onSaved },
                 )
               }
+              onDelete={setDeletingTicket}
             />
             <ListPagination
               itemLabel="회차권"
@@ -390,6 +437,16 @@ export function LessonTicketListScreen({
           </>
         ) : null}
       </SectionCard>
+
+      <LessonTicketDeleteDialog
+        ticket={deletingTicket}
+        loadPreview={loadRefundPreview}
+        isDeleting={deleteMutation.isPending}
+        onClose={() => setDeletingTicket(null)}
+        onConfirm={(ticket, mode) =>
+          deleteMutation.mutate({ academyId, ticketId: ticket.ticketId, mode })
+        }
+      />
     </section>
   );
 }
@@ -455,6 +512,43 @@ function createDefaultAdjustLessonTicket(
     adjustLessonTicketRpc(supabaseClientState.client, input);
 }
 
+function createDefaultDeleteLessonTicket(
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return async (): Promise<DeleteLessonTicketResult> => {
+      throw supabaseClientState.error;
+    };
+  }
+
+  return (input: DeleteLessonTicketInput) =>
+    deleteLessonTicketRpc(supabaseClientState.client, input);
+}
+
+function createDefaultRefundPreviewLoader(
+  academyId: string,
+  supabaseClientState: SupabaseClientState,
+) {
+  if (supabaseClientState.error) {
+    return async (): Promise<LessonTicketRefundPreview> => {
+      throw supabaseClientState.error;
+    };
+  }
+
+  return (ticketId: string) =>
+    getLessonTicketRefundPreviewRpc(supabaseClientState.client, { academyId, ticketId });
+}
+
+function describeDeletion(result: DeleteLessonTicketResult) {
+  if (result.mode === "mistake") {
+    return "잘못 등록한 회차권과 수입 기록을 삭제했습니다.";
+  }
+
+  return result.refunded
+    ? `회차권을 삭제하고 ${result.refundAmount.toLocaleString("ko-KR")}원을 환불 처리했습니다.`
+    : "회차권을 삭제했습니다. 환불할 금액이 없어 수입 내역은 그대로입니다.";
+}
+
 function describeRegistration(
   result: RegisterLessonTicketResult,
   input: RegisterLessonTicketInput,
@@ -492,11 +586,13 @@ function LessonTicketTable({
   today,
   isAdjusting,
   onAdjust,
+  onDelete,
 }: {
   tickets: LessonTicketListRow[];
   today: string;
   isAdjusting: boolean;
   onAdjust: ComponentProps<typeof LessonTicketAdjustDialog>["onAdjust"];
+  onDelete: (ticket: LessonTicketListRow) => void;
 }) {
   if (tickets.length === 0) {
     return (
@@ -570,11 +666,23 @@ function LessonTicketTable({
                 </span>
               </TableCell>
               <TableCell label="관리">
-                <LessonTicketAdjustDialog
-                  ticket={ticket}
-                  isSaving={isAdjusting}
-                  onAdjust={onAdjust}
-                />
+                <span className="flex flex-wrap gap-2">
+                  <LessonTicketAdjustDialog
+                    ticket={ticket}
+                    isSaving={isAdjusting}
+                    onAdjust={onAdjust}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`${ticket.studentName} ${ticket.instrumentName} 회차권 삭제`}
+                    onClick={() => onDelete(ticket)}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    삭제
+                  </Button>
+                </span>
               </TableCell>
             </TableRow>
           );

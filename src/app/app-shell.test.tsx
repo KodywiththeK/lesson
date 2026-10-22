@@ -63,6 +63,8 @@ describe("AppShell", () => {
       "교재 내역",
       "선생님 월급",
       "전체 수입",
+      "설정",
+      "회차권 설정",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
@@ -118,6 +120,7 @@ describe("AppShell", () => {
     expect(labels).not.toContain("선생님");
     expect(labels).not.toContain("휴원/퇴원");
     expect(labels).not.toContain("수입 관리");
+    expect(labels).not.toContain("설정");
     expect(labels).not.toContain("거래처");
     expect(labels).not.toContain("상담");
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();

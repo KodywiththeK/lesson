@@ -9,6 +9,10 @@ import {
 } from "@/domain/academy-lesson-schedule";
 import type { LedgerCategory, LedgerEntry } from "@/domain/book-sale";
 import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
+import {
+  DEFAULT_LESSON_TICKET_REFUND_POLICY,
+  type LessonTicketRefundPolicy,
+} from "@/domain/lesson-ticket-refund";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import {
   adjustLessonTicket,
@@ -80,6 +84,8 @@ export type DemoAcademyState = {
   consultations: ConsultationListRow[];
   books: DemoBook[];
   bookSales: typeof demoBookSales;
+  /** 학원 설정. 회차권을 삭제(환불 처리)할 때 적용하는 규정이다. */
+  lessonTicketRefundPolicy: LessonTicketRefundPolicy;
 };
 
 export type DemoStudentRegistrationInput = {
@@ -343,6 +349,7 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     consultations: [...demoConsultations],
     books: demoBooks.map((book) => ({ ...book })),
     bookSales: [...demoBookSales],
+    lessonTicketRefundPolicy: DEFAULT_LESSON_TICKET_REFUND_POLICY,
   };
 }
 
@@ -885,13 +892,6 @@ export function updateDemoVendor(
   };
 }
 
-export function registerDemoConsultation(
-  state: DemoAcademyState,
-  input: DemoConsultationInput,
-  receivedAt: string,
-): DemoAcademyState {
-  return {
-    ...state,
 export function deleteDemoVendor(
   state: DemoAcademyState,
   { vendorId }: { vendorId: string },
@@ -902,6 +902,13 @@ export function deleteDemoVendor(
   };
 }
 
+export function registerDemoConsultation(
+  state: DemoAcademyState,
+  input: DemoConsultationInput,
+  receivedAt: string,
+): DemoAcademyState {
+  return {
+    ...state,
     consultations: [
       ...state.consultations,
       {

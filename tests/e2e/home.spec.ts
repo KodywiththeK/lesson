@@ -64,7 +64,7 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
     "href",
     "/lessons/academy",
   );
-  await expect(navigation.getByRole("link", { name: /회차권/ })).toHaveAttribute(
+  await expect(navigation.getByRole("link", { name: "회차권", exact: true })).toHaveAttribute(
     "href",
     "/passes",
   );
@@ -232,7 +232,7 @@ test("일별 테이블뷰는 모달 없이 날짜를 옮기고 그날의 메모�
 test("회차권 메뉴에서 회차권 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
-  await mainNavigation(page).getByRole("link", { name: "회차권" }).click();
+  await mainNavigation(page).getByRole("link", { name: "회차권", exact: true }).click();
 
   await expect(
     page.getByRole("heading", { level: 1, name: "회차권 관리" }),
@@ -526,3 +526,48 @@ for (const viewport of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
   });
 }
+
+test("원장은 설정에서 환불 규정을 고르고 회차권을 환불 처리로 삭제한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+
+  await mainNavigation(page).getByRole("link", { name: "회차권 설정" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "설정" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /환불 불가/ })).toBeChecked();
+
+  await page.getByRole("radio", { name: /언제든 남은 회수 비례 환불/ }).click();
+  await page.getByRole("button", { name: "저장" }).click();
+  await expect(page.getByRole("button", { name: "저장" })).toBeDisabled();
+
+  // 같은 화면 상태를 이어서 쓰도록 새로고침하지 않고 메뉴로 이동한다.
+  await mainNavigation(page).getByRole("link", { name: "회차권", exact: true }).click();
+  await page.getByRole("button", { name: "한서아 바이올린 회차권 삭제" }).click();
+
+  const dialog = page.getByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+  await expect(dialog.getByText(/현재 규정: 언제든 남은 회수 비례 환불/)).toBeVisible();
+  await expect(dialog.getByText(/환불 예정 금액 70,000원/)).toBeVisible();
+  await dialog.getByRole("button", { name: "삭제" }).click();
+
+  await expect(page.getByRole("alertdialog")).toBeHidden();
+  await expect(page.getByRole("button", { name: "한서아 바이올린 회차권 삭제" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "최도윤 첼로 회차권 삭제" })).toBeVisible();
+});
+
+test("작은 모바일에서도 회차권 삭제 확인창이 화면 안에 들어오고 환불 불가 규정을 알린다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/passes");
+
+  await page.getByRole("button", { name: "최도윤 첼로 회차권 삭제" }).click();
+
+  const dialog = page.getByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+  await expect(dialog.getByText(/현재 규정으로는 환불할 수 없습니다/)).toBeVisible();
+  await expect(dialog.getByRole("radio", { name: /잘못 등록해서 삭제/ })).toBeDisabled();
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+
+  await dialog.getByRole("button", { name: "취소" }).click();
+  await expect(page.getByRole("alertdialog")).toBeHidden();
+});

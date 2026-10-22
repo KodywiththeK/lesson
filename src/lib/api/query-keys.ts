@@ -204,6 +204,8 @@ export const queryKeys = {
         filters.page ?? "",
         filters.pageSize ?? "",
       ] as const,
+    refundPreview: (academyId: string, ticketId: string) =>
+      [...queryKeys.academy(academyId), "lesson-tickets", "refund-preview", ticketId] as const,
     registrationOptions: (academyId: string) =>
       [
         ...queryKeys.academy(academyId),
@@ -235,5 +237,9 @@ export const queryKeys = {
   lessonWorkspace: {
     month: (academyId: string, month: string) =>
       [...queryKeys.academy(academyId), "lesson-workspace", month] as const,
+  },
+  settings: {
+    lessonTicketRefundPolicy: (academyId: string) =>
+      [...queryKeys.academy(academyId), "settings", "lesson-ticket-refund-policy"] as const,
   },
 };

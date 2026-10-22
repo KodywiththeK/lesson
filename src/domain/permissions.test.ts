@@ -67,6 +67,20 @@ describe("canAccessFeature", () => {
     expect(canAccessFeature({ role: "desk", flags: { allowDeskFinance: true } } as never, "income-management")).toBe(false);
   });
 
+  it("회차권 등록 때 결제 금액 입력은 원장과 데스크만 할 수 있다", () => {
+    expect(canAccessFeature({ role: "owner" }, "ticket-payment-input")).toBe(true);
+    expect(canAccessFeature({ role: "desk" }, "ticket-payment-input")).toBe(true);
+    expect(canAccessFeature({ role: "teacher", teacherId: "teacher-1" }, "ticket-payment-input")).toBe(false);
+    expect(canAccessFeature({ role: "anonymous" }, "ticket-payment-input")).toBe(false);
+  });
+
+  it("학원 설정은 원장만 열 수 있다", () => {
+    expect(canAccessFeature({ role: "owner" }, "settings")).toBe(true);
+    expect(canAccessFeature({ role: "desk" }, "settings")).toBe(false);
+    expect(canAccessFeature({ role: "teacher", teacherId: "teacher-1" }, "settings")).toBe(false);
+    expect(canAccessFeature({ role: "anonymous" }, "settings")).toBe(false);
+  });
+
   it("회차권 수동 수정은 원장과 데스크에 허용하고 선생님에게는 허용하지 않는다", () => {
     expect(canAccessFeature({ role: "owner" }, "ticket-manual-adjustment")).toBe(
       true,
@@ -124,5 +138,11 @@ describe("getVisibleNavigationItems", () => {
     expect(visibleItems).not.toContain("vendors");
     expect(visibleItems).not.toContain("consultations");
     expect(visibleItems).not.toContain("income-management");
+    expect(visibleItems).not.toContain("settings");
+  });
+
+  it("설정 메뉴는 원장에게만 보인다", () => {
+    expect(getVisibleNavigationItems({ role: "owner" })).toContain("settings");
+    expect(getVisibleNavigationItems({ role: "desk" })).not.toContain("settings");
   });
 });

@@ -31,7 +31,9 @@ export type FeatureKey =
   | "tickets"
   | "income-management"
   | "manual-ledger"
+  | "settings"
   | "ticket-manual-adjustment"
+  | "ticket-payment-input"
   | "assigned-student"
   | "own-payroll";
 
@@ -50,8 +52,10 @@ const OWNER_FEATURES: FeatureKey[] = [
   "books",
   "tickets",
   "ticket-manual-adjustment",
+  "ticket-payment-input",
   "income-management",
   "manual-ledger",
+  "settings",
   "assigned-student",
   "own-payroll",
 ];
@@ -66,6 +70,7 @@ const DESK_FEATURES: FeatureKey[] = [
   "books",
   "tickets",
   "ticket-manual-adjustment",
+  "ticket-payment-input",
   "assigned-student",
 ];
 
@@ -132,6 +137,7 @@ export function getVisibleNavigationItems(context: PermissionContext) {
     "books",
     "tickets",
     "income-management",
+    "settings",
     "own-payroll",
   ];
 

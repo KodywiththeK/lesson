@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { getFinanceToday } from "@/domain/finance-date";
+import { canAccessFeature } from "@/domain/permissions";
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { LessonTicketListScreen } from "@/features/lesson-tickets/lesson-ticket-list-screen";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
@@ -44,7 +45,7 @@ export default function PassesPage() {
           ) : <LessonTicketListScreen
             academyId={academy.academyId}
             today={useTestDemo ? DEMO_TODAY : today}
-            canRecordPayment={academy.permissionContext.role === "owner"}
+            canRecordPayment={canAccessFeature(academy.permissionContext, "ticket-payment-input")}
             queryOptionsFactory={
               useTestDemo ? demo.createLessonTicketListQueryOptions : undefined
             }
@@ -58,6 +59,12 @@ export default function PassesPage() {
             }
             adjustLessonTicket={
               useTestDemo ? demo.adjustLessonTicket : undefined
+            }
+            getLessonTicketRefundPreview={
+              useTestDemo ? demo.getLessonTicketRefundPreview : undefined
+            }
+            deleteLessonTicket={
+              useTestDemo ? demo.deleteLessonTicket : undefined
             }
           />}
         </AppShell>

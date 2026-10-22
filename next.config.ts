@@ -6,6 +6,7 @@ const privateRouteSources = [
   "/lessons/:path*",
   "/management/:path*",
   "/passes",
+  "/settings/:path*",
   "/status-management",
   "/students",
   "/teachers",

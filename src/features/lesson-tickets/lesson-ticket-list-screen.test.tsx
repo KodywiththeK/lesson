@@ -56,7 +56,12 @@ function renderLessonTicketListScreen(
   queryOptionsFactory: LessonTicketListQueryOptionsFactory,
   extraProps: Partial<Pick<
     ScreenProps,
-    "registrationOptionsQueryFactory" | "registerLessonTicket" | "adjustLessonTicket" | "canRecordPayment"
+    | "registrationOptionsQueryFactory"
+    | "registerLessonTicket"
+    | "adjustLessonTicket"
+    | "canRecordPayment"
+    | "getLessonTicketRefundPreview"
+    | "deleteLessonTicket"
   >> = {},
 ) {
   const queryClient = new QueryClient({
@@ -175,7 +180,7 @@ describe("LessonTicketListScreen", () => {
       "2026-09-07",
       "6일 남음",
       "잔여 부족",
-      "수정",
+      "수정삭제",
     ]);
     expect(
       within(row).getByRole("button", { name: "김민지 피아노 회차권 수정" }),
@@ -334,7 +339,7 @@ describe("회차권 등록 폼", () => {
     expect(within(dialog).getByLabelText("악기")).toHaveValue("");
   });
 
-  it("데스크 등록에서는 결제 입력을 숨기고 개인레슨 악기가 없는 원생을 후보에서 제외한다", async () => {
+  it("결제 입력 권한이 없으면 결제 입력을 숨기고 개인레슨 악기가 없는 원생을 후보에서 제외한다", async () => {
     const { dialog } = await openRegistrationDialog({
       canRecordPayment: false,
       registrationOptionsQueryFactory: (academyId) => ({
@@ -392,7 +397,7 @@ describe("회차권 등록 폼", () => {
     fireEvent.change(amountInput, { target: { value: "2147483648" } });
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     expect(
-      within(dialog).getByText("입력하면 수입 내역에 기록됩니다(원장만 입력 가능)."),
+      within(dialog).getByText("입력하면 수입 내역에 기록됩니다(관리자만 입력 가능)."),
     ).toBeInTheDocument();
   });
 
@@ -665,6 +670,112 @@ describe("회차권 직접 수정", () => {
       });
     });
     expect(screen.getByRole("dialog", { name: "회차권 수정" })).toBeInTheDocument();
+  });
+});
+
+describe("회차권 삭제", () => {
+  beforeEach(() => {
+    toastMock.success.mockClear();
+    toastMock.error.mockClear();
+  });
+
+  const refundPreview = {
+    policy: "proportional_always" as const,
+    totalGrantedCount: 12,
+    usedCount: 10,
+    eligible: true,
+    refundAmount: 50_000,
+    canDeleteAsMistake: false,
+  };
+
+  async function openDeleteDialog(extraProps: Parameters<typeof renderLessonTicketListScreen>[1] = {}) {
+    const user = userEvent.setup();
+
+    renderLessonTicketListScreen(listLessonTickets(), {
+      getLessonTicketRefundPreview: async () => refundPreview,
+      ...extraProps,
+    });
+    await user.click(await screen.findByRole("button", { name: "김민지 피아노 회차권 삭제" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+    await within(dialog).findByText(/현재 규정/);
+
+    return { user, dialog };
+  }
+
+  it("행마다 삭제 버튼을 두고 눌러야 확인창이 열린다", async () => {
+    renderLessonTicketListScreen(listLessonTickets());
+
+    expect(await screen.findByRole("button", { name: "김민지 피아노 회차권 삭제" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "이서윤 바이올린 회차권 삭제" })).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("환불 처리로 삭제하면 환불 금액을 알리고 확인창을 닫는다", async () => {
+    const deletions: Array<Record<string, unknown>> = [];
+    const { user, dialog } = await openDeleteDialog({
+      deleteLessonTicket: async (input) => {
+        deletions.push(input);
+
+        return { mode: "refund", refunded: true, refundAmount: 50_000 };
+      },
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => {
+      expect(deletions).toEqual([{ academyId: "academy-1", ticketId: "ticket-1", mode: "refund" }]);
+      expect(toastMock.success).toHaveBeenCalledWith("회차권을 삭제하고 50,000원을 환불 처리했습니다.");
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("환불할 금액이 없으면 수입 내역이 그대로라고 알린다", async () => {
+    const { user, dialog } = await openDeleteDialog({
+      deleteLessonTicket: async () => ({ mode: "refund", refunded: false, refundAmount: 0 }),
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith("회차권을 삭제했습니다. 환불할 금액이 없어 수입 내역은 그대로입니다."),
+    );
+  });
+
+  it("잘못 등록해서 삭제하면 수입 기록까지 지웠다고 알린다", async () => {
+    const deletions: Array<Record<string, unknown>> = [];
+    const { user, dialog } = await openDeleteDialog({
+      getLessonTicketRefundPreview: async () => ({ ...refundPreview, usedCount: 0, canDeleteAsMistake: true }),
+      deleteLessonTicket: async (input) => {
+        deletions.push(input);
+
+        return { mode: "mistake", refunded: false, refundAmount: 0 };
+      },
+    });
+
+    await user.click(await within(dialog).findByRole("radio", { name: /잘못 등록해서 삭제/ }));
+    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => {
+      expect(deletions).toEqual([{ academyId: "academy-1", ticketId: "ticket-1", mode: "mistake" }]);
+      expect(toastMock.success).toHaveBeenCalledWith("잘못 등록한 회차권과 수입 기록을 삭제했습니다.");
+    });
+  });
+
+  it("서버가 거절하면 한국어 사유를 보여주고 확인창을 유지한다", async () => {
+    const { user, dialog } = await openDeleteDialog({
+      deleteLessonTicket: async () => {
+        throw new Error("회차권을 삭제하지 못했습니다: 이미 삭제되었거나 찾을 수 없습니다. 목록을 새로고침해 주세요.");
+      },
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("회차권 삭제에 실패했습니다.", {
+        description: "이미 삭제되었거나 찾을 수 없습니다. 목록을 새로고침해 주세요.",
+      }),
+    );
+    expect(screen.getByRole("alertdialog", { name: "회차권을 삭제할까요?" })).toBeInTheDocument();
   });
 });
 

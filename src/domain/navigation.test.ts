@@ -11,6 +11,7 @@ describe("mainNavigation", () => {
       "인원·거래처",
       "교재",
       "수입 관리",
+      "설정",
     ]);
   });
 
@@ -92,5 +93,14 @@ describe("mainNavigation", () => {
       "/finance/payroll",
       "/finance/overview",
     ]);
+  });
+
+  it("설정 메뉴는 원장 전용 기능 키를 쓰는 회차권 설정 하위 메뉴를 가진다", () => {
+    const settingsNavigation = mainNavigation.find((item) => item.label === "설정");
+
+    expect(settingsNavigation?.href).toBe("/settings/lesson-tickets");
+    expect(settingsNavigation?.children?.map((item) => item.label)).toEqual(["회차권 설정"]);
+    expect(settingsNavigation?.children?.map((item) => item.href)).toEqual(["/settings/lesson-tickets"]);
+    expect(settingsNavigation?.children?.map((item) => item.feature)).toEqual(["settings"]);
   });
 });

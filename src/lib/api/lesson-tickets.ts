@@ -7,6 +7,8 @@ import {
   type LessonTicketListRow,
 } from "@/domain/lesson-ticket";
 
+import type { LessonTicketRefundPolicy, LessonTicketRefundQuote } from "@/domain/lesson-ticket-refund";
+
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
@@ -176,6 +178,57 @@ export type AdjustLessonTicketSupabaseClient = {
   ): PromiseLike<SupabaseQueryResult<AdjustLessonTicketRpcRow>>;
 };
 
+/** 삭제 전에 보여 주는 환불 미리보기. 결제 금액은 데스크가 읽을 수 없어 서버가 계산한 값만 받는다. */
+export type LessonTicketRefundPreview = LessonTicketRefundQuote & {
+  /** 사용 이력이 없어 "잘못 등록해서 삭제"를 고를 수 있는지. */
+  canDeleteAsMistake: boolean;
+};
+
+/** `refund`: 환불 처리(규정 검사 후 수입 감액). `mistake`: 잘못 등록(수입 기록까지 삭제, 사용 이력이 없을 때만). */
+export type DeleteLessonTicketMode = "refund" | "mistake";
+
+export type DeleteLessonTicketInput = {
+  academyId: string;
+  ticketId: string;
+  mode: DeleteLessonTicketMode;
+};
+
+export type DeleteLessonTicketResult = {
+  mode: DeleteLessonTicketMode;
+  /** 환불 처리에서 규정에 맞아 수입이 감액되었는지. */
+  refunded: boolean;
+  refundAmount: number;
+};
+
+type LessonTicketRefundPreviewRpcRow = {
+  policy: LessonTicketRefundPolicy;
+  total_granted_count: number;
+  used_count: number;
+  eligible: boolean;
+  refund_amount: number;
+  can_delete_as_mistake: boolean;
+};
+
+type DeleteLessonTicketRpcRow = {
+  mode: DeleteLessonTicketMode;
+  refunded: boolean;
+  refund_amount: number;
+};
+
+export type LessonTicketRefundPreviewSupabaseClient = {
+  rpc(
+    functionName: "get_lesson_ticket_refund_preview",
+    payload: { p_academy_id: string; p_ticket_id: string },
+  ): PromiseLike<SupabaseQueryResult<LessonTicketRefundPreviewRpcRow>>;
+};
+
+export type DeleteLessonTicketSupabaseClient = {
+  rpc(
+    functionName: "delete_lesson_ticket",
+    payload: { p_academy_id: string; p_ticket_id: string; p_mode: DeleteLessonTicketMode },
+  ): PromiseLike<SupabaseQueryResult<DeleteLessonTicketRpcRow>>;
+};
+
 const LESSON_TICKET_LIST_SELECT =
   "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)";
 
@@ -331,6 +384,55 @@ export async function adjustLessonTicket(
     remainingCount: data.remaining_count,
     validUntil: data.valid_until,
   };
+}
+
+export async function getLessonTicketRefundPreview(
+  supabase: LessonTicketRefundPreviewSupabaseClient,
+  input: { academyId: string; ticketId: string },
+): Promise<LessonTicketRefundPreview> {
+  const { data, error } = await supabase.rpc("get_lesson_ticket_refund_preview", {
+    p_academy_id: input.academyId,
+    p_ticket_id: input.ticketId,
+  });
+
+  if (error) {
+    throw new Error(`환불 정보를 불러오지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("환불 정보를 불러왔지만 반환된 데이터가 없습니다.");
+  }
+
+  return {
+    policy: data.policy,
+    totalGrantedCount: data.total_granted_count,
+    usedCount: data.used_count,
+    eligible: data.eligible,
+    refundAmount: data.refund_amount,
+    canDeleteAsMistake: data.can_delete_as_mistake,
+  };
+}
+
+/** 회차권을 삭제한다. 환불 처리는 학원 환불 규정을 서버가 검사해 수입을 같은 트랜잭션에서 정리한다. */
+export async function deleteLessonTicket(
+  supabase: DeleteLessonTicketSupabaseClient,
+  input: DeleteLessonTicketInput,
+): Promise<DeleteLessonTicketResult> {
+  const { data, error } = await supabase.rpc("delete_lesson_ticket", {
+    p_academy_id: input.academyId,
+    p_ticket_id: input.ticketId,
+    p_mode: input.mode,
+  });
+
+  if (error) {
+    throw new Error(`회차권을 삭제하지 못했습니다: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("회차권을 삭제했지만 반환된 데이터가 없습니다.");
+  }
+
+  return { mode: data.mode, refunded: data.refunded, refundAmount: data.refund_amount };
 }
 
 export function createLessonTicketListQueryKey(

@@ -8,8 +8,12 @@ import {
   fetchLessonTicketList,
   fetchAssignedLessonTicketBalances,
   adjustLessonTicket,
+  deleteLessonTicket,
+  getLessonTicketRefundPreview,
   registerLessonTicket,
   type AdjustLessonTicketSupabaseClient,
+  type DeleteLessonTicketSupabaseClient,
+  type LessonTicketRefundPreviewSupabaseClient,
   type LessonTicketGrantSupabaseRow,
   type LessonTicketListSupabaseClient,
   type LessonTicketRegistrationOptionsSupabaseClient,
@@ -477,5 +481,80 @@ describe("adjustLessonTicket", () => {
     await expect(adjustLessonTicket(client, input)).rejects.toThrow(
       "회차권을 수정했지만 반환된 데이터가 없습니다.",
     );
+  });
+});
+
+describe("회차권 삭제·환불 미리보기", () => {
+  it("환불 미리보기 RPC에 학원과 회차권을 넘기고 camelCase로 바꿔 돌려준다", async () => {
+    const calls: Array<{ name: string; payload: unknown }> = [];
+    const client = {
+      rpc(name: string, payload: unknown) {
+        calls.push({ name, payload });
+
+        return Promise.resolve({
+          data: {
+            policy: "proportional_always",
+            total_granted_count: 8,
+            used_count: 6,
+            eligible: true,
+            refund_amount: 70000,
+            can_delete_as_mistake: false,
+          },
+          error: null,
+        });
+      },
+    } as unknown as LessonTicketRefundPreviewSupabaseClient;
+
+    await expect(getLessonTicketRefundPreview(client, { academyId: "academy-1", ticketId: "ticket-1" })).resolves.toEqual({
+      policy: "proportional_always",
+      totalGrantedCount: 8,
+      usedCount: 6,
+      eligible: true,
+      refundAmount: 70000,
+      canDeleteAsMistake: false,
+    });
+    expect(calls).toEqual([
+      { name: "get_lesson_ticket_refund_preview", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1" } },
+    ]);
+  });
+
+  it("환불 미리보기 실패는 사용자에게 보일 문구로 던진다", async () => {
+    const client = {
+      rpc: () => Promise.resolve({ data: null, error: new Error("권한이 없습니다.") }),
+    } as unknown as LessonTicketRefundPreviewSupabaseClient;
+
+    await expect(getLessonTicketRefundPreview(client, { academyId: "academy-1", ticketId: "ticket-1" })).rejects.toThrow(
+      "환불 정보를 불러오지 못했습니다: 권한이 없습니다.",
+    );
+  });
+
+  it("삭제 RPC에 방식(환불 처리·잘못 등록)을 넘기고 결과를 돌려준다", async () => {
+    const calls: Array<{ name: string; payload: unknown }> = [];
+    const client = {
+      rpc(name: string, payload: unknown) {
+        calls.push({ name, payload });
+
+        return Promise.resolve({ data: { mode: "refund", refunded: true, refund_amount: 70000 }, error: null });
+      },
+    } as unknown as DeleteLessonTicketSupabaseClient;
+
+    await expect(deleteLessonTicket(client, { academyId: "academy-1", ticketId: "ticket-1", mode: "refund" })).resolves.toEqual({
+      mode: "refund",
+      refunded: true,
+      refundAmount: 70000,
+    });
+    expect(calls).toEqual([
+      { name: "delete_lesson_ticket", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_mode: "refund" } },
+    ]);
+  });
+
+  it("삭제 실패는 사용자에게 보일 문구로 던진다", async () => {
+    const client = {
+      rpc: () => Promise.resolve({ data: null, error: new Error("사용한 회차권은 잘못 등록으로 삭제할 수 없습니다.") }),
+    } as unknown as DeleteLessonTicketSupabaseClient;
+
+    await expect(
+      deleteLessonTicket(client, { academyId: "academy-1", ticketId: "ticket-1", mode: "mistake" }),
+    ).rejects.toThrow("회차권을 삭제하지 못했습니다: 사용한 회차권은 잘못 등록으로 삭제할 수 없습니다.");
   });
 });

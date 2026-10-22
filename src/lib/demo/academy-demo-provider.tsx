@@ -28,6 +28,7 @@ import {
   buildLessonTicketList,
   type BuildLessonTicketListOptions,
 } from "@/domain/lesson-ticket";
+import type { LessonTicketRefundPolicy } from "@/domain/lesson-ticket-refund";
 import type {
   StudentEnrollmentSaveResult,
   UpdateStudentEnrollmentsInput,
@@ -44,12 +45,20 @@ import {
   createLessonTicketListQueryKey,
   type AdjustLessonTicketInput,
   type AdjustLessonTicketResult,
+  type DeleteLessonTicketInput,
+  type DeleteLessonTicketResult,
+  type LessonTicketRefundPreview,
   type RegisterLessonTicketInput,
   type RegisterLessonTicketResult,
 } from "@/lib/api/lesson-tickets";
 import type { RegisterPrivateLessonEventInput } from "@/lib/api/private-lessons";
 
 import { updateDemoStudentEnrollments } from "./academy-demo-student-edit";
+import {
+  deleteDemoLessonTicket,
+  getDemoLessonTicketRefundPreview,
+  setDemoLessonTicketRefundPolicy,
+} from "./academy-demo-ticket-refund";
 import {
   adjustDemoLessonTicket,
   createInitialDemoAcademyState,
@@ -62,6 +71,7 @@ import {
   registerDemoConsultation,
   registerDemoLessonTicket,
   registerDemoManualLedgerEntry,
+  deleteDemoVendor,
   registerDemoVendor,
   updateDemoAcademyTeacher,
   updateDemoConsultation,
@@ -71,7 +81,6 @@ import {
   updateDemoVendor,
   type DemoAcademyState,
   type DemoConsultationInput,
-  deleteDemoVendor,
   type DemoConsultationUpdateInput,
   type DemoManualLedgerInput,
   type DemoStudentRegistrationInput,
@@ -105,6 +114,13 @@ type DemoAcademyContextValue = {
   updateTeacherStatus: (input: DemoTeacherStatusInput) => void;
   registerLessonTicket: (input: RegisterLessonTicketInput) => Promise<RegisterLessonTicketResult>;
   adjustLessonTicket: (input: AdjustLessonTicketInput) => Promise<AdjustLessonTicketResult>;
+  getLessonTicketRefundPreview: (ticketId: string) => Promise<LessonTicketRefundPreview>;
+  deleteLessonTicket: (input: DeleteLessonTicketInput) => Promise<DeleteLessonTicketResult>;
+  setLessonTicketRefundPolicy: (policy: LessonTicketRefundPolicy) => Promise<void>;
+  createLessonTicketRefundPolicyQueryOptions: (academyId: string) => {
+    queryKey: readonly unknown[];
+    queryFn: () => Promise<LessonTicketRefundPolicy>;
+  };
   registerPrivateLesson: (input: RegisterPrivateLessonEventInput) => Promise<void>;
   markPrivateLessonAttendance: (
     lessonId: string,
@@ -118,6 +134,7 @@ type DemoAcademyContextValue = {
   deleteLedgerEntry: (input: { ledgerId: string }) => void;
   registerVendor: (input: DemoVendorRegistrationInput) => void;
   updateVendor: (input: DemoVendorUpdateInput) => void;
+  deleteVendor: (input: { vendorId: string }) => void;
   registerConsultation: (input: DemoConsultationInput) => void;
   updateConsultation: (input: DemoConsultationUpdateInput) => void;
   deleteConsultation: (input: { consultationId: string }) => void;
@@ -134,8 +151,6 @@ type DemoAcademyContextValue = {
     queryFn: () => Promise<ReturnType<typeof buildStudentList>>;
   };
   createStudentStatusManagementQueryOptions: (
-  deleteVendor: (input: { vendorId: string }) => void;
-  deleteVendor: (input: { vendorId: string }) => void;
     options: StatusManagementFetchOptions<"suspended" | "withdrawn">,
   ) => {
     queryKey: QueryKey;
@@ -200,6 +215,7 @@ export type DemoBookStockInput = {
   price: number;
   quantity: number;
   stockedOn: string;
+  purchaseVendorName?: string;
 };
 
 export type DemoBookReleaseUpdateInput = {
@@ -274,6 +290,24 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
 
         return result;
       },
+      async getLessonTicketRefundPreview(ticketId) {
+        return getDemoLessonTicketRefundPreview(state, ticketId);
+      },
+      async deleteLessonTicket(input) {
+        const { result } = deleteDemoLessonTicket(state, input);
+        commitState((current) => deleteDemoLessonTicket(current, input).state);
+
+        return result;
+      },
+      async setLessonTicketRefundPolicy(policy) {
+        commitState((current) => setDemoLessonTicketRefundPolicy(current, policy));
+      },
+      createLessonTicketRefundPolicyQueryOptions(academyId) {
+        return {
+          queryKey: [...queryKeys.settings.lessonTicketRefundPolicy(academyId), "demo", revision],
+          queryFn: async () => state.lessonTicketRefundPolicy,
+        };
+      },
       async registerPrivateLesson(input) {
         commitState((current) => ({
           ...current,
@@ -325,6 +359,9 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       updateVendor(input) {
         commitState((current) => updateDemoVendor(current, input));
       },
+      deleteVendor(input) {
+        commitState((current) => deleteDemoVendor(current, input));
+      },
       registerConsultation(input) {
         const receivedAt = new Date().toISOString();
         commitState((current) => registerDemoConsultation(current, input, receivedAt));
@@ -360,9 +397,6 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
         return {
           queryKey: [
             ...queryKeys.students.list(options.academyId, {
-      deleteVendor(input) {
-        commitState((current) => deleteDemoVendor(current, input));
-      },
               q: options.search,
               teacherName: options.filters?.teacherName,
               instrumentName: options.filters?.instrumentName,

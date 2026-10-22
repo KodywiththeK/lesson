@@ -9,6 +9,7 @@ import {
   Handshake,
   MessageSquareText,
   ScrollText,
+  Settings,
   UsersRound,
 } from "lucide-react";
 
@@ -178,6 +179,21 @@ export const mainNavigation: NavigationItem[] = [
         description: "연도별 수입·지출·순수익과 수납·미납 현황, 그래프를 확인합니다.",
         icon: Banknote,
         feature: "income-management",
+      },
+    ],
+  },
+  {
+    label: "설정",
+    href: "/settings/lesson-tickets",
+    description: "학원마다 다른 운영 규정을 미리 정해 둡니다. 원장만 바꿀 수 있습니다.",
+    icon: Settings,
+    children: [
+      {
+        label: "회차권 설정",
+        href: "/settings/lesson-tickets",
+        description: "회차권을 삭제할 때 적용할 환불 규정을 고릅니다.",
+        icon: Settings,
+        feature: "settings",
       },
     ],
   },

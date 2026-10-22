@@ -217,7 +217,7 @@ export function LessonTicketRegistrationForm({
           />
         </Label>
         <p id={paidAmountHintId} className="text-xs text-muted-foreground">
-          입력하면 수입 내역에 기록됩니다(원장만 입력 가능).
+          입력하면 수입 내역에 기록됩니다(관리자만 입력 가능).
         </p>
         {!hasValidPaidAmount ? <p className="text-xs text-destructive">결제 금액은 0~{LEDGER_AMOUNT_MAX.toLocaleString("ko-KR")}원 사이의 정수로 입력해 주세요.</p> : null}
       </div> : null}
