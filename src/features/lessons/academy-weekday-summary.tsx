@@ -47,7 +47,7 @@ export function AcademyWeekdaySummary({
                 key={day.weekday}
                 role="group"
                 aria-label={`${day.label}요일 ${day.count}명`}
-                className="rounded-md border border-border bg-background p-2"
+                className="rounded-md border border-calendar-line bg-card p-2"
               >
                 <p className="text-sm font-semibold">
                   {day.label}요일 <span className="text-primary">{day.count}명</span>

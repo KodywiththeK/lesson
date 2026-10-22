@@ -95,7 +95,7 @@ export function LessonMonthCalendar({
           <Label htmlFor={showAllId}>전체 기록 보기</Label>
         </div>
       </div>
-      <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+      <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-calendar-muted">
         {["일", "월", "화", "수", "목", "금", "토"].map((weekday) => (
           <span key={weekday}>{weekday}</span>
         ))}
@@ -125,7 +125,7 @@ export function LessonMonthCalendar({
               aria-label={`${date}${isToday ? " 오늘" : ""}`}
               aria-current={isToday ? "date" : undefined}
               aria-selected={isSelected}
-              className={`flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border bg-background p-1 text-left transition-colors hover:bg-accent/40 aria-selected:border-primary aria-selected:ring-2 aria-selected:ring-ring/25 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "border-border"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : ""}`}
+              className={`flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border p-1 text-left transition-colors aria-selected:ring-2 aria-selected:ring-calendar-strong/20 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary ring-1 ring-primary/30" : "border-calendar-line aria-selected:border-calendar-strong"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-calendar-hover"}`}
               onClick={() => onSelectDate(date)}
               onDragOver={
                 onMoveEvent && draggingEventId
@@ -143,7 +143,7 @@ export function LessonMonthCalendar({
                 aria-label={`${date} 일정 ${dayEvents.length}건${memoCount > 0 ? `, 메모 ${memoCount}건` : ""}`}
                 className="flex w-full flex-col gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                <span className="flex items-center gap-1 text-xs font-semibold text-calendar-muted">
                   <span>{Number(date.slice(-2))}</span>
                   {isToday ? (
                     <span className="hidden rounded-sm bg-primary px-1 py-0.5 text-2xs font-semibold text-primary-foreground sm:inline">
@@ -152,7 +152,7 @@ export function LessonMonthCalendar({
                   ) : null}
                 </span>
                 {memoCount > 0 ? (
-                  <span className="hidden w-fit items-center gap-1 rounded-sm bg-muted px-1 py-0.5 text-xs font-medium text-muted-foreground sm:inline-flex">
+                  <span className="hidden w-fit items-center gap-1 rounded-sm bg-calendar-hover px-1 py-0.5 text-xs font-medium text-calendar-muted sm:inline-flex">
                     <FileText aria-hidden="true" className="size-3" />
                     메모 {memoCount}
                   </span>
@@ -195,7 +195,7 @@ export function LessonMonthCalendar({
                 </div>
               ))}
               {dayEvents.length > 3 ? (
-                <span className="hidden text-xs text-muted-foreground sm:block">
+                <span className="hidden text-xs text-calendar-muted sm:block">
                   +{dayEvents.length - 3}
                 </span>
               ) : null}

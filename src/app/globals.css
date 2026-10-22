@@ -45,6 +45,11 @@
   --chart-3: oklch(0.46 0.17 280);
   --chart-4: oklch(0.65 0.12 180);
   --chart-5: oklch(0.72 0.14 75);
+  /* 달력 칸·글자 전용 무채색(chroma 0). 달력의 색은 일정 칩과 오늘 표시에만 쓴다. */
+  --calendar-line: oklch(0.9 0 0);
+  --calendar-hover: oklch(0.97 0 0);
+  --calendar-muted: oklch(0.52 0 0);
+  --calendar-strong: oklch(0.32 0 0);
   --border: oklch(0.92 0.015 255);
   --input: oklch(0.88 0.02 255);
   --ring: oklch(0.65 0.15 262);
@@ -99,6 +104,10 @@
   --input: oklch(0.34 0.03 262);
   --ring: oklch(0.68 0.16 262);
   --shadow-tint: 0 0 0;
+  --calendar-line: oklch(0.34 0 0);
+  --calendar-hover: oklch(0.26 0 0);
+  --calendar-muted: oklch(0.72 0 0);
+  --calendar-strong: oklch(0.85 0 0);
 }
 
 @theme inline {
@@ -148,6 +157,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-calendar-line: var(--calendar-line);
+  --color-calendar-hover: var(--calendar-hover);
+  --color-calendar-muted: var(--calendar-muted);
+  --color-calendar-strong: var(--calendar-strong);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
