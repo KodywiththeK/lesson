@@ -100,6 +100,21 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - DNS/network sandbox 오류가 나면 같은 명령을 승인 권한으로 1회 재시도한다.
 - 인증 실패가 나면 비밀번호가 틀린 것이므로 반복하지 않고 사용자에게 새 URL이나 CLI 로그인을 요청한다.
 
+## 운영 데이터 비우기와 schema reset 구분
+
+운영·검수 데이터를 비우는 작업은 migration이나 `db reset --linked`가 아니다. schema와 migration history를 유지해야 하면 아래 절차로 **한 번만 실행하는 명시적 트랜잭션**을 사용한다. seed를 다시 넣지 않으며 실행 SQL을 migration 폴더에 두지 않는다.
+
+1. 사용자가 삭제 범위, 유지할 Auth 계정·학원·멤버십, 백업 여부를 명시적으로 확정해야 한다.
+2. 대상 project ref를 다시 확인하고, 유지 조건(예: 학원 1개·활성 원장 1명)과 유지할 ID를 읽는다. 조건이 다르면 삭제하지 않는다.
+3. 삭제 전 public 업무 테이블, Auth 사용자·identity·session, Storage bucket·object, migration 개수·마지막 버전의 건수를 기록한다.
+4. 짧은 `lock_timeout`·`statement_timeout`을 둔 단일 트랜잭션에서 업무 테이블을 이름으로 열거해 `TRUNCATE`한다. 보존 테이블에 닿을 수 있는 `CASCADE`는 사용하지 않는다.
+5. 보존 대상이 아닌 Auth 사용자를 같은 트랜잭션에서 삭제해 profile·membership·identity·session을 FK 규칙에 따라 정리한다. 감사 trigger가 삭제 중 새 행을 만들 수 있으면 마지막에 `audit_events`를 다시 비운다.
+6. 트랜잭션 안에서 유지 데이터의 사후 조건을 확인하고 어긋나면 예외로 전체 롤백한다.
+7. 커밋 뒤 모든 업무 테이블 0건, 유지 Auth/profile/academy/membership 일치, Storage 건수, migration 개수·마지막 버전 불변을 다시 조회한다.
+8. 원장 로그인과 원생·레슨·회차권·교재·수입 화면의 빈 상태를 확인하고, 삭제 전후 집계와 실패·재시도 내역을 evidence에 남긴다. ID·이메일·토큰 같은 민감값은 문서에 적지 않는다.
+
+`db reset --linked`는 원격 schema를 migration 기준으로 다시 만들고 데이터도 지울 수 있으므로 이 용도로 쓰지 않는다. 개발 브랜치 전체를 재구성하는 별도 요청에만 사용한다.
+
 ## 레슨 시간표 migration 체크리스트 (2026-10-16 시리즈)
 
 후속 `20261016090200_lesson_ticket_registration_history.sql`은 회차권 등록 이력, 범위 유일성, 역할별 권한, 기간 공백 방어를 추가한다. **2026-10-16에 운영 DB에 SQL 적용 완료**했다. 적용 전 학원·원생·악기 중복, `registered_at <> valid_from`, 등록 감사 이벤트가 2회 이상인 회차권, 연결 원장이 2건 이상인 회차권을 확인했고 모두 0건이었다. MCP가 임시 버전 `20261015224536`으로 기록했으나, 적용 SQL·기존 4건 backfill을 확인한 뒤 사용자 승인을 받아 공식 CLI `migration repair`로 `20261016090200`을 applied로 표시하고 임시 버전을 reverted로 제거했다. 순서가 깨지므로 로컬 파일명을 임시 버전으로 바꾸거나 SQL을 재적용하지 않았다. 격리 DB 역할별 실행 검증은 Docker 부재로 수행하지 못했다.
