@@ -245,7 +245,7 @@ describe("학원 레슨표 서버 연결", () => {
     const dialog = await screen.findByRole("dialog", { name: "2026-08-21 출석 확인" });
     await user.click(within(dialog).getByRole("radio", { name: "이서윤 결석" }));
     await user.click(within(dialog).getByRole("radio", { name: "박지호 등원" }));
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dialog).getByRole("button", { name: "출석 저장" }));
 
     await waitFor(() => expect(api.markAttendance).toHaveBeenCalledTimes(1));
     const input = api.markAttendance.mock.calls[0][1];

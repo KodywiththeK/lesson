@@ -91,7 +91,7 @@ export function AcademyDayAttendanceDialog({
           <DialogTitle>{date} 출석 확인</DialogTitle>
           <DialogDescription>
             {canManage
-              ? "원생별로 등원(O) 또는 결석(X)을 고르고 확인을 누르면 한꺼번에 저장됩니다. 취소하면 고른 내용은 저장되지 않습니다."
+              ? "원생별로 등원(O) 또는 결석(X)을 고르고 출석 저장을 누르면 한꺼번에 저장됩니다. 닫으면 저장하지 않은 출석 선택만 사라집니다. 일정 이동·삭제·초기화는 각 작업에서 바로 반영됩니다."
               : "선택한 날짜의 학원 수업과 메모를 확인합니다."}
           </DialogDescription>
         </DialogHeader>
@@ -137,14 +137,14 @@ export function AcademyDayAttendanceDialog({
           {isAttendanceTab ? (
             <>
               <Button type="button" variant="outline" disabled={isBusy} onClick={closeAndDiscard}>
-                취소
+                닫기
               </Button>
               <Button
                 type="button"
                 disabled={isBusy || draft.selections.length === 0}
                 onClick={() => void confirmAttendance()}
               >
-                확인
+                출석 저장
               </Button>
             </>
           ) : (

@@ -15,6 +15,10 @@ import {
 import { SidebarNavigation } from "./app-sidebar";
 import { BrandLogo } from "./brand-logo";
 import type { VisibleNavigationItem } from "./navigation-types";
+import {
+  NAVIGATION_SCROLL_STORAGE_KEYS,
+  PersistentNavigationScrollArea,
+} from "./persistent-navigation-scroll-area";
 
 export function MobileNavigationDrawer({
   activeHref,
@@ -48,14 +52,19 @@ export function MobileNavigationDrawer({
           <SheetTitle>주요 메뉴</SheetTitle>
           <SheetDescription>현재 학원: {academyName}</SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <PersistentNavigationScrollArea
+          ariaLabel="모바일 메뉴 스크롤"
+          className="min-h-0 flex-1 overflow-y-auto p-3"
+          restoreSignal={isOpen}
+          storageKey={NAVIGATION_SCROLL_STORAGE_KEYS.mobile}
+        >
           <SidebarNavigation
             activeHref={activeHref}
             ariaLabel="모바일 주요 메뉴"
             visibleNavigation={visibleNavigation}
             onNavigate={() => setIsOpen(false)}
           />
-        </div>
+        </PersistentNavigationScrollArea>
       </SheetContent>
     </Sheet>
   );

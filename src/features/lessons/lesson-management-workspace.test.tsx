@@ -194,7 +194,7 @@ describe("LessonManagementWorkspace", () => {
 
     await user.clear(within(dialog).getByRole("searchbox", { name: "원생 검색" }));
     await user.click(within(dialog).getByRole("button", { name: "전체 등원" }));
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dialog).getByRole("button", { name: "출석 저장" }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument();
     });
@@ -242,7 +242,7 @@ describe("LessonManagementWorkspace", () => {
     await user.selectOptions(statusFilter, "all");
     expect(within(dialog).getByRole("radio", { name: "이서윤 결석" })).toBeChecked();
     expect(within(dialog).getByRole("radio", { name: "김민지 등원" })).toBeChecked();
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dialog).getByRole("button", { name: "출석 저장" }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument();
@@ -551,7 +551,7 @@ describe("LessonManagementWorkspace", () => {
       name: "2026-08-21 출석 확인",
     });
     expect(within(dayDialog).getByRole("tab", { name: "메모 1" })).toBeInTheDocument();
-    await user.click(within(dayDialog).getByRole("button", { name: "취소" }));
+    await user.click(within(dayDialog).getByRole("button", { name: "닫기" }));
 
     academyView.unmount();
     renderWorkspace({ lessonKind: "private" });

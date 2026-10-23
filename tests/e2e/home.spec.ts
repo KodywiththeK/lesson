@@ -39,7 +39,7 @@ test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다",
     .toContain("https://lesson-pi-ten.vercel.app/");
 
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.getByRole("button", { name: "메뉴 열기" }).click();
+  await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "주요 메뉴" }).getByRole("img", { name: "마디마디" }))
     .toBeVisible();
 });
@@ -68,6 +68,41 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
     "href",
     "/passes",
   );
+});
+
+test("사이드바와 모바일 메뉴는 같은 탭에서 메뉴 이동·재열기 후 스크롤 위치를 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 500 });
+  await page.goto("/");
+
+  const desktopScrollArea = page.getByRole("region", { name: "데스크톱 메뉴 스크롤" });
+  const desktopScrollTop = await desktopScrollArea.evaluate((element) => {
+    const target = Math.min(220, element.scrollHeight - element.clientHeight);
+    element.scrollTop = target;
+    element.dispatchEvent(new Event("scroll"));
+    return target;
+  });
+  expect(desktopScrollTop).toBeGreaterThan(0);
+
+  await mainNavigation(page).getByRole("link", { name: "원생" }).click();
+  await expect(page).toHaveURL(/\/management\/students$/);
+  await expect.poll(() => desktopScrollArea.evaluate((element) => element.scrollTop))
+    .toBe(desktopScrollTop);
+
+  await page.setViewportSize({ width: 320, height: 500 });
+  await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
+  const mobileScrollArea = page.getByRole("region", { name: "모바일 메뉴 스크롤" });
+  const mobileScrollTop = await mobileScrollArea.evaluate((element) => {
+    const target = Math.min(260, element.scrollHeight - element.clientHeight);
+    element.scrollTop = target;
+    element.dispatchEvent(new Event("scroll"));
+    return target;
+  });
+  expect(mobileScrollTop).toBeGreaterThan(0);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
+  await expect.poll(() => mobileScrollArea.evaluate((element) => element.scrollTop))
+    .toBe(mobileScrollTop);
 });
 
 test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", async ({ page }) => {
@@ -137,6 +172,24 @@ test("레슨 시간표 메뉴에서 개인레슨 등록 화면으로 이동할 �
 
   await page.getByRole("button", { name: "개인레슨 등록" }).click();
   await expect(page.getByRole("dialog", { name: "레슨 일정 등록" })).toBeVisible();
+});
+
+test("학원 일정 삭제 확인을 취소하면 삭제하지 않고 날짜 모달을 유지한다", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
+  await page.goto("/lessons/academy");
+
+  await page.getByRole("gridcell", { name: /2026-08-21/ }).click();
+  const dayDialog = page.getByRole("dialog", { name: "2026-08-21 출석 확인" });
+  await dayDialog.getByRole("button", { name: "이서윤 일정 삭제" }).click();
+  const deleteDialog = page.getByRole("alertdialog", { name: "이 일정을 삭제할까요?" });
+  await deleteDialog.getByLabel("삭제 사유").fill("수업 취소");
+  await deleteDialog.getByRole("button", { name: "취소" }).click();
+
+  await expect(deleteDialog).toBeHidden();
+  await expect(dayDialog).toBeVisible();
+  await expect(dayDialog.getByRole("row", { name: /이서윤/ })).toBeVisible();
+  await expect(dayDialog.getByRole("button", { name: "닫기" })).toBeVisible();
+  await expect(dayDialog.getByRole("button", { name: "출석 저장" })).toBeVisible();
 });
 
 test("학원레슨 달력은 각 화면 폭에서 넘치지 않고 월별 메모지는 오늘로 이동 옆에 있다", async ({ page }, testInfo) => {

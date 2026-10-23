@@ -127,7 +127,7 @@ function withRows(
 describe("학원 레슨표 출석확인", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("원생별 등원/결석은 임시로 고르고 취소하면 저장하지 않고 버린다", async () => {
+  it("원생별 등원/결석은 임시로 고르고 닫으면 저장하지 않고 버린다", async () => {
     const user = userEvent.setup();
     renderAcademy();
 
@@ -136,7 +136,7 @@ describe("학원 레슨표 출석확인", () => {
     expect(within(dialog).getByRole("radio", { name: "이서윤 등원" })).toBeChecked();
     expect(within(within(dialog).getByRole("row", { name: /이서윤/ })).getByText("대기")).toBeInTheDocument();
 
-    await user.click(within(dialog).getByRole("button", { name: "취소" }));
+    await user.click(within(dialog).getByRole("button", { name: "닫기" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
 
     dialog = await openDay(user, 21);
@@ -144,17 +144,17 @@ describe("학원 레슨표 출석확인", () => {
     expect(within(within(dialog).getByRole("row", { name: /이서윤/ })).getByText("대기")).toBeInTheDocument();
   });
 
-  it("확인을 누르면 고른 출결을 한꺼번에 저장하고 날짜 출석을 마감한다", async () => {
+  it("출석 저장을 누르면 고른 출결을 한꺼번에 저장하고 날짜 출석을 마감한다", async () => {
     const user = userEvent.setup();
     const success = vi.spyOn(toast, "success");
     renderAcademy();
 
     let dialog = await openDay(user, 21);
-    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "출석 저장" })).toBeDisabled();
 
     await user.click(within(dialog).getByRole("radio", { name: "이서윤 결석" }));
     await user.click(within(dialog).getByRole("radio", { name: "김민지 결석" }));
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dialog).getByRole("button", { name: "출석 저장" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
     expect(success).toHaveBeenCalledWith("출석을 저장했습니다. 결석 2명은 결석인원에서 처리해 주세요.");
@@ -181,7 +181,7 @@ describe("학원 레슨표 출석확인", () => {
       expect(within(dialog).getByRole("radio", { name: `${name} 결석` })).toBeChecked();
     }
 
-    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dialog).getByRole("button", { name: "출석 저장" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "결석인원" }));
@@ -230,7 +230,7 @@ describe("학원 레슨표 출석확인", () => {
     const dialog = await openDay(user, 25);
 
     expect(dialog).toHaveTextContent("선택한 날짜에 예정된 학원 레슨이 없습니다.");
-    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "출석 저장" })).toBeDisabled();
   });
 });
 
@@ -567,7 +567,7 @@ describe("결석 사유서와 월별 메모지 자동 기록", () => {
 
     const dayDialog = await openDay(user, 21);
     await user.click(within(dayDialog).getByRole("radio", { name: "이서윤 결석" }));
-    await user.click(within(dayDialog).getByRole("button", { name: "확인" }));
+    await user.click(within(dayDialog).getByRole("button", { name: "출석 저장" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "결석인원" }));
@@ -697,7 +697,7 @@ describe("일정 이동·삭제는 원생 기본 정보를 바꾸지 않는다",
     await user.type(within(confirm).getByLabelText("삭제 사유"), "휴원");
     await user.click(within(confirm).getByRole("button", { name: "삭제" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    await user.click(within(dialog).getByRole("button", { name: "취소" }));
+    await user.click(within(dialog).getByRole("button", { name: "닫기" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "2026-08-21 출석 확인" })).not.toBeInTheDocument());
 
     await expectStudentStillRegistrable(user);

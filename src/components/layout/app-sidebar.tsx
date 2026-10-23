@@ -10,6 +10,10 @@ import type { NavigationItem } from "@/domain/navigation";
 import { BrandLogo } from "./brand-logo";
 import { navigationLinkClassName } from "./navigation-link-styles";
 import type { VisibleNavigationItem } from "./navigation-types";
+import {
+  NAVIGATION_SCROLL_STORAGE_KEYS,
+  PersistentNavigationScrollArea,
+} from "./persistent-navigation-scroll-area";
 
 export function AppSidebar({
   activeHref,
@@ -25,13 +29,17 @@ export function AppSidebar({
       <div className="px-5 pt-5 pb-4">
         <SidebarBrand academyName={academyName} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <PersistentNavigationScrollArea
+        ariaLabel="데스크톱 메뉴 스크롤"
+        className="min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+        storageKey={NAVIGATION_SCROLL_STORAGE_KEYS.desktop}
+      >
         <SidebarNavigation
           activeHref={activeHref}
           ariaLabel="주요 메뉴"
           visibleNavigation={visibleNavigation}
         />
-      </div>
+      </PersistentNavigationScrollArea>
     </aside>
   );
 }

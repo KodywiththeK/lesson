@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePageHeaderActions } from "@/components/layout/page-actions";
 import type { PermissionContext } from "@/domain/permissions";
@@ -8,6 +8,10 @@ import type { PermissionContext } from "@/domain/permissions";
 import { AppShell } from "./app-shell";
 
 describe("AppShell", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
   it.each<[PermissionContext, string]>([
     [{ role: "owner" }, "원장"],
     [{ role: "desk" }, "데스크"],
@@ -218,6 +222,37 @@ describe("AppShell", () => {
       .toHaveAttribute("href", "/lessons/academy");
     expect(within(navigation).getByRole("link", { name: "개인레슨표" }))
       .toHaveAttribute("href", "/lessons/private");
+  });
+
+  it("route가 바뀌어 shell이 다시 만들어져도 데스크톱 메뉴 스크롤 위치를 복원한다", () => {
+    window.history.pushState(null, "", "/lessons/academy");
+    const firstRender = render(
+      <AppShell academyName="더 클래식" permissionContext={{ role: "owner" }} />,
+    );
+    const firstScrollArea = screen.getByLabelText("데스크톱 메뉴 스크롤");
+    firstScrollArea.scrollTop = 184;
+    fireEvent.scroll(firstScrollArea);
+    firstRender.unmount();
+
+    window.history.pushState(null, "", "/finance/ledger");
+    render(<AppShell academyName="더 클래식" permissionContext={{ role: "owner" }} />);
+
+    expect(screen.getByLabelText("데스크톱 메뉴 스크롤").scrollTop).toBe(184);
+  });
+
+  it("모바일 drawer를 닫고 다시 열어도 메뉴 스크롤 위치를 복원한다", async () => {
+    window.history.pushState(null, "", "/lessons/academy");
+    const user = userEvent.setup();
+    render(<AppShell academyName="더 클래식" permissionContext={{ role: "owner" }} />);
+
+    await user.click(screen.getByRole("button", { name: "메뉴 열기" }));
+    const scrollArea = screen.getByLabelText("모바일 메뉴 스크롤");
+    scrollArea.scrollTop = 236;
+    fireEvent.scroll(scrollArea);
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "메뉴 열기" }));
+
+    expect(screen.getByLabelText("모바일 메뉴 스크롤").scrollTop).toBe(236);
   });
 
   it("children 페이지는 상위 메뉴 제목과 하위 탭을 헤더에 표시한다", () => {
