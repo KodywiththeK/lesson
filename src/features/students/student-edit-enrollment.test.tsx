@@ -60,6 +60,8 @@ const violinInstrument = {
   instrumentId: "violin",
   instrumentName: "바이올린",
   lessonType: "private",
+  sessionsPerMonth: 4,
+  lessonDurationMinutes: 40 as const,
   weekdayLabels: ["화"],
   startTime: "17:00",
   endTime: "17:40",
@@ -97,6 +99,13 @@ const privatePianoInstrument = {
   ...pianoInstrument,
   studentInstrumentId: "si-piano-private",
   lessonType: "private",
+  sessionsPerMonth: 8,
+  lessonDurationMinutes: 40 as const,
+  endTime: "15:40",
+  weeklySchedules: pianoInstrument.weeklySchedules.map((schedule) => ({
+    ...schedule,
+    endTime: "15:40",
+  })),
 };
 
 // 이전 데이터: 피아노가 아닌 악기가 학원레슨으로 저장되어 있다.

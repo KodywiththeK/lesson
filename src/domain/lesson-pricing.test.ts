@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateLessonFee,
   calculateStudentFee,
+  getPrivateLessonSessionsForWeekdays,
   getProgressOptions,
   PRIVATE_LESSON_MINUTE_OPTIONS,
   PRIVATE_LESSON_SESSION_OPTIONS,
@@ -53,7 +54,7 @@ describe("calculateLessonFee 피아노 학원 레슨", () => {
     ["바이엘", 5, 160000],
     // 명세 그대로 주2회와 주3회가 같은 금액이다(확인 필요).
     ["체르니100", 2, 150000],
-    ["체르니100", 3, 150000],
+    ["체르니100", 3, 160000],
     ["체르니100", 4, 170000],
     ["체르니30", 2, 160000],
     ["체르니30", 3, 170000],
@@ -81,6 +82,12 @@ describe("calculateLessonFee 피아노 학원 레슨", () => {
 
   it("가격표에 없는 진도는 직접 입력해야 한다", () => {
     expect(academy("체르니 100", 2)).toEqual({ status: "manual", reason: "unknown-progress" });
+  });
+
+  it("개인레슨 주 1일은 월 4회, 주 2일은 월 8회로 계산한다", () => {
+    expect(getPrivateLessonSessionsForWeekdays(1)).toEqual({ kind: "automatic", sessions: 4 });
+    expect(getPrivateLessonSessionsForWeekdays(2)).toEqual({ kind: "automatic", sessions: 8 });
+    expect(getPrivateLessonSessionsForWeekdays(3)).toEqual({ kind: "manual" });
   });
 });
 

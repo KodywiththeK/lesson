@@ -4,7 +4,9 @@ import {
   TEACHER_PARTS,
   buildTeacherList,
   buildTeacherPartFormOptions,
+  formatTeacherContractPeriod,
   formatTeacherPayType,
+  formatTeacherWorkScheduleSummary,
 } from "./teacher-list";
 
 const teachers = [
@@ -140,6 +142,26 @@ describe("formatTeacherPayType", () => {
     expect(formatTeacherPayType("monthly")).toBe("월급제");
     expect(formatTeacherPayType("hourly")).toBe("시급제");
     expect(formatTeacherPayType("ratio")).toBe("비율제");
+  });
+});
+
+describe("선생님 목록 표시", () => {
+  it("근무시간을 월요일부터 일요일 순으로 정렬한다", () => {
+    expect(formatTeacherWorkScheduleSummary([
+      { weekday: "friday", weekdayLabel: "금", startTime: "14:00", endTime: "18:00" },
+      { weekday: "monday", weekdayLabel: "월", startTime: "10:00", endTime: "12:00" },
+      { weekday: "sunday", weekdayLabel: "일" },
+      { weekday: "wednesday", weekdayLabel: "수", startTime: "13:00", endTime: "17:00" },
+    ])).toBe("월 10:00-12:00, 수 13:00-17:00, 금 14:00-18:00, 일");
+  });
+
+  it.each([
+    ["2026-01-01", "2026-12-31", "2026-01-01~2026-12-31"],
+    ["2026-01-01", undefined, "2026-01-01~"],
+    [undefined, "2026-12-31", "~2026-12-31"],
+    [undefined, undefined, "-"],
+  ])("계약 시작일 %s, 종료일 %s를 %s로 표시한다", (startOn, endOn, expected) => {
+    expect(formatTeacherContractPeriod(startOn, endOn)).toBe(expected);
   });
 });
 

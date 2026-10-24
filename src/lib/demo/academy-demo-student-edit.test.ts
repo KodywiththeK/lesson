@@ -59,6 +59,8 @@ function registerStudentWithPianoAndViolin(): { state: DemoAcademyState; student
         teacherId: "teacher-2",
         teacherName: "오유진",
         lessonType: "private",
+        sessionsPerMonth: 4,
+        lessonDurationMinutes: 40,
         weeklySchedules: [{ weekday: "monday" }],
         progress: "스즈키 1권",
         lessonFee: 140000,
@@ -238,7 +240,13 @@ describe("updateDemoStudentEnrollments", () => {
   it("수업 형태를 바꾼 뒤의 모습 기준으로 추가·변경 충돌을 검사한다(서버처럼 종료 → 수정 → 추가 순서)", () => {
     const { state, studentId } = registerStudentWithPianoAndViolin();
     const pianoId = instrumentIdOf(state, studentId, "piano") ?? "";
-    const toPrivate: StudentEnrollmentFields = { ...pianoFields, lessonType: "private", weeklySchedules: [] };
+    const toPrivate: StudentEnrollmentFields = {
+      ...pianoFields,
+      lessonType: "private",
+      sessionsPerMonth: 4,
+      lessonDurationMinutes: 40,
+      weeklySchedules: [{ weekdayLabel: "월" }],
+    };
 
     // 피아노 학원 → 개인으로 바꾸면 같은 저장에서 피아노 학원을 새로 추가할 수 있다.
     const { state: next } = updateDemoStudentEnrollments(state, {

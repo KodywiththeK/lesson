@@ -82,6 +82,22 @@ describe("날짜와 시간 선택 필드", () => {
     expect(screen.getByRole("textbox", { name: "시작 시간" })).toHaveValue("15:37");
   });
 
+  it.each([
+    ["9", "09:00"],
+    ["09", "09:00"],
+    ["930", "09:30"],
+    ["1530", "15:30"],
+  ])("콜론 없이 %s를 입력해도 %s로 완성한다", async (typed, expected) => {
+    const user = userEvent.setup();
+    render(<Controlled Field={TimeField} initial="" label="시작 시간" />);
+    const input = screen.getByRole("textbox", { name: "시작 시간" });
+
+    await user.type(input, typed);
+    await user.tab();
+
+    expect(input).toHaveValue(expected);
+  });
+
   it("월과 날짜·시간은 기존 저장 형식을 유지한다", async () => {
     const user = userEvent.setup();
     render(

@@ -7,7 +7,7 @@ import {
   withInstruments,
 } from "./student-list";
 import {
-  getAcademyScheduleValidationError,
+  getLessonScheduleValidationError,
   type StudentInstrumentDiscountSelection,
 } from "./student-registration";
 
@@ -18,6 +18,7 @@ export const LAST_INSTRUMENT_END_MESSAGE =
 export type StudentBasicInfoInput = {
   registeredOn: string;
   age?: number;
+  birthYear?: number;
   grade?: string;
   school?: string;
   occupation?: string;
@@ -38,6 +39,8 @@ export type StudentEnrollmentFields = StudentInstrumentDiscountSelection & {
   teacherId?: string | null;
   teacherName?: string;
   lessonType: "academy" | "private";
+  sessionsPerMonth?: number;
+  lessonDurationMinutes?: 40 | 60;
   instrumentId: string;
   instrumentName: string;
   weeklySchedules: StudentWeeklyScheduleChange[];
@@ -123,9 +126,11 @@ export function getStudentEnrollmentValidationError(
       continue;
     }
 
-    const scheduleError = getAcademyScheduleValidationError({
+    const scheduleError = getLessonScheduleValidationError({
       lessonType: change.lessonType,
       teacherId: change.teacherId,
+      sessionsPerMonth: change.sessionsPerMonth,
+      lessonDurationMinutes: change.lessonDurationMinutes,
       weeklySchedules: change.weeklySchedules,
     });
 

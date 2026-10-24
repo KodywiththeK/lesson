@@ -9,7 +9,9 @@ import {
   describeManualLessonFee,
   getLessonFeeSubmission,
   repriceLessonFee,
+  resetLessonFeeToPriceTable,
   setLessonFeeManually,
+  updateLessonFeeWeekdayCount,
 } from "./lesson-fee-draft";
 
 const pianoAcademy = (weekdayCount: number) => ({
@@ -58,20 +60,99 @@ describe("repriceLessonFee", () => {
     expect(repriceLessonFee(manual, pianoAcademy(6))).toMatchObject({ lessonFee: 135000, feeSource: "manual" });
   });
 
-  it("직접 입력한 뒤 가격표 구간이 다시 생기면 가격표 금액으로 돌아간다", () => {
+  it("직접 입력한 뒤 가격표 구간이 다시 생겨도 직접 입력한 금액을 유지한다", () => {
     const manual = setLessonFeeManually(createLessonFeeDraft(pianoAcademy(1)), 135000);
 
-    expect(repriceLessonFee(manual, pianoAcademy(2))).toMatchObject({ lessonFee: 140000, feeSource: "auto" });
+    expect(repriceLessonFee(manual, pianoAcademy(2))).toMatchObject({ lessonFee: 135000, feeSource: "manual" });
+  });
+
+  it("가격표로 재계산을 명시하면 직접 입력한 금액을 현재 가격표로 바꾼다", () => {
+    const manual = setLessonFeeManually(createLessonFeeDraft(pianoAcademy(2)), 135000);
+
+    expect(resetLessonFeeToPriceTable(manual, pianoAcademy(3))).toMatchObject({
+      lessonFee: 150000,
+      feeSource: "auto",
+    });
   });
 });
 
 describe("changeLessonFeeLessonType", () => {
+  it("요일 선택 전 개인레슨으로 바꾸면 월 4회·40분 기본 가격표로 초기화한다", () => {
+    const draft = setLessonFeeManually(createLessonFeeDraft(pianoAcademy(0)), 175000);
+
+    expect(
+      changeLessonFeeLessonType(draft, {
+        instrumentName: "피아노",
+        lessonType: "private",
+        weekdayCount: 0,
+      }),
+    ).toMatchObject({
+      progress: "피아노 개인 레슨",
+      sessionsPerMonth: 4,
+      minutes: 40,
+      lessonFee: 140000,
+      feeSource: "auto",
+    });
+  });
+
   it("수업 형태를 바꾸면 그 형태의 첫 진도와 가격표로 다시 계산한다", () => {
-    const draft = createLessonFeeDraft(pianoAcademy(2));
+    const draft = setLessonFeeManually(createLessonFeeDraft(pianoAcademy(2)), 175000);
 
     expect(
       changeLessonFeeLessonType(draft, { instrumentName: "피아노", lessonType: "private", weekdayCount: 2 }),
-    ).toMatchObject({ progress: "피아노 개인 레슨", lessonFee: 140000 });
+    ).toMatchObject({
+      progress: "피아노 개인 레슨",
+      sessionsPerMonth: 8,
+      minutes: 40,
+      lessonFee: 280000,
+      feeSource: "auto",
+    });
+  });
+
+  it("가격 설정이 없는 이전 학원레슨도 개인레슨으로 바꾸면 40분 기본값과 요일별 월 횟수를 적용한다", () => {
+    const legacyAcademy = createLessonFeeDraftFromInstrument({
+      studentInstrumentId: "si-legacy",
+      teacherId: "teacher-1",
+      teacherName: "박선생",
+      instrumentId: "piano",
+      instrumentName: "피아노",
+      lessonType: "academy",
+      weekdayLabels: ["월"],
+      startTime: "15:00",
+      endTime: "15:50",
+      progress: "바이엘",
+      lessonFee: 140000,
+      discountTotal: 0,
+      finalMonthlyFee: 140000,
+      active: true,
+    });
+
+    expect(
+      changeLessonFeeLessonType(legacyAcademy, {
+        instrumentName: "피아노",
+        lessonType: "private",
+        weekdayCount: 1,
+      }),
+    ).toMatchObject({ sessionsPerMonth: 4, minutes: 40, lessonFee: 140000, feeSource: "auto" });
+  });
+});
+
+describe("updateLessonFeeWeekdayCount", () => {
+  it("개인레슨 요일 1·2개는 월 4·8회로 바꾸고 3개부터 직접 입력을 기다린다", () => {
+    const draft = createLessonFeeDraft({ instrumentName: "피아노", lessonType: "private", weekdayCount: 1 });
+    const twoDays = updateLessonFeeWeekdayCount(
+      draft,
+      { instrumentName: "피아노", lessonType: "private", weekdayCount: 2 },
+      1,
+    );
+    const threeDays = updateLessonFeeWeekdayCount(
+      twoDays,
+      { instrumentName: "피아노", lessonType: "private", weekdayCount: 3 },
+      2,
+    );
+
+    expect(twoDays).toMatchObject({ sessionsPerMonth: 8, lessonFee: 280000 });
+    expect(threeDays).toMatchObject({ sessionsPerMonth: 0, lessonFee: 0 });
   });
 });
 
@@ -99,6 +180,12 @@ describe("createLessonFeeDraftFromInstrument", () => {
       lessonFee: 150000,
       feeSource: "manual",
     });
+  });
+
+  it("이전 개인레슨에 월 횟수와 수업 길이가 없으면 임의 기본값으로 채우지 않는다", () => {
+    expect(
+      createLessonFeeDraftFromInstrument({ ...stored, lessonType: "private" }),
+    ).toMatchObject({ sessionsPerMonth: 0, minutes: 0, feeSource: "manual" });
   });
 
   it("할인 종류 없이 저장된 이전 할인액은 기존 할인으로 남기고 라벨을 유지한다", () => {

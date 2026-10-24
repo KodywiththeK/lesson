@@ -26,7 +26,7 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, start_time, end_time)",
+          "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, sessions_per_month, lesson_duration_minutes, start_time, end_time)",
         eq: ["academy_id", "academy-1"],
       },
       {
@@ -46,6 +46,7 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               instrumentId: "piano",
               instrumentName: "피아노",
               teacherId: "teacher-1",
+              sessionsPerMonth: 4,
               lessonMinutes: 40,
             },
             {
@@ -53,7 +54,8 @@ describe("fetchPrivateLessonRegistrationOptions", () => {
               instrumentId: "violin",
               instrumentName: "바이올린",
               teacherId: undefined,
-              lessonMinutes: 30,
+              sessionsPerMonth: 8,
+              lessonMinutes: 60,
             },
           ],
         },
@@ -141,6 +143,8 @@ function createRegistrationOptionsClient(
                             lesson_type: "private",
                             active: true,
                             teacher_id: "teacher-1",
+                            sessions_per_month: 4,
+                            lesson_duration_minutes: 40,
                             start_time: "14:00:00",
                             end_time: "14:40:00",
                           },
@@ -150,6 +154,8 @@ function createRegistrationOptionsClient(
                             instrument_name: "바이올린",
                             lesson_type: "private",
                             active: true,
+                            sessions_per_month: 8,
+                            lesson_duration_minutes: 60,
                             start_time: null,
                             end_time: null,
                           },

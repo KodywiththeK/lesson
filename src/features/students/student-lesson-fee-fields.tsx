@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { MonthField } from "@/components/operations/date-time-fields";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,7 @@ import {
   describeManualLessonFee,
   getLessonFeeSubmission,
   repriceLessonFee,
+  resetLessonFeeToPriceTable,
   setLessonFeeManually,
   type LessonFeeContext,
   type LessonFeeDraft,
@@ -18,7 +20,6 @@ import {
   calculateLessonFee,
   getProgressOptions,
   PRIVATE_LESSON_MINUTE_OPTIONS,
-  PRIVATE_LESSON_SESSION_OPTIONS,
   STUDENT_DISCOUNTS,
   type StudentDiscountKind,
 } from "@/domain/lesson-pricing";
@@ -33,6 +34,13 @@ type StudentLessonFeeFieldsProps = {
   onChange: (draft: LessonFeeDraft) => void;
 };
 
+function getAutomaticMonthlySessionLabel(weekdayCount: number) {
+  if (weekdayCount === 0) return "기본 월 4회 · 요일 선택 시 조정";
+  if (weekdayCount === 1) return "월 4회";
+  if (weekdayCount === 2) return "월 8회";
+  return "";
+}
+
 /** 진도·가격표 레슨비·할인·최종 수강료 입력. 원생 등록과 수정 폼이 함께 쓴다. */
 export function StudentLessonFeeFields({
   labelPrefix = "",
@@ -46,14 +54,13 @@ export function StudentLessonFeeFields({
     ...context,
     progress: draft.progress,
     sessionsPerMonth: draft.sessionsPerMonth,
-    minutes: draft.minutes,
+    minutes: draft.minutes || undefined,
   });
   const submission = getLessonFeeSubmission(draft, referenceMonth);
   const isPrivateLesson = context.lessonType === "private";
   const feeNoticeId = `${labelPrefix}lesson-fee-notice`.replace(/\s+/g, "-");
-  const isFeeReadOnly =
-    priceResult.status === "priced" ||
-    (priceResult.status === "manual" && priceResult.reason === "no-weekdays");
+  const feeInputId = useId();
+  const requiresManualSessionCount = isPrivateLesson && context.weekdayCount >= 3;
   const [feeText, setFeeText] = useState(String(draft.lessonFee));
   const lastInputFee = useRef(draft.lessonFee);
   const [legacyDiscountText, setLegacyDiscountText] = useState(String(draft.otherDiscount.amount));
@@ -101,33 +108,36 @@ export function StudentLessonFeeFields({
           <>
             <Label className="grid gap-1">
               <span>월 횟수</span>
-              <NativeSelect
-                aria-label={withPrefix("월 횟수")}
-                value={String(draft.sessionsPerMonth)}
-                onChange={(event) =>
-                  updatePricingInput({
-                    sessionsPerMonth: Number(event.target.value) as LessonFeeDraft["sessionsPerMonth"],
-                  })
-                }
-              >
-                {PRIVATE_LESSON_SESSION_OPTIONS.map((sessions) => (
-                  <NativeSelectOption key={sessions} value={sessions}>
-                    월 {sessions}회
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+              {requiresManualSessionCount ? (
+                <Input
+                  aria-label={withPrefix("월 횟수")}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={draft.sessionsPerMonth || ""}
+                  onChange={(event) => updatePricingInput({
+                    sessionsPerMonth: Number(event.target.value) || 0,
+                  })}
+                />
+              ) : (
+                <Input
+                  aria-label={withPrefix("월 횟수")}
+                  readOnly
+                  value={getAutomaticMonthlySessionLabel(context.weekdayCount)}
+                />
+              )}
             </Label>
             <Label className="grid gap-1">
               <span>수업 시간</span>
               <NativeSelect
                 aria-label={withPrefix("수업 시간")}
-                value={String(draft.minutes)}
+                value={draft.minutes ? String(draft.minutes) : ""}
                 onChange={(event) =>
                   updatePricingInput({
-                    minutes: Number(event.target.value) as LessonFeeDraft["minutes"],
+                    minutes: (Number(event.target.value) || 0) as LessonFeeDraft["minutes"],
                   })
                 }
               >
+                <NativeSelectOption value="">선택해 주세요</NativeSelectOption>
                 {PRIVATE_LESSON_MINUTE_OPTIONS.map((minutes) => (
                   <NativeSelectOption key={minutes} value={minutes}>
                     {minutes}분
@@ -140,17 +150,29 @@ export function StudentLessonFeeFields({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>레슨비</span>
+        <div className="grid gap-1">
+          <span className="flex items-center justify-between gap-2">
+            <Label htmlFor={feeInputId}>레슨비</Label>
+            {priceResult.status === "priced" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onChange(resetLessonFeeToPriceTable(draft, context))}
+              >
+                가격표로 재계산
+              </Button>
+            ) : null}
+          </span>
           <Input
+            id={feeInputId}
             aria-label={withPrefix("레슨비")}
             aria-describedby={feeNoticeId}
             type="text"
             inputMode="numeric"
             pattern="(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)"
-            required={!isFeeReadOnly}
-            aria-invalid={!isFeeReadOnly && (parseWonInput(feeText) ?? 0) <= 0}
-            readOnly={isFeeReadOnly}
+            required
+            aria-invalid={(parseWonInput(feeText) ?? 0) <= 0}
             value={feeText}
             onChange={(event) => {
               const text = event.target.value;
@@ -164,7 +186,7 @@ export function StudentLessonFeeFields({
               if (amount !== null) setFeeText(amount.toLocaleString("ko-KR"));
             }}
           />
-        </Label>
+        </div>
         <Label className="grid gap-1">
           <span>최종 수강료 (매달)</span>
           <Input
@@ -178,7 +200,7 @@ export function StudentLessonFeeFields({
       <p id={feeNoticeId} className="-mt-2 text-xs text-muted-foreground">
         {priceResult.status === "manual" ? describeManualLessonFee(priceResult.reason) : null}
         {priceResult.status === "priced" && priceResult.fee !== draft.lessonFee
-          ? `저장된 레슨비가 가격표(${priceResult.fee.toLocaleString("ko-KR")}원)와 다릅니다. 진도나 요일을 바꾸면 가격표 금액으로 다시 계산합니다.`
+          ? `직접 입력한 레슨비입니다. 가격표 금액은 ${priceResult.fee.toLocaleString("ko-KR")}원입니다.`
           : null}
       </p>
 

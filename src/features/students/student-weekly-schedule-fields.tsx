@@ -1,6 +1,8 @@
 import { TimeField } from "@/components/operations/date-time-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { calculateLessonEndTime } from "@/domain/student-registration";
 
 import { selectableWeekdayOptions, weekdayOptions } from "./student-form-options";
 
@@ -20,11 +22,15 @@ export function WeeklyScheduleFields({
   labelPrefix = "",
   schedules,
   legacyWeekdays = [],
+  lessonType = "academy",
+  lessonDurationMinutes = 40,
   onChange,
 }: {
   legend: string;
   labelPrefix?: string;
   legacyWeekdays?: string[];
+  lessonType?: "academy" | "private";
+  lessonDurationMinutes?: 0 | 40 | 60;
   schedules: WeeklyScheduleDraft[];
   onChange: (schedules: WeeklyScheduleDraft[]) => void;
 }) {
@@ -79,13 +85,27 @@ export function WeeklyScheduleFields({
                 <TimeField
                   aria-label={withPrefix(`${weekdayLabel} 시작 시간`)}
                   value={schedule.startTime ?? ""}
-                  onValueChange={(startTime) => updateSchedule(schedule.weekday, { startTime })}
+                  onValueChange={(startTime) => updateSchedule(schedule.weekday, {
+                    startTime,
+                    ...(lessonType === "private"
+                      ? { endTime: calculateLessonEndTime(startTime || undefined, lessonDurationMinutes || undefined) }
+                      : {}),
+                  })}
                 />
-                <TimeField
-                  aria-label={withPrefix(`${weekdayLabel} 종료 시간`)}
-                  value={schedule.endTime ?? ""}
-                  onValueChange={(endTime) => updateSchedule(schedule.weekday, { endTime })}
-                />
+                {lessonType === "private" ? (
+                  <Input
+                    aria-label={withPrefix(`${weekdayLabel} 종료 시간`)}
+                    readOnly
+                    value={calculateLessonEndTime(schedule.startTime, lessonDurationMinutes || undefined) ?? ""}
+                    placeholder="시작 시간 선택 시 자동 계산"
+                  />
+                ) : (
+                  <TimeField
+                    aria-label={withPrefix(`${weekdayLabel} 종료 시간`)}
+                    value={schedule.endTime ?? ""}
+                    onValueChange={(endTime) => updateSchedule(schedule.weekday, { endTime })}
+                  />
+                )}
               </div>
             );
           })}

@@ -153,8 +153,17 @@ export function buildTeacherSalarySetting(
   if (
     !Number.isFinite(academyShare) ||
     !Number.isFinite(teacherShare) ||
+    !Number.isInteger(academyShare) ||
+    !Number.isInteger(teacherShare) ||
     academyShare < 0 ||
     teacherShare < 0 ||
+    academyShare > 10 ||
+    teacherShare > 10
+  ) {
+    throw new Error("비율제는 0부터 10 사이의 정수로 입력해 주세요.");
+  }
+
+  if (
     academyShare + teacherShare !== 10
   ) {
     throw new Error("비율제는 학원 몫과 선생님 몫의 합계가 10이어야 합니다.");

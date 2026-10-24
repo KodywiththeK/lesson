@@ -527,6 +527,8 @@ describe("StudentListScreen", () => {
           student_instruments: (row.student_instruments ?? []).map((instrument) => ({
             ...instrument,
             lesson_type: "private",
+            sessions_per_month: 4,
+            lesson_duration_minutes: 40,
           })),
         },
       ]),
@@ -590,7 +592,10 @@ describe("StudentListScreen", () => {
       name: "김민지 원생 상세",
     });
     expect(within(detailDialog).getByText("체르니 100")).toBeInTheDocument();
-    expect(within(detailDialog).getByText("150,000원")).toBeInTheDocument();
+    expect(within(detailDialog).getAllByText("150,000원")).not.toHaveLength(0);
+    expect(within(within(detailDialog).getByText("할인 전 월 합계").parentElement!).getByText("150,000원")).toBeVisible();
+    expect(within(within(detailDialog).getByText("매월 할인 합계").parentElement!).getByText("10,000원")).toBeVisible();
+    expect(within(within(detailDialog).getByText("최종 월 수강료").parentElement!).getByText("140,000원")).toBeVisible();
 
     await user.click(within(detailDialog).getByRole("button", { name: "수정하기" }));
     expect(within(detailDialog).queryByLabelText("악기 ID")).not.toBeInTheDocument();
@@ -707,6 +712,9 @@ describe("StudentListScreen", () => {
           {
             ...studentRows[0].instruments![0],
             lessonType: "private",
+            sessionsPerMonth: 8,
+            lessonDurationMinutes: 40 as const,
+            endTime: "15:40",
             teacherId: null,
             teacherName: "",
           },
@@ -720,6 +728,7 @@ describe("StudentListScreen", () => {
     expect(optionLabels(teacherSelect)).toEqual(["미배정", "박선생"]);
 
     await user.click(within(dialog).getByLabelText("목요일"));
+    await user.type(within(dialog).getByLabelText("월 횟수"), "12");
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
     await waitFor(() => {
@@ -739,6 +748,9 @@ describe("StudentListScreen", () => {
           {
             ...studentRows[0].instruments![0],
             lessonType: "private",
+            sessionsPerMonth: 8,
+            lessonDurationMinutes: 40 as const,
+            endTime: "15:40",
             teacherId: "teacher-9",
             teacherName: "한선생",
           },
@@ -751,6 +763,7 @@ describe("StudentListScreen", () => {
     expect(optionLabels(within(dialog).getByLabelText("담당 선생님"))).toContain("한선생");
 
     await user.click(within(dialog).getByLabelText("목요일"));
+    await user.type(within(dialog).getByLabelText("월 횟수"), "12");
     await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
     await waitFor(() => {
@@ -975,7 +988,7 @@ describe("StudentListScreen", () => {
       const rows = [{ ...studentRows[0], age: 9, ageAsOfYear: 2025 }];
       const { user, updateStudent, dialog } = await openEditForm("김민지", rows);
 
-      expect(within(dialog).getByLabelText("나이")).toHaveValue(10);
+      expect(within(dialog).getByLabelText("나이")).toHaveValue("10");
       await user.type(within(dialog).getByLabelText("학교"), "한빛초");
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
@@ -992,6 +1005,7 @@ describe("StudentListScreen", () => {
       {
         ...studentRows[0],
         age: 9,
+        birthYear: 2018,
         grade: "초등 3학년",
         school: "한빛초",
         occupation: "학생",
@@ -1003,7 +1017,8 @@ describe("StudentListScreen", () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지", detailedRows);
 
       expect(within(dialog).getByLabelText("등록일")).toHaveValue("2026-08-01");
-      expect(within(dialog).getByLabelText("나이")).toHaveValue(9);
+      expect(within(dialog).getByLabelText("나이")).toHaveValue("9");
+      expect(within(dialog).getByLabelText("출생연도")).toHaveValue("2018");
       expect(within(dialog).getByLabelText("학년")).toHaveValue("초등 3학년");
       expect(within(dialog).getByLabelText("학교")).toHaveValue("한빛초");
       expect(within(dialog).getByLabelText("직업")).toHaveValue("학생");
@@ -1023,6 +1038,7 @@ describe("StudentListScreen", () => {
             basicInfo: {
               registeredOn: "2026-08-01",
               age: 9,
+              birthYear: 2018,
               grade: "초등 3학년",
               school: "새빛초",
               occupation: "학생",
@@ -1089,7 +1105,7 @@ describe("StudentListScreen", () => {
   });
 
   describe("수정 폼 레슨비·할인", () => {
-    it("저장된 레슨비를 그대로 보여 주고 진도를 가격표 목록에서 바꾸면 다시 계산한다", async () => {
+    it("저장된 레슨비는 진도를 바꿔도 유지하고 요청할 때만 가격표로 다시 계산한다", async () => {
       const { user, updateStudent, dialog } = await openEditForm("김민지");
 
       expect(within(dialog).getByLabelText("레슨비")).toHaveValue("150000");
@@ -1099,6 +1115,8 @@ describe("StudentListScreen", () => {
       ).toBeVisible();
 
       await user.selectOptions(within(dialog).getByLabelText("진도"), "체르니30");
+      expect(within(dialog).getByLabelText("레슨비")).toHaveValue("150000");
+      await user.click(within(dialog).getByRole("button", { name: "가격표로 재계산" }));
       expect(within(dialog).getByLabelText("레슨비")).toHaveValue("160000");
 
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
@@ -1175,6 +1193,8 @@ describe("StudentListScreen", () => {
             {
               ...studentRows[0].instruments![0],
               lessonType: "private",
+              sessionsPerMonth: 8,
+              lessonDurationMinutes: 40 as const,
               weekdayLabels: ["월", "일"],
               weeklySchedules: [
                 { weekday: "monday", weekdayLabel: "월", startTime: "", endTime: "" },
@@ -1188,6 +1208,7 @@ describe("StudentListScreen", () => {
 
       expect(within(dialog).getByLabelText("일요일")).toBeChecked();
       await user.click(within(dialog).getByLabelText("목요일"));
+      await user.type(within(dialog).getByLabelText("월 횟수"), "12");
       await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
 
       await waitFor(() => expect(updateStudent).toHaveBeenCalledTimes(1));

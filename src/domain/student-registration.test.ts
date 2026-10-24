@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { getAcademyScheduleValidationError, hasSameStudentName, registerStudent } from "./student-registration";
+import {
+  calculateLessonEndTime,
+  getLessonScheduleValidationError,
+  hasSameStudentName,
+  registerStudent,
+} from "./student-registration";
+
+describe("calculateLessonEndTime", () => {
+  it("개인레슨 시작 시간과 회당 길이로 종료 시간을 계산한다", () => {
+    expect(calculateLessonEndTime("15:20", 40)).toBe("16:00");
+    expect(calculateLessonEndTime("15:20", 60)).toBe("16:20");
+    expect(calculateLessonEndTime(undefined, 40)).toBeUndefined();
+    expect(calculateLessonEndTime("23:40", 40)).toBeUndefined();
+    expect(calculateLessonEndTime("12:99", 40)).toBeUndefined();
+    expect(calculateLessonEndTime("24:00", 40)).toBeUndefined();
+  });
+});
 
 describe("registerStudent", () => {
   it("원생 기본 정보와 악기별 수강 설정을 등록 결과로 만든다", () => {
@@ -45,7 +61,9 @@ describe("registerStudent", () => {
           teacherId: "teacher-2",
           teacherName: "이선생",
           lessonType: "private",
-          weekdays: [],
+          sessionsPerMonth: 4,
+          lessonDurationMinutes: 40,
+          weekdays: ["monday"],
           progress: "스즈키 1",
           lessonFee: 0,
           discounts: [],
@@ -150,7 +168,9 @@ describe("registerStudent", () => {
           teacherId: "teacher-2",
           teacherName: "이선생",
           lessonType: "private",
-          weekdays: [],
+          sessionsPerMonth: 4,
+          lessonDurationMinutes: 40,
+          weekdays: ["monday"],
           progress: "스즈키 1",
           lessonFee: 0,
           discounts: [],
@@ -241,11 +261,26 @@ describe("registerStudent", () => {
   });
 
   it("학원레슨은 시작·종료 시간 중 하나만 입력하면 저장하지 않는다", () => {
-    expect(getAcademyScheduleValidationError({
+    expect(getLessonScheduleValidationError({
       lessonType: "academy",
       teacherId: "teacher-1",
       weeklySchedules: [{ startTime: "15:00" }],
     })).toBe("시작 시간과 종료 시간을 함께 입력해 주세요.");
+  });
+
+  it("개인레슨은 월 횟수·수업 길이와 자동 계산한 종료 시간을 검증한다", () => {
+    expect(getLessonScheduleValidationError({
+      lessonType: "private",
+      sessionsPerMonth: 4,
+      lessonDurationMinutes: 40,
+      weeklySchedules: [{ startTime: "09:30", endTime: "10:10" }],
+    })).toBeNull();
+    expect(getLessonScheduleValidationError({
+      lessonType: "private",
+      sessionsPerMonth: 4,
+      lessonDurationMinutes: 40,
+      weeklySchedules: [{ startTime: "09:30", endTime: "10:30" }],
+    })).toBe("개인레슨 종료 시간은 시작 시간에 수업 시간을 더한 값이어야 합니다.");
   });
 
   it("학원 수업은 하나 이상의 수업 요일이 필요하다", () => {

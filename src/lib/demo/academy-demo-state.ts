@@ -92,6 +92,7 @@ export type DemoStudentRegistrationInput = {
   name: string;
   registeredAt: string;
   age?: number;
+  birthYear?: number;
   grade?: string;
   school?: string;
   occupation?: string;
@@ -109,6 +110,8 @@ export type DemoStudentRegistrationInstrumentInput = {
   teacherId: string;
   teacherName: string;
   lessonType: LessonType;
+  sessionsPerMonth?: number;
+  lessonDurationMinutes?: 40 | 60;
   weeklySchedules: Array<{
     weekday: Weekday | string;
     startTime?: string;
@@ -270,6 +273,8 @@ const initialEnrollments: StudentEnrollment[] = [
     teacherId: "teacher-2",
     teacherName: "오유진",
     lessonType: "private",
+    sessionsPerMonth: 4,
+    lessonDurationMinutes: 40,
     active: true,
     weekdays: ["friday"],
     weeklySchedules: [
@@ -292,6 +297,8 @@ const initialEnrollments: StudentEnrollment[] = [
     teacherId: "teacher-3",
     teacherName: "문서준",
     lessonType: "private",
+    sessionsPerMonth: 4,
+    lessonDurationMinutes: 40,
     active: true,
     weekdays: ["saturday"],
     weeklySchedules: [
@@ -366,6 +373,7 @@ export function registerDemoAcademyStudent(
     studentId,
     name: input.name,
     age: input.age,
+    birthYear: input.birthYear,
     grade: input.grade,
     school: input.school,
     occupation: input.occupation,
@@ -383,6 +391,8 @@ export function registerDemoAcademyStudent(
       teacherId: instrument.teacherId,
       teacherName: instrument.teacherName,
       lessonType: instrument.lessonType,
+      sessionsPerMonth: instrument.sessionsPerMonth,
+      lessonDurationMinutes: instrument.lessonDurationMinutes,
       weekdays: instrument.weeklySchedules.map((schedule) =>
         toWeekdayValue(schedule.weekday),
       ),
@@ -422,6 +432,7 @@ export function registerDemoAcademyStudent(
         studentId,
         name: input.name,
         age: input.age,
+        birthYear: input.birthYear,
         grade: input.grade,
         school: input.school,
         occupation: input.occupation,
@@ -456,6 +467,8 @@ export function registerDemoAcademyStudent(
           instrumentId: instrument.instrumentId,
           instrumentName: instrument.instrumentName,
           lessonType: instrument.lessonType,
+          sessionsPerMonth: instrument.sessionsPerMonth,
+          lessonDurationMinutes: instrument.lessonDurationMinutes,
           weekdayLabels: instrument.weeklySchedules.map((schedule) =>
             formatWeekday(schedule.weekday),
           ),

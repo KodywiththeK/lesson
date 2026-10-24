@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -65,6 +65,33 @@ describe("StudentRegistrationDialog", () => {
     expect(screen.getByRole("combobox", { name: "학년" })).toHaveValue("초2");
   });
 
+  it("출생연도로 나이와 미취학 학년을 계산하고 한쪽을 지우면 둘 다 비운다", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.type(screen.getByLabelText("출생연도"), "2022");
+    expect(screen.getByLabelText("나이")).toHaveValue("5");
+    expect(screen.getByRole("combobox", { name: "학년" })).toHaveValue("유치원생(미취학아동)");
+
+    await user.clear(screen.getByLabelText("나이"));
+    expect(screen.getByLabelText("나이")).toHaveValue("");
+    expect(screen.getByLabelText("출생연도")).toHaveValue("");
+  });
+
+  it("범위를 벗어난 나이와 완성되지 않은 출생연도는 그대로 보여 주고 가까이에서 안내한다", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.type(screen.getByLabelText("나이"), "999");
+    expect(screen.getByLabelText("나이")).toHaveValue("999");
+    expect(screen.getByRole("alert")).toHaveTextContent("1세부터 127세");
+
+    await user.clear(screen.getByLabelText("나이"));
+    await user.type(screen.getByLabelText("출생연도"), "20");
+    expect(screen.getByLabelText("출생연도")).toHaveValue("20");
+    expect(screen.getByRole("alert")).toHaveTextContent("4자리");
+  });
+
   it("상담 내용을 초기값으로 받아 이름, 나이, 학교, 연락처, 악기를 채운다", () => {
     renderDialog({
       initialValues: {
@@ -77,7 +104,8 @@ describe("StudentRegistrationDialog", () => {
     });
 
     expect(screen.getByLabelText("원생명")).toHaveValue("김하늘");
-    expect(screen.getByLabelText("나이")).toHaveValue(9);
+    expect(screen.getByLabelText("나이")).toHaveValue("9");
+    expect(screen.getByLabelText("출생연도")).toHaveValue("2018");
     expect(screen.getByLabelText("학교")).toHaveValue("한빛초");
     expect(screen.getByLabelText("연락처")).toHaveValue("010-3333-4444");
     expect(screen.getByRole("checkbox", { name: "바이올린 선택" })).toBeChecked();
@@ -150,8 +178,37 @@ describe("StudentRegistrationDialog", () => {
     }));
   });
 
+  it("등록 요청 중에는 버튼을 잠그고 중복 제출을 막으며 실패해도 입력을 유지한다", async () => {
+    const user = userEvent.setup();
+    let rejectSubmission: (reason?: unknown) => void = () => undefined;
+    const onSubmit = vi.fn(() => new Promise<void>((_resolve, reject) => {
+      rejectSubmission = reject;
+    }));
+    renderDialog({
+      onSubmit,
+      initialValues: {
+        name: "김하늘",
+        phone: "010-3333-4444",
+        instrumentNames: ["바이올린"],
+      },
+    });
+
+    await user.selectOptions(screen.getByLabelText("바이올린 담당 선생님"), "teacher-2");
+    await user.click(screen.getByRole("checkbox", { name: "바이올린 월요일" }));
+    await user.click(screen.getByRole("button", { name: "등록" }));
+
+    const pendingButton = screen.getByRole("button", { name: "등록 중…" });
+    expect(pendingButton).toBeDisabled();
+    await user.click(pendingButton);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    await act(async () => rejectSubmission(new Error("일시 오류")));
+    await waitFor(() => expect(screen.getByRole("button", { name: "등록" })).toBeEnabled());
+    expect(screen.getByLabelText("원생명")).toHaveValue("김하늘");
+  });
+
   describe("레슨비 가격표 자동 적용", () => {
-    it("피아노 학원레슨은 선택한 요일 개수로 레슨비 구간을 자동 적용하고 직접 고치지 못하게 한다", async () => {
+    it("피아노 학원레슨은 요일별 가격을 제안하고 직접 수정한 금액은 보존한다", async () => {
       const user = userEvent.setup();
       renderDialog();
       const fee = screen.getByLabelText("피아노 레슨비");
@@ -160,14 +217,13 @@ describe("StudentRegistrationDialog", () => {
       await user.click(screen.getByRole("checkbox", { name: "피아노 월요일" }));
       await user.click(screen.getByRole("checkbox", { name: "피아노 수요일" }));
       expect(fee).toHaveValue("140000");
-      expect(fee).toHaveAttribute("readonly");
+
+      await user.clear(fee);
+      await user.type(fee, "145000");
 
       await user.click(screen.getByRole("checkbox", { name: "피아노 금요일" }));
-      expect(fee).toHaveValue("150000");
-
-      await user.click(screen.getByRole("checkbox", { name: "피아노 화요일" }));
-      expect(fee).toHaveValue("160000");
-      expect(screen.getByLabelText("피아노 최종 수강료")).toHaveValue(160000);
+      expect(fee).toHaveValue("145,000");
+      expect(screen.getByLabelText("피아노 최종 수강료")).toHaveValue(145000);
     });
 
     it("진도를 바꾸면 같은 요일 개수에서도 가격표 금액으로 다시 계산한다", async () => {
@@ -215,10 +271,25 @@ describe("StudentRegistrationDialog", () => {
 
       expect(fee).toHaveValue("140000");
       await user.selectOptions(screen.getByLabelText("바이올린 진도"), "스즈키 4~6권");
-      await user.selectOptions(screen.getByLabelText("바이올린 월 횟수"), "8");
+      await user.click(screen.getByRole("checkbox", { name: "바이올린 월요일" }));
+      await user.click(screen.getByRole("checkbox", { name: "바이올린 화요일" }));
+      expect(screen.getByLabelText("바이올린 월 횟수")).toHaveValue("월 8회");
       await user.selectOptions(screen.getByLabelText("바이올린 수업 시간"), "60");
 
       expect(fee).toHaveValue("440000");
+    });
+
+    it("개인레슨 시작 시간을 입력하면 회당 길이로 종료 시간을 계산한다", async () => {
+      const user = userEvent.setup();
+      renderDialog({ initialValues: { instrumentNames: ["바이올린"] } });
+
+      await user.click(screen.getByRole("checkbox", { name: "바이올린 월요일" }));
+      const startTime = screen.getByLabelText("바이올린 월 시작 시간");
+      await user.type(startTime, "930");
+      await user.tab();
+
+      expect(startTime).toHaveValue("09:30");
+      expect(screen.getByLabelText("바이올린 월 종료 시간")).toHaveValue("10:10");
     });
 
     it("피아노를 개인레슨으로 바꾸면 개인 레슨 가격표로 바뀐다", async () => {

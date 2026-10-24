@@ -260,6 +260,29 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 적용 후 읽기 전용 카탈로그 확인(Management API, 운영 데이터 행은 읽지 않음): 교재 RPC는 새 7·6인자 시그니처만 존재(옛 시그니처·오버로드 없음), 신규 공개 RPC 4종과 `register_lesson_ticket`은 anon 실행 불가·authenticated 실행 가능, `private.lesson_ticket_refund_*`·`require_finance_owner_for_ledger`는 anon·authenticated 실행 불가, `academy_settings` RLS 활성, 두 컬럼 nullable, `books.purchase_vendor_name` 존재, 인덱스 `lesson_ticket_usages_grant_idx` 존재, 원장 트리거 본문에 NULL 방어(`coalesce(current_setting(...), '')`) 포함.
 - 한계: 적용 전 같은 SQL을 pglite(WASM Postgres) 하네스의 최소 스키마 스텁 위에서 실행해 동작을 확인했지만(회차권 28·기타 14 시나리오), 운영 스키마·실제 역할 JWT로는 확인하지 못했다. **앱에서 직접 확인할 것**: ① 데스크 계정의 회차권 등록(결제 금액 입력)과 삭제, 데스크가 입출입내역·수동 수입 행은 여전히 못 쓰는지, ② 원장의 환불 규정 저장·환불 처리·잘못 등록 삭제와 수입 행 감액, ③ 거래처 삭제와 과거 발주 이름 보존, ④ 교재 재입고 거래처 덮어쓰기·유지, ⑤ 계약기간 없는 선생님 등록과 급여.
 
+## 원생·선생님 등록 개선 migration (20261024233825) — 2026-10-25 적용 완료
+
+`20261024233825_student_teacher_registration_improvements.sql`은 원생 출생연도, 개인레슨 월 횟수·수업 길이, 출석 ID 충돌 재시도, 선생님 비율제 10% 단위 제약을 추가한다. 2026-10-25 운영 DB 적용을 완료했으므로 앱을 배포할 수 있다.
+
+적용 전에는 다음을 확인한다.
+
+1. `teacher_salary_settings.ratio_teacher_share` 중 10의 배수가 아닌 값이 없는지 읽기 전용으로 확인한다. 있으면 migration이 중단되며 임의 반올림하지 않는다.
+2. Supabase MCP `list_migrations`로 이 파일만 대기 중인지 확인한다.
+3. 공개 RPC를 오버로드할 때는 새 시그니처 grant뿐 아니라 옛 시그니처, 내부 legacy 함수, 그 함수가 호출하는 하위 쓰기 RPC의 `PUBLIC`·`anon`·`authenticated` 실행 권한 회수를 확인한다. 이 migration은 `update_student_basic_info`, `update_student_profile_from_date`, `register/update_student_with_enrollments`를 공개 wrapper 밖에서 실행하지 못하게 하고 `students`·`student_instruments` 직접 insert/update 권한도 회수한다.
+4. 직접 테이블 권한을 회수할 때는 별도 정상 mutation RPC의 실행 방식도 확인한다. 이 migration은 역할 검사가 있는 `update_student_status`를 `SECURITY DEFINER`로 전환해 휴원·퇴원·복귀는 유지하고, `PUBLIC`·`anon` 실행은 막는다.
+5. 적용 후 `students.birth_year`, `student_instruments.sessions_per_month·lesson_duration_minutes`, 비율 check constraint, 함수 시그니처·권한을 카탈로그에서 확인하고 PostgREST schema reload를 확인한다. 선생님 기본·급여 검증 함수 모두 계약 시작일과 종료일을 선택 입력으로 허용하는지도 확인한다.
+6. 원장·데스크 계정으로 등록·수정·휴원·퇴원·복귀, 동일 출석 ID 충돌 재시도, 주 1일 4회·주 2일 8회 서버 거부 규칙, 비율 소수 입력 거부를 실제 호출로 확인한다.
+
+적용 기록 (2026-10-25):
+
+- 대상: Supabase `lesson` 프로젝트(`zkzqmqtzzlgljkuctpbn`). 적용 전 프로젝트 상태가 `ACTIVE_HEALTHY`이고 대상 migration이 미적용임을 확인했다.
+- 사전 검증: `teacher_salary_settings.ratio_teacher_share` 중 10의 배수가 아닌 행은 0건이었다.
+- 방법: Supabase MCP `apply_migration`에 로컬 SQL 전체를 전달해 적용했다. MCP가 기록한 원격 version `20261024233825`가 기존 마지막 migration 이후이고 의존 순서를 유지하므로 로컬 파일명도 같은 version으로 정렬했다.
+- 스키마 검증: `students.birth_year`, `student_instruments.sessions_per_month`, `student_instruments.lesson_duration_minutes`와 check constraint 4개가 모두 존재한다. 비정상 비율제 데이터는 적용 후에도 0건이다.
+- 권한 검증: authenticated의 `students`·`student_instruments` 직접 insert/update는 모두 거부된다. 새 등록 wrapper와 상태 변경 RPC만 authenticated 실행 가능하고 anon은 실행할 수 없으며, 옛 등록 오버로드의 authenticated 실행 권한도 회수됐다. 공개 등록·수정·상태 RPC가 `SECURITY DEFINER`임을 확인했다.
+- Security Advisor: 이번 변경 함수는 의도적으로 authenticated가 호출하는 역할 검사형 `SECURITY DEFINER` RPC라 일반 경고에 포함된다. 별도로 기존 `private.lesson_ticket_refund_quote`의 mutable search path 경고와 leaked password protection 비활성 경고가 남아 있으며 이번 migration 범위에서는 변경하지 않았다.
+- 한계: 운영 데이터 mutation을 만드는 owner·desk JWT 스모크 호출은 수행하지 않았다. 원장·데스크 계정으로 등록·수정·상태 변경을 앱에서 확인한다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

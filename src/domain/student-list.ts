@@ -13,6 +13,7 @@ export type StudentListRow = {
   studentId: string;
   name: string;
   age?: number;
+  birthYear?: number;
   /** `age`를 입력한 해(KST). 표시 나이는 `getStudentDisplayAge`로 계산한다. */
   ageAsOfYear?: number;
   grade?: string;
@@ -56,6 +57,8 @@ export type StudentListInstrument = {
   instrumentId: string;
   instrumentName: string;
   lessonType: "academy" | "private" | string;
+  sessionsPerMonth?: number;
+  lessonDurationMinutes?: 40 | 60;
   weekdayLabels: string[];
   startTime: string;
   endTime: string;
@@ -72,6 +75,28 @@ export type StudentListInstrument = {
   active: boolean;
   weeklySchedules?: StudentInstrumentWeeklySchedule[];
 };
+
+export type StudentMonthlyTuitionSummary = {
+  grossMonthlyFee: number;
+  monthlyDiscountTotal: number;
+  finalMonthlyFee: number;
+};
+
+/** 활성 수강만 대상으로 매달 반복되는 수강료를 합산한다. 일회성 소개 할인은 저장 구조상 제외된다. */
+export function calculateStudentMonthlyTuitionSummary(
+  instruments: StudentListInstrument[] | undefined,
+): StudentMonthlyTuitionSummary {
+  return (instruments ?? [])
+    .filter((instrument) => instrument.active)
+    .reduce<StudentMonthlyTuitionSummary>(
+      (summary, instrument) => ({
+        grossMonthlyFee: summary.grossMonthlyFee + instrument.lessonFee,
+        monthlyDiscountTotal: summary.monthlyDiscountTotal + instrument.discountTotal,
+        finalMonthlyFee: summary.finalMonthlyFee + instrument.finalMonthlyFee,
+      }),
+      { grossMonthlyFee: 0, monthlyDiscountTotal: 0, finalMonthlyFee: 0 },
+    );
+}
 
 export type StudentListFilters = {
   teacherName?: string;

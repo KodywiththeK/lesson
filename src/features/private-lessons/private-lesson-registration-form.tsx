@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/native-select";
 import { compareKoreanNames } from "@/domain/common-list";
 import {
-  DEFAULT_PRIVATE_LESSON_MINUTES,
   addMinutesToDateTime,
   filterTeachersForInstrument,
   findPrivateLessonConflictNotice,
@@ -141,7 +140,7 @@ export function PrivateLessonRegistrationForm({
     );
     setMinutesText(
       instrument
-        ? String(instrument.lessonMinutes ?? DEFAULT_PRIVATE_LESSON_MINUTES)
+        ? String(instrument.lessonMinutes ?? "")
         : "",
     );
   }
@@ -250,6 +249,11 @@ export function PrivateLessonRegistrationForm({
         </NativeSelect>
         {ticketBalances && selectedInstrument ? (
           <TicketBalanceNotice remainingCount={selectedTicketBalance?.remainingCount} />
+        ) : null}
+        {selectedInstrument?.sessionsPerMonth ? (
+          <p className="text-xs text-muted-foreground">
+            원생 등록 기준 월 {selectedInstrument.sessionsPerMonth}회
+          </p>
         ) : null}
       </Label>
 

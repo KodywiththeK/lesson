@@ -68,6 +68,7 @@ import {
 } from "@/domain/student-enrollment-edit";
 import {
   buildStudentFilterOptions,
+  calculateStudentMonthlyTuitionSummary,
   DEFAULT_STUDENT_SORT,
   getStudentDisplayAge,
   STUDENT_SORT_OPTIONS,
@@ -249,6 +250,7 @@ export function StudentListScreen({
         name: input.name,
         registeredAt: input.registeredAt,
         age: input.age,
+        birthYear: input.birthYear,
         grade: input.grade,
         school: input.school,
         occupation: input.occupation,
@@ -366,9 +368,7 @@ export function StudentListScreen({
         }
         teachers={teacherOptions}
         existingStudentNames={existingStudentNames}
-        onSubmit={(input) => {
-          registerMutation.mutate(input);
-        }}
+        onSubmit={(input) => registerMutation.mutateAsync(input)}
       />
     ),
     [existingStudentNames, isRegistrationOpen, registerMutation, teacherOptions],
@@ -562,6 +562,7 @@ function StudentDetailDialog({
   const [isEditing, setIsEditing] = useState(false);
   const deleteUnavailableNoticeId = useId();
   const isWithdrawnStudent = student?.status === "withdrawn";
+  const tuitionSummary = calculateStudentMonthlyTuitionSummary(student?.instruments);
 
   return (
     <Dialog
@@ -596,6 +597,10 @@ function StudentDetailDialog({
               <DetailItem label="등록일" value={student.registeredOn ?? "-"} />
               <DetailItem label="출석 ID" value={student.attendanceCode ?? "-"} />
               <DetailItem label="나이" value={formatAge(getStudentDisplayAge(student))} />
+              <DetailItem
+                label="출생연도"
+                value={student.birthYear === undefined ? "-" : `${student.birthYear}년`}
+              />
               <DetailItem label="학년" value={getStudentDisplayGrade(student, getFinanceToday()) || "-"} />
               <DetailItem label="학교" value={student.school ?? "-"} />
               <DetailItem label="직업" value={student.occupation ?? "-"} />
@@ -610,6 +615,21 @@ function StudentDetailDialog({
               <DetailItem
                 label="정기 요일"
                 value={formatJoinedValue(student.weekdayLabels)}
+              />
+            </div>
+
+            <div className="grid gap-3 rounded-md border border-border bg-muted/30 p-4 sm:grid-cols-3">
+              <DetailItem
+                label="할인 전 월 합계"
+                value={formatWon(tuitionSummary.grossMonthlyFee)}
+              />
+              <DetailItem
+                label="매월 할인 합계"
+                value={formatWon(tuitionSummary.monthlyDiscountTotal)}
+              />
+              <DetailItem
+                label="최종 월 수강료"
+                value={formatWon(tuitionSummary.finalMonthlyFee)}
               />
             </div>
 

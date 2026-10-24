@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildStudentFilterOptions,
   buildStudentList,
+  calculateStudentMonthlyTuitionSummary,
   getStudentDisplayAge,
   mergeStudentUpdate,
   STUDENT_SORT_OPTIONS,
@@ -133,6 +134,68 @@ describe("buildStudentFilterOptions", () => {
       "토",
       "일",
     ]);
+  });
+});
+
+describe("calculateStudentMonthlyTuitionSummary", () => {
+  it("활성 수강의 할인 전 금액·월 할인·최종 월 수강료만 합산한다", () => {
+    const summary = calculateStudentMonthlyTuitionSummary([
+      {
+        studentInstrumentId: "piano",
+        teacherId: null,
+        teacherName: "",
+        instrumentId: "piano",
+        instrumentName: "피아노",
+        lessonType: "academy",
+        weekdayLabels: ["월", "수"],
+        startTime: "",
+        endTime: "",
+        progress: "체르니100",
+        lessonFee: 150000,
+        discountTotal: 10000,
+        referralDiscountAmount: 10000,
+        finalMonthlyFee: 140000,
+        active: true,
+      },
+      {
+        studentInstrumentId: "violin",
+        teacherId: null,
+        teacherName: "",
+        instrumentId: "violin",
+        instrumentName: "바이올린",
+        lessonType: "private",
+        weekdayLabels: ["금"],
+        startTime: "",
+        endTime: "",
+        progress: "스즈키 1~3권",
+        lessonFee: 140000,
+        discountTotal: 0,
+        finalMonthlyFee: 140000,
+        active: true,
+      },
+      {
+        studentInstrumentId: "inactive",
+        teacherId: null,
+        teacherName: "",
+        instrumentId: "cello",
+        instrumentName: "첼로",
+        lessonType: "private",
+        weekdayLabels: [],
+        startTime: "",
+        endTime: "",
+        progress: "",
+        lessonFee: 999999,
+        discountTotal: 0,
+        finalMonthlyFee: 999999,
+        active: false,
+      },
+    ]);
+
+    expect(summary).toEqual({
+      grossMonthlyFee: 290000,
+      monthlyDiscountTotal: 10000,
+      finalMonthlyFee: 280000,
+    });
   });
 });
 

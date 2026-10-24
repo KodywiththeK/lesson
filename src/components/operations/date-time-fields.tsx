@@ -41,8 +41,24 @@ const PICKER_CONTENT_CLASS_NAME = "z-[70] w-auto max-w-[calc(100vw-2rem)] p-0";
 const CALENDAR_START_MONTH = new Date(1900, 0);
 const CALENDAR_END_MONTH = new Date(2100, 11);
 
+function insertTimeSeparator(digits: string) {
+  return digits.length === 3
+    ? `${digits.slice(0, 1)}:${digits.slice(1)}`
+    : `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+function formatTimeDraft(value: string) {
+  const continuedThreeDigitDraft = /^(\d):(\d{3})$/.exec(value);
+  if (continuedThreeDigitDraft) {
+    return insertTimeSeparator(`${continuedThreeDigitDraft[1]}${continuedThreeDigitDraft[2]}`);
+  }
+  return /^\d{3,4}$/.test(value) ? insertTimeSeparator(value) : value;
+}
+
 function normalizeTimeInput(value: string): string | null {
-  const match = /^(\d{1,2})(?::(\d{0,2}))?$/.exec(value.trim());
+  const trimmed = value.trim();
+  const formatted = formatTimeDraft(trimmed);
+  const match = /^(\d{1,2})(?::(\d{0,2}))?$/.exec(formatted);
   if (!match) return null;
 
   const hour = Number(match[1]);
@@ -216,11 +232,12 @@ function PickerField({
   }
 
   function handleTextChange(next: string) {
-    setText(next);
-    if (showError) setShowError(next === "" ? Boolean(required) : !isValidValue(next));
+    const nextText = kind === "time" ? formatTimeDraft(next) : next;
+    setText(nextText);
+    if (showError) setShowError(nextText === "" ? Boolean(required) : !isValidValue(nextText));
     // 필수 필드는 비운 값을 올리지 않는다. 화면 state가 빈 값이 되어 조회·계산이 깨지는 것을 막는다.
-    const canCommit = next === "" ? !required : isValidValue(next);
-    if (canCommit) onValueChange(next);
+    const canCommit = nextText === "" ? !required : isValidValue(nextText);
+    if (canCommit) onValueChange(nextText);
   }
 
   function validateDraft() {

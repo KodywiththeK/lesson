@@ -3,7 +3,7 @@ export type PricedLessonType = "academy" | "private";
 export const PRIVATE_LESSON_SESSION_OPTIONS = [4, 8] as const;
 export const PRIVATE_LESSON_MINUTE_OPTIONS = [40, 60] as const;
 
-export type PrivateLessonSessions = (typeof PRIVATE_LESSON_SESSION_OPTIONS)[number];
+export type PrivateLessonSessions = number;
 export type PrivateLessonMinutes = (typeof PRIVATE_LESSON_MINUTE_OPTIONS)[number];
 
 /** 학원 피아노 레슨비 구간: 주2회, 주3회, 주4·5회 순서. */
@@ -12,11 +12,11 @@ type AcademyFeeRow = readonly [week2: number, week3: number, week45: number];
 type PrivateFeeRow = readonly [m4x40: number, m4x60: number, m8x40: number, m8x60: number];
 
 /**
- * 학원 피아노 레슨비(원). 명세 그대로이며 체르니100의 주2회·주3회가 같은 150,000원인 점은 확인이 필요하다.
+ * 학원 피아노 레슨비(원).
  */
 const ACADEMY_PIANO_FEES: Record<string, AcademyFeeRow> = {
   바이엘: [140000, 150000, 160000],
-  체르니100: [150000, 150000, 170000],
+  체르니100: [150000, 160000, 170000],
   체르니30: [160000, 170000, 180000],
   체르니40: [170000, 180000, 190000],
   작품반: [180000, 190000, 200000],
@@ -44,6 +44,18 @@ const MIN_ACADEMY_WEEKDAYS = 2;
 const WEEK_2_COUNT = 2;
 const WEEK_3_COUNT = 3;
 const MAX_ACADEMY_WEEKDAYS = 5;
+
+export type PrivateLessonSessionResolution =
+  | { kind: "automatic"; sessions: PrivateLessonSessions }
+  | { kind: "manual" };
+
+export function getPrivateLessonSessionsForWeekdays(
+  weekdayCount: number,
+): PrivateLessonSessionResolution {
+  if (weekdayCount === 1) return { kind: "automatic", sessions: 4 };
+  if (weekdayCount === 2) return { kind: "automatic", sessions: 8 };
+  return { kind: "manual" };
+}
 
 export function getProgressOptions(
   instrumentName: string,
@@ -75,6 +87,7 @@ export type ManualLessonFeeReason =
   | "no-weekday-tier"
   | "unknown-progress"
   | "missing-private-option"
+  | "no-private-session-tier"
   | "no-price-table";
 
 export type LessonFeeResult =
@@ -132,6 +145,9 @@ function calculatePrivateLessonFee({
   }
   if (!sessionsPerMonth || !minutes) {
     return { status: "manual", reason: "missing-private-option" };
+  }
+  if (!PRIVATE_LESSON_SESSION_OPTIONS.includes(sessionsPerMonth as 4 | 8)) {
+    return { status: "manual", reason: "no-private-session-tier" };
   }
 
   const sessionOffset = sessionsPerMonth === 8 ? 2 : 0;

@@ -281,11 +281,11 @@ describe("registerTeacher", () => {
   });
 });
 
-describe("buildTeacherSalarySetting 비율제 소수 입력", () => {
-  it("소수 첫째 자리 비율도 부동소수점 오차 없이 정수 퍼센트로 변환한다(1.1 → 11%)", () => {
-    expect(
+describe("buildTeacherSalarySetting 비율제 정수 입력", () => {
+  it("소수 비율은 저장하지 않는다", () => {
+    expect(() =>
       buildTeacherSalarySetting({ payType: "ratio", ratioAcademyShare: 8.9, ratioTeacherShare: 1.1 }),
-    ).toEqual({ payType: "ratio", ratioTeacherShare: 11 });
+    ).toThrow("비율제는 0부터 10 사이의 정수로 입력해 주세요.");
   });
 
   it("선생님 몫 0은 유효한 비율이며 0%로 변환한다", () => {

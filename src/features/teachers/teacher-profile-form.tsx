@@ -24,7 +24,10 @@ import {
   formatResidentRegistrationInput,
   validateResidentRegistration,
 } from "@/domain/teacher-resident-registration";
-import { getInitialSalaryState } from "@/domain/teacher-salary-form-state";
+import {
+  getComplementaryRatio,
+  getInitialSalaryState,
+} from "@/domain/teacher-salary-form-state";
 import type { TeacherProfileMutationInput } from "@/lib/api/teachers";
 
 /** 등록·수정 폼이 내보내는 값. 급여·주민등록번호 항목은 원장 화면에서만 채워진다. */
@@ -72,9 +75,7 @@ export function TeacherProfileForm({
   const [name, setName] = useState(initialTeacher?.name ?? "");
   const [part, setPart] = useState(initialTeacher?.part ?? DEFAULT_PART);
   const [contact, setContact] = useState(initialTeacher?.contact ?? "");
-  const [registeredAt, setRegisteredAt] = useState(
-    initialTeacher?.registeredAt ?? getFinanceToday(),
-  );
+  const registeredAt = initialTeacher?.registeredAt ?? getFinanceToday();
   const [contractStartOn, setContractStartOn] = useState(
     initialTeacher?.contractStartOn ?? "",
   );
@@ -97,9 +98,10 @@ export function TeacherProfileForm({
   const [workSchedules, setWorkSchedules] = useState(() =>
     buildInitialWorkScheduleState(initialTeacher),
   );
-  // 소수 첫째 자리 비율(3.5 + 6.5)도 부동소수점 오차 없이 비교한다.
-  const ratioTotal =
-    Math.round((Number(ratioAcademyShare || 0) + Number(ratioTeacherShare || 0)) * 10) / 10;
+  const ratioTotal = Number(ratioAcademyShare || 0) + Number(ratioTeacherShare || 0);
+  const hasValidRatio =
+    getComplementaryRatio(ratioAcademyShare) === ratioTeacherShare &&
+    getComplementaryRatio(ratioTeacherShare) === ratioAcademyShare;
   const residentRegistrationResult = residentRegistration
     ? validateResidentRegistration(residentRegistration)
     : undefined;
@@ -110,10 +112,9 @@ export function TeacherProfileForm({
     Boolean(
       name.trim() &&
         part.trim() &&
-        contact.trim() &&
-        registeredAt,
+        contact.trim(),
     ) &&
-    (!isOwner || payType !== "ratio" || ratioTotal === 10) &&
+    (!isOwner || payType !== "ratio" || hasValidRatio) &&
     (!isOwner || hasValidSalary) &&
     !hasInvalidResidentRegistration;
 
@@ -198,14 +199,6 @@ export function TeacherProfileForm({
             aria-label="연락처"
             value={contact}
             onChange={(event) => setContact(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>등록일</span>
-          <DateField
-            aria-label="등록일"
-            value={registeredAt}
-            onValueChange={setRegisteredAt}
           />
         </Label>
         {isOwner ? (
@@ -313,11 +306,20 @@ export function TeacherProfileForm({
           ratioAcademyShare={ratioAcademyShare}
           ratioTeacherShare={ratioTeacherShare}
           ratioTotal={ratioTotal}
+          hasValidRatio={hasValidRatio}
           onPayTypeChange={setPayType}
           onMonthlySalaryChange={setMonthlySalary}
           onHourlyRateChange={setHourlyRate}
-          onRatioAcademyShareChange={setRatioAcademyShare}
-          onRatioTeacherShareChange={setRatioTeacherShare}
+          onRatioAcademyShareChange={(value) => {
+            setRatioAcademyShare(value);
+            const complement = getComplementaryRatio(value);
+            if (complement !== null) setRatioTeacherShare(complement);
+          }}
+          onRatioTeacherShareChange={(value) => {
+            setRatioTeacherShare(value);
+            const complement = getComplementaryRatio(value);
+            if (complement !== null) setRatioAcademyShare(complement);
+          }}
         />
       ) : null}
 
@@ -386,6 +388,7 @@ function SalaryFields({
   ratioAcademyShare,
   ratioTeacherShare,
   ratioTotal,
+  hasValidRatio,
   onPayTypeChange,
   onMonthlySalaryChange,
   onHourlyRateChange,
@@ -398,6 +401,7 @@ function SalaryFields({
   ratioAcademyShare: string;
   ratioTeacherShare: string;
   ratioTotal: number;
+  hasValidRatio: boolean;
   onPayTypeChange: (payType: TeacherPayType) => void;
   onMonthlySalaryChange: (value: string) => void;
   onHourlyRateChange: (value: string) => void;
@@ -453,7 +457,7 @@ function SalaryFields({
               type="number"
               min="0"
               max="10"
-              step="0.1"
+              step="1"
               value={ratioAcademyShare}
               onChange={(event) => onRatioAcademyShareChange(event.target.value)}
             />
@@ -463,12 +467,18 @@ function SalaryFields({
               type="number"
               min="0"
               max="10"
-              step="0.1"
+              step="1"
               value={ratioTeacherShare}
               onChange={(event) => onRatioTeacherShareChange(event.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground">현재 합계 {ratioTotal}</p>
+          {hasValidRatio ? (
+            <p className="text-xs text-muted-foreground">현재 합계 {ratioTotal}</p>
+          ) : (
+            <p role="alert" className="text-xs text-destructive">
+              한쪽 몫을 0부터 10까지 정수로 입력해 주세요. 반대쪽은 자동으로 채워집니다.
+            </p>
+          )}
         </div>
       ) : null}
     </div>

@@ -35,6 +35,6 @@ describe("TeachersPage (데스크 로그인)", () => {
     expect(screen.queryByRole("columnheader", { name: "급여" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("급여 형태 필터")).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "주민등록번호" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "등록일" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "계약 기간" })).toBeInTheDocument();
   });
 });

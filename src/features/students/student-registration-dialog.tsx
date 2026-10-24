@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,12 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { getFinanceToday } from "@/domain/finance-date";
-import { getSuggestedStudentGrade, getSuggestedStudentOccupation, STUDENT_GRADE_OPTIONS } from "@/domain/student-grade";
+import {
+  calculateBirthYearFromAge,
+  getSuggestedStudentGrade,
+  getSuggestedStudentOccupation,
+  getStudentDemographicValidationError,
+} from "@/domain/student-grade";
 import {
   hasSameStudentName,
   type StudentInstrumentDiscountSelection,
@@ -28,6 +33,7 @@ import type { TeacherListRow } from "@/domain/teacher-list";
 import type { DemoStudentRegistrationInput } from "@/lib/demo/academy-demo-state";
 
 import { contactRelationshipOptions, instrumentOptions } from "./student-form-options";
+import { StudentDemographicFields } from "./student-demographic-fields";
 import {
   buildRegistrationInstrument,
   createRegistrationInstrumentDraft,
@@ -52,6 +58,7 @@ export type StudentRegistrationSubmission = Omit<DemoStudentRegistrationInput, "
 export type StudentRegistrationInitialValues = {
   name?: string;
   age?: number;
+  birthYear?: number;
   school?: string;
   phone?: string;
   instrumentNames?: string[];
@@ -66,7 +73,7 @@ type StudentRegistrationDialogProps = {
   initialValues?: StudentRegistrationInitialValues;
   /** 같은 이름의 재원 원생이 있으면 구분 안내를 보이기 위한 기존 원생 이름. 없으면 안내하지 않는다. */
   existingStudentNames?: string[];
-  onSubmit: (input: StudentRegistrationSubmission) => void;
+  onSubmit: (input: StudentRegistrationSubmission) => void | Promise<void>;
 };
 
 export function StudentRegistrationDialog({
@@ -108,18 +115,25 @@ function StudentRegistrationForm({
   teachers: TeacherListRow[];
   initialValues?: StudentRegistrationInitialValues;
   existingStudentNames?: string[];
-  onSubmit: (input: StudentRegistrationSubmission) => void;
+  onSubmit: (input: StudentRegistrationSubmission) => void | Promise<void>;
 }) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [registeredAt, setRegisteredAt] = useState(getFinanceToday());
   const [age, setAge] = useState(
     initialValues?.age === undefined ? "" : String(initialValues.age),
   );
+  const [birthYear, setBirthYear] = useState(() => {
+    if (initialValues?.birthYear !== undefined) return String(initialValues.birthYear);
+    if (initialValues?.age === undefined) return "";
+    return String(calculateBirthYearFromAge(
+      initialValues.age,
+      Number(getFinanceToday().slice(0, 4)),
+    ) ?? "");
+  });
   const [grade, setGrade] = useState(() => getSuggestedStudentGrade(initialValues?.age ?? NaN));
-  const gradeWasSelected = useRef(false);
   const [school, setSchool] = useState(initialValues?.school ?? "");
   const [occupation, setOccupation] = useState(getSuggestedStudentOccupation(initialValues?.age === undefined ? "" : String(initialValues.age)));
-  const occupationWasEdited = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [contactRelationship, setContactRelationship] = useState("모");
   const [contactPhone, setContactPhone] = useState(initialValues?.phone ?? "");
   const [secondaryRelationship, setSecondaryRelationship] = useState("");
@@ -142,6 +156,11 @@ function StudentRegistrationForm({
   );
 
   const referenceMonth = /^\d{4}-\d{2}/.test(registeredAt) ? registeredAt.slice(0, 7) : "";
+  const demographicError = getStudentDemographicValidationError({
+    ageText: age,
+    birthYearText: birthYear,
+    currentYear: Number(getFinanceToday().slice(0, 4)),
+  });
   const orderedDrafts = selectedInstrumentIds
     .map((instrumentId) => instrumentDrafts[instrumentId])
     .filter(Boolean);
@@ -149,6 +168,7 @@ function StudentRegistrationForm({
     name.trim() &&
       registeredAt &&
       contactPhone.replace(/\D/g, "").length >= 4 &&
+      !demographicError &&
       Object.keys(getSecondaryContactErrors(secondaryRelationship, secondaryPhone)).length === 0 &&
       orderedDrafts.length > 0 &&
       orderedDrafts.every((draft) =>
@@ -159,31 +179,39 @@ function StudentRegistrationForm({
   return (
     <form
       className="grid gap-5"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
 
-        if (!canSubmit) {
+        if (!canSubmit || isSubmitting) {
           return;
         }
 
-        onSubmit({
-          name: name.trim(),
-          registeredAt,
-          age: age ? Number(age) : undefined,
-          grade: grade.trim() || undefined,
-          school: school.trim() || undefined,
-          occupation: occupation.trim() || undefined,
-          contact: {
-            relationship: contactRelationship.trim() || "본인",
-            phone: contactPhone.trim(),
-          },
-          ...(secondaryRelationship.trim() && secondaryPhone.trim()
-            ? { secondaryContact: { relationship: secondaryRelationship.trim(), phone: secondaryPhone.trim() } }
-            : {}),
-          instruments: orderedDrafts.map((draft) =>
-            buildRegistrationInstrument(draft, teachers, referenceMonth),
-          ),
-        });
+        setIsSubmitting(true);
+        try {
+          await onSubmit({
+            name: name.trim(),
+            registeredAt,
+            age: age ? Number(age) : undefined,
+            birthYear: birthYear ? Number(birthYear) : undefined,
+            grade: grade.trim() || undefined,
+            school: school.trim() || undefined,
+            occupation: occupation.trim() || undefined,
+            contact: {
+              relationship: contactRelationship.trim() || "본인",
+              phone: contactPhone.trim(),
+            },
+            ...(secondaryRelationship.trim() && secondaryPhone.trim()
+              ? { secondaryContact: { relationship: secondaryRelationship.trim(), phone: secondaryPhone.trim() } }
+              : {}),
+            instruments: orderedDrafts.map((draft) =>
+              buildRegistrationInstrument(draft, teachers, referenceMonth),
+            ),
+          });
+        } catch {
+          // 화면 상위 mutation이 사용자용 오류를 표시한다. 입력은 그대로 두고 재시도할 수 있게 한다.
+        } finally {
+          setIsSubmitting(false);
+        }
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -210,59 +238,18 @@ function StudentRegistrationForm({
         </Label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Label className="grid gap-1">
-          <span>나이</span>
-          <Input
-            aria-label="나이"
-            min={0}
-            type="number"
-            value={age}
-            onChange={(event) => {
-              const nextAge = event.target.value;
-              setAge(nextAge);
-              if (!gradeWasSelected.current) setGrade(getSuggestedStudentGrade(Number(nextAge)));
-              const suggestedOccupation = getSuggestedStudentOccupation(nextAge);
-              if (!occupationWasEdited.current && suggestedOccupation) setOccupation(suggestedOccupation);
-            }}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>학년</span>
-          <NativeSelect
-            aria-label="학년"
-            value={grade}
-            onChange={(event) => {
-              gradeWasSelected.current = true;
-              setGrade(event.target.value);
-            }}
-          >
-            <NativeSelectOption value="">학년 선택</NativeSelectOption>
-            {STUDENT_GRADE_OPTIONS.map((option) => (
-              <NativeSelectOption key={option} value={option}>{option}</NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Label>
-        <Label className="grid gap-1">
-          <span>학교</span>
-          <Input
-            aria-label="학교"
-            value={school}
-            onChange={(event) => setSchool(event.target.value)}
-          />
-        </Label>
-        <Label className="grid gap-1">
-          <span>직업</span>
-          <Input
-            aria-label="직업"
-            value={occupation}
-            onChange={(event) => {
-              occupationWasEdited.current = true;
-              setOccupation(event.target.value);
-            }}
-          />
-        </Label>
-      </div>
+      <StudentDemographicFields
+        values={{ age, birthYear, grade, school, occupation }}
+        hasManualGradeInitially={false}
+        hasManualOccupationInitially={false}
+        onChange={(patch) => {
+          if (patch.age !== undefined) setAge(patch.age);
+          if (patch.birthYear !== undefined) setBirthYear(patch.birthYear);
+          if (patch.grade !== undefined) setGrade(patch.grade);
+          if (patch.school !== undefined) setSchool(patch.school);
+          if (patch.occupation !== undefined) setOccupation(patch.occupation);
+        }}
+      />
 
       <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
         <Label className="grid gap-1">
@@ -354,8 +341,8 @@ function StudentRegistrationForm({
       </div>
 
       <DialogFooter>
-        <Button type="submit" disabled={!canSubmit}>
-          등록
+        <Button type="submit" disabled={!canSubmit || isSubmitting}>
+          {isSubmitting ? "등록 중…" : "등록"}
         </Button>
       </DialogFooter>
     </form>

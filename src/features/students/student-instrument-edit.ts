@@ -5,7 +5,7 @@ import {
 } from "@/domain/lesson-fee-draft";
 import type { StudentListInstrument, StudentListRow } from "@/domain/student-list";
 import type { StudentEnrollmentFields } from "@/domain/student-enrollment-edit";
-import { getAcademyScheduleValidationError } from "@/domain/student-registration";
+import { getLessonScheduleValidationError } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 
 import {
@@ -64,8 +64,14 @@ export function createInstrumentEditDraft(
 }
 
 export function getInstrumentScheduleError(draft: InstrumentEditDraft) {
-  return getAcademyScheduleValidationError({
+  return getLessonScheduleValidationError({
     lessonType: draft.lessonType,
+    ...(draft.lessonType === "private"
+      ? {
+          sessionsPerMonth: draft.fee.sessionsPerMonth || undefined,
+          lessonDurationMinutes: draft.fee.minutes || undefined,
+        }
+      : {}),
     teacherId: draft.teacherId,
     weeklySchedules: draft.schedules,
   });
@@ -92,6 +98,12 @@ export function buildInstrumentUpdate({
     instrumentId: (instrument.instrumentId || toInstrumentId(instrument.instrumentName)).trim(),
     instrumentName: instrument.instrumentName.trim(),
     lessonType: draft.lessonType,
+    ...(draft.lessonType === "private"
+      ? {
+          sessionsPerMonth: draft.fee.sessionsPerMonth || undefined,
+          lessonDurationMinutes: draft.fee.minutes || undefined,
+        }
+      : {}),
     weeklySchedules: toWeeklyScheduleChanges(draft.schedules),
     progress: draft.fee.progress,
     ...getLessonFeeSubmission(draft.fee, referenceMonth),

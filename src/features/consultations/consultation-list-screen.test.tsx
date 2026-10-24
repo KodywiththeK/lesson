@@ -399,7 +399,7 @@ describe("ConsultationListScreen", () => {
 
       const dialog = await screen.findByRole("dialog", { name: "원생 등록" });
       expect(within(dialog).getByLabelText("원생명")).toHaveValue("박서준");
-      expect(within(dialog).getByLabelText("나이")).toHaveValue(11);
+      expect(within(dialog).getByLabelText("나이")).toHaveValue("11");
       expect(within(dialog).getByLabelText("학교")).toHaveValue("한빛초");
       expect(within(dialog).getByLabelText("연락처")).toHaveValue("010-3333-4444");
       expect(within(dialog).getByRole("checkbox", { name: "바이올린 선택" })).toBeChecked();

@@ -61,6 +61,8 @@ const violin: StudentListInstrument = {
   instrumentId: "violin",
   instrumentName: "바이올린",
   lessonType: "private",
+  sessionsPerMonth: 4,
+  lessonDurationMinutes: 40 as const,
   weekdayLabels: ["화"],
   startTime: "17:00",
   endTime: "17:40",

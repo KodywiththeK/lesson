@@ -19,14 +19,21 @@ export function getInitialSalaryState(teacher: SalaryFormSource | undefined) {
   }
 
   const hasRatio = teacher.ratioTeacherShare !== undefined;
+  const hasIntegerRatio = hasRatio && (teacher.ratioTeacherShare ?? 0) % PERCENT_PER_FORM_UNIT === 0;
 
   return {
     monthlySalary: teacher.monthlySalary ? String(teacher.monthlySalary) : "",
     hourlyRate: teacher.hourlyRate ? String(teacher.hourlyRate) : "",
     // 퍼센트를 정수로 나눠 한 번에 문자열로 만들어 10 - x 같은 부동소수점 오차(3.7000000000000002)를 피한다.
-    ratioAcademyShare: hasRatio
+    ratioAcademyShare: hasIntegerRatio
       ? String((TOTAL_PERCENT - (teacher.ratioTeacherShare ?? 0)) / PERCENT_PER_FORM_UNIT)
       : "",
-    ratioTeacherShare: hasRatio ? String((teacher.ratioTeacherShare ?? 0) / PERCENT_PER_FORM_UNIT) : "",
+    ratioTeacherShare: hasIntegerRatio ? String((teacher.ratioTeacherShare ?? 0) / PERCENT_PER_FORM_UNIT) : "",
   };
+}
+
+export function getComplementaryRatio(value: string): string | null {
+  if (!/^\d+$/.test(value)) return null;
+  const ratio = Number(value);
+  return ratio >= 0 && ratio <= 10 ? String(10 - ratio) : null;
 }

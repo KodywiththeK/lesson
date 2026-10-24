@@ -157,7 +157,7 @@ describe("fetchStudentList", () => {
       {
         table: "students",
         select:
-          "id, academy_id, name, age, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
+          "id, academy_id, name, age, birth_year, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, sessions_per_month, lesson_duration_minutes, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))",
         eq: [
           ["academy_id", "academy-1"],
           ["status", "enrolled"],
@@ -212,6 +212,7 @@ describe("registerStudentEnrollment", () => {
       name: "김민지",
       registeredAt: "2026-08-21",
       age: 8,
+      birthYear: 2019,
       grade: "초등 1학년",
       school: "한빛초",
       occupation: "학생",
@@ -247,6 +248,7 @@ describe("registerStudentEnrollment", () => {
           p_name: "김민지",
           p_registered_on: "2026-08-21",
           p_age: 8,
+          p_birth_year: 2019,
           p_grade: "초등 1학년",
           p_school: "한빛초",
           p_occupation: "학생",
@@ -259,6 +261,8 @@ describe("registerStudentEnrollment", () => {
               instrument_name: "피아노",
               teacher_id: "teacher-1",
               lesson_type: "academy",
+              sessions_per_month: null,
+              lesson_duration_minutes: null,
               progress: "바이엘 상",
               lesson_fee: 150000,
               discount_total: 10000,
@@ -571,10 +575,14 @@ describe("원생 나이·할인 필드 조회", () => {
         academy_id: "academy-1",
         name: "김민지",
         age: 9,
+        birth_year: 2018,
         age_as_of_year: 2025,
         student_instruments: [
           {
             instrument_name: "피아노",
+            lesson_type: "private",
+            sessions_per_month: 8,
+            lesson_duration_minutes: 60,
             weekdays: ["월", "수"],
             discount_total: 10000,
             discount_kinds: ["sibling", "referral", "unknown-kind"],
@@ -589,8 +597,10 @@ describe("원생 나이·할인 필드 조회", () => {
 
     const [student] = (await fetchStudentList(client, { academyId: "academy-1" })).items;
 
-    expect(student).toMatchObject({ age: 9, ageAsOfYear: 2025 });
+    expect(student).toMatchObject({ age: 9, birthYear: 2018, ageAsOfYear: 2025 });
     expect(student.instruments?.[0]).toMatchObject({
+      sessionsPerMonth: 8,
+      lessonDurationMinutes: 60,
       discountKinds: ["sibling", "referral"],
       referralDiscountMonth: "2026-10",
       referralDiscountAmount: 10000,
@@ -634,6 +644,8 @@ describe("registerStudentEnrollment 할인·나이", () => {
         teacherId: "teacher-2",
         teacherName: "최선생",
         lessonType: "private" as const,
+        sessionsPerMonth: 4,
+        lessonDurationMinutes: 40 as const,
         weeklySchedules: [{ weekday: "friday" }],
         progress: "스즈키 1~3권",
         lessonFee: 140000,
@@ -759,6 +771,7 @@ describe("updateStudentEnrollments", () => {
       basicInfo: {
         registeredOn: "2026-03-01",
         age: 9,
+        birthYear: 2018,
         grade: " 초3 ",
         occupation: "",
         contactRelationship: "어머니",
@@ -790,6 +803,7 @@ describe("updateStudentEnrollments", () => {
       p_basic: {
         registered_on: "2026-03-01",
         age: 9,
+        birth_year: 2018,
         grade: "초3",
         school: null,
         occupation: null,
@@ -804,6 +818,8 @@ describe("updateStudentEnrollments", () => {
           instrument_id: "piano",
           instrument_name: "피아노",
           lesson_type: "academy",
+          sessions_per_month: null,
+          lesson_duration_minutes: null,
           progress: "체르니 40",
           lesson_fee: 200000,
           discount_total: 10000,
@@ -818,6 +834,8 @@ describe("updateStudentEnrollments", () => {
           instrument_id: "cello",
           instrument_name: "첼로",
           lesson_type: "academy",
+          sessions_per_month: null,
+          lesson_duration_minutes: null,
           progress: "체르니 40",
           lesson_fee: 200000,
           discount_total: 10000,

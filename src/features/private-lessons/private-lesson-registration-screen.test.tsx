@@ -249,6 +249,8 @@ describe("PrivateLessonRegistrationScreen", () => {
                   studentInstrumentId: "student-instrument-1",
                   instrumentId: "piano",
                   instrumentName: "피아노",
+                  sessionsPerMonth: 8,
+                  lessonMinutes: 60,
                 },
               ],
             },
@@ -326,6 +328,8 @@ describe("PrivateLessonRegistrationScreen", () => {
                   studentInstrumentId: "student-instrument-1",
                   instrumentId: "piano",
                   instrumentName: "피아노",
+                  sessionsPerMonth: 8,
+                  lessonMinutes: 60,
                 },
               ],
             },
@@ -365,6 +369,7 @@ describe("PrivateLessonRegistrationScreen", () => {
     });
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    expect(within(dialog).getByText("원생 등록 기준 월 8회")).toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-1");
     await user.type(within(dialog).getByLabelText("날짜"), "2026-08-21");
     await user.type(within(dialog).getByLabelText("시작 시간"), "15:00");
@@ -382,8 +387,7 @@ describe("PrivateLessonRegistrationScreen", () => {
           teacherId: "teacher-1",
           teacherName: "박선생",
           startAt: "2026-08-21T15:00:00+09:00",
-          // 원생의 레슨 길이 기본 30분
-          endAt: "2026-08-21T15:30:00+09:00",
+          endAt: "2026-08-21T16:00:00+09:00",
         },
       ]);
     });
@@ -402,6 +406,7 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
             studentInstrumentId: "si-2",
             instrumentId: "violin",
             instrumentName: "바이올린",
+            sessionsPerMonth: 8,
             lessonMinutes: 40,
           },
         ],
@@ -414,6 +419,7 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
             studentInstrumentId: "si-1",
             instrumentId: "piano",
             instrumentName: "피아노",
+            sessionsPerMonth: 4,
           },
         ],
       },

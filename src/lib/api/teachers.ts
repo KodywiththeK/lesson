@@ -3,6 +3,7 @@ import {
   buildTeacherList,
   formatTeacherSalarySummary,
   formatTeacherWorkScheduleSummary,
+  sortTeacherWorkSchedules,
   type BuildTeacherListOptions,
   type TeacherListRow,
   type TeacherWorkSchedule,
@@ -603,8 +604,8 @@ function toTeacherListRow(row: TeacherSupabaseRow): TeacherListRow {
     ) ??
     row.teacher_salary_settings?.find((setting) => setting.active) ??
     null;
-  const workSchedules = (row.teacher_work_schedules ?? []).map(
-    toTeacherWorkSchedule,
+  const workSchedules = sortTeacherWorkSchedules(
+    (row.teacher_work_schedules ?? []).map(toTeacherWorkSchedule),
   );
   const mapped: TeacherListRow = {
     academyId: row.academy_id,

@@ -5,6 +5,20 @@ function mainNavigation(page: Page) {
   return page.getByRole("navigation", { name: "주요 메뉴" });
 }
 
+async function openResponsivePageAction(page: Page, actionName: string) {
+  const compactActionMenu = page.getByRole("button", { name: "작업 메뉴 열기" });
+  if (await compactActionMenu.isVisible()) {
+    await compactActionMenu.click();
+    await page
+      .getByRole("dialog", { name: "페이지 작업" })
+      .getByRole("button", { name: actionName })
+      .click();
+    return;
+  }
+
+  await page.getByRole("button", { name: actionName }).click();
+}
+
 test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다", async ({ page, request }) => {
   await page.goto("/");
 
@@ -381,6 +395,37 @@ test("관리·재무 목록은 작은 화면에서도 항목명과 표 작업을
         await table.scrollIntoViewIfNeeded();
         await page.screenshot({ path: testInfo.outputPath(`${route.replaceAll("/", "-")}-${width}.png`) });
       }
+    }
+  }
+});
+
+test("원생·선생님 등록 폼은 주요 화면 폭에서 넘치지 않고 저장 버튼에 접근할 수 있다", async ({ page }) => {
+  const forms = [
+    { route: "/management/students", action: "원생 등록", dialog: "원생 등록", submit: "등록" },
+    { route: "/management/teachers", action: "선생님 등록", dialog: "선생님 등록", submit: "저장" },
+  ];
+
+  for (const width of [320, 480, 767, 768, 1023, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+
+    for (const form of forms) {
+      await page.goto(form.route);
+      await openResponsivePageAction(page, form.action);
+
+      const dialog = page.getByRole("dialog", { name: form.dialog });
+      await expect(dialog).toBeVisible();
+      const dialogBox = await dialog.boundingBox();
+      expect(dialogBox).not.toBeNull();
+      expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
+      expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(width);
+      expect(dialogBox!.y).toBeGreaterThanOrEqual(0);
+      expect(dialogBox!.y + dialogBox!.height).toBeLessThanOrEqual(800);
+
+      const submit = dialog.getByRole("button", { name: form.submit, exact: true });
+      await submit.scrollIntoViewIfNeeded();
+      await expect(submit).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
     }
   }
 });

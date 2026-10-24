@@ -22,7 +22,7 @@ import {
 } from "@/domain/student-enrollment-edit";
 import { STUDENT_DISCOUNTS, type StudentDiscountKind } from "@/domain/lesson-pricing";
 import {
-  getAcademyScheduleValidationError,
+  getLessonScheduleValidationError,
   type StudentInstrumentDiscountSelection,
 } from "@/domain/student-registration";
 
@@ -39,6 +39,8 @@ export type StudentInstrumentSupabaseRow = {
   instrument_id?: string | null;
   instrument_name: string | null;
   lesson_type?: string | null;
+  sessions_per_month?: number | null;
+  lesson_duration_minutes?: number | null;
   weekdays: string[] | null;
   start_time?: string | null;
   end_time?: string | null;
@@ -86,6 +88,7 @@ export type StudentSupabaseRow = {
   academy_id: string;
   name: string;
   age?: number | null;
+  birth_year?: number | null;
   age_as_of_year?: number | null;
   grade?: string | null;
   grade_as_of_year?: number | null;
@@ -145,6 +148,7 @@ export type RegisterStudentEnrollmentInput = {
   name: string;
   registeredAt: string;
   age?: number;
+  birthYear?: number;
   grade?: string;
   school?: string;
   occupation?: string;
@@ -160,6 +164,8 @@ export type RegisterStudentEnrollmentInstrumentInput = StudentInstrumentDiscount
   teacherId?: string | null;
   teacherName?: string;
   lessonType: "academy" | "private";
+  sessionsPerMonth?: number;
+  lessonDurationMinutes?: 40 | 60;
   instrumentId: string;
   instrumentName: string;
   weeklySchedules: RegisterStudentWeeklyScheduleInput[];
@@ -188,6 +194,7 @@ type RegisterStudentEnrollmentRpcPayload = {
   p_name: string;
   p_registered_on: string;
   p_age: number | null;
+  p_birth_year: number | null;
   p_grade: string | null;
   p_school: string | null;
   p_occupation: string | null;
@@ -199,6 +206,8 @@ type RegisterStudentEnrollmentRpcPayload = {
     instrument_name: string;
     teacher_id: string | null;
     lesson_type: string;
+    sessions_per_month: number | null;
+    lesson_duration_minutes: number | null;
     progress: string;
     lesson_fee: number;
     discount_total: number;
@@ -239,6 +248,8 @@ type EnrollmentRpcFields = {
   instrument_id: string;
   instrument_name: string;
   lesson_type: string;
+  sessions_per_month: number | null;
+  lesson_duration_minutes: number | null;
   progress: string;
   lesson_fee: number;
   discount_total: number;
@@ -262,6 +273,7 @@ type UpdateStudentEnrollmentsRpcPayload = {
   p_basic: {
     registered_on: string;
     age: number | null;
+    birth_year: number | null;
     grade: string | null;
     school: string | null;
     occupation: string | null;
@@ -279,7 +291,7 @@ type UpdateStudentEnrollmentsRpcResult = {
 };
 
 const STUDENT_LIST_SELECT =
-  "id, academy_id, name, age, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
+  "id, academy_id, name, age, birth_year, age_as_of_year, grade, grade_as_of_year, school, occupation, attendance_code, registered_on, status, suspended_at, withdrawn_at, retention_until, archived_at, student_contacts!student_contacts_academy_student_fk(id, created_at, relationship, phone, phone_last4), student_instruments!student_instruments_academy_student_fk(id, teacher_id, instrument_id, instrument_name, lesson_type, sessions_per_month, lesson_duration_minutes, weekdays, start_time, end_time, progress, lesson_fee, discount_total, discount_label, discount_kinds, referral_discount_month, referral_discount_amount, final_monthly_fee, active, student_instrument_weekly_schedules!student_iws_academy_instrument_fk(id, weekday, start_time, end_time), teachers!student_instruments_academy_teacher_fk(name))";
 const STATUS_TRANSITION_SELECT =
   "entity_type, entity_id, to_status, reason, changed_at";
 
@@ -444,9 +456,12 @@ export async function updateStudentEnrollments(
 }
 
 function toBasicInfoPayload(basicInfo: StudentBasicInfoInput) {
+  const birthYear = resolveBirthYear(basicInfo.age, basicInfo.birthYear);
+
   return {
     registered_on: basicInfo.registeredOn,
     age: basicInfo.age ?? null,
+    birth_year: birthYear ?? null,
     grade: normalizeOptionalText(basicInfo.grade),
     school: normalizeOptionalText(basicInfo.school),
     occupation: normalizeOptionalText(basicInfo.occupation),
@@ -491,6 +506,8 @@ function toEnrollmentRpcFields(fields: StudentEnrollmentFields) {
     instrument_id: fields.instrumentId,
     instrument_name: fields.instrumentName,
     lesson_type: fields.lessonType,
+    sessions_per_month: fields.lessonType === "private" ? (fields.sessionsPerMonth ?? null) : null,
+    lesson_duration_minutes: fields.lessonType === "private" ? (fields.lessonDurationMinutes ?? null) : null,
     progress: fields.progress,
     lesson_fee: fields.lessonFee,
     discount_total: fields.discountTotal,
@@ -560,6 +577,7 @@ export async function registerStudentEnrollment(
   input: RegisterStudentEnrollmentInput,
 ): Promise<StudentListRow> {
   const trimmedName = input.name.trim();
+  const birthYear = resolveBirthYear(input.age, input.birthYear);
 
   if (!trimmedName) {
     throw new Error("원생명은 필수입니다.");
@@ -570,7 +588,7 @@ export async function registerStudentEnrollment(
   }
 
   for (const instrument of input.instruments) {
-    const scheduleError = getAcademyScheduleValidationError(instrument);
+    const scheduleError = getLessonScheduleValidationError(instrument);
     if (scheduleError) throw new Error(scheduleError);
   }
 
@@ -581,6 +599,7 @@ export async function registerStudentEnrollment(
       p_name: trimmedName,
       p_registered_on: input.registeredAt,
       p_age: input.age ?? null,
+      p_birth_year: birthYear ?? null,
       p_grade: normalizeOptionalText(input.grade),
       p_school: normalizeOptionalText(input.school),
       p_occupation: normalizeOptionalText(input.occupation),
@@ -592,6 +611,8 @@ export async function registerStudentEnrollment(
         instrument_name: instrument.instrumentName,
         teacher_id: instrument.teacherId || null,
         lesson_type: instrument.lessonType,
+        sessions_per_month: instrument.lessonType === "private" ? (instrument.sessionsPerMonth ?? null) : null,
+        lesson_duration_minutes: instrument.lessonType === "private" ? (instrument.lessonDurationMinutes ?? null) : null,
         progress: instrument.progress,
         lesson_fee: instrument.lessonFee,
         discount_total: instrument.discountTotal,
@@ -625,6 +646,8 @@ export async function registerStudentEnrollment(
       instrumentId: instrument.instrumentId,
       instrumentName: instrument.instrumentName,
       lessonType: instrument.lessonType,
+      sessionsPerMonth: instrument.sessionsPerMonth,
+      lessonDurationMinutes: instrument.lessonDurationMinutes,
       weekdayLabels: uniqueNonEmpty(
         instrument.weeklySchedules.map((schedule) =>
           toKoreanWeekdayLabel(schedule.weekday),
@@ -656,6 +679,7 @@ export async function registerStudentEnrollment(
     studentId,
     name: trimmedName,
     age: input.age,
+    birthYear,
     ageAsOfYear: input.age === undefined ? undefined : getCurrentFinanceYear(),
     grade: input.grade,
     gradeAsOfYear: input.grade ? getCurrentFinanceYear() : undefined,
@@ -741,6 +765,7 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
     studentId: row.id,
     name: row.name,
     age: row.age ?? undefined,
+    birthYear: row.birth_year ?? undefined,
     ageAsOfYear: row.age_as_of_year ?? undefined,
     grade: row.grade ?? undefined,
     gradeAsOfYear: row.grade_as_of_year ?? undefined,
@@ -780,6 +805,11 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
 function toStudentListInstrument(instrument: StudentInstrumentSupabaseRow) {
   const weeklySchedules = normalizeWeeklySchedulesForRow(instrument);
 
+  const lessonDurationMinutes: 40 | 60 | undefined =
+    instrument.lesson_duration_minutes === 40 || instrument.lesson_duration_minutes === 60
+      ? instrument.lesson_duration_minutes
+      : undefined;
+
   return {
     studentInstrumentId: instrument.id ?? "",
     teacherId: instrument.teacher_id ?? null,
@@ -787,6 +817,8 @@ function toStudentListInstrument(instrument: StudentInstrumentSupabaseRow) {
     instrumentId: instrument.instrument_id ?? "",
     instrumentName: instrument.instrument_name ?? "",
     lessonType: instrument.lesson_type ?? "academy",
+    sessionsPerMonth: instrument.sessions_per_month ?? undefined,
+    lessonDurationMinutes,
     weekdayLabels: uniqueNonEmpty(
       weeklySchedules.map((schedule) => schedule.weekdayLabel),
     ),
@@ -858,6 +890,10 @@ function buildLatestReasonMap(rows: EntityStatusTransitionSupabaseRow[]) {
 
 function getCurrentFinanceYear() {
   return Number(getFinanceToday().slice(0, 4));
+}
+
+function resolveBirthYear(age: number | undefined, birthYear: number | undefined) {
+  return birthYear ?? (age === undefined ? undefined : getCurrentFinanceYear() - age + 1);
 }
 
 const REFERRAL_DISCOUNT_KIND: StudentDiscountKind = "referral";

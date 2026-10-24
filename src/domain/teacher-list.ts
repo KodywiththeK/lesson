@@ -133,13 +133,35 @@ export function formatTeacherWorkScheduleSummary(
     return "-";
   }
 
-  return schedules
+  return sortTeacherWorkSchedules(schedules)
     .map((schedule) =>
       schedule.startTime && schedule.endTime
         ? `${schedule.weekdayLabel} ${schedule.startTime}-${schedule.endTime}`
         : schedule.weekdayLabel,
     )
     .join(", ");
+}
+
+export function sortTeacherWorkSchedules<T extends Pick<TeacherWorkSchedule, "weekdayLabel">>(
+  schedules: readonly T[],
+): T[] {
+  return [...schedules].sort(
+    (left, right) => getWeekdayOrder(left.weekdayLabel) - getWeekdayOrder(right.weekdayLabel),
+  );
+}
+
+export function formatTeacherContractPeriod(startOn?: string, endOn?: string) {
+  if (startOn && endOn) return `${startOn}~${endOn}`;
+  if (startOn) return `${startOn}~`;
+  if (endOn) return `~${endOn}`;
+  return "-";
+}
+
+const WEEKDAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"];
+
+function getWeekdayOrder(weekdayLabel: string) {
+  const index = WEEKDAY_ORDER.indexOf(weekdayLabel);
+  return index < 0 ? WEEKDAY_ORDER.length : index;
 }
 
 function matchesTeacherFilters(

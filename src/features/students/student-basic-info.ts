@@ -1,6 +1,10 @@
 import { getStudentDisplayAge, type StudentListRow } from "@/domain/student-list";
 import { getFinanceToday } from "@/domain/finance-date";
-import { getStudentDisplayGrade } from "@/domain/student-grade";
+import {
+  calculateBirthYearFromAge,
+  getStudentDemographicValidationError,
+  getStudentDisplayGrade,
+} from "@/domain/student-grade";
 import type { StudentBasicInfoInput } from "@/domain/student-enrollment-edit";
 
 import { contactRelationshipOptions } from "./student-form-options";
@@ -13,6 +17,7 @@ export type StudentBasicFormValues = {
   name: string;
   registeredOn: string;
   age: string;
+  birthYear: string;
   grade: string;
   school: string;
   occupation: string;
@@ -26,11 +31,17 @@ export function createBasicFormValues(student: StudentListRow): StudentBasicForm
   const primaryContact = student.contacts?.[0];
   const secondaryContact = student.contacts?.[1];
   const displayAge = getStudentDisplayAge(student);
+  const currentYear = Number(getFinanceToday().slice(0, 4));
+  const displayBirthYear = student.birthYear
+    ?? (displayAge === undefined
+      ? undefined
+      : calculateBirthYearFromAge(displayAge, currentYear));
 
   return {
     name: student.name,
     registeredOn: student.registeredOn ?? "",
     age: displayAge === undefined ? "" : String(displayAge),
+    birthYear: displayBirthYear === undefined ? "" : String(displayBirthYear),
     grade: getStudentDisplayGrade(student, getFinanceToday()),
     school: student.school ?? "",
     occupation: student.occupation ?? "",
@@ -46,6 +57,7 @@ export function toBasicInfoInput(values: StudentBasicFormValues): StudentBasicIn
   return {
     registeredOn: values.registeredOn,
     age: values.age ? Number(values.age) : undefined,
+    birthYear: values.birthYear ? Number(values.birthYear) : undefined,
     grade: values.grade,
     school: values.school,
     occupation: values.occupation,
@@ -69,6 +81,14 @@ export function getContactPhoneError(phone: string, hasExistingContact: boolean)
   }
 
   return digits >= MIN_PHONE_DIGITS ? null : "연락처는 숫자 4자리 이상 입력해 주세요.";
+}
+
+export function getBasicInfoDemographicError(values: StudentBasicFormValues) {
+  return getStudentDemographicValidationError({
+    ageText: values.age,
+    birthYearText: values.birthYear,
+    currentYear: Number(getFinanceToday().slice(0, 4)),
+  });
 }
 
 /** 저장된 관계가 기본 선택지에 없어도 그대로 보여 주고 유지한다. */

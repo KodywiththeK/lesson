@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getInitialSalaryState } from "./teacher-salary-form-state";
+import { getComplementaryRatio, getInitialSalaryState } from "./teacher-salary-form-state";
 
 describe("getInitialSalaryState", () => {
   it("새 선생님은 금액 칸을 비우고 비율만 4:6 기본값으로 둔다", () => {
@@ -28,14 +28,10 @@ describe("getInitialSalaryState", () => {
     });
   });
 
-  it("10의 배수가 아닌 비율도 부동소수점 오차 없이 소수 첫째 자리로 보여 준다", () => {
+  it("10의 배수가 아닌 이전 비율은 임의 반올림하지 않고 다시 입력하게 비운다", () => {
     expect(getInitialSalaryState({ payType: "ratio", ratioTeacherShare: 65 })).toMatchObject({
-      ratioAcademyShare: "3.5",
-      ratioTeacherShare: "6.5",
-    });
-    expect(getInitialSalaryState({ payType: "ratio", ratioTeacherShare: 63 })).toMatchObject({
-      ratioAcademyShare: "3.7",
-      ratioTeacherShare: "6.3",
+      ratioAcademyShare: "",
+      ratioTeacherShare: "",
     });
     expect(getInitialSalaryState({ payType: "ratio", ratioTeacherShare: 100 })).toMatchObject({
       ratioAcademyShare: "0",
@@ -52,5 +48,14 @@ describe("getInitialSalaryState", () => {
       monthlySalary: "",
       hourlyRate: "30000",
     });
+  });
+
+  it("한쪽 정수 비율을 바꾸면 반대쪽을 합계 10으로 계산한다", () => {
+    expect(getComplementaryRatio("6")).toBe("4");
+    expect(getComplementaryRatio("0")).toBe("10");
+    expect(getComplementaryRatio("10")).toBe("0");
+    expect(getComplementaryRatio("6.5")).toBeNull();
+    expect(getComplementaryRatio("11")).toBeNull();
+    expect(getComplementaryRatio("")).toBeNull();
   });
 });

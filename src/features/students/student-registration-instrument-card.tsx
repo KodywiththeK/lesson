@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { changeLessonFeeLessonType, repriceLessonFee } from "@/domain/lesson-fee-draft";
+import { changeLessonFeeLessonType, updateLessonFeeWeekdayCount } from "@/domain/lesson-fee-draft";
+import { calculateLessonEndTime } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 
 import { getDefaultTeacherId, getTeacherCandidates } from "./student-form-options";
@@ -111,11 +112,17 @@ export function StudentRegistrationInstrumentCard({
         legend="수강 요일"
         labelPrefix={`${label} `}
         schedules={draft.weeklySchedules}
+        lessonType={draft.lessonType}
+        lessonDurationMinutes={draft.fee.minutes}
         onChange={(weeklySchedules) =>
           onChange({
             ...draft,
             weeklySchedules,
-            fee: repriceLessonFee(draft.fee, feeContext(draft.lessonType, weeklySchedules.length)),
+            fee: updateLessonFeeWeekdayCount(
+              draft.fee,
+              feeContext(draft.lessonType, weeklySchedules.length),
+              draft.weeklySchedules.length,
+            ),
           })
         }
       />
@@ -125,7 +132,16 @@ export function StudentRegistrationInstrumentCard({
         context={feeContext(draft.lessonType, draft.weeklySchedules.length)}
         referenceMonth={referenceMonth}
         draft={draft.fee}
-        onChange={(fee) => onChange({ ...draft, fee })}
+        onChange={(fee) => onChange({
+          ...draft,
+          fee,
+          weeklySchedules: draft.lessonType === "private"
+            ? draft.weeklySchedules.map((schedule) => ({
+                ...schedule,
+                endTime: calculateLessonEndTime(schedule.startTime, fee.minutes || undefined),
+              }))
+            : draft.weeklySchedules,
+        })}
       />
     </section>
   );

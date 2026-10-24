@@ -4,7 +4,7 @@ import {
   isReferralMonthMissing,
   type LessonFeeDraft,
 } from "@/domain/lesson-fee-draft";
-import { getAcademyScheduleValidationError } from "@/domain/student-registration";
+import { getLessonScheduleValidationError } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 
 import { getDefaultTeacherId, instrumentOptions } from "./student-form-options";
@@ -66,11 +66,14 @@ export function isRegistrationInstrumentReady(
 ) {
   return (
     draft.weeklySchedules.length > 0 &&
+    (draft.lessonType !== "private" || draft.fee.sessionsPerMonth > 0) &&
     draft.fee.lessonFee > 0 &&
     !isReferralMonthMissing(draft.fee, referenceMonth) &&
-    !getAcademyScheduleValidationError({
+    !getLessonScheduleValidationError({
       lessonType: draft.lessonType,
       teacherId: getEffectiveTeacherId(draft, teachers),
+      sessionsPerMonth: draft.fee.sessionsPerMonth,
+      lessonDurationMinutes: draft.fee.minutes || undefined,
       weeklySchedules: draft.weeklySchedules,
     })
   );
@@ -91,6 +94,12 @@ export function buildRegistrationInstrument(
     teacherId,
     teacherName: teacher?.name ?? "",
     lessonType: draft.lessonType,
+    ...(draft.lessonType === "private"
+      ? {
+          sessionsPerMonth: draft.fee.sessionsPerMonth || undefined,
+          lessonDurationMinutes: draft.fee.minutes || undefined,
+        }
+      : {}),
     weeklySchedules: draft.weeklySchedules,
     progress: draft.fee.progress.trim() || "신규 등록",
     ...getLessonFeeSubmission(draft.fee, referenceMonth),

@@ -1,6 +1,7 @@
 import {
   calculateLessonFee,
   calculateStudentFee,
+  getPrivateLessonSessionsForWeekdays,
   getProgressOptions,
   type ManualLessonFeeReason,
   type PricedLessonType,
@@ -14,7 +15,8 @@ import type { StudentListInstrument } from "./student-list";
 export type LessonFeeDraft = {
   progress: string;
   sessionsPerMonth: PrivateLessonSessions;
-  minutes: PrivateLessonMinutes;
+  /** 0은 이전 데이터에 개인레슨 수업 길이가 저장되지 않아 사용자가 보완해야 하는 상태다. */
+  minutes: PrivateLessonMinutes | 0;
   lessonFee: number;
   /** manual이면 직원이 직접 입력(또는 저장된) 금액이라 가격표 구간이 없는 동안 유지한다. */
   feeSource: "auto" | "manual";
@@ -62,8 +64,8 @@ export function createLessonFeeDraftFromInstrument(
 
   return {
     progress: instrument?.progress ?? "",
-    sessionsPerMonth: DEFAULT_SESSIONS,
-    minutes: DEFAULT_MINUTES,
+    sessionsPerMonth: instrument?.sessionsPerMonth ?? 0,
+    minutes: instrument?.lessonDurationMinutes ?? 0,
     lessonFee: instrument?.lessonFee ?? 0,
     feeSource: "manual",
     discountKinds,
@@ -77,26 +79,58 @@ export function createLessonFeeDraftFromInstrument(
 
 /** 진도·요일 개수·월 횟수·수업 시간·수업 형태가 바뀐 뒤 레슨비를 가격표로 다시 맞춘다. */
 export function repriceLessonFee(draft: LessonFeeDraft, context: LessonFeeContext): LessonFeeDraft {
+  if (draft.feeSource === "manual") {
+    return draft;
+  }
+
   const result = calculateLessonFee({
     ...context,
     progress: draft.progress,
     sessionsPerMonth: draft.sessionsPerMonth,
-    minutes: draft.minutes,
+    minutes: draft.minutes || undefined,
   });
 
   if (result.status === "priced") {
     return { ...draft, lessonFee: result.fee, feeSource: "auto" };
   }
-  if (draft.feeSource === "manual" && result.reason !== "no-weekdays") {
-    return draft;
-  }
-
   // 가격표 구간이 없어졌다면 이전 구간의 금액이 남아 잘못 청구되지 않게 비운다.
   return { ...draft, lessonFee: 0, feeSource: "auto" };
 }
 
+export function resetLessonFeeToPriceTable(
+  draft: LessonFeeDraft,
+  context: LessonFeeContext,
+): LessonFeeDraft {
+  return repriceLessonFee({ ...draft, feeSource: "auto" }, context);
+}
+
+export function updateLessonFeeWeekdayCount(
+  draft: LessonFeeDraft,
+  context: LessonFeeContext,
+  previousWeekdayCount: number,
+): LessonFeeDraft {
+  if (context.lessonType !== "private") return repriceLessonFee(draft, context);
+
+  const resolution = getPrivateLessonSessionsForWeekdays(context.weekdayCount);
+  let sessionsPerMonth = draft.sessionsPerMonth;
+  if (resolution.kind === "automatic") {
+    sessionsPerMonth = resolution.sessions;
+  } else if (previousWeekdayCount <= 2) {
+    sessionsPerMonth = 0;
+  }
+
+  return repriceLessonFee({ ...draft, sessionsPerMonth }, context);
+}
+
 export function setLessonFeeManually(draft: LessonFeeDraft, lessonFee: number): LessonFeeDraft {
   return { ...draft, lessonFee, feeSource: "manual" };
+}
+
+function getPrivateSessionsForLessonTypeChange(weekdayCount: number): PrivateLessonSessions {
+  if (weekdayCount === 0) return DEFAULT_SESSIONS;
+
+  const resolution = getPrivateLessonSessionsForWeekdays(weekdayCount);
+  return resolution.kind === "automatic" ? resolution.sessions : 0;
 }
 
 export function changeLessonFeeLessonType(
@@ -104,7 +138,17 @@ export function changeLessonFeeLessonType(
   context: LessonFeeContext,
 ): LessonFeeDraft {
   return repriceLessonFee(
-    { ...draft, progress: getProgressOptions(context.instrumentName, context.lessonType)[0] ?? "" },
+    {
+      ...draft,
+      progress: getProgressOptions(context.instrumentName, context.lessonType)[0] ?? "",
+      ...(context.lessonType === "private"
+        ? {
+            sessionsPerMonth: getPrivateSessionsForLessonTypeChange(context.weekdayCount),
+            minutes: draft.minutes || DEFAULT_MINUTES,
+          }
+        : {}),
+      feeSource: "auto",
+    },
     context,
   );
 }
@@ -148,6 +192,7 @@ const MANUAL_LESSON_FEE_MESSAGES: Record<ManualLessonFeeReason, string> = {
   "no-weekday-tier": "요일 개수에 맞는 가격표가 없어 레슨비를 직접 입력해 주세요.",
   "unknown-progress": "가격표에 없는 진도라 레슨비를 직접 입력해 주세요.",
   "missing-private-option": "월 횟수와 수업 시간을 선택하면 레슨비가 자동으로 계산됩니다.",
+  "no-private-session-tier": "가격표에 없는 월 횟수라 레슨비를 직접 입력해 주세요.",
   "no-price-table": "이 수업은 가격표가 없어 레슨비를 직접 입력해 주세요.",
 };
 

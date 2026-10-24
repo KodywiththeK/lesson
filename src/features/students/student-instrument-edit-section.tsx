@@ -5,8 +5,9 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   changeLessonFeeLessonType,
-  repriceLessonFee,
+  updateLessonFeeWeekdayCount,
 } from "@/domain/lesson-fee-draft";
+import { calculateLessonEndTime } from "@/domain/student-registration";
 import type { StudentListInstrument } from "@/domain/student-list";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import { cn } from "@/lib/utils";
@@ -162,11 +163,17 @@ export function StudentInstrumentEditSection({
         labelPrefix={labelPrefix}
         schedules={draft.schedules}
         legacyWeekdays={legacyWeekdays}
+        lessonType={draft.lessonType}
+        lessonDurationMinutes={draft.fee.minutes}
         onChange={(schedules) =>
           onChange({
             ...draft,
             schedules,
-            fee: repriceLessonFee(draft.fee, feeContext(draft.lessonType, schedules.length)),
+            fee: updateLessonFeeWeekdayCount(
+              draft.fee,
+              feeContext(draft.lessonType, schedules.length),
+              draft.schedules.length,
+            ),
           })
         }
       />
@@ -181,7 +188,16 @@ export function StudentInstrumentEditSection({
         context={feeContext(draft.lessonType, draft.schedules.length)}
         referenceMonth={referenceMonth}
         draft={draft.fee}
-        onChange={(fee) => onChange({ ...draft, fee })}
+        onChange={(fee) => onChange({
+          ...draft,
+          fee,
+          schedules: draft.lessonType === "private"
+            ? draft.schedules.map((schedule) => ({
+                ...schedule,
+                endTime: calculateLessonEndTime(schedule.startTime, fee.minutes || undefined),
+              }))
+            : draft.schedules,
+        })}
       />
     </section>
   );

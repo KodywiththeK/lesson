@@ -8,6 +8,7 @@ import type { TeacherListRow } from "@/domain/teacher-list";
 
 import {
   createBasicFormValues,
+  getBasicInfoDemographicError,
   getContactPhoneError,
   hasBasicInfoChanged,
   toBasicInfoInput,
@@ -53,12 +54,14 @@ export function StudentEditForm({
   const hasExistingContact = Boolean(student.contacts?.[0]);
   const referenceMonth = toReferenceMonth(values.registeredOn);
   const phoneError = getContactPhoneError(values.contactPhone, hasExistingContact);
+  const demographicError = getBasicInfoDemographicError(values);
   const secondaryContactErrors = getSecondaryContactErrors(values.secondaryContactRelationship, values.secondaryContactPhone);
   const blockedLabels = getBlockedSectionLabels(edits, teachers, referenceMonth);
   const canSubmit =
     Boolean(values.name.trim()) &&
     Boolean(values.registeredOn) &&
     !phoneError &&
+    !demographicError &&
     Object.keys(secondaryContactErrors).length === 0 &&
     blockedLabels.length === 0;
   // 섹션이 하나뿐이면 오류가 그 섹션 안에 바로 보이므로, 여러 섹션일 때만 어느 섹션이 막는지 따로 알린다.

@@ -22,7 +22,9 @@ export type PrivateLessonRegistrationStudentOption = {
     instrumentName: string;
     /** 원생이 이 악기를 배우는 담당 선생님. 등록 폼의 기본 선생님으로 쓴다. */
     teacherId?: string;
-    /** 원생관리에 입력된 레슨 시작·종료 시각의 차이(분). 개인레슨 옵션에만 있고 값이 없으면 기본 30분이다. */
+    /** 원생 등록에서 정한 월 레슨 횟수. */
+    sessionsPerMonth?: number;
+    /** 원생 등록에서 정한 회당 길이. 이전 데이터는 대표 시작·종료 시각의 차이를 사용한다. */
     lessonMinutes?: number;
   }>;
 };
@@ -52,6 +54,8 @@ export type PrivateLessonRegistrationStudentSupabaseRow = {
         lesson_type: string | null;
         active: boolean | null;
         teacher_id?: string | null;
+        sessions_per_month?: number | null;
+        lesson_duration_minutes?: number | null;
         start_time?: string | null;
         end_time?: string | null;
       }>
@@ -197,7 +201,7 @@ export type MarkPrivateLessonAttendanceInput = {
 };
 
 const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
-  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, start_time, end_time)";
+  "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, sessions_per_month, lesson_duration_minutes, start_time, end_time)";
 const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part, status";
 const PRIVATE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin";
@@ -423,16 +427,28 @@ function toLessonRegistrationStudentOption(
           teacherId: instrument.teacher_id ?? undefined,
           ...(lessonType === "private"
             ? {
-                lessonMinutes: deriveLessonMinutes(
+                lessonMinutes: getRegistrationLessonMinutes(
+                  instrument.lesson_duration_minutes,
                   instrument.start_time,
                   instrument.end_time,
                 ),
+                sessionsPerMonth: instrument.sessions_per_month ?? undefined,
               }
             : {}),
         },
       ];
     }),
   };
+}
+
+function getRegistrationLessonMinutes(
+  configuredMinutes: number | null | undefined,
+  legacyStartTime: string | null | undefined,
+  legacyEndTime: string | null | undefined,
+) {
+  if (configuredMinutes && configuredMinutes > 0) return configuredMinutes;
+  if (!legacyStartTime || !legacyEndTime) return undefined;
+  return deriveLessonMinutes(legacyStartTime, legacyEndTime);
 }
 
 function toPrivateLessonTeacherOption(

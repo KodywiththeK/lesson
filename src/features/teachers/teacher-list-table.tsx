@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  formatTeacherContractPeriod,
   formatTeacherPayType,
   formatTeacherStatus,
   type TeacherListRow,
@@ -25,7 +26,7 @@ const TEACHER_COLUMNS = [
   "상태",
   "담당 파트",
   "연락처",
-  "등록일",
+  "계약 기간",
   "주민등록번호",
   "근무시간",
 ] as const;
@@ -46,7 +47,7 @@ export function TeacherListTable({ teachers, isOwner, onSelectTeacher }: Teacher
     );
   }
 
-  const [name, status, part, contact, registeredAt, residentRegistration, workSchedule] = TEACHER_COLUMNS;
+  const [name, status, part, contact, contractPeriod, residentRegistration, workSchedule] = TEACHER_COLUMNS;
   const columns = isOwner ? [...TEACHER_COLUMNS, SALARY_COLUMN, "관리"] : [...TEACHER_COLUMNS, "관리"];
 
   return (
@@ -78,8 +79,8 @@ export function TeacherListTable({ teachers, isOwner, onSelectTeacher }: Teacher
               <TableCell label={contact}>
                 {teacher.contact || "-"}
               </TableCell>
-              <TableCell label={registeredAt} className="tabular-nums">
-                {teacher.registeredAt}
+              <TableCell label={contractPeriod} className="tabular-nums">
+                {formatTeacherContractPeriod(teacher.contractStartOn, teacher.contractEndOn)}
               </TableCell>
               <TableCell label={residentRegistration} className="tabular-nums">
                 {teacher.residentRegistrationMasked || "-"}
