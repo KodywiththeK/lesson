@@ -95,12 +95,12 @@ describe("mainNavigation", () => {
     ]);
   });
 
-  it("설정 메뉴는 원장 전용 기능 키를 쓰는 회차권 설정 하위 메뉴를 가진다", () => {
+  it("설정 메뉴는 레슨시간표와 회차권 설정 하위 메뉴를 가진다", () => {
     const settingsNavigation = mainNavigation.find((item) => item.label === "설정");
 
-    expect(settingsNavigation?.href).toBe("/settings/lesson-tickets");
-    expect(settingsNavigation?.children?.map((item) => item.label)).toEqual(["회차권 설정"]);
-    expect(settingsNavigation?.children?.map((item) => item.href)).toEqual(["/settings/lesson-tickets"]);
-    expect(settingsNavigation?.children?.map((item) => item.feature)).toEqual(["settings"]);
+    expect(settingsNavigation?.href).toBe("/settings/lesson-schedule");
+    expect(settingsNavigation?.children?.map((item) => item.label)).toEqual(["레슨시간표", "회차권 설정"]);
+    expect(settingsNavigation?.children?.map((item) => item.href)).toEqual(["/settings/lesson-schedule", "/settings/lesson-tickets"]);
+    expect(settingsNavigation?.children?.map((item) => item.feature)).toEqual(["lesson-calendar-settings", "settings"]);
   });
 });

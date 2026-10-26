@@ -184,10 +184,17 @@ export const mainNavigation: NavigationItem[] = [
   },
   {
     label: "설정",
-    href: "/settings/lesson-tickets",
-    description: "학원마다 다른 운영 규정을 미리 정해 둡니다. 원장만 바꿀 수 있습니다.",
+    href: "/settings/lesson-schedule",
+    description: "레슨시간표와 학원 운영 규정을 설정합니다.",
     icon: Settings,
     children: [
+      {
+        label: "레슨시간표",
+        href: "/settings/lesson-schedule",
+        description: "악기 색상과 학원 휴원일을 설정합니다.",
+        icon: CalendarDays,
+        feature: "lesson-calendar-settings",
+      },
       {
         label: "회차권 설정",
         href: "/settings/lesson-tickets",

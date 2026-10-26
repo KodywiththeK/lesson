@@ -68,6 +68,7 @@ describe("AppShell", () => {
       "선생님 월급",
       "전체 수입",
       "설정",
+      "레슨시간표",
       "회차권 설정",
     ]);
     expect(
@@ -92,6 +93,16 @@ describe("AppShell", () => {
     );
     expect(screen.queryByRole("link", { name: /수납 등록/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /출석 확인/ })).not.toBeInTheDocument();
+  });
+
+  it("데스크는 레슨시간표 설정을 열고 다른 설정 하위 메뉴는 볼 수 없다", () => {
+    window.history.pushState(null, "", "/settings/lesson-schedule");
+    render(<AppShell academyName="더 클래식" permissionContext={{ role: "desk" }}><p>시간표 설정 내용</p></AppShell>);
+
+    const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
+    expect(within(navigation).getByRole("link", { name: "레슨시간표" })).toHaveAttribute("href", "/settings/lesson-schedule");
+    expect(within(navigation).queryByRole("link", { name: "회차권 설정" })).not.toBeInTheDocument();
+    expect(screen.getByText("시간표 설정 내용")).toBeInTheDocument();
   });
 
   it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 아직 없는 내 급여 링크도 보여주지 않는다", () => {

@@ -79,6 +79,9 @@ describe("canAccessFeature", () => {
     expect(canAccessFeature({ role: "desk" }, "settings")).toBe(false);
     expect(canAccessFeature({ role: "teacher", teacherId: "teacher-1" }, "settings")).toBe(false);
     expect(canAccessFeature({ role: "anonymous" }, "settings")).toBe(false);
+    expect(canAccessFeature({ role: "owner" }, "lesson-calendar-settings")).toBe(true);
+    expect(canAccessFeature({ role: "desk" }, "lesson-calendar-settings")).toBe(true);
+    expect(canAccessFeature({ role: "teacher", teacherId: "teacher-1" }, "lesson-calendar-settings")).toBe(false);
   });
 
   it("회차권 수동 수정은 원장과 데스크에 허용하고 선생님에게는 허용하지 않는다", () => {

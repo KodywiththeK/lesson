@@ -8,7 +8,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { CalendarPlus, Search, Send, Settings2, X } from "lucide-react";
+import { CalendarPlus, Search, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -86,8 +86,7 @@ import {
 } from "@/lib/api/lesson-memos";
 import { queryKeys } from "@/lib/api/query-keys";
 import {
-  archiveAcademyClosure, fetchAcademyClosures, fetchAcademyInstrumentColors,
-  saveAcademyClosure, saveAcademyInstrumentColor,
+  fetchAcademyClosures, fetchAcademyInstrumentColors,
   type LessonCalendarSettingsClient,
 } from "@/lib/api/lesson-calendar-settings";
 import type { LessonWorkspaceDemoData } from "@/lib/demo/lesson-demo-data";
@@ -101,7 +100,6 @@ import { AcademyLessonDayView } from "@/features/lessons/academy-lesson-day-view
 import { MoveAcademyLessonDialog } from "@/features/lessons/academy-move-dialog";
 import { AcademyWeekdaySummary } from "@/features/lessons/academy-weekday-summary";
 import { LessonMonthCalendar } from "@/features/lessons/lesson-month-calendar";
-import { LessonCalendarSettingsDialog } from "@/features/lessons/lesson-calendar-settings-dialog";
 import { LessonAuditHistory } from "@/features/lessons/lesson-audit-history";
 import { lessonAuditQueryKey, type LessonAuditSupabaseClient } from "@/lib/api/lesson-audit";
 import { LessonMonthlyNoteDialog } from "@/features/lessons/lesson-monthly-note";
@@ -248,7 +246,6 @@ export function LessonManagementWorkspace({
   const [academyView, setAcademyView] = useState<LessonView>("calendar");
   const [privateView, setPrivateView] = useState<LessonView>("calendar");
   const selectedMonth = selectedDate.slice(0, 7);
-  const [calendarSettingsOpen, setCalendarSettingsOpen] = useState(false);
   const hasInjectedData = Boolean(demoData);
   const supabaseClientState = useMemo(
     () => (hasInjectedData ? null : createLessonSupabaseClient()),
@@ -402,39 +399,6 @@ export function LessonManagementWorkspace({
         .sort(compareCalendarEvents),
     [privateLessons, privateSessionLabels, initialWorkspaceData.hiddenCalendarEvents],
   );
-  const saveColorMutation = useMutation({
-    mutationFn: async ({ instrumentId, color }: { instrumentId: string; color: string }) => {
-      if (!settingsClient) throw new Error("학원 설정 연결을 확인해 주세요.");
-      await saveAcademyInstrumentColor(settingsClient, academyId, instrumentId, color);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "instrument-colors"] });
-      toast.success("악기 색상을 저장했습니다.");
-    },
-    onError: (error) => toast.error("악기 색상 저장에 실패했습니다.", { description: toUserMessage(error) }),
-  });
-  const saveClosureMutation = useMutation({
-    mutationFn: async (input: Parameters<typeof saveAcademyClosure>[1]) => {
-      if (!settingsClient) throw new Error("학원 설정 연결을 확인해 주세요.");
-      await saveAcademyClosure(settingsClient, input);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "closures"] });
-      toast.success("휴원일을 저장했습니다.");
-    },
-    onError: (error) => toast.error("휴원일 저장에 실패했습니다.", { description: toUserMessage(error) }),
-  });
-  const archiveClosureMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (!settingsClient) throw new Error("학원 설정 연결을 확인해 주세요.");
-      await archiveAcademyClosure(settingsClient, academyId, id);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "closures"] });
-      toast.success("휴원일을 해제했습니다.");
-    },
-    onError: (error) => toast.error("휴원일 해제에 실패했습니다.", { description: toUserMessage(error) }),
-  });
   const academyTableRows = useMemo(
     () =>
       Object.values(academySheets)
@@ -984,12 +948,9 @@ export function LessonManagementWorkspace({
             <X aria-hidden="true" />
             결석인원
           </Button>
-          <Button type="button" variant="outline" onClick={() => setCalendarSettingsOpen(true)}>
-            <Settings2 aria-hidden="true" /> 시간표 설정
-          </Button>
         </>
       ) : null,
-    [canManage, setAbsentOpen, setAcademyEventOpen, setCalendarSettingsOpen],
+    [canManage, setAbsentOpen, setAcademyEventOpen],
   );
   const privateHeaderActions = useMemo(
     () => (
@@ -1018,9 +979,6 @@ export function LessonManagementWorkspace({
           <Send aria-hidden="true" />
           레슨시간표 보내기
         </Button>
-        {canManage ? <Button type="button" variant="outline" onClick={() => setCalendarSettingsOpen(true)}>
-          <Settings2 aria-hidden="true" /> 시간표 설정
-        </Button> : null}
       </>
     ),
     [
@@ -1029,7 +987,6 @@ export function LessonManagementWorkspace({
       privateRegistrationProps,
       setPrivateAbsentOpen,
       setScheduleOpen,
-      setCalendarSettingsOpen,
     ],
   );
   const lessonHeaderActions =
@@ -1405,20 +1362,6 @@ export function LessonManagementWorkspace({
         onSave={(input) => updatePrivateLessonMutation.mutate(input)}
         onDelete={() => deletePrivateLessonMutation.mutate(privateEditDraft.lesson)}
       /> : null}
-
-      <LessonCalendarSettingsDialog
-        open={calendarSettingsOpen}
-        instruments={[...new Map(privateRegistrationOptions.students.flatMap((student) =>
-          student.instruments.map((item) => [item.instrumentId, { id: item.instrumentId, name: item.instrumentName }] as const),
-        )).values()]}
-        colors={colorQuery.data ?? []}
-        closures={closures}
-        isSaving={saveColorMutation.isPending || saveClosureMutation.isPending || archiveClosureMutation.isPending}
-        onOpenChange={setCalendarSettingsOpen}
-        onSaveColor={(instrumentId, color) => saveColorMutation.mutate({ instrumentId, color })}
-        onSaveClosure={(input) => saveClosureMutation.mutate({ ...input, academyId })}
-        onArchiveClosure={(id) => archiveClosureMutation.mutate(id)}
-      />
 
       <PrivateLessonStudentSearchDialog
         open={privateStudentSearchOpen}

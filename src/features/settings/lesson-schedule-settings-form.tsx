@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -15,16 +14,14 @@ import type { AcademyInstrumentColor, SaveAcademyClosureInput } from "@/lib/api/
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 type ClosureKind = "day" | "range" | "weekly";
 
-export function LessonCalendarSettingsDialog({
-  open, instruments, colors, closures, isSaving, onOpenChange,
+export function LessonScheduleSettingsForm({
+  instruments, colors, closures, isSaving,
   onSaveColor, onSaveClosure, onArchiveClosure,
 }: {
-  open: boolean;
   instruments: Array<{ id: string; name: string }>;
   colors: AcademyInstrumentColor[];
   closures: AcademyClosure[];
   isSaving: boolean;
-  onOpenChange: (open: boolean) => void;
   onSaveColor: (instrumentId: string, color: string) => void;
   onSaveClosure: (input: Omit<SaveAcademyClosureInput, "academyId">) => void;
   onArchiveClosure: (id: string) => void;
@@ -48,12 +45,7 @@ export function LessonCalendarSettingsDialog({
   const canSaveClosure = Boolean(title.trim() && startsOn &&
     (kind === "day" || (endsOn && endsOn >= startsOn))) && !isSaving;
 
-  return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-      <DialogHeader>
-        <DialogTitle>레슨 시간표 설정</DialogTitle>
-        <DialogDescription>악기 색상과 학원 공통 휴원일을 설정합니다. 휴원일의 기존 수업은 그대로 남습니다.</DialogDescription>
-      </DialogHeader>
+  return <div className="grid gap-4">
       <section className="grid gap-3 rounded-lg border p-3" aria-label="악기별 색상 설정">
         <h3 className="font-semibold">악기별 색상</h3>
         <Label className="grid gap-1"><span>악기</span>
@@ -113,7 +105,5 @@ export function LessonCalendarSettingsDialog({
           </li>)}
         </ul>
       </section>
-      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>닫기</Button></DialogFooter>
-    </DialogContent>
-  </Dialog>;
+  </div>;
 }
