@@ -370,6 +370,19 @@ export async function fetchLessonWorkspaceData(
     privateLessons: events
       .filter((event) => event.lesson_kind === "private")
       .map(toPrivateLesson),
+    hiddenCalendarEvents: (eventsResult.data ?? [])
+      .filter((event) => event.status === "cancelled" &&
+        (event.lesson_kind === "academy" || event.lesson_kind === "private"))
+      .map((event) => ({
+        id: event.id,
+        lessonKind: event.lesson_kind as "academy" | "private",
+        date: toSeoulDate(event.starts_at),
+        startTime: toSeoulHourMinute(event.starts_at),
+        endTime: toSeoulHourMinute(event.ends_at),
+        title: event.students?.name?.trim() || "이름 없음",
+        subtitle: event.instrument_name,
+        status: "cancelled" as const,
+      })),
     ticketBalances: await withPriorLessonCounts(
       supabase,
       input.academyId,

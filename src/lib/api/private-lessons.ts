@@ -40,6 +40,46 @@ export type PrivateLessonRegistrationOptions = {
   teachers: PrivateLessonRegistrationTeacherOption[];
 };
 
+export type PrivateLessonAvailability = {
+  studentId: string;
+  instrumentId: string;
+  remainingCount: number;
+  reservedCount: number;
+  availableCount: number;
+};
+
+export type PrivateLessonAvailabilitySupabaseClient = {
+  rpc(
+    functionName: "get_private_lesson_availability",
+    payload: { p_academy_id: string; p_lesson_date: string },
+  ): PromiseLike<SupabaseQueryResult<Array<{
+    student_id: string;
+    instrument_id: string;
+    remaining_count: number;
+    reserved_count: number;
+    available_count: number;
+  }>>>;
+};
+
+export async function fetchPrivateLessonAvailability(
+  supabase: PrivateLessonAvailabilitySupabaseClient,
+  academyId: string,
+  lessonDate: string,
+): Promise<PrivateLessonAvailability[]> {
+  const { data, error } = await supabase.rpc("get_private_lesson_availability", {
+    p_academy_id: academyId,
+    p_lesson_date: lessonDate,
+  });
+  if (error) throw new Error(`예약 가능 회차를 불러오지 못했습니다: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    studentId: row.student_id,
+    instrumentId: row.instrument_id,
+    remainingCount: row.remaining_count,
+    reservedCount: row.reserved_count,
+    availableCount: row.available_count,
+  }));
+}
+
 type LessonRegistrationOptionLessonType = "academy" | "private";
 
 export type PrivateLessonRegistrationStudentSupabaseRow = {
@@ -167,6 +207,49 @@ export type CancelPrivateLessonAttendanceSupabaseClient = {
     },
   ): PromiseLike<SupabaseQueryResult<{ cancelled: boolean; restored_ticket: boolean }>>;
 };
+
+export type PrivateLessonMutationSupabaseClient = {
+  rpc(
+    functionName: "update_private_lesson_event" | "delete_private_lesson_event",
+    payload: Record<string, string | null>,
+  ): PromiseLike<SupabaseQueryResult<{ event_id: string }>>;
+};
+
+export type UpdatePrivateLessonEventInput = {
+  academyId: string;
+  eventId: string;
+  teacherId: string;
+  startAt: string;
+  endAt: string;
+  reason?: string;
+};
+
+export async function updatePrivateLessonEvent(
+  supabase: PrivateLessonMutationSupabaseClient,
+  input: UpdatePrivateLessonEventInput,
+) {
+  const { error } = await supabase.rpc("update_private_lesson_event", {
+    p_academy_id: input.academyId,
+    p_event_id: input.eventId,
+    p_teacher_id: input.teacherId,
+    p_starts_at: input.startAt,
+    p_ends_at: input.endAt,
+    p_reason: input.reason?.trim() || null,
+  });
+  if (error) throw new Error(`개인레슨 일정을 수정하지 못했습니다: ${error.message}`);
+}
+
+export async function deletePrivateLessonEvent(
+  supabase: PrivateLessonMutationSupabaseClient,
+  academyId: string,
+  eventId: string,
+) {
+  const { error } = await supabase.rpc("delete_private_lesson_event", {
+    p_academy_id: academyId,
+    p_event_id: eventId,
+  });
+  if (error) throw new Error(`개인레슨 일정을 삭제하지 못했습니다: ${error.message}`);
+}
 
 export type RegisterPrivateLessonEventInput = {
   academyId: string;

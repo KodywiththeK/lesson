@@ -142,14 +142,14 @@ describe("개인레슨표 결석인원", () => {
     expect(dialog).not.toHaveTextContent(secondLesson.studentName);
   });
 
-  it("선생님처럼 관리 권한이 없어도 조회할 수 있고 처리 버튼은 없다", async () => {
+  it("선생님도 결석 목록을 조회하고 담당 수업의 결석 취소를 시도할 수 있다", async () => {
     const user = userEvent.setup();
     renderPrivateWorkspace({ canManage: false });
 
     const dialog = await openAbsenceDialog(user);
 
     expect(dialog).toHaveTextContent("한서아");
-    expect(within(dialog).queryByRole("button", { name: /결석확인|취소/ })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "한서아 결석 취소" })).toBeInTheDocument();
   });
 });
 
@@ -193,7 +193,7 @@ describe("개인레슨표 결석 사유", () => {
     expect(within(dialog).getByRole("columnheader", { name: "사유" })).toBeInTheDocument();
     expect(within(early).getByText("감기로 결석")).toBeInTheDocument();
     expect(within(late).queryByText("결석 확인")).not.toBeInTheDocument();
-    expect(late).toHaveTextContent(/-$/);
+    expect(within(late).getByRole("cell", { name: "-" })).toBeInTheDocument();
   });
 
   it("출석 확인에서 사유를 입력해 결석 처리하면 결석인원 표 사유 열에 바로 보인다", async () => {
@@ -220,7 +220,7 @@ describe("개인레슨표 결석 사유", () => {
     await user.click(within(dayDialog).getByRole("button", { name: "결석 저장" }));
     await user.click(within(dayDialog).getByRole("button", { name: "Close" }));
 
-    expect(await absenceRowOf(user, "한서아")).toHaveTextContent(/-$/);
+    expect(within((await absenceRowOf(user, "한서아"))!).getByRole("cell", { name: "-" })).toBeInTheDocument();
   });
 
   it("이미 결석인 수업은 사유 수정으로 사유만 바꾸고 수정했다고 알린다", async () => {

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type PrivateLesson } from "@/domain/private-lesson";
+import { getInstrumentColorStyle } from "@/domain/instrument-color";
 import {
   type LessonCalendarMemo,
   type LessonCalendarMemoPayload,
@@ -50,12 +51,14 @@ export function PrivateDayAttendanceDialog({
   history,
   pendingLessonIds,
   assignedTicketBalances = [],
+  instrumentColors,
   onOpenChange,
   onCreateMemo,
   onUpdateMemo,
   onDeleteMemo,
   onMark,
   onCancelAttendance,
+  onEditLesson,
   onRegisterOnDate,
 }: {
   open: boolean;
@@ -72,12 +75,14 @@ export function PrivateDayAttendanceDialog({
   history?: ReactNode;
   pendingLessonIds: ReadonlySet<string>;
   assignedTicketBalances?: AssignedLessonTicketBalance[];
+  instrumentColors?: Map<string, string>;
   onOpenChange: (open: boolean) => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
   onUpdateMemo: (input: UpdateLessonCalendarMemoInput) => void;
   onDeleteMemo: (memoId: string) => Promise<void>;
   onMark: MarkPrivateLesson;
   onCancelAttendance: (lesson: PrivateLesson) => void;
+  onEditLesson?: (lesson: PrivateLesson) => void;
   /** 없으면(조회만 가능한 역할) 이 날짜에 등록하는 버튼을 보여 주지 않는다. */
   onRegisterOnDate?: () => void;
 }) {
@@ -119,6 +124,9 @@ export function PrivateDayAttendanceDialog({
               <div
                 key={lesson.id}
                 className="grid gap-3 rounded-md border border-border bg-background p-3"
+                style={lesson.status === "scheduled" || lesson.status === "present"
+                  ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
+                  : undefined}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -159,6 +167,11 @@ export function PrivateDayAttendanceDialog({
                     onCancelAttendance={onCancelAttendance}
                     onOpenReason={reasonForm.open}
                   />
+                  {lesson.status === "scheduled" && onEditLesson ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => onEditLesson(lesson)}>
+                      {lesson.studentName} 일정 수정
+                    </Button>
+                  ) : null}
                 </div>
                 {reasonForm.reasonLessonId === lesson.id ? (
                   <PrivateAbsenceReasonForm

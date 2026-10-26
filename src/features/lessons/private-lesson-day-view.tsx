@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PrivateLesson } from "@/domain/private-lesson";
+import { getInstrumentColorStyle } from "@/domain/instrument-color";
 import { OriginBadge } from "@/features/lessons/lesson-badges";
 import { LessonDayMemoDialog } from "@/features/lessons/lesson-day-memo-dialog";
 import { LessonHistorySection } from "@/features/lessons/lesson-history-section";
@@ -55,10 +56,12 @@ export function PrivateLessonDayView({
   history,
   pendingLessonIds,
   assignedTicketBalances = [],
+  instrumentColors,
   onChangeDate,
   onToday,
   onMark,
   onCancelAttendance,
+  onEditLesson,
   onRegisterOnDate,
   onCreateMemo,
   onUpdateMemo,
@@ -78,10 +81,12 @@ export function PrivateLessonDayView({
   history?: ReactNode;
   pendingLessonIds: ReadonlySet<string>;
   assignedTicketBalances?: AssignedLessonTicketBalance[];
+  instrumentColors?: Map<string, string>;
   onChangeDate: (date: string) => void;
   onToday: () => void;
   onMark: MarkPrivateLesson;
   onCancelAttendance: (lesson: PrivateLesson) => void;
+  onEditLesson?: (lesson: PrivateLesson) => void;
   /** 없으면(조회만 가능한 역할) 이 날짜에 등록하는 버튼을 보여 주지 않는다. */
   onRegisterOnDate?: () => void;
   onCreateMemo: (input: LessonCalendarMemoPayload) => void;
@@ -143,7 +148,9 @@ export function PrivateLessonDayView({
             ) : null}
             {lessons.map((lesson) => (
               <Fragment key={lesson.id}>
-                <TableRow>
+                <TableRow style={lesson.status === "scheduled" || lesson.status === "present"
+                  ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
+                  : undefined}>
                   <TableCell label="시간">
                     {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)}
                   </TableCell>
@@ -169,6 +176,11 @@ export function PrivateLessonDayView({
                     </div>
                   </TableCell>
                   <TableCell label="처리" className="text-right">
+                    {lesson.status === "scheduled" && onEditLesson ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => onEditLesson(lesson)}>
+                        {lesson.studentName} 일정 수정
+                      </Button>
+                    ) : null}
                     <PrivateLessonAttendanceActions
                       lesson={lesson}
                       isPending={pendingLessonIds.has(lesson.id)}

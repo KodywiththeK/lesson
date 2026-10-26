@@ -184,6 +184,7 @@ export function toPrivateCalendarEvent(
 
   return {
     id: lesson.id,
+    instrumentId: lesson.instrumentId,
     date: toSeoulDate(lesson.startAt),
     startTime,
     timeLabel: formatKoreanTimeLabel(startTime),
@@ -195,6 +196,7 @@ export function toPrivateCalendarEvent(
     status: lesson.status === "makeup" ? "scheduled" : lesson.status,
     origin: lesson.origin,
     originLabel: lesson.originLabel,
+    movable: lesson.status === "scheduled",
   };
 }
 

@@ -6,6 +6,9 @@ import { useId, useMemo, useState, type DragEvent, type ReactNode } from "react"
 import { SectionCard } from "@/components/shared/section-card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { getClosuresOnDate, type AcademyClosure } from "@/domain/academy-closure";
+import { getInstrumentColorStyle } from "@/domain/instrument-color";
+import type { KoreanHoliday } from "@/domain/korean-holiday";
 
 import { LessonMonthControl } from "@/features/lessons/lesson-toolbar";
 import {
@@ -30,12 +33,18 @@ export function LessonMonthCalendar({
   onMoveEvent,
   onToday,
   headerActions,
+  holidays = [],
+  closures = [],
+  instrumentColors,
 }: {
   ariaLabel: string;
   selectedDate: string;
   events: CalendarEvent[];
   memoCounts: Map<string, number>;
   variant: "academy" | "private";
+  holidays?: KoreanHoliday[];
+  closures?: AcademyClosure[];
+  instrumentColors?: Map<string, string>;
   onChangeMonth: (month: string) => void;
   onSelectDate: (date: string) => void;
   onToday?: () => void;
@@ -53,6 +62,11 @@ export function LessonMonthCalendar({
   const today = getTodayDate();
   const variantLabel = variant === "academy" ? "학원 레슨 캘린더" : "개인레슨 캘린더";
   const hiddenCount = events.filter(isHiddenCalendarRecord).length;
+  const hiddenByStatus = {
+    absent: events.filter((event) => event.status === "absent").length,
+    passed: events.filter((event) => event.status === "passed").length,
+    cancelled: events.filter((event) => event.status === "cancelled").length,
+  };
   const eventsByDate = useMemo(() => {
     const grouped = new Map<string, CalendarEvent[]>();
     for (const event of events) {
@@ -69,6 +83,7 @@ export function LessonMonthCalendar({
   };
   const dropOnDate = (event: DragEvent<HTMLElement>, date: string) => {
     event.preventDefault();
+    if (!date.startsWith(selectedMonth)) { finishDrag(); return; }
     const eventId = event.dataTransfer.getData(DRAG_DATA_TYPE) || draggingEventId;
     const draggedEvent = events.find((candidate) => candidate.id === eventId);
 
@@ -95,6 +110,11 @@ export function LessonMonthCalendar({
           <Label htmlFor={showAllId}>전체 기록 보기</Label>
         </div>
       </div>
+      {hiddenCount > 0 ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          결석 {hiddenByStatus.absent}건 · 패스 {hiddenByStatus.passed}건 · 취소 {hiddenByStatus.cancelled}건은 기본 달력에서 숨깁니다. 전체 기록 보기로 확인할 수 있습니다.
+        </p>
+      ) : null}
       <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-calendar-muted">
         {["일", "월", "화", "수", "목", "금", "토"].map((weekday) => (
           <span key={weekday}>{weekday}</span>
@@ -115,6 +135,8 @@ export function LessonMonthCalendar({
           const isCurrentMonth = date.startsWith(selectedMonth);
           const isToday = date === today;
           const isDropTarget = date === dropTargetDate;
+          const dayHolidays = holidays.filter((holiday) => holiday.date === date);
+          const dayClosures = getClosuresOnDate(closures, date);
 
           return (
             // 칩을 끌어 옮기려면 칩이 버튼 안에 있으면 안 된다(Firefox는 버튼 안 드래그를 막는다).
@@ -157,6 +179,8 @@ export function LessonMonthCalendar({
                     메모 {memoCount}
                   </span>
                 ) : null}
+                {dayHolidays.map((holiday) => <span key={holiday.name} className="text-2xs font-medium text-destructive">{holiday.name}</span>)}
+                {dayClosures.map((closure) => <span key={closure.id} className="text-2xs font-medium text-amber-700 dark:text-amber-300">{closure.title}</span>)}
                 <span className="flex flex-col text-2xs leading-tight sm:hidden">
                   {pendingCount > 0 ? <span className="text-primary">예정 {pendingCount}</span> : null}
                   {presentCount > 0 ? <span className="text-foreground">등원 {presentCount}</span> : null}
@@ -168,6 +192,9 @@ export function LessonMonthCalendar({
                   key={event.id}
                   draggable={onMoveEvent ? Boolean(event.movable) : undefined}
                   className={`hidden min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:block sm:px-2 ${getEventTone(event.status, variant)} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
+                  style={variant === "private" && event.instrumentId && (event.status === "scheduled" || event.status === "present")
+                    ? getInstrumentColorStyle(instrumentColors?.get(event.instrumentId), event.status)
+                    : undefined}
                   onDragStart={(dragEvent) => {
                     dragEvent.dataTransfer.setData(DRAG_DATA_TYPE, event.id);
                     dragEvent.dataTransfer.effectAllowed = "move";
@@ -187,9 +214,9 @@ export function LessonMonthCalendar({
                       </span>
                     </>
                   )}
-                  {isHiddenCalendarRecord(event) ? (
+                  {variant === "private" || isHiddenCalendarRecord(event) ? (
                     <span className="block text-2xs font-normal">
-                      {getCalendarEventStatusLabel(event.status)}
+                      {variant === "private" && event.status === "present" ? "등원" : getCalendarEventStatusLabel(event.status)}
                     </span>
                   ) : null}
                 </div>

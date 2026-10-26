@@ -283,6 +283,14 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - Security Advisor: 이번 변경 함수는 의도적으로 authenticated가 호출하는 역할 검사형 `SECURITY DEFINER` RPC라 일반 경고에 포함된다. 별도로 기존 `private.lesson_ticket_refund_quote`의 mutable search path 경고와 leaked password protection 비활성 경고가 남아 있으며 이번 migration 범위에서는 변경하지 않았다.
 - 한계: 운영 데이터 mutation을 만드는 owner·desk JWT 스모크 호출은 수행하지 않았다. 원장·데스크 계정으로 등록·수정·상태 변경을 앱에서 확인한다.
 
+## 레슨시간표·회차권 예약 migration (20261026130428) — 2026-10-26 적용 완료
+
+- 대상: Supabase `lesson` 프로젝트(`zkzqmqtzzlgljkuctpbn`). 사용자의 명시 요청에 따라 `private_lesson_reservations_and_calendar_settings` **한 건만** MCP `apply_migration`으로 적용했다. 별도 `academy_onboarding` migration은 미적용 상태다.
+- 원격 migration version `20261026130428`과 로컬 파일명을 일치시켰다. 온보딩 파일은 이번 migration의 의존 대상이 아니며, 나중에 적용할 때 원격 이력 순서를 다시 확인한다.
+- 적용 전후 예정 개인레슨 36건, 회차권 8건이 유지됐다. 기존 예약 초과 조합 1개는 데이터를 고치지 않고 새 예약만 막는다.
+- 트리거 3개·설정 테이블 2개·RLS·GRANT·RPC 실행 권한을 카탈로그에서 확인했다. 롤백 트랜잭션으로 원장 조회·수정·숨김 삭제, 초과 예약 거부, 직접 삭제 거부, 원장 휴원일 쓰기와 비회원 쓰기 거부를 확인했다. 실제 두 세션 동시 등록과 선생님 실계정은 검증하지 못했다.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test:run`(2,145개), `NEXT_PUBLIC_E2E_DEMO=1 pnpm build --webpack`, 관련 Playwright(3개)가 통과했다. 세부 결과와 advisor 경고는 `docs/harness/evidence/2026-10-26-lesson-schedule-ticket-flow.md`에 기록했다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

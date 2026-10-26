@@ -153,9 +153,11 @@ describe("날짜에서 개인레슨 등록 (명세 3.2)", () => {
 
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const registration = await screen.findByRole("dialog", { name: "레슨 일정 등록" });
-    await user.selectOptions(await within(registration).findByLabelText("원생"), "student-4");
+    await within(registration).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(registration).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(registration).getByLabelText("원생"), "student-4");
     await user.selectOptions(within(registration).getByLabelText("선생님"), "teacher-2");
-    await user.type(within(registration).getByLabelText("날짜"), "2026-08-21");
+    expect(within(registration).getByLabelText("날짜")).toHaveValue("2026-08-21");
     await user.type(within(registration).getByLabelText("시작 시간"), "18:20");
 
     expect(within(registration).getByRole("alert")).toHaveTextContent(

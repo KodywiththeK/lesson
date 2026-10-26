@@ -19,10 +19,9 @@ describe("integrated demo flow", () => {
     await user.click(screen.getByRole("button", { name: "회차권 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
 
-    await within(dialog).findByRole("option", { name: "한서아" });
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-4");
     await within(dialog).findByRole("option", { name: "바이올린" });
     await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-4");
     fireEvent.change(within(dialog).getByLabelText("부여 회수"), {
       target: { value: "4" },
     });
@@ -63,9 +62,9 @@ describe("integrated demo flow", () => {
 
     await user.click(screen.getByRole("button", { name: "회차권 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
-    await within(dialog).findByRole("option", { name: "한서아" });
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-4");
     await within(dialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-4");
     fireEvent.change(within(dialog).getByLabelText("부여 회수"), { target: { value: "5" } });
     fireEvent.change(within(dialog).getByLabelText("등록일"), { target: { value: "2026-08-21" } });
     await user.click(within(dialog).getByRole("button", { name: "저장" }));

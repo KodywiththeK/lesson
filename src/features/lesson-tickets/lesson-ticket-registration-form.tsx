@@ -58,7 +58,12 @@ export function LessonTicketRegistrationForm({
   const [registeredAt, setRegisteredAt] = useState(today);
   const [paidAmountText, setPaidAmountText] = useState("");
   const eligibleOptions = options.filter((option) => option.instruments.length > 0);
-  const selectedStudent = eligibleOptions.find((option) => option.studentId === studentId);
+  const instruments = [...new Map(eligibleOptions.flatMap((option) =>
+    option.instruments.map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
+  )).entries()];
+  const studentsForInstrument = eligibleOptions.filter((option) =>
+    option.instruments.some((instrument) => instrument.instrumentId === instrumentId));
+  const selectedStudent = studentsForInstrument.find((option) => option.studentId === studentId);
   const selectedInstrument = selectedStudent?.instruments.find(
     (instrument) => instrument.instrumentId === instrumentId,
   );
@@ -117,44 +122,39 @@ export function LessonTicketRegistrationForm({
       ) : null}
 
       <Label className="grid gap-1">
-        <span>원생</span>
+        <span>악기</span>
         <NativeSelect
-          aria-label="원생"
-          value={studentId}
+          aria-label="악기"
+          value={instrumentId}
           onChange={(event) => {
-            const nextStudent = eligibleOptions.find((option) => option.studentId === event.target.value);
-
-            setStudentId(event.target.value);
-            // 악기가 하나뿐이면 선택 단계를 줄인다.
-            setInstrumentId(
-              nextStudent?.instruments.length === 1 ? nextStudent.instruments[0].instrumentId : "",
-            );
+            setInstrumentId(event.target.value);
+            setStudentId("");
           }}
         >
-          <NativeSelectOption value="">원생 선택</NativeSelectOption>
-          {eligibleOptions.map((option) => (
-            <NativeSelectOption key={option.studentId} value={option.studentId}>
-              {option.studentName}
+          <NativeSelectOption value="">악기 선택</NativeSelectOption>
+          {instruments.map(([id, name]) => (
+            <NativeSelectOption key={id} value={id}>
+              {name}
             </NativeSelectOption>
           ))}
         </NativeSelect>
       </Label>
 
       <Label className="grid gap-1">
-        <span>악기</span>
+        <span>원생</span>
         <NativeSelect
-          aria-label="악기"
-          value={instrumentId}
-          disabled={!selectedStudent}
-          onChange={(event) => setInstrumentId(event.target.value)}
+          aria-label="원생"
+          value={studentId}
+          disabled={!instrumentId}
+          onChange={(event) => setStudentId(event.target.value)}
         >
-          <NativeSelectOption value="">악기 선택</NativeSelectOption>
-          {(selectedStudent?.instruments ?? []).map((instrument) => (
+          <NativeSelectOption value="">원생 선택</NativeSelectOption>
+          {studentsForInstrument.map((option) => (
             <NativeSelectOption
-              key={instrument.instrumentId}
-              value={instrument.instrumentId}
+              key={option.studentId}
+              value={option.studentId}
             >
-              {instrument.instrumentName}
+              {option.studentName}
             </NativeSelectOption>
           ))}
         </NativeSelect>

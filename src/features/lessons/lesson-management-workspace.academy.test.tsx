@@ -708,6 +708,7 @@ describe("일정 이동·삭제는 원생 기본 정보를 바꾸지 않는다",
     renderAcademy();
 
     dragChip("이서윤", getDayCell(21), getDayCell(24));
+    await user.click(within(await screen.findByRole("dialog", { name: "이서윤 일정 이동" })).getByRole("button", { name: "이동 저장" }));
     await waitFor(() => expect(within(getDayCell(24)).getByText("이서윤")).toBeInTheDocument());
 
     expect(within(getDayCell(21)).getByText("김민지")).toBeInTheDocument();
@@ -722,10 +723,12 @@ describe("학원 레슨표 달력 드래그 이동", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("일정을 같은 달의 다른 날짜로 끌어 놓으면 그 날짜로 옮겨진다", async () => {
+    const user = userEvent.setup();
     const success = vi.spyOn(toast, "success");
     renderAcademy();
 
     dragChip("이서윤", getDayCell(21), getDayCell(24));
+    await user.click(within(await screen.findByRole("dialog", { name: "이서윤 일정 이동" })).getByRole("button", { name: "이동 저장" }));
 
     await waitFor(() => expect(within(getDayCell(24)).getByText("이서윤")).toBeInTheDocument());
     expect(within(getDayCell(21)).queryByText("이서윤")).not.toBeInTheDocument();
@@ -735,16 +738,13 @@ describe("학원 레슨표 달력 드래그 이동", () => {
     expect(success).toHaveBeenCalledWith("학원 일정을 이동했습니다.");
   });
 
-  it("다른 달 날짜로 끌어 놓으면 옮기지 않고 같은 달 안에서만 가능하다고 안내한다", () => {
-    const error = vi.spyOn(toast, "error");
+  it("다른 달 날짜로 끌어 놓으면 이동 창을 열지 않는다", () => {
     renderAcademy();
     const nextMonthCell = within(getCalendar()).getAllByRole("gridcell", { hidden: true }).at(-1) as HTMLElement;
 
     dragChip("이서윤", getDayCell(21), nextMonthCell);
 
-    expect(error).toHaveBeenCalledWith(
-      "일정은 같은 달 안에서만 이동할 수 있습니다. 다른 달에 수업을 잡으려면 일정 추가를 이용해 주세요.",
-    );
+    expect(screen.queryByRole("dialog", { name: "이서윤 일정 이동" })).not.toBeInTheDocument();
     expect(within(getDayCell(21)).getByText("이서윤")).toBeInTheDocument();
   });
 

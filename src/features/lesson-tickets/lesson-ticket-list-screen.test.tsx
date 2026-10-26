@@ -317,6 +317,8 @@ describe("회차권 등록 폼", () => {
     });
     await user.click(screen.getByRole("button", { name: "회차권 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "회차권 등록" });
+    await within(dialog).findByRole("option", { name: "피아노" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     await within(dialog).findByRole("option", { name: "김민지" });
 
     return { user, dialog };
@@ -335,8 +337,9 @@ describe("회차권 등록 폼", () => {
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByLabelText("악기")).toHaveValue("piano");
 
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
-    expect(within(dialog).getByLabelText("악기")).toHaveValue("");
+    expect(within(dialog).getByLabelText("악기")).toHaveValue("violin");
   });
 
   it("결제 입력 권한이 없으면 결제 입력을 숨기고 개인레슨 악기가 없는 원생을 후보에서 제외한다", async () => {

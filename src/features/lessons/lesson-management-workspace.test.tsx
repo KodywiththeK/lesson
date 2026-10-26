@@ -316,8 +316,8 @@ describe("LessonManagementWorkspace", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     const table = screen.getByRole("table", { name: "2026-08-21 개인레슨 테이블" });
-    expect(within(table).getByRole("cell", { name: /한서아/ })).toBeInTheDocument();
-    expect(within(table).queryByRole("cell", { name: /최도윤/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "한서아" })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: "최도윤" })).not.toBeInTheDocument();
     expect(within(table).getByRole("row", { name: /한서아/ }).querySelectorAll("td[data-label]")).toHaveLength(7);
 
     await user.click(within(table).getByRole("button", { name: "한서아 개인레슨 등원 확인" }));
@@ -333,8 +333,8 @@ describe("LessonManagementWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "개인레슨 테이블 다음 날짜" }));
 
     const table = screen.getByRole("table", { name: "2026-08-22 개인레슨 테이블" });
-    expect(within(table).getByRole("cell", { name: /최도윤/ })).toBeInTheDocument();
-    expect(within(table).queryByRole("cell", { name: /한서아/ })).not.toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "최도윤" })).toBeInTheDocument();
+    expect(within(table).queryByRole("cell", { name: "한서아" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "개인레슨 테이블 다음 날짜" }));
 
@@ -651,11 +651,15 @@ describe("LessonManagementWorkspace", () => {
       name: "레슨 일정 등록",
     });
 
-    await user.selectOptions(within(registrationDialog).getByLabelText("원생"), "student-4");
-    await user.selectOptions(within(registrationDialog).getByLabelText("악기"), "violin");
-    await user.selectOptions(within(registrationDialog).getByLabelText("선생님"), "teacher-2");
+    await user.clear(within(registrationDialog).getByLabelText("날짜"));
     await user.type(within(registrationDialog).getByLabelText("날짜"), "2026-08-23");
+    await within(registrationDialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(registrationDialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(registrationDialog).getByLabelText("원생"), "student-4");
+    await user.selectOptions(within(registrationDialog).getByLabelText("선생님"), "teacher-2");
     await user.type(within(registrationDialog).getByLabelText("시작 시간"), "17:00");
+    expect(within(registrationDialog).getByLabelText("날짜")).toHaveValue("2026-08-23");
+    expect(within(registrationDialog).getByRole("button", { name: "완료" })).toBeEnabled();
     await user.click(within(registrationDialog).getByRole("button", { name: "완료" }));
 
     await waitFor(() => {

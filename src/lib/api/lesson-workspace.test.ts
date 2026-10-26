@@ -97,6 +97,9 @@ describe("fetchLessonWorkspaceData", () => {
     });
 
     expect(result.academySheets).toEqual([]);
+    expect(result.hiddenCalendarEvents).toEqual([expect.objectContaining({
+      id: "lesson-cancelled", lessonKind: "academy", status: "cancelled", date: "2026-08-21",
+    })]);
   });
 
   it("개인레슨의 출석·결석 상태는 출결 기록에서 가져와 재조회 후에도 유지한다", async () => {

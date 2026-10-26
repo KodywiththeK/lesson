@@ -225,6 +225,7 @@ export function LessonTicketListScreen({
         queryKey: [...queryKeys.academy(academyId), section],
       });
     }
+    void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
   }
 
   const registerMutation = useMutation({

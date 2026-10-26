@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -17,20 +18,22 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { compareKoreanNames } from "@/domain/common-list";
+import { getClosuresOnDate, type AcademyClosure } from "@/domain/academy-closure";
 import {
   addMinutesToDateTime,
   filterTeachersForInstrument,
   findPrivateLessonConflictNotice,
-  getPrivateLessonRegistrationFlowState,
   pickDefaultTeacherId,
   type PrivateLesson,
   type PrivateLessonTicketSearchBalance,
 } from "@/domain/private-lesson";
 import type {
   PrivateLessonRegistrationOptions,
+  PrivateLessonAvailability,
   RegisterPrivateLessonEventInput,
 } from "@/lib/api/private-lessons";
 import { toUserMessage } from "@/lib/errors/user-message";
+import { getTodayDate } from "@/features/lessons/workspace-helpers";
 
 const MIN_LESSON_MINUTES = 5;
 const MAX_LESSON_MINUTES = 240;
@@ -42,6 +45,8 @@ export function PrivateLessonRegistrationForm({
   academyId,
   options,
   ticketBalances,
+  fetchAvailability,
+  closures = [],
   existingLessons = [],
   initialDate = "",
   isLoading,
@@ -53,6 +58,8 @@ export function PrivateLessonRegistrationForm({
   academyId: string;
   options: PrivateLessonRegistrationOptions;
   ticketBalances?: PrivateLessonTicketSearchBalance[];
+  fetchAvailability?: (date: string) => Promise<PrivateLessonAvailability[]>;
+  closures?: AcademyClosure[];
   /** 시간 겹침을 미리 알리는 데 쓰는 이미 등록된 개인레슨. 조회된 월의 일정만 담긴다. */
   existingLessons?: PrivateLesson[];
   initialDate?: string;
@@ -65,15 +72,36 @@ export function PrivateLessonRegistrationForm({
   const [studentId, setStudentId] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
   const [teacherId, setTeacherId] = useState("");
-  const [date, setDate] = useState(initialDate);
+  const [date, setDate] = useState(initialDate || getTodayDate());
   const [startTime, setStartTime] = useState("");
   const [minutesText, setMinutesText] = useState("");
-  const students = useMemo(
+  const [closureConfirmed, setClosureConfirmed] = useState(false);
+  const matchingClosures = getClosuresOnDate(closures, date);
+  const allStudents = useMemo(
     () =>
       [...options.students].sort((left, right) =>
         compareKoreanNames(left.studentName, right.studentName),
       ),
     [options.students],
+  );
+  const availabilityQuery = useQuery({
+    queryKey: ["private-lesson-availability", academyId, date],
+    queryFn: () => fetchAvailability?.(date) ?? Promise.resolve([]),
+    enabled: Boolean(fetchAvailability && date),
+  });
+  const availability = fetchAvailability
+    ? availabilityQuery.data ?? []
+    : buildLocalAvailability(ticketBalances ?? [], existingLessons, academyId);
+  const instruments = [...new Map(allStudents.flatMap((student) =>
+    student.instruments.filter((instrument) => availability.some((row) =>
+      row.studentId === student.studentId && row.instrumentId === instrument.instrumentId &&
+      row.availableCount > 0,
+    )).map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
+  )).entries()];
+  const students = allStudents.filter((student) =>
+    student.instruments.some((instrument) => instrument.instrumentId === instrumentId) &&
+    availability.some((row) => row.studentId === student.studentId &&
+      row.instrumentId === instrumentId && row.availableCount > 0),
   );
   const selectedStudent = students.find(
     (student) => student.studentId === studentId,
@@ -91,14 +119,8 @@ export function PrivateLessonRegistrationForm({
   const selectedTeacher = options.teachers.find(
     (teacher) => teacher.teacherId === teacherId,
   );
-  const selectedTicketBalance =
-    selectedStudent && selectedInstrument && ticketBalances
-      ? findTicketBalance(ticketBalances, {
-          academyId,
-          studentId: selectedStudent.studentId,
-          instrumentId: selectedInstrument.instrumentId,
-        })
-      : undefined;
+  const selectedAvailability = availability.find((row) =>
+    row.studentId === studentId && row.instrumentId === instrumentId);
   const lessonMinutes = parseLessonMinutes(minutesText);
   const startAt = date && startTime ? `${date}T${startTime}` : "";
   const endAt =
@@ -114,27 +136,20 @@ export function PrivateLessonRegistrationForm({
           endAt: toSeoulIsoOffset(endAt),
         })
       : undefined;
-  const flow = getPrivateLessonRegistrationFlowState({
-    academyId,
-    studentId: studentId || undefined,
-    instrumentId: instrumentId || undefined,
-    teacherId: teacherId || undefined,
-    startAt: startAt || undefined,
-    endAt: endAt || undefined,
-  });
-  const hasNoRegistrableStudent = !isLoading && !error && students.length === 0;
+  const hasNoRegistrableStudent = !isLoading && !error && !availabilityQuery.isLoading && students.length === 0;
   const canSubmit =
     Boolean(selectedStudent) &&
     Boolean(selectedInstrument) &&
     Boolean(selectedTeacher) &&
+    (selectedAvailability?.availableCount ?? 0) > 0 &&
     Boolean(startAt) &&
     Boolean(endAt) &&
     !conflictNotice &&
+    (matchingClosures.length === 0 || closureConfirmed) &&
     !isSaving;
 
-  /** 악기를 고르면 그 악기의 담당(또는 같은 파트) 선생님과 원생의 레슨 길이를 기본값으로 채운다. */
-  function selectInstrument(instrument: RegistrationInstrument | undefined) {
-    setInstrumentId(instrument?.instrumentId ?? "");
+  /** 원생을 고르면 담당 선생님과 레슨 길이를 채운다. */
+  function selectStudentInstrument(instrument: RegistrationInstrument | undefined) {
     setTeacherId(
       instrument ? pickDefaultTeacherId(instrument, options.teachers) : "",
     );
@@ -169,13 +184,9 @@ export function PrivateLessonRegistrationForm({
         });
       }}
     >
-      <ol className="grid gap-2 sm:grid-cols-4" aria-label="개인레슨 등록 단계">
-        {flow.steps.map((step) => (
-          <li key={step.id}>
-            <Badge variant={step.status === "locked" ? "secondary" : "outline"}>
-              {step.label}
-            </Badge>
-          </li>
+      <ol className="grid gap-2 sm:grid-cols-5" aria-label="개인레슨 등록 단계">
+        {["날짜", "악기", "원생", "선생님", "시간"].map((label) => (
+          <li key={label}><Badge variant="outline">{label}</Badge></li>
         ))}
       </ol>
 
@@ -191,64 +202,76 @@ export function PrivateLessonRegistrationForm({
           개인레슨 등록 선택지를 불러오는 중입니다.
         </p>
       ) : null}
+      {availabilityQuery.isError ? (
+        <ListStatusAlert message="예약 가능 회차를 불러오지 못했습니다." detail={toUserMessage(availabilityQuery.error)} />
+      ) : null}
+      {!isLoading && !error && !availabilityQuery.isLoading && !availabilityQuery.isError && instruments.length === 0 ? (
+        <p role="status" className="text-sm text-destructive">
+          선택한 날짜에 예약 가능한 회차권이 없습니다. 회차권 메뉴에서 등록해 주세요.
+        </p>
+      ) : null}
 
       <Label className="grid gap-1">
-        <span>원생</span>
-        <NativeSelect
-          aria-label="원생"
-          value={studentId}
-          disabled={hasNoRegistrableStudent}
-          onChange={(event) => {
-            const nextStudentId = event.target.value;
-            const nextStudent = students.find(
-              (student) => student.studentId === nextStudentId,
-            );
-
-            // 악기가 하나뿐일 때만 자동 선택한다. 여러 개면 직접 고르게 한다.
-            const onlyInstrument =
-              nextStudent?.instruments.length === 1 ? nextStudent.instruments[0] : undefined;
-
-            setStudentId(nextStudentId);
-            selectInstrument(onlyInstrument);
+        <span>날짜</span>
+        <DateField
+          aria-label="날짜"
+          value={date}
+          onValueChange={(value) => {
+            setDate(value);
+            setClosureConfirmed(false);
+            setInstrumentId("");
+            setStudentId("");
+            selectStudentInstrument(undefined);
           }}
-        >
-          <NativeSelectOption value="">
-            {hasNoRegistrableStudent ? "등록된 원생 없음" : "원생 선택"}
-          </NativeSelectOption>
-          {students.map((student) => (
-            <NativeSelectOption key={student.studentId} value={student.studentId}>
-              {formatStudentOptionLabel(student, ticketBalances, academyId)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        />
       </Label>
-
+      {matchingClosures.length > 0 ? <div className="rounded-md border border-amber-500 p-2 text-sm">
+        <p>휴원일: {matchingClosures.map((closure) => closure.title).join(", ")}</p>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={closureConfirmed} onChange={(event) => setClosureConfirmed(event.target.checked)} />휴원일 일정을 확인하고 등록</label>
+      </div> : null}
       <Label className="grid gap-1">
         <span>악기</span>
         <NativeSelect
           aria-label="악기"
           value={instrumentId}
-          disabled={!selectedStudent}
-          onChange={(event) =>
-            selectInstrument(
-              selectedStudent?.instruments.find(
-                (instrument) => instrument.instrumentId === event.target.value,
-              ),
-            )
-          }
+          disabled={!date || availabilityQuery.isLoading}
+          onChange={(event) => {
+            setInstrumentId(event.target.value);
+            setStudentId("");
+            selectStudentInstrument(undefined);
+          }}
         >
           <NativeSelectOption value="">악기 선택</NativeSelectOption>
-          {(selectedStudent?.instruments ?? []).map((instrument) => (
-            <NativeSelectOption
-              key={instrument.instrumentId}
-              value={instrument.instrumentId}
-            >
-              {instrument.instrumentName}
+          {instruments.map(([id, name]) => (
+            <NativeSelectOption key={id} value={id}>
+              {name}
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        {ticketBalances && selectedInstrument ? (
-          <TicketBalanceNotice remainingCount={selectedTicketBalance?.remainingCount} />
+      </Label>
+      <Label className="grid gap-1">
+        <span>원생</span>
+        <NativeSelect
+          aria-label="원생"
+          value={studentId}
+          disabled={!instrumentId || hasNoRegistrableStudent}
+          onChange={(event) => {
+            const nextStudent = students.find((student) => student.studentId === event.target.value);
+            setStudentId(event.target.value);
+            selectStudentInstrument(nextStudent?.instruments.find((instrument) => instrument.instrumentId === instrumentId));
+          }}
+        >
+          <NativeSelectOption value="">{hasNoRegistrableStudent && instrumentId ? "예약 가능한 원생 없음" : "원생 선택"}</NativeSelectOption>
+          {students.map((student) => (
+            <NativeSelectOption key={student.studentId} value={student.studentId}>
+              {student.studentName}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        {selectedAvailability ? (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            실제 잔여 {selectedAvailability.remainingCount}회 · 예약 {selectedAvailability.reservedCount}회 · 예약 가능 {selectedAvailability.availableCount}회
+          </p>
         ) : null}
         {selectedInstrument?.sessionsPerMonth ? (
           <p className="text-xs text-muted-foreground">
@@ -281,15 +304,6 @@ export function PrivateLessonRegistrationForm({
       </Label>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1">
-          <span>날짜</span>
-          <DateField
-            aria-label="날짜"
-            value={date}
-            disabled={!selectedTeacher}
-            onValueChange={setDate}
-          />
-        </Label>
         <Label className="grid gap-1">
           <span>시작 시간</span>
           <TimeField
@@ -343,23 +357,6 @@ export function PrivateLessonRegistrationForm({
   );
 }
 
-function TicketBalanceNotice({ remainingCount }: { remainingCount: number | undefined }) {
-  if (!remainingCount) {
-    return (
-      <p className="text-xs font-medium text-destructive" role="status">
-        사용할 수 있는 회차권이 없습니다. 일정은 등록할 수 있지만, 출석 확인 전에 회차권 메뉴에서 먼저
-        등록해 주세요.
-      </p>
-    );
-  }
-
-  return (
-    <p className="text-xs text-muted-foreground" aria-live="polite">
-      선택 악기 잔여 회차권 {remainingCount}회
-    </p>
-  );
-}
-
 function parseLessonMinutes(text: string) {
   const minutes = Number(text);
 
@@ -381,46 +378,23 @@ function formatEndLabel(startDate: string, endAt: string) {
   return endDate === startDate ? endTime : `${endDate} ${endTime}`;
 }
 
-function formatStudentOptionLabel(
-  student: PrivateLessonRegistrationOptions["students"][number],
-  ticketBalances: PrivateLessonTicketSearchBalance[] | undefined,
+function buildLocalAvailability(
+  balances: PrivateLessonTicketSearchBalance[],
+  lessons: PrivateLesson[],
   academyId: string,
-) {
-  if (!ticketBalances) {
-    return student.studentName;
-  }
-
-  const summaries = student.instruments.flatMap((instrument) => {
-    const ticketBalance = findTicketBalance(ticketBalances, {
-      academyId,
-      studentId: student.studentId,
-      instrumentId: instrument.instrumentId,
-    });
-
-    return ticketBalance
-      ? [`${ticketBalance.instrumentName} ${ticketBalance.remainingCount}회`]
-      : [];
+): PrivateLessonAvailability[] {
+  return balances.filter((balance) => balance.academyId === academyId).map((balance) => {
+    const reservedCount = lessons.filter((lesson) =>
+      lesson.academyId === academyId && lesson.studentId === balance.studentId &&
+      lesson.instrumentId === balance.instrumentId && lesson.status === "scheduled").length;
+    return {
+      studentId: balance.studentId,
+      instrumentId: balance.instrumentId,
+      remainingCount: balance.remainingCount,
+      reservedCount,
+      availableCount: Math.max(0, balance.remainingCount - reservedCount),
+    };
   });
-
-  return `${student.studentName} · ${
-    summaries.length > 0 ? summaries.join(", ") : "회차권 없음"
-  }`;
-}
-
-function findTicketBalance(
-  ticketBalances: PrivateLessonTicketSearchBalance[],
-  input: {
-    academyId: string;
-    studentId: string;
-    instrumentId: string;
-  },
-) {
-  return ticketBalances.find(
-    (ticket) =>
-      ticket.academyId === input.academyId &&
-      ticket.studentId === input.studentId &&
-      ticket.instrumentId === input.instrumentId,
-  );
 }
 
 function toSeoulIsoOffset(value: string) {

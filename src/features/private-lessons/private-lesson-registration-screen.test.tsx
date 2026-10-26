@@ -34,7 +34,13 @@ function renderPrivateLessonRegistrationScreen(
         academyName="더 클래식"
         registrationOptionsQueryFactory={registrationOptionsQueryFactory}
         registerPrivateLesson={registerPrivateLesson}
-        ticketBalances={ticketBalances}
+        ticketBalances={ticketBalances ?? [
+          { academyId: "academy-1", studentId: "student-1", instrumentId: "piano", instrumentName: "피아노", remainingCount: 4 },
+          { academyId: "academy-1", studentId: "student-1", instrumentId: "violin", instrumentName: "바이올린", remainingCount: 4 },
+          { academyId: "academy-1", studentId: "student-2", instrumentId: "violin", instrumentName: "바이올린", remainingCount: 4 },
+          { academyId: "academy-1", studentId: "student-2", instrumentId: "cello", instrumentName: "첼로", remainingCount: 4 },
+          { academyId: "academy-1", studentId: "student-3", instrumentId: "flute", instrumentName: "플루트", remainingCount: 4 },
+        ]}
         {...extraProps}
       />
     </QueryClientProvider>,
@@ -42,7 +48,7 @@ function renderPrivateLessonRegistrationScreen(
 }
 
 describe("PrivateLessonRegistrationScreen", () => {
-  it("개인레슨 등록 다이얼로그를 원생, 악기, 선생님, 시간 순서로 보여준다", async () => {
+  it("개인레슨 등록 다이얼로그를 날짜, 악기, 원생, 선생님, 시간 순서로 보여준다", async () => {
     const user = userEvent.setup();
 
     renderPrivateLessonRegistrationScreen((academyId) => ({
@@ -86,6 +92,9 @@ describe("PrivateLessonRegistrationScreen", () => {
     expect(within(steps).getByText("선생님")).toBeInTheDocument();
     expect(within(steps).getByText("시간")).toBeInTheDocument();
 
+    expect(within(steps).getByText("날짜")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("원생")).toBeDisabled();
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
 
     expect(within(dialog).getByLabelText("악기")).toBeEnabled();
@@ -93,7 +102,7 @@ describe("PrivateLessonRegistrationScreen", () => {
     expect(within(dialog).getByLabelText("선생님")).toBeEnabled();
   });
 
-  it("원생의 악기가 하나일 때만 악기를 자동 선택하고 여러 개면 직접 고르게 한다", async () => {
+  it("악기를 먼저 고르면 해당 악기를 수강하는 원생만 보여 준다", async () => {
     const user = userEvent.setup();
 
     renderPrivateLessonRegistrationScreen((academyId) => ({
@@ -143,11 +152,12 @@ describe("PrivateLessonRegistrationScreen", () => {
       name: "레슨 일정 등록",
     });
 
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-    expect(within(dialog).getByLabelText("악기")).toHaveValue("");
-
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
-    expect(within(dialog).getByLabelText("악기")).toHaveValue("cello");
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    expect(within(dialog).getByRole("option", { name: "김민지" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: "이서윤" })).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "cello");
+    expect(within(dialog).getByRole("option", { name: "이서윤" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: "김민지" })).not.toBeInTheDocument();
   });
 
   it("원생을 고르면 그 악기의 담당 선생님이 기본 선생님으로 선택된다", async () => {
@@ -192,10 +202,12 @@ describe("PrivateLessonRegistrationScreen", () => {
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "레슨 일정 등록" });
 
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByLabelText("선생님")).toHaveValue("teacher-2");
 
     // 담당 선생님 정보가 없으면 같은 파트 선생님이 한 명일 때만 기본 선택
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
     expect(within(dialog).getByLabelText("선생님")).toHaveValue("teacher-3");
   });
@@ -226,10 +238,11 @@ describe("PrivateLessonRegistrationScreen", () => {
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "레슨 일정 등록" });
 
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-    expect(within(dialog).getByLabelText("선생님")).toHaveValue("");
-
+    expect(within(dialog).getByLabelText("선생님")).toHaveValue("teacher-1");
     await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByLabelText("선생님")).toHaveValue("teacher-3");
   });
 
@@ -292,23 +305,13 @@ describe("PrivateLessonRegistrationScreen", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "레슨 일정 등록",
     });
-    expect(
-      within(dialog).getByRole("option", { name: "김민지 · 피아노 3회" }),
-    ).toBeInTheDocument();
-    expect(
-      within(dialog).getByRole("option", { name: "이서윤 · 회차권 없음" }),
-    ).toBeInTheDocument();
-
+    await within(dialog).findByRole("option", { name: "피아노" });
+    expect(within(dialog).queryByRole("option", { name: "바이올린" })).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    expect(within(dialog).getByRole("option", { name: "김민지" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: "이서윤" })).not.toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
-
-    expect(within(dialog).getByText("선택 악기 잔여 회차권 3회")).toBeInTheDocument();
-
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
-
-    expect(within(dialog).getByRole("status")).toHaveTextContent(
-      "사용할 수 있는 회차권이 없습니다.",
-    );
-    expect(within(dialog).getByRole("status")).toHaveTextContent("회차권 메뉴에서 먼저 등록해 주세요");
+    expect(within(dialog).getByText(/실제 잔여 3회.*예약 가능 3회/)).toBeInTheDocument();
   });
 
   it("개인레슨 등록 폼 입력을 mutation으로 전달한다", async () => {
@@ -360,6 +363,8 @@ describe("PrivateLessonRegistrationScreen", () => {
           status: "scheduled",
         };
       },
+      [{ academyId: "academy-1", studentId: "student-1", instrumentId: "piano", instrumentName: "피아노", remainingCount: 4 }],
+      { initialDate: "2026-08-21" },
     );
 
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
@@ -367,11 +372,10 @@ describe("PrivateLessonRegistrationScreen", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "레슨 일정 등록",
     });
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByText("원생 등록 기준 월 8회")).toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-1");
-    await user.type(within(dialog).getByLabelText("날짜"), "2026-08-21");
     await user.type(within(dialog).getByLabelText("시작 시간"), "15:00");
     await user.click(within(dialog).getByRole("button", { name: "완료" }));
 
@@ -440,29 +444,31 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     extraProps: Partial<ComponentProps<typeof PrivateLessonRegistrationScreen>> = {},
     register?: ComponentProps<typeof PrivateLessonRegistrationScreen>["registerPrivateLesson"],
   ) {
-    renderPrivateLessonRegistrationScreen(optionsFactory, register, undefined, extraProps);
+    renderPrivateLessonRegistrationScreen(optionsFactory, register, undefined, { initialDate: "2026-08-21", ...extraProps });
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     return screen.findByRole("dialog", { name: "레슨 일정 등록" });
   }
 
-  it("취소와 완료 버튼을 보여 주고 원생은 가나다순으로 고른다", async () => {
+  it("취소와 완료 버튼을 보여 주고 악기 선택 뒤 원생을 고른다", async () => {
     const user = userEvent.setup();
     const dialog = await openDialog(user);
 
     expect(within(dialog).getByRole("button", { name: "취소" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "완료" })).toBeDisabled();
     expect(within(dialog).queryByRole("button", { name: "저장" })).toBeNull();
+    await within(dialog).findByRole("option", { name: "피아노" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
     await waitFor(() =>
       expect(
         within(within(dialog).getByLabelText("원생")).getAllByRole("option").map((option) => option.textContent),
-      ).toEqual(["원생 선택", "가은", "이서윤"]),
+      ).toEqual(["원생 선택", "가은"]),
     );
 
     await user.click(within(dialog).getByRole("button", { name: "취소" }));
     expect(screen.queryByRole("dialog", { name: "레슨 일정 등록" })).toBeNull();
   });
 
-  it("등록할 수 있는 원생이 하나도 없으면 등록된 원생 없음으로 알리고 선택하지 못하게 한다", async () => {
+  it("등록할 수 있는 원생이 하나도 없으면 회차권 안내를 보여 준다", async () => {
     const user = userEvent.setup();
     renderPrivateLessonRegistrationScreen((academyId) => ({
       queryKey: ["private-lesson-registration-options", academyId],
@@ -471,9 +477,7 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "레슨 일정 등록" });
 
-    await waitFor(() =>
-      expect(within(dialog).getByRole("option", { name: "등록된 원생 없음" })).toBeInTheDocument(),
-    );
+    expect(await within(dialog).findByText(/선택한 날짜에 예약 가능한 회차권이 없습니다/)).toBeInTheDocument();
     expect(within(dialog).getByLabelText("원생")).toBeDisabled();
   });
 
@@ -481,7 +485,9 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     const user = userEvent.setup();
     const dialog = await openDialog(user);
 
-    await user.selectOptions(await within(dialog).findByLabelText("원생"), "student-2");
+    await within(dialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
 
     const teacherOptions = within(within(dialog).getByLabelText("선생님")).getAllByRole("option");
     expect(teacherOptions.map((option) => option.textContent)).toEqual(["선생님 선택", "오유진 / 바이올린"]);
@@ -507,7 +513,9 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     await user.click(screen.getByRole("button", { name: "개인레슨 등록" }));
     const dialog = await screen.findByRole("dialog", { name: "레슨 일정 등록" });
 
-    await user.selectOptions(await within(dialog).findByLabelText("원생"), "student-3");
+    await within(dialog).findByRole("option", { name: "플루트" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "flute");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-3");
 
     expect(
       within(dialog).getByText("이 악기를 담당하는 선생님이 없어 전체 선생님을 보여 줍니다."),
@@ -523,12 +531,13 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
       return { ...input, id: "new", status: "scheduled" };
     });
 
-    await user.selectOptions(await within(dialog).findByLabelText("원생"), "student-2");
+    await within(dialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
     expect(within(dialog).getByLabelText("레슨 시간(분)")).toHaveValue(40);
     expect(within(dialog).getByLabelText("종료 시간")).toHaveAttribute("readonly");
 
     await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-2");
-    await user.type(within(dialog).getByLabelText("날짜"), "2026-08-21");
     await user.type(within(dialog).getByLabelText("시작 시간"), "15:00");
     expect(within(dialog).getByLabelText("종료 시간")).toHaveValue("15:40");
 
@@ -552,9 +561,10 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     const user = userEvent.setup();
     const dialog = await openDialog(user);
 
-    await user.selectOptions(await within(dialog).findByLabelText("원생"), "student-2");
+    await within(dialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
     await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-2");
-    await user.type(within(dialog).getByLabelText("날짜"), "2026-08-21");
     await user.type(within(dialog).getByLabelText("시작 시간"), "15:00");
     expect(within(dialog).getByRole("button", { name: "완료" })).toBeEnabled();
 
@@ -583,9 +593,10 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
       ],
     });
 
-    await user.selectOptions(await within(dialog).findByLabelText("원생"), "student-2");
+    await within(dialog).findByRole("option", { name: "바이올린" });
+    await user.selectOptions(within(dialog).getByLabelText("악기"), "violin");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-2");
     await user.selectOptions(within(dialog).getByLabelText("선생님"), "teacher-2");
-    await user.type(within(dialog).getByLabelText("날짜"), "2026-08-21");
     await user.type(within(dialog).getByLabelText("시작 시간"), "15:20");
 
     expect(within(dialog).getByRole("alert")).toHaveTextContent(

@@ -9,6 +9,16 @@ import type { LessonCalendarMemo } from "@/lib/api/lesson-memos";
 export type LessonWorkspaceDemoData = {
   academySheets: DailyAcademyAttendanceSheet[];
   privateLessons: PrivateLesson[];
+  hiddenCalendarEvents?: Array<{
+    id: string;
+    lessonKind: "academy" | "private";
+    date: string;
+    startTime: string;
+    endTime: string;
+    title: string;
+    subtitle: string;
+    status: "cancelled";
+  }>;
   ticketBalances: PrivateLessonTicketSearchBalance[];
   registrationOptions: PrivateLessonRegistrationOptions;
   privateRegistrationOptions: PrivateLessonRegistrationOptions;

@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { getInstrumentColorTone } from "@/domain/instrument-color";
 
 import { LessonMonthCalendar } from "./lesson-month-calendar";
 import type { CalendarEvent } from "./workspace-types";
@@ -13,6 +14,29 @@ const events: CalendarEvent[] = [
 ];
 
 describe("월간 레슨 캘린더", () => {
+  it("공휴일·휴원일 이름과 악기별 예정·등원 색상 및 상태를 표시한다", () => {
+    render(<LessonMonthCalendar
+      ariaLabel="개인레슨 달력" selectedDate="2026-10-16"
+      events={[
+        { ...events[1], instrumentId: "cello", title: "예정 원생" },
+        { ...events[1], id: "present", instrumentId: "cello", title: "등원 원생", status: "present" },
+      ]}
+      memoCounts={new Map()} variant="private"
+      holidays={[{ date: "2026-10-16", name: "특별 공휴일" }]}
+      closures={[{ id: "closed", title: "학원 휴원", startsOn: "2026-10-16", endsOn: "2026-10-16", weekday: null, active: true }]}
+      instrumentColors={new Map([["cello", "#246bb2"]])}
+      onChangeMonth={vi.fn()} onSelectDate={vi.fn()}
+    />);
+    const day = screen.getByRole("gridcell", { selected: true });
+    expect(within(day).getByText("특별 공휴일")).toBeInTheDocument();
+    expect(within(day).getByText("학원 휴원")).toBeInTheDocument();
+    expect(within(day).getByText("예정")).toBeInTheDocument();
+    expect(within(day).getByText("등원")).toBeInTheDocument();
+    const planned = within(day).getByText("예정 원생").closest("div");
+    const present = within(day).getByText("등원 원생").closest("div");
+    expect(planned).toHaveStyle({ backgroundColor: getInstrumentColorTone("#246bb2", "scheduled").background });
+    expect(present).toHaveStyle({ backgroundColor: getInstrumentColorTone("#246bb2", "present").background });
+  });
   it("시간 미정 수업은 임시 자정 시각 대신 상태를 표시한다", () => {
     render(<LessonMonthCalendar
       ariaLabel="2026년 10월 학원레슨 캘린더"
@@ -48,6 +72,8 @@ describe("월간 레슨 캘린더", () => {
     expect(within(grid).queryByText("패스 원생")).not.toBeInTheDocument();
     expect(within(grid).queryByText("취소 원생")).not.toBeInTheDocument();
     expect(screen.getByText("숨긴 일정 3건")).toBeInTheDocument();
+    expect(screen.getByText(/결석 1건 · 패스 1건 · 취소 1건/)).toBeInTheDocument();
+    expect(screen.getByText(/전체 기록 보기로 확인/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("switch", { name: "전체 기록 보기" }));
     expect(within(grid).getByText("결석 원생")).toBeInTheDocument();

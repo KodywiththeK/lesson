@@ -6,6 +6,7 @@ import type {
 
 export type CalendarEvent = {
   id: string;
+  instrumentId?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -22,7 +23,7 @@ export type CalendarEvent = {
   sessionLabel?: string;
   /** 보강 시간을 입력하지 않은 학원 레슨 일정이라 시간을 보여 주지 않는다. */
   timeUnspecified?: boolean;
-  /** 달력에서 다른 날짜로 끌어 옮길 수 있는 학원 레슨 일정(출결 처리 전) */
+  /** 달력에서 다른 날짜로 끌어 옮길 수 있는 출결 전 일정 */
   movable?: boolean;
 };
 

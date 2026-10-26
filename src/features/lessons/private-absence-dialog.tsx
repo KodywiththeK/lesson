@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -25,8 +26,8 @@ import {
 } from "@/features/lessons/workspace-helpers";
 
 /**
- * 개인레슨 결석인원. 조회 중인 달에 결석 처리된 개인레슨을 날짜순으로 모아 보여 주는 조회 전용 목록이다.
- * 개인레슨은 보강·패스 처리 흐름이 없고, 출결과 결석 사유 변경은 날짜의 출석 확인에서 한다.
+ * 개인레슨 결석인원. 조회 중인 달의 결석을 날짜순으로 보여 주고 결석 취소를 제공한다.
+ * 결석 사유 수정은 날짜의 출석 확인에서 한다.
  */
 export function PrivateAbsenceDialog({
   open,
@@ -34,12 +35,14 @@ export function PrivateAbsenceDialog({
   absences,
   onOpenChange,
   onChangeMonth,
+  onCancelAbsence,
 }: {
   open: boolean;
   month: string;
   absences: PrivateLesson[];
   onOpenChange: (open: boolean) => void;
   onChangeMonth: (month: string) => void;
+  onCancelAbsence?: (lesson: PrivateLesson) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,8 +50,8 @@ export function PrivateAbsenceDialog({
         <DialogHeader>
           <DialogTitle>{formatMonthLabel(month)} 개인레슨 결석인원</DialogTitle>
           <DialogDescription>
-            조회 중인 달에 결석 처리된 개인레슨입니다. 출결이나 결석 사유를 바꾸려면 날짜를 눌러
-            출석 확인에서 수정해 주세요.
+            조회 중인 달에 결석 처리된 개인레슨입니다. 결석 취소는 예정 상태로 되돌립니다.
+            사유 수정은 날짜의 출석 확인에서 할 수 있습니다.
           </DialogDescription>
         </DialogHeader>
         <LessonMonthControl
@@ -69,12 +72,13 @@ export function PrivateAbsenceDialog({
               <TableHead>악기</TableHead>
               <TableHead>선생님</TableHead>
               <TableHead>사유</TableHead>
+              {onCancelAbsence ? <TableHead>처리</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {absences.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <TableCell colSpan={onCancelAbsence ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
                   이 달에는 결석 인원이 없습니다.
                 </TableCell>
               </TableRow>
@@ -89,6 +93,10 @@ export function PrivateAbsenceDialog({
                 <TableCell label="악기">{lesson.instrumentName}</TableCell>
                 <TableCell label="선생님">{lesson.teacherName}</TableCell>
                 <TableCell label="사유">{formatAbsenceReason(lesson.absenceReason)}</TableCell>
+                {onCancelAbsence ? <TableCell label="처리">
+                  <Button type="button" variant="outline" size="sm" aria-label={`${lesson.studentName} 결석 취소`}
+                    onClick={() => onCancelAbsence(lesson)}>결석 취소</Button>
+                </TableCell> : null}
               </TableRow>
             ))}
           </TableBody>

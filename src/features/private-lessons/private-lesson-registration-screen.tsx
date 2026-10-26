@@ -24,10 +24,14 @@ import {
   type PrivateLesson,
   type PrivateLessonTicketSearchBalance,
 } from "@/domain/private-lesson";
+import type { AcademyClosure } from "@/domain/academy-closure";
 import { toUserMessage } from "@/lib/errors/user-message";
 import {
   createPrivateLessonRegistrationOptionsQueryOptions,
+  fetchPrivateLessonAvailability,
   registerPrivateLessonEvent,
+  type PrivateLessonAvailability,
+  type PrivateLessonAvailabilitySupabaseClient,
   type PrivateLessonRegistrationOptions,
   type PrivateLessonRegistrationOptionsSupabaseClient,
   type PrivateLessonRegistrationSupabaseClient,
@@ -51,10 +55,12 @@ type PrivateLessonRegistrationScreenProps = {
   academyId: string;
   academyName: string;
   registrationOptionsQueryFactory?: PrivateLessonRegistrationOptionsQueryFactory;
+  fetchAvailability?: (date: string) => Promise<PrivateLessonAvailability[]>;
   registerPrivateLesson?: (
     input: RegisterPrivateLessonEventInput,
   ) => Promise<PrivateLesson>;
   ticketBalances?: PrivateLessonTicketSearchBalance[];
+  closures?: AcademyClosure[];
   /** 시간 겹침을 등록 전에 알리는 데 쓰는 이미 등록된 개인레슨(조회된 월의 일정). */
   existingLessons?: PrivateLesson[];
   /** 등록창을 열 때 날짜 칸을 미리 채울 날짜 `YYYY-MM-DD`. */
@@ -68,7 +74,7 @@ type PrivateLessonRegistrationScreenProps = {
 };
 
 type PrivateLessonSupabaseClient = PrivateLessonRegistrationOptionsSupabaseClient &
-  PrivateLessonRegistrationSupabaseClient;
+  PrivateLessonRegistrationSupabaseClient & PrivateLessonAvailabilitySupabaseClient;
 
 type SupabaseClientState =
   | {
@@ -84,8 +90,10 @@ export function PrivateLessonRegistrationScreen({
   academyId,
   academyName,
   registrationOptionsQueryFactory,
+  fetchAvailability,
   registerPrivateLesson,
   ticketBalances,
+  closures,
   existingLessons,
   initialDate,
   onRegistered,
@@ -122,6 +130,11 @@ export function PrivateLessonRegistrationScreen({
     queryFn: registrationOptionsQueryOptions.queryFn,
     enabled: open && (hasInjectedOptions || !supabaseClientState?.error),
   });
+  const availabilityFetcher = fetchAvailability ?? (
+    !hasInjectedOptions && supabaseClientState?.client
+      ? (date: string) => fetchPrivateLessonAvailability(supabaseClientState.client, academyId, date)
+      : undefined
+  );
   const registerMutation = useMutation({
     mutationFn:
       registerPrivateLesson ??
@@ -137,6 +150,7 @@ export function PrivateLessonRegistrationScreen({
       void queryClient.invalidateQueries({
         queryKey: [...queryKeys.academy(academyId), "private-lessons"],
       });
+      void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
     },
     onError: (error) => {
       toast.error("개인레슨 등록에 실패했습니다.", {
@@ -159,7 +173,7 @@ export function PrivateLessonRegistrationScreen({
         <DialogHeader>
           <DialogTitle>레슨 일정 등록</DialogTitle>
           <DialogDescription>
-            원생, 악기, 선생님, 시간을 순서대로 선택합니다.
+            날짜, 악기, 원생, 선생님, 시간을 순서대로 선택합니다.
           </DialogDescription>
         </DialogHeader>
         <PrivateLessonRegistrationForm
@@ -171,6 +185,8 @@ export function PrivateLessonRegistrationScreen({
             }
           }
           ticketBalances={ticketBalances}
+          closures={closures}
+          fetchAvailability={availabilityFetcher}
           existingLessons={existingLessons}
           initialDate={initialDate}
           isLoading={registrationOptionsQuery.isLoading}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getClosuresOnDate, type AcademyClosure } from "@/domain/academy-closure";
 
 import { DateTimeField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export function AcademyLessonEventDialog({
   academyId,
   selectedDate,
   options,
+  closures = [],
   onOpenChange,
   onSave,
 }: {
@@ -34,6 +36,7 @@ export function AcademyLessonEventDialog({
   academyId: string;
   selectedDate: string;
   options: PrivateLessonRegistrationOptions;
+  closures?: AcademyClosure[];
   onOpenChange: (open: boolean) => void;
   onSave: (input: CreateAcademyLessonEventInput) => void;
 }) {
@@ -44,6 +47,8 @@ export function AcademyLessonEventDialog({
   const [startAt, setStartAt] = useState(`${selectedDate}T15:00`);
   const [endAt, setEndAt] = useState(`${selectedDate}T15:50`);
   const [reason, setReason] = useState("");
+  const [closureConfirmed, setClosureConfirmed] = useState(false);
+  const matchingClosures = getClosuresOnDate(closures, startAt.slice(0, 10));
   const selectedStudent = options.students.find(
     (student) => student.studentId === studentId,
   );
@@ -59,7 +64,8 @@ export function AcademyLessonEventDialog({
     Boolean(selectedTeacher) &&
     Boolean(startAt) &&
     Boolean(endAt) &&
-    reason.trim().length > 0;
+    reason.trim().length > 0 &&
+    (matchingClosures.length === 0 || closureConfirmed);
 
   return (
     <Dialog
@@ -182,7 +188,7 @@ export function AcademyLessonEventDialog({
               <DateTimeField
                 aria-label="시작 시간"
                 value={startAt}
-                onValueChange={setStartAt}
+                onValueChange={(value) => { setStartAt(value); setClosureConfirmed(false); }}
               />
             </Label>
             <Label className="grid gap-1">
@@ -194,6 +200,10 @@ export function AcademyLessonEventDialog({
               />
             </Label>
           </div>
+          {matchingClosures.length > 0 ? <div className="rounded-md border border-amber-500 p-2 text-sm">
+            <p>휴원일: {matchingClosures.map((closure) => closure.title).join(", ")}</p>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={closureConfirmed} onChange={(event) => setClosureConfirmed(event.target.checked)} />휴원일 일정을 확인하고 등록</label>
+          </div> : null}
           <Label className="grid gap-1">
             <span>추가 사유</span>
             <Textarea
