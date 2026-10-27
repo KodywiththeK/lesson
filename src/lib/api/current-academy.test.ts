@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AcademySelectionRequiredError,
   AuthRequiredError,
   fetchCurrentAcademyContext,
+  NoMembershipError,
   type CurrentAcademySupabaseClient,
 } from "./current-academy";
 
@@ -56,5 +58,27 @@ describe("fetchCurrentAcademyContext 로그인 확인", () => {
 
     await expect(result).rejects.not.toBeInstanceOf(AuthRequiredError);
     await expect(result).rejects.toThrow("사용자 세션을 확인하지 못했습니다: Failed to fetch");
+  });
+});
+
+function clientWithMemberships(rows: Array<{ academy_id: string; role: "owner" | "desk" | "teacher"; academies: { id: string; name: string } }>) {
+  return {
+    auth: { getUser: async () => ({ data: { user: { id: "user-1" } }, error: null }) },
+    from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ order: async () => ({ data: rows, error: null }) }) }) }) }),
+  } as unknown as CurrentAcademySupabaseClient;
+}
+
+describe("학원 선택", () => {
+  it("마지막 사용 학원의 멤버십을 검증해 선택한다", async () => {
+    const client = clientWithMemberships([
+      { academy_id: "a", role: "owner", academies: { id: "a", name: "가 학원" } },
+      { academy_id: "b", role: "teacher", academies: { id: "b", name: "나 학원" } },
+    ]);
+    expect((await fetchCurrentAcademyContext(client, "b")).academyName).toBe("나 학원");
+    await expect(fetchCurrentAcademyContext(client, "missing")).rejects.toBeInstanceOf(AcademySelectionRequiredError);
+  });
+
+  it("활성 학원이 없으면 가입 화면으로 보낼 상태를 알린다", async () => {
+    await expect(fetchCurrentAcademyContext(clientWithMemberships([]))).rejects.toBeInstanceOf(NoMembershipError);
   });
 });

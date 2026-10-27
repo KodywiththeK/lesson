@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const privateRouteSources = [
+  "/auth/:path*",
   "/books/:path*",
   "/finance/:path*",
   "/lessons/:path*",
   "/management/:path*",
+  "/join",
+  "/onboarding",
   "/passes",
   "/settings/:path*",
   "/status-management",

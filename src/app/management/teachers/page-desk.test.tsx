@@ -5,6 +5,7 @@ import { AppProviders } from "../../providers";
 import TeachersPage from "./page";
 
 vi.mock("@/features/auth/academy-session-gate", () => ({
+  useAcademySessionControls: () => null,
   AcademySessionGate: ({
     children,
   }: {

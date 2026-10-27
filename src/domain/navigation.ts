@@ -202,6 +202,13 @@ export const mainNavigation: NavigationItem[] = [
         icon: Settings,
         feature: "settings",
       },
+      {
+        label: "직원 및 가입 신청",
+        href: "/settings/members",
+        description: "가입 신청을 승인하고 직원 권한을 관리합니다.",
+        icon: UsersRound,
+        feature: "settings",
+      },
     ],
   },
 ];

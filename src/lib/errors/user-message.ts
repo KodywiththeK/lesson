@@ -18,6 +18,14 @@ const MESSAGE_RULES: Array<{ pattern: RegExp; message: string }> = [
     message: "로그인이 만료되었습니다. 다시 로그인해 주세요.",
   },
   {
+    pattern: /invalid login credentials/i,
+    message: "이메일 또는 비밀번호를 확인해 주세요.",
+  },
+  {
+    pattern: /email_conflict_identity_not_deletable|Unable to unlink identity due to email conflict/i,
+    message: "카카오 이메일이 다른 계정과 충돌해 이전 로그인을 해제하지 못했습니다. 관리자에게 문의해 주세요.",
+  },
+  {
     pattern: /failed to fetch|networkerror|network request failed|load failed/i,
     message: "네트워크 연결을 확인한 뒤 다시 시도해 주세요.",
   },

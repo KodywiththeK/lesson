@@ -1,9 +1,11 @@
 import type { PermissionContext } from "@/domain/permissions";
+import { chooseActiveAcademy, type ActiveAcademy } from "@/domain/auth-onboarding";
 
 export type CurrentAcademyContext = {
   academyId: string;
   academyName: string;
   permissionContext: PermissionContext;
+  availableAcademies: ActiveAcademy[];
 };
 
 type SupabaseResult<TData> = {
@@ -34,30 +36,33 @@ export type CurrentAcademySupabaseClient = {
     }>;
   };
   from(table: "academy_members"): {
-    select(select: string): {
-      eq(
-        column: "user_id" | "status",
-        value: string,
-      ): ReturnType<CurrentAcademySupabaseClient["from"]>["select"] extends (
-        select: string,
-      ) => infer TBuilder
-        ? TBuilder
-        : never;
-      order(column: "created_at", options: { ascending: boolean }): {
-        limit(count: number): {
-          maybeSingle(): PromiseLike<
-            SupabaseResult<CurrentAcademyMembershipRow>
-          >;
-        };
-      };
-    };
+    select(select: string): CurrentAcademyMembershipQuery;
   };
+};
+
+type CurrentAcademyMembershipQuery = {
+  eq(column: "user_id" | "status", value: string): CurrentAcademyMembershipQuery;
+  order(column: "created_at", options: { ascending: boolean }): PromiseLike<SupabaseResult<CurrentAcademyMembershipRow[]>>;
 };
 
 export class AuthRequiredError extends Error {
   constructor() {
     super("로그인이 필요합니다.");
     this.name = "AuthRequiredError";
+  }
+}
+
+export class NoMembershipError extends Error {
+  constructor() {
+    super("활성 학원 멤버십이 없습니다.");
+    this.name = "NoMembershipError";
+  }
+}
+
+export class AcademySelectionRequiredError extends Error {
+  constructor(readonly memberships: ActiveAcademy[]) {
+    super("사용할 학원을 선택해 주세요.");
+    this.name = "AcademySelectionRequiredError";
   }
 }
 
@@ -78,6 +83,7 @@ const CURRENT_ACADEMY_SELECT = "academy_id, role, academies(id, name)";
 
 export async function fetchCurrentAcademyContext(
   supabase: CurrentAcademySupabaseClient,
+  selectedAcademyId: string | null = null,
 ): Promise<CurrentAcademyContext> {
   const userResult = await supabase.auth.getUser();
 
@@ -101,31 +107,29 @@ export async function fetchCurrentAcademyContext(
     .select(CURRENT_ACADEMY_SELECT)
     .eq("user_id", user.id)
     .eq("status", "active")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
   if (error) {
     throw new Error(`현재 학원을 불러오지 못했습니다: ${error.message}`);
   }
 
-  if (!data) {
-    throw new Error("활성 학원 멤버십이 없습니다.");
+  if (!data?.length) {
+    throw new NoMembershipError();
   }
 
-  const academy = Array.isArray(data.academies)
-    ? data.academies[0]
-    : data.academies;
-
-  if (!academy) {
-    throw new Error("학원 정보를 찾지 못했습니다.");
-  }
+  const memberships: ActiveAcademy[] = data.flatMap((row) => {
+    const academy = Array.isArray(row.academies) ? row.academies[0] : row.academies;
+    return academy ? [{ academyId: row.academy_id, academyName: academy.name, role: row.role as ActiveAcademy["role"] }] : [];
+  });
+  const selected = chooseActiveAcademy(memberships, selectedAcademyId);
+  if (!selected) throw new AcademySelectionRequiredError(memberships);
 
   return {
-    academyId: data.academy_id,
-    academyName: academy.name,
+    academyId: selected.academyId,
+    academyName: selected.academyName,
     permissionContext: {
-      role: data.role,
+      role: selected.role,
     },
+    availableAcademies: memberships,
   };
 }

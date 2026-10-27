@@ -291,6 +291,22 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 트리거 3개·설정 테이블 2개·RLS·GRANT·RPC 실행 권한을 카탈로그에서 확인했다. 롤백 트랜잭션으로 원장 조회·수정·숨김 삭제, 초과 예약 거부, 직접 삭제 거부, 원장 휴원일 쓰기와 비회원 쓰기 거부를 확인했다. 실제 두 세션 동시 등록과 선생님 실계정은 검증하지 못했다.
 - `pnpm lint`, `pnpm typecheck`, `pnpm test:run`(2,145개), `NEXT_PUBLIC_E2E_DEMO=1 pnpm build --webpack`, 관련 Playwright(3개)가 통과했다. 세부 결과와 advisor 경고는 `docs/harness/evidence/2026-10-26-lesson-schedule-ticket-flow.md`에 기록했다.
 
+## 학원 가입·권한 migration (20261027060000) — 2026-10-27 적용 완료
+
+- 사용자 요청 범위는 `academy_onboarding` 한 건이다. 같은 저장소에서 대기하던 `instrument_color_palette`와 `private_lesson_credit_and_service_tickets`는 적용하지 않았다.
+- 적용 전 원격 마지막 버전은 `20261026130428`이었다. 미적용 가입 파일을 `20261026053115`에서 `20261027060000_academy_onboarding.sql`로 이동해 선행 이력 뒤, 다른 두 대기 파일 앞에 배치했다. 기존 학원·멤버십·프로필은 각 1건이었고 새 테이블·휴대폰 컬럼은 없었다.
+- Supabase MCP `apply_migration`으로 파일 SQL 전체를 한 번 적용했다. MCP 임시 이력 버전 `20261027120024`가 생성되어 실제 SQL과 스키마를 확인한 뒤 공식 CLI `migration repair --help` 절차로 `20261027060000`을 `applied`, 임시 버전을 `reverted`로 정렬했다. SQL은 재실행하지 않았다.
+- `migration list`에서 로컬·원격 `20261027060000`이 일치하며 임시 버전은 없다. `db push --dry-run`에는 미적용 색상·회차권 파일 두 건만 나타났다. 이후 `db push`를 실행할 때 두 건은 별도 사용자 범위 확인을 거친다.
+- 원격 카탈로그에서 `profiles.phone`, 신청·비밀값 테이블 3개, RLS, 공개 RPC 13개, 선생님 트리거 2개, 고유 인덱스 2개를 확인했다. `authenticated`의 학원/멤버십 직접 insert와 멤버십 update는 거부되며, 새 RPC는 authenticated만 실행할 수 있다. 원장 조회와 비원장 거부, 롤백 트랜잭션의 초대 발급·목록 조회를 확인했다. 운영 Auth의 기존 이메일 로그인 후 같은 원장 멤버십·학원도 조회됐다.
+- 기존 학원·멤버십·프로필 수는 각 1건으로 유지됐다. 초대·신청·코드 행은 0건이다. 기존 학원이 학원 코드를 쓰려면 앱 배포 뒤 원장이 처음 발급해야 한다. 자세한 명령·한계는 `docs/harness/evidence/2026-10-27-academy-onboarding-migration.md`를 본다.
+
+## 기존 원장 비밀번호 정리 함수 (2026-10-27 적용)
+
+- 사용자 요청으로 `20261027140448_retire_legacy_owner_password.sql`의 함수만 원격에 미리 설치했다. Supabase MCP `apply_migration` 결과와 원격 history 버전은 `20261027140448`이며 로컬 파일명도 같은 버전으로 맞췄다. 다른 대기 migration 두 건은 적용하지 않았다.
+- 설치 직후 `pg_get_functiondef`·함수 권한을 확인했다. 원장·학원 멤버십은 그대로이고 Kakao identity는 0건, 비밀번호 해시는 존재하며 정리 감사 이벤트는 0건이다. 함수 설치 자체는 인증 정보를 변경하지 않았다.
+- 정리 함수의 실행은 고정 데모 원장 사용자 ID, 해당 학원 활성 owner, 연결된 Kakao identity, OAuth 로그인 JWT가 모두 있어야 한다. `anon` 실행 권한은 없으며, `authenticated` 실행은 전용 화면에서 호출하기 위해 의도적으로 열었다. Security Advisor의 `authenticated_security_definer_function_executable` 경고 2건은 이 공개 RPC에 관한 것으로, 실제 권한 검사를 함수 안에서 수행한다. 자세한 증거는 `docs/harness/evidence/2026-10-27-kakao-legacy-retirement-and-onboarding-logout.md`를 본다.
+- 실제 비밀번호 해시 제거와 이메일 identity 해제는 카카오 연결 뒤 원장이 일반 카카오 로그인으로 기존 학원을 확인하고 정리 버튼을 눌렀을 때만 진행한다. 그 후 Email provider와 앱 이메일 로그인 코드를 제거한다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 vi.mock("@/features/auth/academy-session-gate", () => ({
+  useAcademySessionControls: () => null,
   AcademySessionGate: ({
     children,
   }: {

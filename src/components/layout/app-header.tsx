@@ -6,6 +6,10 @@ import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -13,14 +17,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { SessionRole } from "@/domain/permissions";
+import { academyRoleLabels } from "@/domain/auth-onboarding";
+import { useAcademySessionControls } from "@/features/auth/academy-session-gate";
 
 import { navigationLinkClassName } from "./navigation-link-styles";
 import type { VisibleNavigationItem } from "./navigation-types";
 
 const roleLabels: Record<SessionRole, string> = {
-  owner: "원장",
-  desk: "데스크",
-  teacher: "선생님",
+  ...academyRoleLabels,
   anonymous: "게스트",
 };
 
@@ -74,6 +78,7 @@ function HeaderUser({
   role: SessionRole;
 }) {
   const description = `${academyName} · ${roleLabels[role]}`;
+  const session = useAcademySessionControls();
 
   return (
     <div className="flex items-center gap-3 sm:border-l sm:border-border sm:pl-3">
@@ -87,6 +92,17 @@ function HeaderUser({
       <p className="hidden max-w-48 truncate text-sm font-medium sm:block">
         {description}
       </p>
+      {session ? <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" aria-label="계정과 학원 메뉴">학원 전환</Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {session.academies.map((academy) => <DropdownMenuItem key={academy.academyId} onSelect={() => session.selectAcademy(academy.academyId)}>{academy.academyName} · {roleLabels[academy.role]}</DropdownMenuItem>)}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild><Link href="/onboarding">다른 학원 만들기·가입 신청</Link></DropdownMenuItem>
+          {role === "owner" && process.env.NEXT_PUBLIC_LEGACY_OWNER_LINK_ENABLED === "1" ?
+            <DropdownMenuItem asChild><Link href="/auth/retire-email">기존 이메일 로그인 정리</Link></DropdownMenuItem> : null}
+          <DropdownMenuItem onSelect={() => void session.signOut()}>로그아웃</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu> : null}
     </div>
   );
 }
