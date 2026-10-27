@@ -92,6 +92,8 @@ function NavigationEntry({
   if (item.children?.length) {
     return (
       <CollapsibleNavigationGroup
+        // 경로 이동 때 이전 수동 펼침을 버리고 현재 하위 경로로 기본 상태를 다시 계산한다.
+        key={activeHref ?? "none"}
         item={item}
         activeHref={activeHref}
         onNavigate={onNavigate}
@@ -117,10 +119,10 @@ function CollapsibleNavigationGroup({
   activeHref?: string;
   onNavigate?: () => void;
 }) {
-  const [isOpen, setIsOpen] = useState(true);
   const hasActiveChild = item.children?.some(
     (child) => child.href === activeHref,
   );
+  const [isOpen, setIsOpen] = useState(Boolean(hasActiveChild));
   const isActive = item.href === activeHref || hasActiveChild;
 
   return (

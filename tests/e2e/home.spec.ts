@@ -84,13 +84,33 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
   );
 });
 
+test("데스크톱 하위 메뉴는 클릭할 때 펼치고 현재 페이지 메뉴는 기본으로 열린다", async ({ page }) => {
+  await page.goto("/");
+  const navigation = mainNavigation(page);
+  const management = navigation.getByRole("link", { name: "인원·거래처" });
+  await expect(navigation.getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" })).toHaveAttribute("aria-expanded", "false");
+  await expect(navigation.getByRole("link", { name: "원생" })).toHaveCount(0);
+
+  await management.hover();
+  await expect(navigation.getByRole("link", { name: "원생" })).toHaveCount(0);
+  await navigation.getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
+  await expect(navigation.getByRole("link", { name: "원생" })).toBeVisible();
+  await navigation.getByRole("link", { name: "원생" }).click();
+  await expect(page).toHaveURL(/\/management\/students$/);
+  await expect(navigation.getByRole("button", { name: "인원·거래처 하위 메뉴 접기" })).toHaveAttribute("aria-expanded", "true");
+  await expect(navigation.getByRole("link", { name: "원생" })).toBeVisible();
+  await navigation.getByRole("button", { name: "인원·거래처 하위 메뉴 접기" }).click();
+  await expect(navigation.getByRole("link", { name: "원생" })).toHaveCount(0);
+});
+
 test("사이드바와 모바일 메뉴는 같은 탭에서 메뉴 이동·재열기 후 스크롤 위치를 유지한다", async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 500 });
+  await page.setViewportSize({ width: 1024, height: 320 });
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   const desktopScrollArea = page.getByRole("region", { name: "데스크톱 메뉴 스크롤" });
   const desktopScrollTop = await desktopScrollArea.evaluate((element) => {
-    const target = Math.min(220, element.scrollHeight - element.clientHeight);
+    const target = Math.min(60, element.scrollHeight - element.clientHeight);
     element.scrollTop = target;
     element.dispatchEvent(new Event("scroll"));
     return target;
@@ -126,6 +146,7 @@ test("원생 메뉴에서 원생 목록 화면으로 이동할 수 있다", asyn
     "href",
     "/management/students",
   );
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "원생" }).click();
   await expect(page).toHaveURL(/\/management\/students$/);
 
@@ -433,6 +454,7 @@ test("원생·선생님 등록 폼은 주요 화면 폭에서 넘치지 않고 �
 test("선생님 메뉴에서 선생님 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "선생님", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/teachers$/);
 
@@ -449,6 +471,7 @@ test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 
 }) => {
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "휴원/퇴원" }).click();
   await expect(page).toHaveURL(/\/management\/status$/);
 
@@ -477,6 +500,7 @@ test("휴원/퇴원 메뉴에서 비활성 원생과 선생님을 관리할 수 
 test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "거래처", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/vendors$/);
 
@@ -491,6 +515,7 @@ test("거래처 메뉴에서 거래처 목록 화면으로 이동할 수 있다"
 test("상담 메뉴에서 상담 목록 화면으로 이동할 수 있다", async ({ page }) => {
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "상담", exact: true }).click();
   await expect(page).toHaveURL(/\/management\/consultations$/);
 
@@ -629,6 +654,7 @@ test("원장은 설정에서 환불 규정을 고르고 회차권을 환불 처�
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
+  await mainNavigation(page).getByRole("button", { name: "설정 하위 메뉴 펼치기" }).click();
   await mainNavigation(page).getByRole("link", { name: "회차권 설정" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "설정" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /환불 불가/ })).toBeChecked();

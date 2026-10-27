@@ -30,7 +30,7 @@ describe("AppShell", () => {
     expect(within(header).queryByText("현재 학원: 더 클래식")).not.toBeInTheDocument();
   });
 
-  it("owner에게 운영 전체 메뉴를 보여주고 공통 헤더 액션은 노출하지 않는다", () => {
+  it("owner에게 상위 메뉴를 기본 표시하고 클릭 시 하위 메뉴를 보여준다", async () => {
     window.history.pushState(null, "", "/");
 
     render(
@@ -47,33 +47,16 @@ describe("AppShell", () => {
     expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "대시보드",
       "레슨 시간표",
-      "학원레슨표",
-      "개인레슨표",
       "회차권",
       "인원·거래처",
-      "원생",
-      "선생님",
-      "휴원/퇴원",
-      "거래처",
-      "상담",
       "교재",
-      "재고",
-      "출고",
-      "결제 완료",
-      "발주·입고",
       "수입 관리",
-      "학원 고정 수입",
-      "입출입내역",
-      "교재 내역",
-      "선생님 월급",
-      "전체 수입",
       "설정",
-      "레슨시간표",
-      "회차권 설정",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
     ).toHaveAttribute("href", "/management/students");
+    await userEvent.click(within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }));
     expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute(
       "href",
       "/management/students",
@@ -105,7 +88,7 @@ describe("AppShell", () => {
     expect(screen.getByText("시간표 설정 내용")).toBeInTheDocument();
   });
 
-  it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 아직 없는 내 급여 링크도 보여주지 않는다", () => {
+  it("teacher에게는 거래처와 수입 관리성 메뉴를 숨기고 아직 없는 내 급여 링크도 보여주지 않는다", async () => {
     window.history.pushState(null, "", "/management/students");
 
     render(
@@ -120,6 +103,7 @@ describe("AppShell", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
+    await userEvent.click(within(navigation).getByRole("button", { name: "레슨 시간표 하위 메뉴 펼치기" }));
     const labels = within(navigation).getAllByRole("link").map((link) => link.textContent);
 
     expect(labels).toContain("레슨 시간표");
@@ -184,7 +168,7 @@ describe("AppShell", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("children 메뉴는 기본 펼침이고 toggle로 접고 펼친다", async () => {
+  it("현재 하위 페이지의 메뉴는 기본으로 열리고 클릭하면 접힌다", async () => {
     window.history.pushState(null, "", "/management/students");
 
     render(
@@ -197,15 +181,8 @@ describe("AppShell", () => {
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     expect(within(navigation).getByRole("link", { name: "원생" })).toBeInTheDocument();
 
-    await userEvent.click(
-      within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 접기" }),
-    );
+    await userEvent.click(within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 접기" }));
     expect(within(navigation).queryByRole("link", { name: "원생" })).not.toBeInTheDocument();
-
-    await userEvent.click(
-      within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }),
-    );
-    expect(within(navigation).getByRole("link", { name: "원생" })).toBeInTheDocument();
   });
 
   it("lg 이하 화면을 위한 drawer 메뉴 버튼으로 주요 메뉴를 연다", async () => {
@@ -233,6 +210,9 @@ describe("AppShell", () => {
       .toHaveAttribute("href", "/lessons/academy");
     expect(within(navigation).getByRole("link", { name: "개인레슨표" }))
       .toHaveAttribute("href", "/lessons/private");
+    expect(within(navigation).queryByRole("link", { name: "원생" })).not.toBeInTheDocument();
+    await userEvent.click(within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }));
+    expect(within(navigation).getByRole("link", { name: "원생" })).toBeInTheDocument();
   });
 
   it("route가 바뀌어 shell이 다시 만들어져도 데스크톱 메뉴 스크롤 위치를 복원한다", () => {

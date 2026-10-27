@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import Home from "./page";
@@ -30,7 +31,7 @@ describe("Home", () => {
     expect(screen.queryByText(/Supabase tenant/)).not.toBeInTheDocument();
   });
 
-  it("PDF 1차 범위의 주요 메뉴를 탐색 링크로 제공한다", () => {
+  it("주요 메뉴는 상위 링크를 기본 표시하고 클릭한 하위 링크를 제공한다", async () => {
     render(<Home />);
 
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
@@ -39,32 +40,17 @@ describe("Home", () => {
     expect(links.map((link) => link.textContent)).toEqual([
       "대시보드",
       "레슨 시간표",
-      "학원레슨표",
-      "개인레슨표",
       "회차권",
       "인원·거래처",
-      "원생",
-      "선생님",
-      "휴원/퇴원",
-      "거래처",
-      "상담",
       "교재",
-      "재고",
-      "출고",
-      "결제 완료",
-      "발주·입고",
       "수입 관리",
-      "학원 고정 수입",
-      "입출입내역",
-      "교재 내역",
-      "선생님 월급",
-      "전체 수입",
       "설정",
-      "회차권 설정",
     ]);
     expect(
       within(navigation).getByRole("link", { name: "인원·거래처" }),
     ).toHaveAttribute("href", "/management/students");
+    await userEvent.click(within(navigation).getByRole("button", { name: "인원·거래처 하위 메뉴 펼치기" }));
+    expect(within(navigation).getByRole("link", { name: "원생" })).toHaveAttribute("href", "/management/students");
     expect(
       within(navigation).getByRole("link", { name: "레슨 시간표" }),
     ).toHaveAttribute("href", "/lessons/academy");
