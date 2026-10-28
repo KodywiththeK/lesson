@@ -202,7 +202,7 @@ export function LessonTicketRegistrationForm({
         </Label>
         <div className="self-end pb-2 text-sm text-muted-foreground">
           <p>{`입력 기준 만료일: ${validUntil ?? `사용 기한을 1~${MAX_LESSON_TICKET_VALID_DAYS}일로 입력해 주세요`}`}</p>
-          <p>기존 회차권 만료일이 더 늦으면 그 날짜를 유지합니다.</p>
+          <p>기존 회차권과 합치지 않고 새 회차권으로 등록합니다.</p>
         </div>
       </div>
 

@@ -356,6 +356,17 @@ describe("buildPrivateLessonSessionLabels", () => {
     status: "scheduled" as const,
   };
 
+  it("새 구매 뒤에도 각 일정의 구매권 회차 번호를 유지한다", () => {
+    const labels = buildPrivateLessonSessionLabels([
+      { ...base, id: "old", startAt: "2026-10-01T10:00:00+09:00",
+        ticketGrantId: "old-pass", ticketSessionNumber: 3, ticketTotalCount: 4 },
+      { ...base, id: "new", startAt: "2026-10-02T10:00:00+09:00",
+        ticketGrantId: "new-pass", ticketSessionNumber: 1, ticketTotalCount: 4 },
+    ], []);
+    expect(labels.get("old")).toBe("3/4");
+    expect(labels.get("new")).toBe("1/4");
+  });
+
   it("같은 원생·악기의 일정을 시간순으로 세어 현재/총 회차를 만든다", () => {
     const labels = buildPrivateLessonSessionLabels(
       [

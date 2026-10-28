@@ -1,10 +1,10 @@
 export type PricedLessonType = "academy" | "private";
 
 export const PRIVATE_LESSON_SESSION_OPTIONS = [4, 8] as const;
-export const PRIVATE_LESSON_MINUTE_OPTIONS = [40, 60] as const;
+export const PRIVATE_LESSON_MINUTE_OPTIONS = [30, 40, 60] as const;
 
 export type PrivateLessonSessions = number;
-export type PrivateLessonMinutes = (typeof PRIVATE_LESSON_MINUTE_OPTIONS)[number];
+export type PrivateLessonMinutes = number;
 
 /** 학원 피아노 레슨비 구간: 주2회, 주3회, 주4·5회 순서. */
 type AcademyFeeRow = readonly [week2: number, week3: number, week45: number];
@@ -88,6 +88,7 @@ export type ManualLessonFeeReason =
   | "unknown-progress"
   | "missing-private-option"
   | "no-private-session-tier"
+  | "no-private-minute-tier"
   | "no-price-table";
 
 export type LessonFeeResult =
@@ -148,6 +149,9 @@ function calculatePrivateLessonFee({
   }
   if (!PRIVATE_LESSON_SESSION_OPTIONS.includes(sessionsPerMonth as 4 | 8)) {
     return { status: "manual", reason: "no-private-session-tier" };
+  }
+  if (minutes !== 40 && minutes !== 60) {
+    return { status: "manual", reason: "no-private-minute-tier" };
   }
 
   const sessionOffset = sessionsPerMonth === 8 ? 2 : 0;

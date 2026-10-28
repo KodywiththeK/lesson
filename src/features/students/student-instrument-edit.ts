@@ -64,7 +64,7 @@ export function createInstrumentEditDraft(
 }
 
 export function getInstrumentScheduleError(draft: InstrumentEditDraft) {
-  return getLessonScheduleValidationError({
+  const scheduleError = getLessonScheduleValidationError({
     lessonType: draft.lessonType,
     ...(draft.lessonType === "private"
       ? {
@@ -75,6 +75,12 @@ export function getInstrumentScheduleError(draft: InstrumentEditDraft) {
     teacherId: draft.teacherId,
     weeklySchedules: draft.schedules,
   });
+  if (scheduleError) return scheduleError;
+  if (draft.lessonType === "private" && draft.fee.minutes !== 40
+    && draft.fee.minutes !== 60 && draft.fee.lessonFee <= 0) {
+    return "수업 시간에 맞는 레슨비를 직접 입력해 주세요.";
+  }
+  return null;
 }
 
 export function buildInstrumentUpdate({

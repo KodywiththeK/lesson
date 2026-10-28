@@ -128,7 +128,7 @@ describe("applyLessonTicketRegistration", () => {
     registeredAt: "2026-08-01",
   };
 
-  it("같은 학원, 원생, 악기의 회차권에 회수를 더하고 만료일을 등록일 기준으로 새로 계산한다", () => {
+  it("같은 학원, 원생, 악기라도 새 구매는 별도 회차권으로 계산한다", () => {
     const result = applyLessonTicketRegistration(activeTicket, {
       academyId: "academy-1",
       studentId: "student-1",
@@ -139,16 +139,15 @@ describe("applyLessonTicketRegistration", () => {
     });
 
     expect(result.ticket).toMatchObject({
-      totalGrantedCount: 22,
-      remainingCount: 13,
-      validFrom: "2026-08-01",
+      totalGrantedCount: 10,
+      remainingCount: 10,
+      validFrom: "2026-09-20",
       validUntil: "2026-10-20",
       registeredAt: "2026-09-20",
     });
     expect(result.event).toEqual({
-      type: "merged-existing-ticket",
+      type: "created-new-ticket",
       addedCount: 10,
-      previousValidUntil: "2026-09-30",
       nextValidUntil: "2026-10-20",
     });
   });
@@ -167,7 +166,7 @@ describe("applyLessonTicketRegistration", () => {
     );
 
     expect(result.ticket).toMatchObject({
-      totalGrantedCount: 20,
+      totalGrantedCount: 8,
       remainingCount: 8,
       validUntil: "2026-10-31",
     });

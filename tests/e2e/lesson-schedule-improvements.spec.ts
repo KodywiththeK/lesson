@@ -79,3 +79,34 @@ test("회차권 등록은 악기를 선택한 뒤 원생을 고른다", async ({
   await dialog.getByLabel("악기").selectOption("violin");
   await expect(dialog.getByRole("option", { name: "한서아" })).toBeAttached();
 });
+
+test("같은 원생의 새 구매는 기존 회차권과 별도 행으로 보인다", async ({ page }) => {
+  await page.goto("/passes");
+  await page.getByRole("button", { name: "회차권 등록" }).click();
+  const dialog = page.getByRole("dialog", { name: "회차권 등록" });
+  await dialog.getByLabel("악기").selectOption("violin");
+  await dialog.getByLabel("원생").selectOption("student-4");
+  await dialog.getByLabel("부여 회수").fill("4");
+  await dialog.getByLabel("결제 금액").fill("160000");
+  await dialog.getByRole("textbox", { name: "등록일" }).fill("2026-08-21");
+  await dialog.getByRole("button", { name: "저장" }).click();
+
+  await expect(page.getByRole("row", { name: /한서아/ })).toHaveCount(2);
+  await expect(page.getByRole("row", { name: /한서아/ }).filter({ hasText: "4회" })).toHaveCount(1);
+});
+
+test("320px 개인레슨 등록에서 원생별 횟수 선택지가 화면 밖으로 넘치지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/lessons/private");
+  await page.getByRole("button", { name: "작업 메뉴 열기" }).click();
+  await page.getByRole("dialog", { name: "페이지 작업" })
+    .getByRole("button", { name: "개인레슨 등록" }).click();
+  const dialog = page.getByRole("dialog", { name: "레슨 일정 등록" });
+  await dialog.getByRole("combobox", { name: "악기" }).selectOption("violin");
+  const studentSelect = dialog.getByRole("combobox", { name: "원생" });
+  await expect(studentSelect.getByRole("option", { name: /예약 가능 \d+회 · 실제 잔여 \d+회/ }).first()).toBeAttached();
+  const box = await studentSelect.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+});

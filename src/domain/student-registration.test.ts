@@ -9,6 +9,8 @@ import {
 
 describe("calculateLessonEndTime", () => {
   it("개인레슨 시작 시간과 회당 길이로 종료 시간을 계산한다", () => {
+    expect(calculateLessonEndTime("15:20", 30)).toBe("15:50");
+    expect(calculateLessonEndTime("15:20", 45)).toBe("16:05");
     expect(calculateLessonEndTime("15:20", 40)).toBe("16:00");
     expect(calculateLessonEndTime("15:20", 60)).toBe("16:20");
     expect(calculateLessonEndTime(undefined, 40)).toBeUndefined();
@@ -16,9 +18,35 @@ describe("calculateLessonEndTime", () => {
     expect(calculateLessonEndTime("12:99", 40)).toBeUndefined();
     expect(calculateLessonEndTime("24:00", 40)).toBeUndefined();
   });
+
+  it("직접 입력 길이는 5~240분의 정수만 허용한다", () => {
+    const input = { lessonType: "private" as const, teacherId: "t1", sessionsPerMonth: 4,
+      weeklySchedules: [{ startTime: "15:00", endTime: "15:30" }] };
+    expect(getLessonScheduleValidationError({ ...input, lessonDurationMinutes: 30 })).toBeNull();
+    expect(getLessonScheduleValidationError({ ...input, lessonDurationMinutes: 4 })).toMatch(/5~240분/);
+    expect(getLessonScheduleValidationError({ ...input, lessonDurationMinutes: 241 })).toMatch(/5~240분/);
+  });
 });
 
 describe("registerStudent", () => {
+  it("30분·직접 입력 길이는 레슨비를 수동 입력해야 한다", () => {
+    const input = {
+      academyId: "academy-1", studentId: "student-1", name: "김민지",
+      registeredAt: "2026-08-20", guardians: [],
+      instruments: [{
+        instrumentId: "piano", instrumentName: "피아노", teacherId: "teacher-1",
+        teacherName: "박선생", lessonType: "private" as const, sessionsPerMonth: 4,
+        lessonDurationMinutes: 30, weekdays: ["monday" as const], progress: "바이엘 1",
+        lessonFee: 0, discounts: [], finalMonthlyFee: 0,
+      }],
+    };
+    expect(() => registerStudent(input)).toThrow("수업 시간에 맞는 레슨비를 직접 입력해 주세요.");
+    expect(() => registerStudent({ ...input, instruments: [{ ...input.instruments[0], lessonDurationMinutes: 45 }] }))
+      .toThrow("수업 시간에 맞는 레슨비를 직접 입력해 주세요.");
+    expect(registerStudent({ ...input, instruments: [{ ...input.instruments[0], lessonFee: 120000,
+      finalMonthlyFee: 120000 }] }).enrollments[0].lessonFee).toBe(120000);
+  });
+
   it("원생 기본 정보와 악기별 수강 설정을 등록 결과로 만든다", () => {
     const result = registerStudent({
       academyId: "academy-1",

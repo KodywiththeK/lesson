@@ -52,7 +52,7 @@ describe("integrated demo flow", () => {
     expect(within(purchase.closest("tr")!).getByText("160,000원")).toBeInTheDocument();
   });
 
-  it("같은 원생·악기로 다시 등록하면 기존 회차권에 회수가 더해지고 만료일이 새로 계산된다", async () => {
+  it("같은 원생·악기로 다시 등록하면 기존 회차권과 새 회차권이 별도 행에 남는다", async () => {
     const user = userEvent.setup();
     render(
       <AppProviders>
@@ -70,12 +70,17 @@ describe("integrated demo flow", () => {
     fireEvent.change(within(dialog).getByLabelText("결제 금액"), { target: { value: "100000" } });
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
-    const seoaRow = await screen.findByRole("row", { name: /한서아/ });
     await waitFor(() => {
-      expect(seoaRow.querySelector('[data-label="총 부여"]')).toHaveTextContent(/^13회/);
+      expect(screen.getAllByRole("row", { name: /한서아/ })).toHaveLength(2);
     });
-    expect(seoaRow.querySelector('[data-label="잔여"]')).toHaveTextContent(/^7회/);
-    expect(within(seoaRow).getByRole("cell", { name: "2026-09-20" })).toBeInTheDocument();
+    const seoaRows = screen.getAllByRole("row", { name: /한서아/ });
+    expect(seoaRows.map((row) => row.querySelector('[data-label="총 부여"]')?.textContent)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^8회/), expect.stringMatching(/^5회/)]),
+    );
+    expect(seoaRows.map((row) => row.querySelector('[data-label="잔여"]')?.textContent)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^2회/), expect.stringMatching(/^5회/)]),
+    );
+    expect(seoaRows.some((row) => within(row).queryByRole("cell", { name: "2026-09-20" }))).toBe(true);
     expect(screen.queryByRole("dialog", { name: "회차권 등록" })).not.toBeInTheDocument();
   });
 

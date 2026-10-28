@@ -60,7 +60,7 @@ describe("academy demo state", () => {
     ).toBe(true);
   });
 
-  it("같은 원생·악기로 등록하면 기존 회차권에 회수를 더하고 만료일을 등록일 기준으로 갱신하며 수입 ledger를 남긴다", () => {
+  it("같은 원생·악기 구매도 별도 회차권과 수입 행으로 남긴다", () => {
     const state = createInitialDemoAcademyState();
 
     const { state: next, result } = registerDemoLessonTicket(state, {
@@ -80,21 +80,18 @@ describe("academy demo state", () => {
         candidate.instrumentId === "violin",
     );
 
-    expect(next.tickets).toHaveLength(state.tickets.length);
+    expect(next.tickets).toHaveLength(state.tickets.length + 1);
     expect(ticket).toMatchObject({
       ticketId: "ticket-1",
-      totalGrantedCount: 12,
-      remainingCount: 6,
-      validUntil: "2026-09-20",
-      registeredAt: "2026-08-21",
-      paidAmount: 440000,
+      totalGrantedCount: 8,
+      remainingCount: 2,
     });
     expect(result).toEqual({
-      ticketId: "ticket-1",
-      merged: true,
-      totalGrantedCount: 12,
-      remainingCount: 6,
-      validFrom: "2026-08-01",
+      ticketId: expect.stringMatching(/^ticket-demo-/),
+      merged: false,
+      totalGrantedCount: 4,
+      remainingCount: 4,
+      validFrom: "2026-08-21",
       validUntil: "2026-09-20",
     });
     expect(next.ledgerEntries).toContainEqual(
@@ -107,7 +104,34 @@ describe("academy demo state", () => {
     );
   });
 
-  it("기존 회차권이 없으면 새 회차권을 만들고 결제 금액이 없으면 수입 ledger를 남기지 않는다", () => {
+  it("권을 삭제한 뒤 다시 구매해도 남은 권과 ID가 겹치지 않는다", () => {
+    const state = createInitialDemoAcademyState();
+    const first = registerDemoLessonTicket(state, {
+      academyId: state.academyId,
+      studentId: "student-4",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      grantedCount: 4,
+      validDays: 30,
+      registeredAt: "2026-08-21",
+      paidAmount: 160000,
+    });
+    const afterDeletion = { ...first.state, tickets: first.state.tickets.slice(1) };
+    const { state: next } = registerDemoLessonTicket(afterDeletion, {
+      academyId: state.academyId,
+      studentId: "student-4",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      grantedCount: 4,
+      validDays: 30,
+      registeredAt: "2026-08-21",
+      paidAmount: 160000,
+    });
+
+    expect(new Set(next.tickets.map((ticket) => ticket.ticketId)).size).toBe(next.tickets.length);
+  });
+
+  it("서비스권은 별도 회차권을 만들고 결제 수입을 남기지 않는다", () => {
     const state = createInitialDemoAcademyState();
 
     const { state: next, result } = registerDemoLessonTicket(state, {
@@ -118,6 +142,7 @@ describe("academy demo state", () => {
       grantedCount: 8,
       validDays: 30,
       registeredAt: "2026-08-21",
+      isService: true,
     });
 
     expect(next.tickets).toHaveLength(state.tickets.length + 1);
@@ -132,6 +157,19 @@ describe("academy demo state", () => {
     });
     expect(result).toMatchObject({ merged: false, remainingCount: 8, validUntil: "2026-09-20" });
     expect(next.ledgerEntries).toHaveLength(state.ledgerEntries.length);
+  });
+
+  it("서비스 선택 없이 결제 금액을 비운 일반 구매는 거부한다", () => {
+    const state = createInitialDemoAcademyState();
+    expect(() => registerDemoLessonTicket(state, {
+      academyId: state.academyId,
+      studentId: "student-1",
+      instrumentId: "piano",
+      instrumentName: "피아노",
+      grantedCount: 4,
+      validDays: 30,
+      registeredAt: "2026-08-21",
+    })).toThrow("결제 금액을 입력하거나 서비스로 지급하기를 선택해 주세요.");
   });
 
   it("회차권 직접 수정은 부여 회수·잔여 회수·만료일을 바꾼다", () => {

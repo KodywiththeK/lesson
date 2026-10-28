@@ -75,7 +75,49 @@ function PrivateFeeFormWithoutWeekday() {
   );
 }
 
+function PrivatePricedFeeForm() {
+  const privateContext = {
+    instrumentName: "피아노", lessonType: "private" as const, weekdayCount: 1,
+  };
+  const [draft, setDraft] = useState<LessonFeeDraft>(() => createLessonFeeDraft(privateContext));
+  return <>
+    <StudentLessonFeeFields context={privateContext} referenceMonth="2026-10" draft={draft} onChange={setDraft} />
+    <output aria-label="저장용 수업 시간">{draft.minutes}</output>
+    <button type="button" onClick={() => setDraft({ ...draft, minutes: 40 })}>수업 시간 초기화</button>
+  </>;
+}
+
 describe("StudentLessonFeeFields", () => {
+  it("30분과 직접 입력 수업 시간에서는 레슨비를 직접 받는다", async () => {
+    const user = userEvent.setup();
+    render(<PrivatePricedFeeForm />);
+    const duration = screen.getByRole("combobox", { name: "수업 시간" });
+    await user.selectOptions(duration, "30");
+    expect(screen.getByLabelText("저장용 수업 시간")).toHaveTextContent("30");
+    expect(screen.getByText(/레슨비를 직접 입력/)).toBeInTheDocument();
+    await user.selectOptions(duration, "custom");
+    await user.type(screen.getByRole("textbox", { name: "직접 입력 수업 시간" }), "45");
+    expect(screen.getByLabelText("저장용 수업 시간")).toHaveTextContent("45");
+  });
+  it("외부에서 수업 시간을 기본값으로 되돌리면 직접 입력 칸이 닫힌다", async () => {
+    const user = userEvent.setup();
+    render(<PrivatePricedFeeForm />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "수업 시간" }), "custom");
+    await user.type(screen.getByRole("textbox", { name: "직접 입력 수업 시간" }), "45");
+    await user.click(screen.getByRole("button", { name: "수업 시간 초기화" }));
+
+    expect(screen.getByRole("combobox", { name: "수업 시간" })).toHaveValue("40");
+    expect(screen.queryByRole("textbox", { name: "직접 입력 수업 시간" })).not.toBeInTheDocument();
+  });
+  it("직접 입력으로 40분을 적어도 입력칸은 유지된다", async () => {
+    const user = userEvent.setup();
+    render(<PrivatePricedFeeForm />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "수업 시간" }), "custom");
+    await user.type(screen.getByRole("textbox", { name: "직접 입력 수업 시간" }), "40");
+
+    expect(screen.getByRole("combobox", { name: "수업 시간" })).toHaveValue("custom");
+    expect(screen.getByRole("textbox", { name: "직접 입력 수업 시간" })).toHaveValue("40");
+  });
   it("초기 0을 지우고 빈 상태로 둔 뒤 쉼표 금액을 정확히 입력한다", async () => {
     const user = userEvent.setup();
     render(<FeeForm />);

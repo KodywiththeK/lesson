@@ -29,6 +29,9 @@ export type PrivateLesson = {
   endAt: string;
   status: PrivateLessonStatus;
   creditAuthorized?: boolean;
+  ticketGrantId?: string;
+  ticketSessionNumber?: number;
+  ticketTotalCount?: number;
   /** 결석 사유. 결석이 아니면 없다. 사유를 비우고 저장한 결석은 기본 문구(결석 확인)다. */
   absenceReason?: string;
   origin?: LessonEventOrigin;
@@ -314,19 +317,23 @@ export function buildPrivateLessonStudentSearchResults(
 }
 
 /**
- * 같은 원생·악기의 취소되지 않은 레슨을 시간순으로 세어 `현재/총` 회차 표시를 만든다.
- * 현재 회차는 회차권 기간 안에서 이전 달까지 잡힌 레슨 수(`priorLessonCount`)에 전달된 레슨(보통 조회된 한 달)
- * 안의 순번을 더한 값이고, 총 회차는 유효한 회차권의 총 부여 횟수다.
- * 순번이 총 회차를 넘어도 총으로 자르지 않고 그대로 보여 준다.
+ * 구매 권에 연결된 일정은 저장된 권별 회차 번호를 보여 준다.
+ * 이전 데이터처럼 번호가 없으면 같은 원생·악기의 레슨을 시간순으로 세고
+ * 이전 달까지의 수(`priorLessonCount`)를 더한다.
  */
 export function buildPrivateLessonSessionLabels(
   lessons: PrivateLesson[],
   ticketBalances: PrivateLessonTicketSearchBalance[],
 ): Map<string, string> {
   const lessonsByStudentInstrument = new Map<string, PrivateLesson[]>();
+  const labels = new Map<string, string>();
 
   for (const lesson of lessons) {
     if (lesson.status === "cancelled") {
+      continue;
+    }
+    if (lesson.ticketSessionNumber && lesson.ticketTotalCount) {
+      labels.set(lesson.id, `${lesson.ticketSessionNumber}/${lesson.ticketTotalCount}`);
       continue;
     }
 
@@ -336,8 +343,6 @@ export function buildPrivateLessonSessionLabels(
       lesson,
     ]);
   }
-
-  const labels = new Map<string, string>();
 
   for (const [key, group] of lessonsByStudentInstrument) {
     const balance = ticketBalances.find((ticket) => toStudentInstrumentKey(ticket) === key);

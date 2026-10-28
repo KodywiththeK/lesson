@@ -361,7 +361,7 @@ describe("회차권 등록 폼", () => {
     const { dialog } = await openRegistrationDialog();
 
     expect(within(dialog).getByText("입력 기준 만료일: 2026-10-01")).toBeInTheDocument();
-    expect(within(dialog).getByText("기존 회차권 만료일이 더 늦으면 그 날짜를 유지합니다.")).toBeInTheDocument();
+    expect(within(dialog).getByText("기존 회차권과 합치지 않고 새 회차권으로 등록합니다.")).toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "사용 기한(일)" }), {
       target: { value: "60" },
@@ -447,7 +447,7 @@ describe("회차권 등록 폼", () => {
       ]);
     });
     expect(screen.queryByRole("dialog", { name: "회차권 등록" })).toBeNull();
-    expect(toastMock.success).toHaveBeenCalledWith("회차권을 등록했습니다.");
+    expect(toastMock.success).toHaveBeenCalledWith("새 회차권 10회를 등록했습니다. 만료일은 2026-10-31입니다.");
   });
 
   it("결제 금액을 입력하면 유료 등록 요청을 보낸다", async () => {
@@ -500,13 +500,13 @@ describe("회차권 등록 폼", () => {
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
   });
 
-  it("기존 회차권에 추가되면 더한 회수와 새 만료일을 알려준다", async () => {
+  it("다시 구매하면 기존 권에 합치지 않고 새 권의 회수와 만료일을 알린다", async () => {
     const { user, dialog } = await openRegistrationDialog({
       registerLessonTicket: async () => ({
         ticketId: "ticket-1",
-        merged: true,
-        totalGrantedCount: 22,
-        remainingCount: 12,
+        merged: false,
+        totalGrantedCount: 10,
+        remainingCount: 10,
         validFrom: "2026-08-01",
         validUntil: "2026-10-01",
       }),
@@ -523,7 +523,7 @@ describe("회차권 등록 폼", () => {
 
     await waitFor(() => {
       expect(toastMock.success).toHaveBeenCalledWith(
-        "기존 회차권에 10회를 추가하고 만료일을 2026-10-01로 갱신했습니다.",
+        "새 회차권 10회를 등록했습니다. 만료일은 2026-10-01입니다.",
       );
     });
   });

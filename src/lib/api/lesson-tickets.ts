@@ -146,7 +146,7 @@ export async function revokeServiceLessonTicket(
 
 export type RegisterLessonTicketResult = {
   ticketId: string;
-  /** 같은 원생·악기의 기존 회차권에 더해졌으면 true. */
+  /** 기존 서버 응답과의 호환 필드. 신규 구매는 항상 false다. */
   merged: boolean;
   totalGrantedCount: number;
   remainingCount: number;
@@ -357,7 +357,7 @@ export function createLessonTicketRegistrationOptionsQueryOptions(
   };
 }
 
-/** 신규 등록과 기존 회차권 추가를 서버 RPC 한 번으로 처리한다(결제 금액이 있으면 수입 기록까지 같은 트랜잭션). */
+/** 신규 구매마다 별도 회차권을 서버 RPC 한 번으로 만들고 수입 원장까지 함께 기록한다. */
 export async function registerLessonTicket(
   supabase: RegisterLessonTicketSupabaseClient,
   input: RegisterLessonTicketInput,

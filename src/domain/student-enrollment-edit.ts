@@ -40,7 +40,7 @@ export type StudentEnrollmentFields = StudentInstrumentDiscountSelection & {
   teacherName?: string;
   lessonType: "academy" | "private";
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   instrumentId: string;
   instrumentName: string;
   weeklySchedules: StudentWeeklyScheduleChange[];
@@ -136,6 +136,10 @@ export function getStudentEnrollmentValidationError(
 
     if (scheduleError) {
       return scheduleError;
+    }
+    if (change.lessonType === "private" && change.lessonDurationMinutes !== 40
+      && change.lessonDurationMinutes !== 60 && change.lessonFee <= 0) {
+      return "수업 시간에 맞는 레슨비를 직접 입력해 주세요.";
     }
 
     if (change.action !== "add") {

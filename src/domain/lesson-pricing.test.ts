@@ -37,9 +37,9 @@ describe("getProgressOptions", () => {
     expect(getProgressOptions("드럼", "private")).toEqual([]);
   });
 
-  it("개인 레슨 선택지는 월 4·8회와 40·60분이다", () => {
+  it("개인 레슨 선택지는 월 4·8회와 30·40·60분이다", () => {
     expect(PRIVATE_LESSON_SESSION_OPTIONS).toEqual([4, 8]);
-    expect(PRIVATE_LESSON_MINUTE_OPTIONS).toEqual([40, 60]);
+    expect(PRIVATE_LESSON_MINUTE_OPTIONS).toEqual([30, 40, 60]);
   });
 });
 
@@ -170,6 +170,13 @@ describe("calculateLessonFee 개인 레슨", () => {
         weekdayCount: 0,
       }),
     ).toEqual({ status: "manual", reason: "missing-private-option" });
+  });
+
+  it.each([30, 45, 240])("%i분 수업에는 40분 가격을 대입하지 않는다", (minutes) => {
+    expect(calculateLessonFee({
+      instrumentName: "피아노", lessonType: "private", progress: "피아노 개인 레슨",
+      weekdayCount: 1, sessionsPerMonth: 4, minutes,
+    })).toEqual({ status: "manual", reason: "no-private-minute-tier" });
   });
 
   it("가격표가 없는 악기는 직접 입력해야 한다", () => {

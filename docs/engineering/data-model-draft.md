@@ -41,11 +41,12 @@
 - 정기 일정 수정은 기존 series를 닫고 새 series를 만들며, 과거 event와 출석 기록이 있는 event는 보존한다.
 - 비정기 학원레슨, 보강, 특강, 개인레슨은 series 없이 event로 직접 생성할 수 있다.
 - event 출처는 `origin`으로 구분한다: `regular`, `manual`, `makeup`, `private`, `special`.
-- 개인레슨 회차권 차감 여부는 event의 `counts_for_ticket`로 결정한다.
+- 개인레슨 회차권 차감 여부는 event의 `counts_for_ticket`로 결정한다. 일반 일정은 `ticket_grant_id`로 구매 권에 연결하고 `ticket_session_number`·`ticket_total_count`로 당시 회차를 표시한다. 외상 일정은 실제 사용·정산 때 권에 연결한다.
 
 ## Tickets
 
-- `lesson_ticket_grants`: 회차권 부여 수량, 유효기간, 등록일
+- `lesson_ticket_grants`: 구매 한 건당 별도 행으로 부여 수량, 잔여, 유효기간, 등록일을 기록한다. 과거에 합쳐진 권은 한 행의 통합권으로 보존한다.
+- `lesson_ticket_registrations`: 구매별 결제·서비스·유효기간과 연결 원장 기록
 - `lesson_ticket_adjustments`: 수동 수정과 사유 감사 로그
 - `lesson_ticket_usages`: 출석 확인과 연결된 회차 차감 기록
 

@@ -340,7 +340,7 @@ export function LessonTicketListScreen({
           <DialogHeader>
             <DialogTitle>회차권 등록</DialogTitle>
             <DialogDescription>
-              개인레슨 회차권을 신규 등록하거나 기존 회차권에 추가합니다.
+              개인레슨 회차권을 새 구매 건으로 등록합니다.
             </DialogDescription>
           </DialogHeader>
           <LessonTicketRegistrationForm
@@ -598,9 +598,7 @@ function describeRegistration(
   result: RegisterLessonTicketResult,
   input: RegisterLessonTicketInput,
 ) {
-  return result.merged
-    ? `기존 회차권에 ${input.grantedCount}회를 추가하고 만료일을 ${result.validUntil}로 갱신했습니다.`
-    : "회차권을 등록했습니다.";
+  return `새 회차권 ${input.grantedCount}회를 등록했습니다. 만료일은 ${result.validUntil}입니다.`;
 }
 
 function createLessonTicketSupabaseClient(): SupabaseClientState {

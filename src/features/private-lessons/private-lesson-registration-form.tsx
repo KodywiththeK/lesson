@@ -285,11 +285,14 @@ export function PrivateLessonRegistrationForm({
           }}
         >
           <NativeSelectOption value="">{hasNoRegistrableStudent && instrumentId ? "예약 가능한 원생 없음" : "원생 선택"}</NativeSelectOption>
-          {students.map((student) => (
-            <NativeSelectOption key={student.studentId} value={student.studentId}>
-              {student.studentName}
-            </NativeSelectOption>
-          ))}
+          {students.map((student) => {
+            const counts = availability.find((row) => row.studentId === student.studentId && row.instrumentId === instrumentId);
+            return (
+              <NativeSelectOption key={student.studentId} value={student.studentId}>
+                {student.studentName} · 예약 가능 {counts?.availableCount ?? 0}회 · 실제 잔여 {counts?.remainingCount ?? 0}회
+              </NativeSelectOption>
+            );
+          })}
         </NativeSelect>
         {selectedAvailability ? (
           <p className="text-xs text-muted-foreground" aria-live="polite">

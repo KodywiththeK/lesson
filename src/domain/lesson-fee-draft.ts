@@ -193,6 +193,7 @@ const MANUAL_LESSON_FEE_MESSAGES: Record<ManualLessonFeeReason, string> = {
   "unknown-progress": "가격표에 없는 진도라 레슨비를 직접 입력해 주세요.",
   "missing-private-option": "월 횟수와 수업 시간을 선택하면 레슨비가 자동으로 계산됩니다.",
   "no-private-session-tier": "가격표에 없는 월 횟수라 레슨비를 직접 입력해 주세요.",
+  "no-private-minute-tier": "이 수업 시간은 가격표에 없어 레슨비를 직접 입력해 주세요.",
   "no-price-table": "이 수업은 가격표가 없어 레슨비를 직접 입력해 주세요.",
 };
 

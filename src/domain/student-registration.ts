@@ -20,7 +20,7 @@ export type StudentInstrumentInput = {
   teacherName: string;
   lessonType: LessonType;
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   weekdays: Weekday[];
   weeklySchedules?: StudentInstrumentWeeklyScheduleInput[];
   startTime?: string;
@@ -56,7 +56,7 @@ export function getLessonScheduleValidationError(input: {
   lessonType: LessonType;
   teacherId?: string | null;
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   weeklySchedules: ReadonlyArray<{ startTime?: string; endTime?: string }>;
 }): string | null {
   if (input.lessonType === "academy" && !input.teacherId?.trim()) {
@@ -69,8 +69,9 @@ export function getLessonScheduleValidationError(input: {
     if (!Number.isInteger(input.sessionsPerMonth) || (input.sessionsPerMonth ?? 0) <= 0) {
       return "개인레슨 월 횟수를 1회 이상 입력해 주세요.";
     }
-    if (input.lessonDurationMinutes !== 40 && input.lessonDurationMinutes !== 60) {
-      return "개인레슨 수업 시간을 40분 또는 60분으로 선택해 주세요.";
+    if (!Number.isInteger(input.lessonDurationMinutes) ||
+      (input.lessonDurationMinutes ?? 0) < 5 || (input.lessonDurationMinutes ?? 0) > 240) {
+      return "개인레슨 수업 시간은 5~240분의 정수로 입력해 주세요.";
     }
   }
   if (input.weeklySchedules.some(({ startTime, endTime }) => Boolean(startTime) !== Boolean(endTime))) {
@@ -131,7 +132,7 @@ export type StudentEnrollment = {
   teacherName: string;
   lessonType: LessonType;
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   active: true;
   weekdays: Weekday[];
   weeklySchedules: StudentInstrumentWeeklyScheduleInput[];
@@ -287,6 +288,10 @@ function validateInstrument(
 ) {
   if (instrument.lessonFee < 0 || instrument.finalMonthlyFee < 0) {
     throw new Error("수강료는 0 이상이어야 합니다.");
+  }
+  if (instrument.lessonType === "private" && instrument.lessonDurationMinutes !== 40
+    && instrument.lessonDurationMinutes !== 60 && instrument.lessonFee <= 0) {
+    throw new Error("수업 시간에 맞는 레슨비를 직접 입력해 주세요.");
   }
 
   if (instrument.discounts.some((discount) => discount.amount < 0)) {

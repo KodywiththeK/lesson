@@ -297,6 +297,16 @@ describe("수강 변경 검증 보조", () => {
     ).toBe("학원레슨 선생님을 선택해야 합니다.");
   });
 
+  it("30분 또는 직접 입력 개인레슨은 금액을 직접 입력해야 저장된다", () => {
+    const change = { ...cello, action: "add" as const, startedOn: "2026-10-20",
+      lessonType: "private" as const, sessionsPerMonth: 4, lessonDurationMinutes: 30,
+      weeklySchedules: [{ weekdayLabel: "금", startTime: "17:00", endTime: "17:30" }],
+      lessonFee: 0, finalMonthlyFee: 0 };
+    expect(getStudentEnrollmentValidationError(buildInput([change]))).toBe("수업 시간에 맞는 레슨비를 직접 입력해 주세요.");
+    expect(getStudentEnrollmentValidationError(buildInput([{ ...change, lessonFee: 100000,
+      finalMonthlyFee: 100000 }]))).toBeNull();
+  });
+
   it("추가하는 수강은 악기와 시작일이 필요하고 같은 조합을 두 번 추가할 수 없다", () => {
     expect(
       getStudentEnrollmentValidationError(

@@ -55,7 +55,7 @@ describe("개인레슨 일정 등록 예약", () => {
     expect(screen.getByLabelText("날짜")).toHaveValue("2026-10-20");
     await screen.findByRole("option", { name: "피아노" });
     await user.selectOptions(screen.getByLabelText("악기"), "piano");
-    expect(await screen.findByRole("option", { name: "김민지" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "김민지 · 예약 가능 3회 · 실제 잔여 4회" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "이서윤" })).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("원생"), "s1");
     expect(screen.getByText(/실제 잔여 4회.*예약 1회.*예약 가능 3회/)).toBeInTheDocument();

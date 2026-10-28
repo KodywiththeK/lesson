@@ -30,7 +30,7 @@ export function WeeklyScheduleFields({
   labelPrefix?: string;
   legacyWeekdays?: string[];
   lessonType?: "academy" | "private";
-  lessonDurationMinutes?: 0 | 40 | 60;
+  lessonDurationMinutes?: number;
   schedules: WeeklyScheduleDraft[];
   onChange: (schedules: WeeklyScheduleDraft[]) => void;
 }) {

@@ -68,6 +68,17 @@ function createSupabaseStub(
 }
 
 describe("fetchLessonTicketList", () => {
+  it("같은 원생·악기의 두 구매를 합치지 않고 별도 권으로 돌려준다", async () => {
+    const { client } = createSupabaseStub([
+      createGrantRow({ id: "old", total_granted_count: 4, remaining_count: 1 }),
+      createGrantRow({ id: "new", total_granted_count: 4, remaining_count: 4,
+        registered_at: "2026-10-01", valid_from: "2026-10-01" }),
+    ]);
+    const rows = await fetchAllLessonTickets(client, "academy-1");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => [row.ticketId, row.totalGrantedCount, row.remainingCount]))
+      .toEqual(expect.arrayContaining([["new", 4, 4], ["old", 4, 1]]));
+  });
   it("Supabase 회차권 row를 목록으로 변환하고 academy_id로 제한한다", async () => {
     const { client, calls } = createSupabaseStub([
       {
@@ -344,10 +355,10 @@ describe("registerLessonTicket", () => {
     const { client, calls } = createRpcStub<RegisterLessonTicketSupabaseClient>({
       data: {
         ticket_id: "ticket-1",
-        merged: true,
-        total_granted_count: 22,
-        remaining_count: 13,
-        valid_from: "2026-08-01",
+        merged: false,
+        total_granted_count: 10,
+        remaining_count: 10,
+        valid_from: "2026-09-20",
         valid_until: "2026-10-20",
       },
       error: null,
@@ -373,10 +384,10 @@ describe("registerLessonTicket", () => {
     ]);
     expect(result).toEqual({
       ticketId: "ticket-1",
-      merged: true,
-      totalGrantedCount: 22,
-      remainingCount: 13,
-      validFrom: "2026-08-01",
+      merged: false,
+      totalGrantedCount: 10,
+      remainingCount: 10,
+      validFrom: "2026-09-20",
       validUntil: "2026-10-20",
     });
   });

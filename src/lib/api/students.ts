@@ -165,7 +165,7 @@ export type RegisterStudentEnrollmentInstrumentInput = StudentInstrumentDiscount
   teacherName?: string;
   lessonType: "academy" | "private";
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   instrumentId: string;
   instrumentName: string;
   weeklySchedules: RegisterStudentWeeklyScheduleInput[];
@@ -805,9 +805,10 @@ function toStudentListRow(row: StudentSupabaseRow): StudentListRow {
 function toStudentListInstrument(instrument: StudentInstrumentSupabaseRow) {
   const weeklySchedules = normalizeWeeklySchedulesForRow(instrument);
 
-  const lessonDurationMinutes: 40 | 60 | undefined =
-    instrument.lesson_duration_minutes === 40 || instrument.lesson_duration_minutes === 60
-      ? instrument.lesson_duration_minutes
+  const lessonDurationMinutes: number | undefined =
+    Number.isInteger(instrument.lesson_duration_minutes) &&
+      (instrument.lesson_duration_minutes ?? 0) >= 5 && (instrument.lesson_duration_minutes ?? 0) <= 240
+      ? instrument.lesson_duration_minutes ?? undefined
       : undefined;
 
   return {

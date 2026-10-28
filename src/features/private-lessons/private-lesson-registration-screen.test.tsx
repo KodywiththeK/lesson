@@ -153,11 +153,11 @@ describe("PrivateLessonRegistrationScreen", () => {
     });
 
     await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
-    expect(within(dialog).getByRole("option", { name: "김민지" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("option", { name: "이서윤" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /^김민지 · 예약 가능/ })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /^이서윤 ·/ })).not.toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("악기"), "cello");
-    expect(within(dialog).getByRole("option", { name: "이서윤" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("option", { name: "김민지" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /^이서윤 · 예약 가능/ })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /^김민지 ·/ })).not.toBeInTheDocument();
   });
 
   it("원생을 고르면 그 악기의 담당 선생님이 기본 선생님으로 선택된다", async () => {
@@ -308,8 +308,8 @@ describe("PrivateLessonRegistrationScreen", () => {
     await within(dialog).findByRole("option", { name: "피아노" });
     expect(within(dialog).queryByRole("option", { name: "바이올린" })).not.toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("악기"), "piano");
-    expect(within(dialog).getByRole("option", { name: "김민지" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("option", { name: "이서윤" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /^김민지 · 예약 가능/ })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("option", { name: /^이서윤 ·/ })).not.toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     expect(within(dialog).getByText(/실제 잔여 3회.*예약 가능 3회/)).toBeInTheDocument();
   });
@@ -462,7 +462,7 @@ describe("레슨 일정 등록 폼 (명세 3.3)", () => {
     await waitFor(() =>
       expect(
         within(within(dialog).getByLabelText("원생")).getAllByRole("option").map((option) => option.textContent),
-      ).toEqual(["원생 선택", "가은"]),
+      ).toEqual(["원생 선택", "가은 · 예약 가능 4회 · 실제 잔여 4회"]),
     );
 
     await user.click(within(dialog).getByRole("button", { name: "취소" }));

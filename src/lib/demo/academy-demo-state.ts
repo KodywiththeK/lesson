@@ -111,7 +111,7 @@ export type DemoStudentRegistrationInstrumentInput = {
   teacherName: string;
   lessonType: LessonType;
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   weeklySchedules: Array<{
     weekday: Weekday | string;
     startTime?: string;
@@ -609,11 +609,12 @@ export function registerDemoLessonTicket(
   state: DemoAcademyState,
   input: RegisterLessonTicketInput,
 ): { state: DemoAcademyState; result: RegisterLessonTicketResult } {
-  const existingTicket = state.tickets.find(
-    (ticket) =>
-      ticket.studentId === input.studentId &&
-      ticket.instrumentId === input.instrumentId,
-  );
+  if (input.isService ? (input.paidAmount ?? 0) !== 0 : !input.paidAmount || input.paidAmount <= 0) {
+    throw new Error("결제 금액을 입력하거나 서비스로 지급하기를 선택해 주세요.");
+  }
+  const existingTicket = state.tickets
+    .filter((ticket) => ticket.studentId === input.studentId && ticket.instrumentId === input.instrumentId)
+    .sort((left, right) => right.registeredAt.localeCompare(left.registeredAt))[0];
   const registered = applyLessonTicketRegistration(existingTicket, {
     academyId: state.academyId,
     studentId: input.studentId,
@@ -629,17 +630,15 @@ export function registerDemoLessonTicket(
   const paidAmount = input.paidAmount ?? 0;
   const ticket: LessonTicketListItem = {
     ...registered.ticket,
-    ticketId: existingTicket?.ticketId ?? `ticket-demo-${state.tickets.length + 1}`,
+    ticketId: `ticket-demo-${crypto.randomUUID()}`,
     studentName,
     instrumentName: input.instrumentName,
-    paidAmount: (existingTicket?.paidAmount ?? 0) + paidAmount,
-    paidAt: paidAmount > 0 ? input.registeredAt : existingTicket?.paidAt,
+    paidAmount,
+    paidAt: paidAmount > 0 ? input.registeredAt : undefined,
+    serviceTotalCount: input.isService ? input.grantedCount : 0,
+    serviceRemainingCount: input.isService ? input.grantedCount : 0,
   };
-  const tickets = existingTicket
-    ? state.tickets.map((candidate) =>
-        candidate.ticketId === existingTicket.ticketId ? ticket : candidate,
-      )
-    : [...state.tickets, ticket];
+  const tickets = [...state.tickets, ticket];
   const ledgerId = paidAmount > 0
     ? `ledger-ticket-${ticket.ticketId}-${state.ticketRegistrations.length + 1}`
     : null;
@@ -685,7 +684,7 @@ export function registerDemoLessonTicket(
     },
     result: {
       ticketId: ticket.ticketId,
-      merged: Boolean(existingTicket),
+      merged: false,
       totalGrantedCount: ticket.totalGrantedCount,
       remainingCount: ticket.remainingCount,
       validFrom: ticket.validFrom,

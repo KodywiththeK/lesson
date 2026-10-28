@@ -87,15 +87,9 @@ export type LessonTicketRegistration = {
 };
 
 export type LessonTicketRegistrationEvent =
-  | {
+  {
       type: "created-new-ticket";
       addedCount: number;
-      nextValidUntil: string;
-    }
-  | {
-      type: "merged-existing-ticket";
-      addedCount: number;
-      previousValidUntil: string;
       nextValidUntil: string;
     };
 
@@ -225,7 +219,7 @@ export function calculateLessonTicketValidUntil(
   return toDateString(toUtcDayNumber(registeredAt) + validDays);
 }
 
-/** 같은 원생·악기 회차권이 있으면 회수를 더하고 만료일을 등록일 기준으로 새로 계산한다. */
+/** 이전 구매가 있어도 새 구매는 독립된 회차권이다. */
 export function applyLessonTicketRegistration(
   existingTicket: LessonTicket | undefined,
   registration: LessonTicketRegistration,
@@ -236,45 +230,27 @@ export function applyLessonTicketRegistration(
     registration.validDays,
   );
 
-  if (!existingTicket) {
-    return {
-      ticket: {
-        academyId: registration.academyId,
-        studentId: registration.studentId,
-        instrumentId: registration.instrumentId,
-        totalGrantedCount: registration.grantedCount,
-        remainingCount: registration.grantedCount,
-        validFrom: registration.registeredAt,
-        validUntil,
-        registeredAt: registration.registeredAt,
-      },
-      event: {
-        type: "created-new-ticket",
-        addedCount: registration.grantedCount,
-        nextValidUntil: validUntil,
-      },
-    };
-  }
-
-  assertSameTicketScope(existingTicket, registration);
-  if (toUtcDayNumber(registration.registeredAt) < toUtcDayNumber(existingTicket.registeredAt)) {
-    throw new Error("등록일은 직전 등록일보다 앞설 수 없습니다.");
+  if (existingTicket) {
+    assertSameTicketScope(existingTicket, registration);
+    if (toUtcDayNumber(registration.registeredAt) < toUtcDayNumber(existingTicket.registeredAt)) {
+      throw new Error("등록일은 직전 등록일보다 앞설 수 없습니다.");
+    }
   }
 
   return {
     ticket: {
-      ...existingTicket,
-      totalGrantedCount:
-        existingTicket.totalGrantedCount + registration.grantedCount,
-      remainingCount: existingTicket.remainingCount + registration.grantedCount,
-      validFrom: existingTicket.validFrom,
+      academyId: registration.academyId,
+      studentId: registration.studentId,
+      instrumentId: registration.instrumentId,
+      totalGrantedCount: registration.grantedCount,
+      remainingCount: registration.grantedCount,
+      validFrom: registration.registeredAt,
       validUntil,
       registeredAt: registration.registeredAt,
     },
     event: {
-      type: "merged-existing-ticket",
+      type: "created-new-ticket",
       addedCount: registration.grantedCount,
-      previousValidUntil: existingTicket.validUntil,
       nextValidUntil: validUntil,
     },
   };

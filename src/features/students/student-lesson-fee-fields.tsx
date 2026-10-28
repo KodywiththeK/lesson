@@ -61,6 +61,11 @@ export function StudentLessonFeeFields({
   const feeNoticeId = `${labelPrefix}lesson-fee-notice`.replace(/\s+/g, "-");
   const feeInputId = useId();
   const requiresManualSessionCount = isPrivateLesson && context.weekdayCount >= 3;
+  const hasPresetMinutes = PRIVATE_LESSON_MINUTE_OPTIONS.some((minutes) => minutes === draft.minutes);
+  const [customMinutesSelected, setCustomMinutesSelected] = useState(!hasPresetMinutes && draft.minutes !== 0);
+  const [lastCustomMinutes, setLastCustomMinutes] = useState<number | null>(!hasPresetMinutes ? draft.minutes : null);
+  const showCustomMinutes = (!hasPresetMinutes && draft.minutes !== 0)
+    || (customMinutesSelected && draft.minutes === lastCustomMinutes);
   const [feeText, setFeeText] = useState(String(draft.lessonFee));
   const lastInputFee = useRef(draft.lessonFee);
   const [legacyDiscountText, setLegacyDiscountText] = useState(String(draft.otherDiscount.amount));
@@ -130,12 +135,13 @@ export function StudentLessonFeeFields({
               <span>수업 시간</span>
               <NativeSelect
                 aria-label={withPrefix("수업 시간")}
-                value={draft.minutes ? String(draft.minutes) : ""}
-                onChange={(event) =>
-                  updatePricingInput({
-                    minutes: (Number(event.target.value) || 0) as LessonFeeDraft["minutes"],
-                  })
-                }
+                value={showCustomMinutes ? "custom" : draft.minutes ? String(draft.minutes) : ""}
+                onChange={(event) => {
+                  const isCustom = event.target.value === "custom";
+                  setCustomMinutesSelected(isCustom);
+                  setLastCustomMinutes(isCustom ? 0 : null);
+                  updatePricingInput({ minutes: isCustom ? 0 : Number(event.target.value) || 0 });
+                }}
               >
                 <NativeSelectOption value="">선택해 주세요</NativeSelectOption>
                 {PRIVATE_LESSON_MINUTE_OPTIONS.map((minutes) => (
@@ -143,8 +149,22 @@ export function StudentLessonFeeFields({
                     {minutes}분
                   </NativeSelectOption>
                 ))}
+                <NativeSelectOption value="custom">직접 입력</NativeSelectOption>
               </NativeSelect>
             </Label>
+            {showCustomMinutes ? (
+              <Label className="grid gap-1">
+                <span>직접 입력 수업 시간</span>
+                <Input aria-label={withPrefix("직접 입력 수업 시간")} inputMode="numeric"
+                  value={draft.minutes || ""} aria-invalid={!Number.isInteger(draft.minutes) || draft.minutes < 5 || draft.minutes > 240}
+                  onChange={(event) => {
+                    const minutes = Number(event.target.value) || 0;
+                    setLastCustomMinutes(minutes);
+                    updatePricingInput({ minutes });
+                  }} />
+                <span className="text-xs text-muted-foreground">5~240분의 정수를 입력해 주세요.</span>
+              </Label>
+            ) : null}
           </>
         ) : null}
       </div>

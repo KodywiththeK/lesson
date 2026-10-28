@@ -58,7 +58,7 @@ export type StudentListInstrument = {
   instrumentName: string;
   lessonType: "academy" | "private" | string;
   sessionsPerMonth?: number;
-  lessonDurationMinutes?: 40 | 60;
+  lessonDurationMinutes?: number;
   weekdayLabels: string[];
   startTime: string;
   endTime: string;
