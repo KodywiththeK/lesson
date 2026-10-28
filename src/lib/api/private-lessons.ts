@@ -126,6 +126,7 @@ export type PrivateLessonEventSupabaseRow = {
   starts_at: string;
   ends_at: string;
   status: string;
+  credit_authorized?: boolean;
   origin?: string | null;
 };
 
@@ -262,6 +263,7 @@ export type RegisterPrivateLessonEventInput = {
   teacherName: string;
   startAt: string;
   endAt: string;
+  creditAuthorized?: boolean;
 };
 
 export type CancelPrivateLessonAttendanceInput = {
@@ -287,7 +289,7 @@ const PRIVATE_LESSON_STUDENT_OPTIONS_SELECT =
   "id, academy_id, name, student_instruments!student_instruments_academy_student_fk(id, instrument_id, instrument_name, lesson_type, active, teacher_id, sessions_per_month, lesson_duration_minutes, start_time, end_time)";
 const PRIVATE_LESSON_TEACHER_OPTIONS_SELECT = "id, academy_id, name, part, status";
 const PRIVATE_LESSON_EVENT_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), starts_at, ends_at, status, origin, credit_authorized";
 
 export async function fetchPrivateLessonRegistrationOptions(
   supabase: PrivateLessonRegistrationOptionsSupabaseClient,
@@ -404,6 +406,7 @@ export async function registerPrivateLessonEvent(
       ends_at: input.endAt,
       status: "scheduled",
       generated_from_enrollment: false,
+      credit_authorized: Boolean(input.creditAuthorized),
     })
     .select(PRIVATE_LESSON_EVENT_SELECT)
     .single();
@@ -559,6 +562,7 @@ function toPrivateLesson(row: PrivateLessonEventSupabaseRow): PrivateLesson {
     status: row.status === "cancelled" || row.status === "deleted"
       ? "cancelled"
       : "scheduled",
+    creditAuthorized: row.credit_authorized ?? false,
     origin: "private",
     originLabel: "개인레슨",
   };

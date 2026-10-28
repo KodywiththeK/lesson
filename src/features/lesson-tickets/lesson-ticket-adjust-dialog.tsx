@@ -62,7 +62,7 @@ export function LessonTicketAdjustDialog({
         <DialogHeader>
           <DialogTitle>회차권 수정</DialogTitle>
           <DialogDescription>
-            잘못 입력한 회수와 만료일을 고칩니다. 원생과 악기는 바꿀 수 없습니다.
+            유료 회차의 횟수와 만료일을 고칩니다. 서비스 회차는 별도로 회수합니다.
           </DialogDescription>
         </DialogHeader>
         <LessonTicketAdjustForm
@@ -84,8 +84,10 @@ function LessonTicketAdjustForm({
   isSaving: boolean;
   onSubmit: (input: LessonTicketAdjustmentInput) => void;
 }) {
-  const [totalGrantedCountText, setTotalGrantedCountText] = useState(String(ticket.totalGrantedCount));
-  const [remainingCountText, setRemainingCountText] = useState(String(ticket.remainingCount));
+  const paidTotalCount = ticket.totalGrantedCount - (ticket.serviceTotalCount ?? 0);
+  const paidRemainingCount = ticket.remainingCount - (ticket.serviceRemainingCount ?? 0);
+  const [totalGrantedCountText, setTotalGrantedCountText] = useState(String(paidTotalCount));
+  const [remainingCountText, setRemainingCountText] = useState(String(paidRemainingCount));
   const [validUntil, setValidUntil] = useState(ticket.validUntil);
   const [reason, setReason] = useState("");
   const input: LessonTicketAdjustmentInput = {
@@ -94,7 +96,8 @@ function LessonTicketAdjustForm({
     validUntil,
     reason: reason.trim(),
   };
-  const validation = validateLessonTicketAdjustment(ticket, input);
+  const validation = validateLessonTicketAdjustment({ ...ticket,
+    totalGrantedCount: paidTotalCount, remainingCount: paidRemainingCount }, input);
   const canSubmit = validation.ok && !isSaving;
 
   return (

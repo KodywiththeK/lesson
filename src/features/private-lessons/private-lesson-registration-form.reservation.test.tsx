@@ -60,4 +60,24 @@ describe("개인레슨 일정 등록 예약", () => {
     await user.selectOptions(screen.getByLabelText("원생"), "s1");
     expect(screen.getByText(/실제 잔여 4회.*예약 1회.*예약 가능 3회/)).toBeInTheDocument();
   });
+
+  it("예약 가능 회차가 없어도 외상을 명시하고 확인한 경우에만 원생을 선택해 등록한다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<QueryClientProvider client={new QueryClient()}><PrivateLessonRegistrationForm
+      academyId="a1" initialDate="2026-10-20" isLoading={false} error={null} isSaving={false}
+      options={{ students: [{ studentId: "s1", studentName: "김민지", instruments: [{ studentInstrumentId: "si1", instrumentId: "piano", instrumentName: "피아노", lessonMinutes: 40 }] }], teachers: [{ teacherId: "t1", teacherName: "박선생", part: "피아노" }] }}
+      fetchAvailability={async () => []} onSubmit={onSubmit} onCancel={vi.fn()}
+    /></QueryClientProvider>);
+    expect(screen.queryByRole("option", { name: "피아노" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "외상 예정으로 등록" }));
+    await user.selectOptions(screen.getByLabelText("악기"), "piano");
+    await user.selectOptions(screen.getByLabelText("원생"), "s1");
+    await user.type(screen.getByLabelText("시작 시간"), "16:00");
+    expect(screen.getByRole("button", { name: "완료" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "외상 등록 내용을 확인했습니다" }));
+    expect(screen.getByRole("button", { name: "완료" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "완료" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ creditAuthorized: true }));
+  });
 });

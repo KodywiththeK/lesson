@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { getInstrumentColorTone } from "@/domain/instrument-color";
@@ -36,6 +36,16 @@ describe("월간 레슨 캘린더", () => {
     const present = within(day).getByText("등원 원생").closest("div");
     expect(planned).toHaveStyle({ backgroundColor: getInstrumentColorTone("#246bb2", "scheduled").background });
     expect(present).toHaveStyle({ backgroundColor: getInstrumentColorTone("#246bb2", "present").background });
+    expect(planned).toHaveStyle({ color: getInstrumentColorTone("#246bb2", "scheduled").foreground });
+    expect(present).toHaveStyle({ color: getInstrumentColorTone("#246bb2", "present").foreground });
+    expect(within(planned!).getByText(/첼로/)).not.toHaveClass("opacity-80");
+    expect(within(present!).getByText(/첼로/)).not.toHaveClass("opacity-80");
+  });
+  it("악기색 일정의 회차 글자는 투명도로 흐리게 하지 않는다", () => {
+    render(<LessonMonthCalendar ariaLabel="개인레슨 달력" selectedDate="2026-10-16"
+      events={[{ ...events[1], instrumentId: "cello", detailLabel: "한서아 (첼로)", timeLabel: "17:00", sessionLabel: "1/4" }]}
+      memoCounts={new Map()} variant="private" onChangeMonth={vi.fn()} onSelectDate={vi.fn()} />);
+    expect(screen.getByText("1/4")).not.toHaveClass("opacity-80");
   });
   it("시간 미정 수업은 임시 자정 시각 대신 상태를 표시한다", () => {
     render(<LessonMonthCalendar
@@ -117,6 +127,30 @@ describe("월간 레슨 캘린더", () => {
 
     await user.click(screen.getByRole("button", { name: "오늘로 이동" }));
     expect(onToday).toHaveBeenCalledOnce();
+  });
+
+  it.each(["academy", "private"] as const)("%s 달력에서 일정 4건 이상인 날짜를 지연 호버하면 네 번째 일정까지 보여 준다", (variant) => {
+    vi.useFakeTimers();
+    try {
+      const crowded = Array.from({ length: 4 }, (_, index) => ({
+        ...events[1], id: `crowded-${index}`, title: `원생 ${index + 1}`,
+        movable: true,
+      }));
+      render(<LessonMonthCalendar ariaLabel="레슨 달력" selectedDate="2026-10-16"
+        events={crowded} memoCounts={new Map()} variant={variant}
+        onChangeMonth={vi.fn()} onSelectDate={vi.fn()} onMoveEvent={vi.fn()} />);
+      const day = screen.getByRole("gridcell", { selected: true });
+      expect(within(day).queryByText("원생 4")).not.toBeInTheDocument();
+      fireEvent.mouseEnter(day);
+      act(() => vi.advanceTimersByTime(349));
+      expect(screen.queryByRole("region", { name: "2026-10-16 전체 일정" })).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      const expanded = screen.getByRole("region", { name: "2026-10-16 전체 일정" });
+      expect(within(expanded).getByText("원생 4").closest("[draggable]"))
+        .toHaveAttribute("draggable", "true");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("달력 헤더의 오늘로 이동 바로 옆에 받은 버튼을 둔다", () => {

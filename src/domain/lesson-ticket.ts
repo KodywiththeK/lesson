@@ -33,6 +33,8 @@ export type LessonTicketListItem = LessonTicket & {
   ticketId: string;
   studentName: string;
   instrumentName: string;
+  serviceTotalCount?: number;
+  serviceRemainingCount?: number;
   paidAmount?: number;
   paidAt?: string;
 };

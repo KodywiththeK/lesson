@@ -67,13 +67,14 @@ describe("integrated demo flow", () => {
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-4");
     fireEvent.change(within(dialog).getByLabelText("부여 회수"), { target: { value: "5" } });
     fireEvent.change(within(dialog).getByLabelText("등록일"), { target: { value: "2026-08-21" } });
+    fireEvent.change(within(dialog).getByLabelText("결제 금액"), { target: { value: "100000" } });
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
     const seoaRow = await screen.findByRole("row", { name: /한서아/ });
     await waitFor(() => {
-      expect(within(seoaRow).getByRole("cell", { name: "13회" })).toBeInTheDocument();
+      expect(seoaRow.querySelector('[data-label="총 부여"]')).toHaveTextContent(/^13회/);
     });
-    expect(within(seoaRow).getByRole("cell", { name: "7회" })).toBeInTheDocument();
+    expect(seoaRow.querySelector('[data-label="잔여"]')).toHaveTextContent(/^7회/);
     expect(within(seoaRow).getByRole("cell", { name: "2026-09-20" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "회차권 등록" })).not.toBeInTheDocument();
   });
@@ -96,7 +97,7 @@ describe("integrated demo flow", () => {
 
     const seoaRow = await screen.findByRole("row", { name: /한서아/ });
     await waitFor(() => {
-      expect(within(seoaRow).getByRole("cell", { name: "5회" })).toBeInTheDocument();
+      expect(seoaRow.querySelector('[data-label="잔여"]')).toHaveTextContent(/^5회/);
     });
     expect(within(seoaRow).queryByText("잔여 부족")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "회차권 수정" })).not.toBeInTheDocument();

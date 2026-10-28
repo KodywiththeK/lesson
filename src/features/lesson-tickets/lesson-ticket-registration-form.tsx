@@ -57,6 +57,7 @@ export function LessonTicketRegistrationForm({
   const [validDaysText, setValidDaysText] = useState(DEFAULT_VALID_DAYS);
   const [registeredAt, setRegisteredAt] = useState(today);
   const [paidAmountText, setPaidAmountText] = useState("");
+  const [isService, setIsService] = useState(false);
   const eligibleOptions = options.filter((option) => option.instruments.length > 0);
   const instruments = [...new Map(eligibleOptions.flatMap((option) =>
     option.instruments.map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
@@ -69,10 +70,12 @@ export function LessonTicketRegistrationForm({
   );
   const grantedCount = parseNumberInput(grantedCountText);
   const validDays = parseNumberInput(validDaysText);
-  const paidAmount = !canRecordPayment || paidAmountText === "" ? undefined : parseWonInput(paidAmountText);
+  const paidAmount = isService ? 0 : paidAmountText === "" ? undefined : parseWonInput(paidAmountText);
   const hasValidGrantedCount = Number.isInteger(grantedCount) && grantedCount >= 1;
   const hasValidValidDays = Number.isInteger(validDays) && validDays >= 1 && validDays <= MAX_LESSON_TICKET_VALID_DAYS;
-  const hasValidPaidAmount = paidAmount === undefined || (paidAmount !== null && paidAmount <= LEDGER_AMOUNT_MAX);
+  const hasValidPaidAmount = isService ||
+    (canRecordPayment && paidAmount !== undefined && paidAmount !== null &&
+      paidAmount > 0 && paidAmount <= LEDGER_AMOUNT_MAX);
   const validUntil =
     hasValidValidDays && registeredAt
       ? calculateLessonTicketValidUntil(registeredAt, validDays)
@@ -104,7 +107,8 @@ export function LessonTicketRegistrationForm({
           grantedCount,
           validDays,
           registeredAt,
-          ...(paidAmount == null ? {} : { paidAmount }),
+          paidAmount: paidAmount ?? 0,
+          isService,
         });
       }}
     >
@@ -202,9 +206,13 @@ export function LessonTicketRegistrationForm({
         </div>
       </div>
 
-      {canRecordPayment ? <div className="grid gap-1">
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={isService} onChange={(event) => setIsService(event.target.checked)} />
+        서비스로 지급하기
+      </label>
+      {canRecordPayment && !isService ? <div className="grid gap-1">
         <Label className="grid gap-1">
-          <span>결제 금액(선택)</span>
+          <span>결제 금액(필수)</span>
           <Input
             aria-label="결제 금액"
             aria-describedby={paidAmountHintId}
@@ -217,9 +225,9 @@ export function LessonTicketRegistrationForm({
           />
         </Label>
         <p id={paidAmountHintId} className="text-xs text-muted-foreground">
-          입력하면 수입 내역에 기록됩니다(관리자만 입력 가능).
+          양수 금액을 입력하면 수입 내역에 기록됩니다. 서비스 지급은 0원으로 기록합니다.
         </p>
-        {!hasValidPaidAmount ? <p className="text-xs text-destructive">결제 금액은 0~{LEDGER_AMOUNT_MAX.toLocaleString("ko-KR")}원 사이의 정수로 입력해 주세요.</p> : null}
+        {!hasValidPaidAmount ? <p className="text-xs text-destructive">결제 금액은 1~{LEDGER_AMOUNT_MAX.toLocaleString("ko-KR")}원 사이의 정수로 입력해 주세요.</p> : null}
       </div> : null}
 
       <DialogFooter>

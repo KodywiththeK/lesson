@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import type { PrivateLesson } from "@/domain/private-lesson";
 import { getInstrumentColorStyle } from "@/domain/instrument-color";
-import { OriginBadge } from "@/features/lessons/lesson-badges";
+import { OriginBadge, PrivateLessonStatusBadge } from "@/features/lessons/lesson-badges";
 import { LessonDayMemoDialog } from "@/features/lessons/lesson-day-memo-dialog";
 import { LessonHistorySection } from "@/features/lessons/lesson-history-section";
 import { LessonDayControl } from "@/features/lessons/lesson-toolbar";
@@ -146,11 +146,12 @@ export function PrivateLessonDayView({
                 </TableCell>
               </TableRow>
             ) : null}
-            {lessons.map((lesson) => (
-              <Fragment key={lesson.id}>
-                <TableRow style={lesson.status === "scheduled" || lesson.status === "present"
-                  ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
-                  : undefined}>
+            {lessons.map((lesson) => {
+              const colorStyle = lesson.status === "scheduled" || lesson.status === "present"
+                ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
+                : undefined;
+              return <Fragment key={lesson.id}>
+                <TableRow>
                   <TableCell label="시간">
                     {toSeoulHourMinute(lesson.startAt)}-{toSeoulHourMinute(lesson.endAt)}
                   </TableCell>
@@ -164,15 +165,15 @@ export function PrivateLessonDayView({
                       />
                     ) : null}
                   </TableCell>
-                  <TableCell label="악기">{lesson.instrumentName}</TableCell>
+                  <TableCell label="악기">{colorStyle ? <span className="inline-flex w-fit rounded-md border px-2 py-1 text-sm font-semibold"
+                    style={colorStyle}>{lesson.instrumentName}</span> : lesson.instrumentName}</TableCell>
                   <TableCell label="선생님">{lesson.teacherName}</TableCell>
                   <TableCell label="회차">{sessionLabels.get(lesson.id) ?? "-"}</TableCell>
                   <TableCell label="상태">
                     <div className="flex flex-wrap gap-1">
                       <OriginBadge label={lesson.originLabel} />
-                      <Badge variant={lesson.status === "present" ? "default" : "outline"}>
-                        {formatPrivateLessonStatus(lesson.status)}
-                      </Badge>
+                      <PrivateLessonStatusBadge status={lesson.status} label={formatPrivateLessonStatus(lesson.status)} />
+                      {lesson.creditAuthorized && lesson.status === "scheduled" ? <Badge variant="warning" className="border-warning">외상 예정</Badge> : null}
                     </div>
                   </TableCell>
                   <TableCell label="처리" className="text-right">
@@ -202,8 +203,8 @@ export function PrivateLessonDayView({
                     </TableCell>
                   </TableRow>
                 ) : null}
-              </Fragment>
-            ))}
+              </Fragment>;
+            })}
           </TableBody>
         </Table>
       </SectionCard>

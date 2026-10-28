@@ -307,6 +307,13 @@ pnpm supabase db push --db-url "$POSTGRES_URL_NON_POOLING"
 - 정리 함수의 실행은 고정 데모 원장 사용자 ID, 해당 학원 활성 owner, 연결된 Kakao identity, OAuth 로그인 JWT가 모두 있어야 한다. `anon` 실행 권한은 없으며, `authenticated` 실행은 전용 화면에서 호출하기 위해 의도적으로 열었다. Security Advisor의 `authenticated_security_definer_function_executable` 경고 2건은 이 공개 RPC에 관한 것으로, 실제 권한 검사를 함수 안에서 수행한다. 자세한 증거는 `docs/harness/evidence/2026-10-27-kakao-legacy-retirement-and-onboarding-logout.md`를 본다.
 - 실제 비밀번호 해시 제거와 이메일 identity 해제는 카카오 연결 뒤 원장이 일반 카카오 로그인으로 기존 학원을 확인하고 정리 버튼을 눌렀을 때만 진행한다. 그 후 Email provider와 앱 이메일 로그인 코드를 제거한다.
 
+## 개인레슨 색상·외상/서비스 회차 migration (2026-10-27 적용)
+
+- 사용자 요청에 따라 `instrument_color_palette`와 `private_lesson_credit_and_service_tickets` 두 건만 Supabase MCP `apply_migration`으로 순서대로 적용했다. 원격 history 버전은 `20261027144305`, `20261027144316`이며 로컬 파일명도 맞췄다. 선행 원격 버전 `20261027140448` 뒤라 의존 순서는 유지됐다.
+- 사전 조회에서 색상 설정 0건, 총 부여/등록 불일치 0건, 판정 불가능한 0원 등록 0건이었다. 적용 후 색상 제약 1개, 외상 테이블 RLS·조회 정책 1개, 회차권 등록 8·9인자 함수가 확인됐다. 외상·서비스 이관 행은 0건이다.
+- 새 테이블 SELECT와 공개 등록·미정산 조회·서비스 회수 RPC는 `authenticated`에게만 열려 있고 `anon`은 거부된다. 기존 앱의 8인자 유료 등록은 호환 함수를 유지하며 0원 일반 등록은 거부한다. 원장 JWT 문맥의 롤백 트랜잭션에서 9인자 서비스 등록과 8인자 유료 등록이 각각 성공했고 생성 행은 남지 않았다.
+- `pnpm test:run` 2,189개, `pnpm lint`, `pnpm typecheck`, `pnpm build`, 해당 Playwright 4개와 격리 PGlite migration 시나리오가 통과했다. 실제 브라우저 세션의 역할별 조작과 두 세션 동시 트랜잭션은 수행하지 않았다. 상세 증거는 `docs/harness/evidence/2026-10-27-private-lesson-color-contrast.md`와 `docs/harness/evidence/2026-10-27-private-lesson-credit-service.md`에 있다.
+
 ## 금지 사항
 
 - 공개 Supabase URL/key로 migration을 시도하지 않는다.

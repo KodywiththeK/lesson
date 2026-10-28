@@ -60,6 +60,7 @@ import {
   deleteLessonTicket as deleteLessonTicketRpc,
   getLessonTicketRefundPreview as getLessonTicketRefundPreviewRpc,
   registerLessonTicket as registerLessonTicketRpc,
+  revokeServiceLessonTicket as revokeServiceLessonTicketRpc,
   type AdjustLessonTicketInput,
   type AdjustLessonTicketResult,
   type AdjustLessonTicketSupabaseClient,
@@ -74,13 +75,21 @@ import {
   type RegisterLessonTicketInput,
   type RegisterLessonTicketResult,
   type RegisterLessonTicketSupabaseClient,
+  type RevokeServiceLessonTicketClient,
+  type RevokeServiceLessonTicketInput,
 } from "@/lib/api/lesson-tickets";
 import { queryKeys } from "@/lib/api/query-keys";
+import {
+  fetchPrivateLessonCreditBalances,
+  type PrivateLessonCreditBalance,
+  type PrivateLessonCreditBalanceClient,
+} from "@/lib/api/private-lesson-credits";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import { LessonTicketAdjustDialog } from "./lesson-ticket-adjust-dialog";
 import { LessonTicketDeleteDialog } from "./lesson-ticket-delete-dialog";
 import { LessonTicketRegistrationForm } from "./lesson-ticket-registration-form";
+import { LessonTicketServiceRevokeDialog } from "./lesson-ticket-service-revoke-dialog";
 
 type LessonTicketListQueryOptions = {
   queryKey: QueryKey;
@@ -205,6 +214,13 @@ export function LessonTicketListScreen({
     enabled: hasInjectedQueryOptions || !supabaseClientState?.error,
     placeholderData: keepPreviousData,
   });
+  const creditBalancesQuery = useQuery({
+    queryKey: [...queryKeys.academy(academyId), "private-credits"],
+    queryFn: () => fetchPrivateLessonCreditBalances(
+      supabaseClientState!.client as unknown as PrivateLessonCreditBalanceClient, academyId,
+    ),
+    enabled: Boolean(supabaseClientState?.client),
+  });
   const ticketListView = lessonTicketListQuery.data;
   const registrationOptionsQueryOptions = registrationOptionsQueryFactory
     ? registrationOptionsQueryFactory(academyId)
@@ -226,6 +242,7 @@ export function LessonTicketListScreen({
       });
     }
     void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
+    void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "private-credits"] });
   }
 
   const registerMutation = useMutation({
@@ -290,6 +307,18 @@ export function LessonTicketListScreen({
         description: toUserMessage(error),
       });
     },
+  });
+  const serviceRevokeMutation = useMutation({
+    mutationFn: (input: RevokeServiceLessonTicketInput) =>
+      revokeServiceLessonTicketRpc(
+        (supabaseClientState ?? createMissingSupabaseClientState()).client as unknown as RevokeServiceLessonTicketClient,
+        input,
+      ),
+    onSuccess: (count) => {
+      toast.success(`미사용 서비스 ${count}회를 회수했습니다.`);
+      invalidateTicketRelatedQueries();
+    },
+    onError: (error) => toast.error("서비스 회차 회수에 실패했습니다.", { description: toUserMessage(error) }),
   });
   const loadRefundPreview =
     getLessonTicketRefundPreview ??
@@ -413,13 +442,25 @@ export function LessonTicketListScreen({
             회차권 목록을 불러오는 중입니다.
           </EmptyState>
         ) : null}
+        {creditBalancesQuery.isError ? <ListStatusAlert
+          message="미정산 레슨을 불러오지 못했습니다."
+          detail={toUserMessage(creditBalancesQuery.error)}
+        /> : null}
+        {(creditBalancesQuery.data?.length ?? 0) > 0 ? <div className="grid gap-1 border-b p-4 text-sm">
+          <strong>미정산 출석</strong>
+          {creditBalancesQuery.data?.map((balance) => <p key={`${balance.studentId}:${balance.instrumentId}`}>
+            {balance.studentName} · {balance.instrumentName} · 미정산 {balance.openCount}회
+          </p>)}
+        </div> : null}
 
         {ticketListView && !lessonTicketListQuery.isError ? (
           <>
             <LessonTicketTable
               tickets={ticketListView.items}
+              creditBalances={creditBalancesQuery.data ?? []}
               today={today}
               isAdjusting={adjustMutation.isPending}
+              isRevokingService={serviceRevokeMutation.isPending}
               onAdjust={(ticket, input, onSaved) =>
                 adjustMutation.mutate(
                   { ...input, academyId, ticketId: ticket.ticketId },
@@ -427,6 +468,9 @@ export function LessonTicketListScreen({
                 )
               }
               onDelete={setDeletingTicket}
+              onRevokeService={(ticket, count, reason, onSaved) =>
+                serviceRevokeMutation.mutate({ academyId, ticketId: ticket.ticketId, count, reason },
+                  { onSuccess: onSaved })}
             />
             <ListPagination
               itemLabel="회차권"
@@ -584,16 +628,22 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 
 function LessonTicketTable({
   tickets,
+  creditBalances,
   today,
   isAdjusting,
+  isRevokingService,
   onAdjust,
   onDelete,
+  onRevokeService,
 }: {
   tickets: LessonTicketListRow[];
+  creditBalances: PrivateLessonCreditBalance[];
   today: string;
   isAdjusting: boolean;
+  isRevokingService: boolean;
   onAdjust: ComponentProps<typeof LessonTicketAdjustDialog>["onAdjust"];
   onDelete: (ticket: LessonTicketListRow) => void;
+  onRevokeService: (ticket: LessonTicketListRow, count: number, reason: string, onSaved: () => void) => void;
 }) {
   if (tickets.length === 0) {
     return (
@@ -622,6 +672,9 @@ function LessonTicketTable({
       <TableBody>
         {tickets.map((ticket) => {
           const needsAttention = hasLowOrNoRemaining(ticket);
+          const openCredit = creditBalances.find((balance) =>
+            balance.studentId === ticket.studentId && balance.instrumentId === ticket.instrumentId,
+          );
 
           return (
             <TableRow
@@ -636,6 +689,9 @@ function LessonTicketTable({
               </TableCell>
               <TableCell label="총 부여">
                 {formatCount(ticket.totalGrantedCount)}
+                <span className="block text-xs text-muted-foreground">
+                  유료 {formatCount(ticket.totalGrantedCount - (ticket.serviceTotalCount ?? 0))} · 서비스 {formatCount(ticket.serviceTotalCount ?? 0)}
+                </span>
               </TableCell>
               <TableCell label="사용">
                 {formatCount(ticket.totalGrantedCount - ticket.remainingCount)}
@@ -649,6 +705,13 @@ function LessonTicketTable({
                 }
               >
                 {formatCount(ticket.remainingCount)}
+                <span className="block text-xs font-normal text-muted-foreground">
+                  유료 {formatCount(ticket.remainingCount - (ticket.serviceRemainingCount ?? 0))} · 서비스 {formatCount(ticket.serviceRemainingCount ?? 0)}
+                </span>
+                {openCredit
+                  ? <span className="block text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    미정산 {openCredit.openCount}회
+                  </span> : null}
               </TableCell>
               <TableCell label="등록일">{ticket.registeredAt}</TableCell>
               <TableCell label="만료일">{ticket.validUntil}</TableCell>
@@ -668,12 +731,16 @@ function LessonTicketTable({
               </TableCell>
               <TableCell label="관리">
                 <span className="flex flex-wrap gap-2">
-                  <LessonTicketAdjustDialog
+                  {ticket.totalGrantedCount > (ticket.serviceTotalCount ?? 0) ? <LessonTicketAdjustDialog
                     ticket={ticket}
                     isSaving={isAdjusting}
                     onAdjust={onAdjust}
-                  />
-                  <Button
+                  /> : null}
+                  {(ticket.serviceRemainingCount ?? 0) > 0 ? <LessonTicketServiceRevokeDialog
+                    ticket={ticket} isSaving={isRevokingService}
+                    onRevoke={(count, reason, onSaved) => onRevokeService(ticket, count, reason, onSaved)}
+                  /> : null}
+                  {ticket.totalGrantedCount > (ticket.serviceTotalCount ?? 0) ? <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -682,7 +749,7 @@ function LessonTicketTable({
                   >
                     <Trash2 aria-hidden="true" />
                     삭제
-                  </Button>
+                  </Button> : null}
                 </span>
               </TableCell>
             </TableRow>

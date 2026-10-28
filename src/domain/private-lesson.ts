@@ -28,6 +28,7 @@ export type PrivateLesson = {
   startAt: string;
   endAt: string;
   status: PrivateLessonStatus;
+  creditAuthorized?: boolean;
   /** 결석 사유. 결석이 아니면 없다. 사유를 비우고 저장한 결석은 기본 문구(결석 확인)다. */
   absenceReason?: string;
   origin?: LessonEventOrigin;

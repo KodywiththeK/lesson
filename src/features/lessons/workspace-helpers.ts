@@ -196,6 +196,7 @@ export function toPrivateCalendarEvent(
     status: lesson.status === "makeup" ? "scheduled" : lesson.status,
     origin: lesson.origin,
     originLabel: lesson.originLabel,
+    creditAuthorized: lesson.creditAuthorized,
     movable: lesson.status === "scheduled",
   };
 }

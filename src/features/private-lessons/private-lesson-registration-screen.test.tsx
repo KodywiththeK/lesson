@@ -392,6 +392,7 @@ describe("PrivateLessonRegistrationScreen", () => {
           teacherName: "박선생",
           startAt: "2026-08-21T15:00:00+09:00",
           endAt: "2026-08-21T16:00:00+09:00",
+          creditAuthorized: false,
         },
       ]);
     });

@@ -25,6 +25,8 @@ export type LessonTicketGrantSupabaseRow = {
   instrument_name: string;
   total_granted_count: number;
   remaining_count: number;
+  service_total_count?: number;
+  service_remaining_count?: number;
   valid_from: string;
   valid_until: string;
   registered_at: string;
@@ -106,9 +108,41 @@ export type RegisterLessonTicketInput = {
   /** 사용 기한(일수). 만료일은 서버가 등록일 + 기한으로 계산한다. */
   validDays: number;
   registeredAt: string;
-  /** 입력하면 수입 원장에 기록된다(원장만 가능). 비우면 0원으로 등록한다. */
+  /** 일반 등록은 양수, 서비스 지급은 0원이다. */
   paidAmount?: number;
+  isService?: boolean;
 };
+
+export type RevokeServiceLessonTicketInput = {
+  academyId: string;
+  ticketId: string;
+  count: number;
+  reason: string;
+};
+
+export type RevokeServiceLessonTicketClient = {
+  rpc(functionName: "revoke_service_lesson_ticket", payload: {
+    p_academy_id: string;
+    p_ticket_id: string;
+    p_count: number;
+    p_reason: string;
+  }): PromiseLike<SupabaseQueryResult<{ revoked_count: number }>>;
+};
+
+export async function revokeServiceLessonTicket(
+  client: RevokeServiceLessonTicketClient,
+  input: RevokeServiceLessonTicketInput,
+): Promise<number> {
+  const { data, error } = await client.rpc("revoke_service_lesson_ticket", {
+    p_academy_id: input.academyId,
+    p_ticket_id: input.ticketId,
+    p_count: input.count,
+    p_reason: input.reason.trim(),
+  });
+  if (error) throw new Error(`서비스 회차를 회수하지 못했습니다: ${error.message}`);
+  if (!data) throw new Error("서비스 회차 회수 결과가 없습니다.");
+  return data.revoked_count;
+}
 
 export type RegisterLessonTicketResult = {
   ticketId: string;
@@ -160,6 +194,7 @@ export type RegisterLessonTicketSupabaseClient = {
       p_valid_days: number;
       p_registered_at: string;
       p_paid_amount: number;
+      p_is_service: boolean;
     },
   ): PromiseLike<SupabaseQueryResult<RegisterLessonTicketRpcRow>>;
 };
@@ -230,7 +265,7 @@ export type DeleteLessonTicketSupabaseClient = {
 };
 
 const LESSON_TICKET_LIST_SELECT =
-  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)";
+  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)";
 
 /** 재무 집계처럼 페이지로 자르면 안 되는 용도. 학원의 회차권 전체를 준다. */
 export async function fetchAllLessonTickets(
@@ -327,6 +362,9 @@ export async function registerLessonTicket(
   supabase: RegisterLessonTicketSupabaseClient,
   input: RegisterLessonTicketInput,
 ): Promise<RegisterLessonTicketResult> {
+  if (input.isService ? (input.paidAmount ?? 0) !== 0 : !input.paidAmount || input.paidAmount <= 0) {
+    throw new Error("결제 금액을 입력하거나 서비스로 지급하기를 선택해 주세요.");
+  }
   const { data, error } = await supabase.rpc("register_lesson_ticket", {
     p_academy_id: input.academyId,
     p_student_id: input.studentId,
@@ -336,6 +374,7 @@ export async function registerLessonTicket(
     p_valid_days: input.validDays,
     p_registered_at: input.registeredAt,
     p_paid_amount: input.paidAmount ?? 0,
+    p_is_service: Boolean(input.isService),
   });
 
   if (error) {
@@ -469,6 +508,8 @@ function toLessonTicketListItem(
     instrumentName: row.instrument_name,
     totalGrantedCount: row.total_granted_count,
     remainingCount: row.remaining_count,
+    serviceTotalCount: row.service_total_count ?? 0,
+    serviceRemainingCount: row.service_remaining_count ?? 0,
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     registeredAt: row.registered_at,

@@ -21,6 +21,13 @@ describe("레슨 달력 학원 설정 API", () => {
       { onConflict: "academy_id,instrument_id" });
   });
 
+  it("팔레트에 없는 직접 선택 색상은 저장 요청 전에 거부한다", async () => {
+    const from = vi.fn();
+    await expect(saveAcademyInstrumentColor({ from }, "academy-1", "piano", "#f2c94c"))
+      .rejects.toThrow("기본 색상");
+    expect(from).not.toHaveBeenCalled();
+  });
+
   it("매주 반복 휴원일에 종료일이 없으면 서버 저장을 요청하지 않는다", async () => {
     const from = vi.fn();
     await expect(saveAcademyClosure({ from }, {

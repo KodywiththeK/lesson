@@ -76,6 +76,8 @@ export function PrivateLessonRegistrationForm({
   const [startTime, setStartTime] = useState("");
   const [minutesText, setMinutesText] = useState("");
   const [closureConfirmed, setClosureConfirmed] = useState(false);
+  const [creditMode, setCreditMode] = useState(false);
+  const [creditConfirmed, setCreditConfirmed] = useState(false);
   const matchingClosures = getClosuresOnDate(closures, date);
   const allStudents = useMemo(
     () =>
@@ -96,12 +98,12 @@ export function PrivateLessonRegistrationForm({
     student.instruments.filter((instrument) => availability.some((row) =>
       row.studentId === student.studentId && row.instrumentId === instrument.instrumentId &&
       row.availableCount > 0,
-    )).map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
+    ) === !creditMode).map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
   )).entries()];
   const students = allStudents.filter((student) =>
     student.instruments.some((instrument) => instrument.instrumentId === instrumentId) &&
     availability.some((row) => row.studentId === student.studentId &&
-      row.instrumentId === instrumentId && row.availableCount > 0),
+      row.instrumentId === instrumentId && row.availableCount > 0) === !creditMode,
   );
   const selectedStudent = students.find(
     (student) => student.studentId === studentId,
@@ -141,10 +143,12 @@ export function PrivateLessonRegistrationForm({
     Boolean(selectedStudent) &&
     Boolean(selectedInstrument) &&
     Boolean(selectedTeacher) &&
-    (selectedAvailability?.availableCount ?? 0) > 0 &&
+    (creditMode ? creditConfirmed && (selectedAvailability?.availableCount ?? 0) === 0
+      : (selectedAvailability?.availableCount ?? 0) > 0) &&
     Boolean(startAt) &&
     Boolean(endAt) &&
     !conflictNotice &&
+    !availabilityQuery.isError &&
     (matchingClosures.length === 0 || closureConfirmed) &&
     !isSaving;
 
@@ -181,6 +185,7 @@ export function PrivateLessonRegistrationForm({
           teacherName: selectedTeacher.teacherName,
           startAt: toSeoulIsoOffset(startAt),
           endAt: toSeoulIsoOffset(endAt),
+          creditAuthorized: creditMode,
         });
       }}
     >
@@ -189,6 +194,24 @@ export function PrivateLessonRegistrationForm({
           <li key={label}><Badge variant="outline">{label}</Badge></li>
         ))}
       </ol>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={creditMode} onChange={(event) => {
+          setCreditMode(event.target.checked);
+          setCreditConfirmed(false);
+          setInstrumentId("");
+          setStudentId("");
+          selectStudentInstrument(undefined);
+        }} />
+        외상 예정으로 등록
+      </label>
+      {creditMode ? <div className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+        <p>회차권 없이 일정을 등록합니다. 출석 시 사용 가능한 회차가 없으면 미정산 1회가 생깁니다.</p>
+        <label className="mt-2 flex items-center gap-2">
+          <input type="checkbox" checked={creditConfirmed} onChange={(event) => setCreditConfirmed(event.target.checked)} />
+          외상 등록 내용을 확인했습니다
+        </label>
+      </div> : null}
 
       {error ? (
         <ListStatusAlert
@@ -205,9 +228,9 @@ export function PrivateLessonRegistrationForm({
       {availabilityQuery.isError ? (
         <ListStatusAlert message="예약 가능 회차를 불러오지 못했습니다." detail={toUserMessage(availabilityQuery.error)} />
       ) : null}
-      {!isLoading && !error && !availabilityQuery.isLoading && !availabilityQuery.isError && instruments.length === 0 ? (
+      {!creditMode && !isLoading && !error && !availabilityQuery.isLoading && !availabilityQuery.isError && instruments.length === 0 ? (
         <p role="status" className="text-sm text-destructive">
-          선택한 날짜에 예약 가능한 회차권이 없습니다. 회차권 메뉴에서 등록해 주세요.
+          선택한 날짜에 예약 가능한 회차권이 없습니다. 회차권을 등록하거나 외상 예정으로 등록해 주세요.
         </p>
       ) : null}
 

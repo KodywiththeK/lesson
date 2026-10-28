@@ -98,7 +98,7 @@ describe("fetchLessonTicketList", () => {
       expect.objectContaining({
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)",
         eq: [["academy_id", "academy-1"]],
         order: [["id", undefined]],
         range: [[0, 999]],
@@ -367,6 +367,7 @@ describe("registerLessonTicket", () => {
           p_valid_days: 30,
           p_registered_at: "2026-09-20",
           p_paid_amount: 150000,
+          p_is_service: false,
         },
       },
     ]);
@@ -380,7 +381,7 @@ describe("registerLessonTicket", () => {
     });
   });
 
-  it("결제 금액을 입력하지 않으면 0원으로 보낸다", async () => {
+  it("일반 등록의 결제 금액 누락은 막고 서비스 지급만 0원으로 보낸다", async () => {
     const { client, calls } = createRpcStub<RegisterLessonTicketSupabaseClient>({
       data: {
         ticket_id: "ticket-2",
@@ -393,9 +394,11 @@ describe("registerLessonTicket", () => {
       error: null,
     });
 
-    await registerLessonTicket(client, input);
+    await expect(registerLessonTicket(client, input)).rejects.toThrow(/결제 금액/);
+    expect(calls).toHaveLength(0);
+    await registerLessonTicket(client, { ...input, isService: true, paidAmount: 0 });
 
-    expect(calls[0].payload).toMatchObject({ p_paid_amount: 0 });
+    expect(calls[0].payload).toMatchObject({ p_paid_amount: 0, p_is_service: true });
   });
 
   it("RPC 오류는 한국어 원인을 살려 등록 실패 오류로 감싼다", async () => {
@@ -414,7 +417,7 @@ describe("registerLessonTicket", () => {
   it("RPC가 결과를 돌려주지 않으면 오류로 처리한다", async () => {
     const { client } = createRpcStub<RegisterLessonTicketSupabaseClient>({ data: null, error: null });
 
-    await expect(registerLessonTicket(client, input)).rejects.toThrow(
+    await expect(registerLessonTicket(client, { ...input, paidAmount: 1000 })).rejects.toThrow(
       "회차권을 등록했지만 반환된 데이터가 없습니다.",
     );
   });

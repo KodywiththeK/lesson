@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { AcademyClosure } from "@/domain/academy-closure";
-import { INSTRUMENT_COLOR_PRESETS } from "@/domain/instrument-color";
+import { INSTRUMENT_COLOR_PRESETS, getInstrumentColorStyle, resolveInstrumentColorPreset } from "@/domain/instrument-color";
 import type { AcademyInstrumentColor, SaveAcademyClosureInput } from "@/lib/api/lesson-calendar-settings";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -52,7 +52,7 @@ export function LessonScheduleSettingsForm({
           <NativeSelect aria-label="색상 설정 악기" value={instrumentId} onChange={(event) => {
             const nextId = event.target.value;
             setInstrumentId(nextId);
-            setColor(colors.find((item) => item.instrumentId === nextId)?.colorHex ?? INSTRUMENT_COLOR_PRESETS[0]);
+            setColor(resolveInstrumentColorPreset(colors.find((item) => item.instrumentId === nextId)?.colorHex));
           }}>
             <NativeSelectOption value="">악기 선택</NativeSelectOption>
             {instruments.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.name}</NativeSelectOption>)}
@@ -61,12 +61,9 @@ export function LessonScheduleSettingsForm({
         <div className="flex flex-wrap gap-2" aria-label="기본 색상 8개">
           {INSTRUMENT_COLOR_PRESETS.map((preset, index) => <button key={preset} type="button"
             aria-label={`기본 색 ${index + 1}`} aria-pressed={color === preset}
-            className="size-9 rounded-md border-2 border-border focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-foreground"
-            style={{ backgroundColor: preset }} onClick={() => setColor(preset)} />)}
+            className="size-9 rounded-md border-2 border-border text-xs font-semibold focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-foreground"
+            style={getInstrumentColorStyle(preset, "scheduled")} onClick={() => setColor(preset)}>{index + 1}</button>)}
         </div>
-        <Label className="flex items-center gap-2"><span>직접 색상 선택</span>
-          <Input aria-label="직접 색상 선택" type="color" className="h-10 w-20 p-1" value={color} onChange={(event) => setColor(event.target.value)} />
-        </Label>
         <Button type="button" disabled={!instrumentId || isSaving} onClick={() => onSaveColor(instrumentId, color)}>악기 색상 저장</Button>
       </section>
       <section className="grid gap-3 rounded-lg border p-3" aria-label="휴원일 설정">

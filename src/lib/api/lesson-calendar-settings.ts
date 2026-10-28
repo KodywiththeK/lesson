@@ -1,4 +1,5 @@
 import type { AcademyClosure } from "@/domain/academy-closure";
+import { INSTRUMENT_COLOR_PRESETS } from "@/domain/instrument-color";
 
 type Result = { data: Record<string, unknown>[] | null; error: Error | null };
 type WriteResult = { data: unknown; error: Error | null };
@@ -36,7 +37,9 @@ export async function saveAcademyInstrumentColor(
   instrumentId: string,
   colorHex: string,
 ) {
-  if (!/^#[0-9a-fA-F]{6}$/.test(colorHex)) throw new Error("색상 값을 확인해 주세요.");
+  if (!INSTRUMENT_COLOR_PRESETS.some((preset) => preset === colorHex)) {
+    throw new Error("기본 색상 8개 중에서 선택해 주세요.");
+  }
   const { error } = await client.from("academy_instrument_colors").upsert({
     academy_id: academyId, instrument_id: instrumentId, color_hex: colorHex,
   }, { onConflict: "academy_id,instrument_id" });

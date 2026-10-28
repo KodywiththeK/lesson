@@ -43,6 +43,7 @@ type LessonWorkspaceEventRow = {
   starts_at: string;
   ends_at: string;
   status: string;
+  credit_authorized?: boolean;
   time_unspecified?: boolean | null;
   source_lesson_event_id?: string | null;
   attendance_records:
@@ -271,7 +272,7 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, credit_authorized, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
 const ATTENDEE_COUNT_EVENTS_SELECT = "student_id, lesson_kind, status, starts_at";
 const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
   "id, academy_id, lesson_kind, memo_date, content, unread";
@@ -809,6 +810,7 @@ function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
     startAt: row.starts_at,
     endAt: row.ends_at,
     status,
+    creditAuthorized: row.credit_authorized ?? false,
     absenceReason: status === "absent" ? row.attendance_records?.[0]?.absence_reason ?? undefined : undefined,
     origin: normalizeOrigin(row.origin, row.lesson_kind),
     originLabel: formatOriginLabel(normalizeOrigin(row.origin, row.lesson_kind)),

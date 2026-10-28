@@ -9,7 +9,7 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-accent text-accent-foreground [a&]:hover:bg-accent/70",
+        default: "border-border bg-white text-slate-900 [a&]:hover:bg-slate-100",
         secondary:
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/70",
         destructive:
@@ -20,8 +20,8 @@ const badgeVariants = cva(
           "bg-warning-soft text-warning-soft-foreground [a&]:hover:bg-warning-soft/70",
         info: "bg-info-soft text-info-soft-foreground [a&]:hover:bg-info-soft/70",
         outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+          "border-border bg-white text-slate-900 [a&]:hover:bg-slate-100",
+        ghost: "border-border bg-white text-slate-900 [a&]:hover:bg-slate-100",
         link: "text-primary underline-offset-4 [a&]:hover:underline",
       },
     },

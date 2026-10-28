@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ABSENCE_REASON } from "@/domain/academy-lesson-attendance";
 import { PRIVATE_ABSENCE_REASON_MAX_LENGTH } from "@/domain/private-lesson";
+import { getInstrumentColorTone } from "@/domain/instrument-color";
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
 
 import { PrivateDayAttendanceDialog } from "./private-day-attendance-dialog";
@@ -39,6 +40,21 @@ function renderDialog(props: Partial<ComponentProps<typeof PrivateDayAttendanceD
 }
 
 describe("PrivateDayAttendanceDialog", () => {
+  it("예정·등원 카드의 안내 문구와 상태 글자를 연한 배경에서 진하게 읽을 수 있다", () => {
+    renderDialog({
+      lessons: [lesson, { ...lesson, id: "present", status: "present" }],
+      instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]),
+      assignedTicketBalances: [{ studentId: lesson.studentId, instrumentId: lesson.instrumentId, remainingCount: 3, validUntil: "2026-12-31" }],
+    });
+    const tones = [getInstrumentColorTone("#246bb2", "scheduled"), getInstrumentColorTone("#246bb2", "present")];
+    screen.getAllByText(/잔여 3회/).forEach((note, index) => {
+      expect(note).toHaveStyle({ color: tones[index].foreground });
+      expect(note.closest("div.grid.rounded-md")).toHaveStyle({ backgroundColor: tones[index].background });
+    });
+    expect(screen.getByText("예정")).toHaveStyle({ color: tones[0].foreground });
+    expect(screen.getByText("출석")).toBeInTheDocument();
+  });
+
   it("같은 수업의 출결 요청 중에는 등원, 결석, 사유 수정을 다시 누를 수 없다", () => {
     renderDialog({ pendingLessonIds: new Set([lesson.id]) });
 

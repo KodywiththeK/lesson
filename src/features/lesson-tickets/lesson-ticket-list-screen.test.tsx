@@ -173,9 +173,9 @@ describe("LessonTicketListScreen", () => {
     expect(within(row).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
       "김민지",
       "피아노",
-      "12회",
+      "12회유료 12회 · 서비스 0회",
       "10회",
-      "2회",
+      "2회유료 2회 · 서비스 0회",
       "2026-08-01",
       "2026-09-07",
       "6일 남음",
@@ -379,14 +379,15 @@ describe("회차권 등록 폼", () => {
     expect(within(dialog).getByText("입력 기준 만료일: 사용 기한을 1~3650일로 입력해 주세요")).toBeInTheDocument();
   });
 
-  it("결제 금액은 선택 입력이고 0원과 1원 단위 정수를 허용하며 음수·소수는 거절한다", async () => {
+  it("일반 등록은 양수 결제가 필수이고 서비스 지급은 별도로 선택한다", async () => {
     const { user, dialog } = await openRegistrationDialog();
     const amountInput = within(dialog).getByRole<HTMLInputElement>("textbox", { name: "결제 금액" });
 
-    expect(amountInput).not.toBeRequired();
     expect(amountInput).toHaveValue("");
+    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     for (const [value, isValid] of [
-      ["0", true],
+      ["0", false],
       ["1", true],
       ["140000", true],
       ["140,000", true],
@@ -394,17 +395,16 @@ describe("회차권 등록 폼", () => {
       ["1.5", false],
     ] as const) {
       fireEvent.change(amountInput, { target: { value } });
-      expect(amountInput.checkValidity(), `${value}원 입력의 제약 검증`).toBe(isValid);
+      expect(within(dialog).getByRole("button", { name: "저장" }).hasAttribute("disabled"), `${value}원 입력`).toBe(!isValid);
     }
-    await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
     fireEvent.change(amountInput, { target: { value: "2147483648" } });
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     expect(
-      within(dialog).getByText("입력하면 수입 내역에 기록됩니다(관리자만 입력 가능)."),
+      within(dialog).getByText(/양수 금액을 입력하면 수입 내역에 기록됩니다/),
     ).toBeInTheDocument();
   });
 
-  it("결제 금액을 비워도 등록할 수 있고 입력값을 등록 요청에 담아 보낸다", async () => {
+  it("서비스 지급을 선택하면 결제 금액 없이 0원 등록 요청을 보낸다", async () => {
     const registrations: Array<Record<string, unknown>> = [];
     const { user, dialog } = await openRegistrationDialog({
       registerLessonTicket: async (input) => {
@@ -422,6 +422,7 @@ describe("회차권 등록 폼", () => {
     });
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    await user.click(within(dialog).getByRole("checkbox", { name: "서비스로 지급하기" }));
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
       target: { value: "10" },
     });
@@ -440,6 +441,8 @@ describe("회차권 등록 폼", () => {
           grantedCount: 10,
           validDays: 60,
           registeredAt: "2026-09-01",
+          paidAmount: 0,
+          isService: true,
         },
       ]);
     });
@@ -447,7 +450,7 @@ describe("회차권 등록 폼", () => {
     expect(toastMock.success).toHaveBeenCalledWith("회차권을 등록했습니다.");
   });
 
-  it("결제 금액을 입력하면 금액과 함께 등록하고 0원도 그대로 보낸다", async () => {
+  it("결제 금액을 입력하면 유료 등록 요청을 보낸다", async () => {
     const registrations: Array<Record<string, unknown>> = [];
     const { user, dialog } = await openRegistrationDialog({
       registerLessonTicket: async (input) => {
@@ -471,13 +474,16 @@ describe("회차권 등록 폼", () => {
     await user.click(within(dialog).getByRole("button", { name: "저장" }));
 
     await waitFor(() => expect(registrations).toHaveLength(1));
-    expect(registrations[0]).toMatchObject({ paidAmount: 150000 });
+    expect(registrations[0]).toMatchObject({ paidAmount: 150000, isService: false });
   });
 
   it("부여 회수나 사용 기한이 1 미만이면 저장할 수 없다", async () => {
     const { user, dialog } = await openRegistrationDialog();
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "결제 금액" }), {
+      target: { value: "1000" },
+    });
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeEnabled();
 
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
@@ -507,6 +513,9 @@ describe("회차권 등록 폼", () => {
     });
 
     await user.selectOptions(within(dialog).getByLabelText("원생"), "student-1");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "결제 금액" }), {
+      target: { value: "1000" },
+    });
     fireEvent.change(within(dialog).getByRole("spinbutton", { name: "부여 회수" }), {
       target: { value: "10" },
     });

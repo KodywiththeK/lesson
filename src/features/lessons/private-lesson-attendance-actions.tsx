@@ -13,10 +13,12 @@ export function AssignedTicketBalanceNote({
   lesson,
   balances,
   className,
+  textColor,
 }: {
   lesson: PrivateLesson;
   balances: AssignedLessonTicketBalance[];
   className?: string;
+  textColor?: string;
 }) {
   const balance = balances.find(
     (row) => row.studentId === lesson.studentId && row.instrumentId === lesson.instrumentId,
@@ -27,7 +29,7 @@ export function AssignedTicketBalanceNote({
   }
 
   return (
-    <p className={cn("text-sm text-muted-foreground", className)}>
+    <p className={cn("text-sm text-muted-foreground", className)} style={textColor ? { color: textColor } : undefined}>
       잔여 {balance.remainingCount}회 · 만료일 {balance.validUntil}
     </p>
   );

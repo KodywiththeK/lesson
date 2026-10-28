@@ -85,6 +85,7 @@ import {
   type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
 import { queryKeys } from "@/lib/api/query-keys";
+import { fetchPrivateLessonCreditBalances, type PrivateLessonCreditBalanceClient } from "@/lib/api/private-lesson-credits";
 import {
   fetchAcademyClosures, fetchAcademyInstrumentColors,
   type LessonCalendarSettingsClient,
@@ -306,6 +307,13 @@ export function LessonManagementWorkspace({
     queryFn: assignedTicketQueryOptions?.queryFn ?? (async () => []),
     enabled: !canManage && Boolean(assignedTicketQueryOptions),
   });
+  const creditBalancesQuery = useQuery({
+    queryKey: [...queryKeys.academy(academyId), "private-credits"],
+    queryFn: () => fetchPrivateLessonCreditBalances(
+      supabaseClientState!.client as unknown as PrivateLessonCreditBalanceClient, academyId,
+    ),
+    enabled: lessonKind === "private" && Boolean(supabaseClientState?.client),
+  });
   const monthlyNote = useLessonMonthlyNote({
     academyId,
     lessonKind,
@@ -467,6 +475,7 @@ export function LessonManagementWorkspace({
     onSuccess: (_data, input) => {
       setPrivateLessonStatus(input.lessonEventId, input.status, input.reason);
       void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "private-credits"] });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
@@ -507,6 +516,7 @@ export function LessonManagementWorkspace({
         setPrivateLessonStatus(input.lessonEventId, "scheduled");
       }
       void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "private-credits"] });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
@@ -1134,6 +1144,17 @@ export function LessonManagementWorkspace({
               </Button>
             }
           />
+          {creditBalancesQuery.isError ? <ListStatusAlert
+            message="미정산 출석을 불러오지 못했습니다."
+            detail={toUserMessage(creditBalancesQuery.error)}
+          /> : null}
+          {(creditBalancesQuery.data?.length ?? 0) > 0 ? <Alert>
+            <AlertDescription>
+              <strong>미정산 출석</strong>{" "}
+              {creditBalancesQuery.data?.map((balance) =>
+                `${balance.studentName} ${balance.instrumentName} ${balance.openCount}회`).join(" · ")}
+            </AlertDescription>
+          </Alert> : null}
           {privateView === "calendar" ? (
             <LessonMonthCalendar
               ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}

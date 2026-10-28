@@ -4,7 +4,9 @@ export const INSTRUMENT_COLOR_PRESETS = [
 ] as const;
 
 const WHITE = "#ffffff";
-const BLACK = "#111827";
+const BLACK = "#000000";
+const BACKGROUND_ALPHA = 0.22;
+const MINIMUM_TEXT_CONTRAST = 7;
 
 function channels(hex: string) {
   const safe = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : INSTRUMENT_COLOR_PRESETS[0];
@@ -21,6 +23,22 @@ function mix(hex: string, target: string, amount: number) {
   return toHex(base.map((value, index) => value * (1 - amount) + other[index] * amount));
 }
 
+export function resolveInstrumentColorPreset(color: string | undefined) {
+  if (!color || !/^#[0-9a-fA-F]{6}$/.test(color)) return INSTRUMENT_COLOR_PRESETS[0];
+  const actual = channels(color);
+  let closest: (typeof INSTRUMENT_COLOR_PRESETS)[number] = INSTRUMENT_COLOR_PRESETS[0];
+  let smallestDistance = Number.POSITIVE_INFINITY;
+  for (const preset of INSTRUMENT_COLOR_PRESETS) {
+    const distance = channels(preset).reduce((sum, channel, index) =>
+      sum + (channel - actual[index]) ** 2, 0);
+    if (distance < smallestDistance) {
+      closest = preset;
+      smallestDistance = distance;
+    }
+  }
+  return closest;
+}
+
 function luminance(hex: string) {
   const linear = channels(hex).map((value) => {
     const normalized = value / 255;
@@ -35,12 +53,12 @@ export function contrastRatio(left: string, right: string) {
 }
 
 export function getInstrumentColorTone(color: string, status: "scheduled" | "present") {
-  const light = status === "present";
-  const target = light ? WHITE : "#000000";
-  const foreground = light ? BLACK : WHITE;
-  let background = mix(color, target, light ? 0.72 : 0.28);
-  for (let step = 0; step < 20 && contrastRatio(background, foreground) < 4.5; step += 1) {
-    background = mix(background, target, 0.12);
+  void status;
+  const preset = resolveInstrumentColorPreset(color);
+  const background = mix(WHITE, preset, BACKGROUND_ALPHA);
+  let foreground = mix(preset, BLACK, 0.66);
+  for (let step = 0; step < 20 && contrastRatio(background, foreground) < MINIMUM_TEXT_CONTRAST; step += 1) {
+    foreground = mix(foreground, BLACK, 0.12);
   }
   return { background, foreground };
 }

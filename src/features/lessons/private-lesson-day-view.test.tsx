@@ -4,6 +4,7 @@ import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
+import { getInstrumentColorTone } from "@/domain/instrument-color";
 
 import { PrivateLessonDayView } from "./private-lesson-day-view";
 
@@ -44,6 +45,27 @@ function renderView(props: Partial<ComponentProps<typeof PrivateLessonDayView>> 
 }
 
 describe("PrivateLessonDayView", () => {
+  it("행 전체와 원생 이름은 채우지 않고 악기 이름에만 색상 태그를 표시한다", () => {
+    const tone = getInstrumentColorTone("#246bb2", "scheduled");
+    renderView({ canManage: false,
+      instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]),
+      assignedTicketBalances: [{ studentId: lesson.studentId, instrumentId: lesson.instrumentId, remainingCount: 3, validUntil: "2026-12-31" }],
+    });
+    const row = screen.getByRole("row", { name: new RegExp(lesson.studentName) });
+    expect(row).not.toHaveStyle({ backgroundColor: tone.background });
+    expect(screen.getByText(lesson.studentName)).not.toHaveAttribute("style");
+    expect(screen.getByText(lesson.instrumentName)).toHaveStyle({ backgroundColor: tone.background, color: tone.foreground });
+    expect(screen.getByText(/잔여 3회/)).not.toHaveAttribute("style");
+    expect(screen.getByText("예정")).not.toHaveAttribute("style");
+  });
+
+  it("등원한 악기 이름 태그도 예정과 같은 색을 쓴다", () => {
+    const present = { ...lesson, status: "present" as const };
+    const tone = getInstrumentColorTone("#246bb2", "present");
+    renderView({ lessons: [present], instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]) });
+    expect(screen.getByText(lesson.instrumentName)).toHaveStyle({ backgroundColor: tone.background, color: tone.foreground });
+  });
+
   it("선택한 날짜의 개인레슨을 모달 없이 표로 보여 준다", () => {
     renderView();
 

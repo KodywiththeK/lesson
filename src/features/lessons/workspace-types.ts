@@ -15,6 +15,7 @@ export type CalendarEvent = {
   status: "present" | "absent" | "passed" | "cancelled" | "pending" | "scheduled";
   origin?: LessonEventOrigin;
   originLabel?: string;
+  creditAuthorized?: boolean;
   /** 달력 칸에 쓰는 `오후 2시` 같은 시작 시간. 있으면 `detailLabel`과 함께 상세 형태로 그린다. */
   timeLabel?: string;
   /** 달력 칸에 쓰는 `홍길동 (첼로) - OOO 선생님` 같은 한 줄 설명. */

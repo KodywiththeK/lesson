@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { useId, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 
 import { SectionCard } from "@/components/shared/section-card";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,7 @@ import {
 import type { CalendarEvent } from "@/features/lessons/workspace-types";
 
 const DRAG_DATA_TYPE = "text/plain";
+const EXPAND_DELAY_MS = 350;
 
 export function LessonMonthCalendar({
   ariaLabel,
@@ -56,6 +57,8 @@ export function LessonMonthCalendar({
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [showAllRecords, setShowAllRecords] = useState(false);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showAllId = useId();
   const calendarDates = buildCalendarDates(selectedDate);
   const selectedMonth = selectedDate.slice(0, 7);
@@ -77,9 +80,22 @@ export function LessonMonthCalendar({
     }
     return grouped;
   }, [events, showAllRecords]);
+  useEffect(() => () => {
+    if (expandTimer.current) clearTimeout(expandTimer.current);
+  }, []);
+  const stopExpandTimer = () => {
+    if (expandTimer.current) clearTimeout(expandTimer.current);
+    expandTimer.current = null;
+  };
+  const scheduleExpand = (date: string, eventCount: number) => {
+    if (eventCount < 4 || draggingEventId) return;
+    stopExpandTimer();
+    expandTimer.current = setTimeout(() => setExpandedDate(date), EXPAND_DELAY_MS);
+  };
   const finishDrag = () => {
     setDraggingEventId(null);
     setDropTargetDate(null);
+    setExpandedDate(null);
   };
   const dropOnDate = (event: DragEvent<HTMLElement>, date: string) => {
     event.preventDefault();
@@ -92,6 +108,40 @@ export function LessonMonthCalendar({
     if (draggedEvent && draggedEvent.date !== date) {
       onMoveEvent?.(draggedEvent.id, date);
     }
+  };
+  const renderEvent = (event: CalendarEvent) => {
+    const colorStyle = getPrivateEventColorStyle(event, variant, instrumentColors);
+    return <div
+      key={event.id}
+      draggable={onMoveEvent ? Boolean(event.movable) : undefined}
+      className={`min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:px-2 ${getEventTone(event.status, variant)} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
+      style={colorStyle}
+      onDragStart={(dragEvent) => {
+        dragEvent.dataTransfer.setData(DRAG_DATA_TYPE, event.id);
+        dragEvent.dataTransfer.effectAllowed = "move";
+        stopExpandTimer();
+        setDraggingEventId(event.id);
+      }}
+      onDragEnd={finishDrag}
+    >
+      {event.detailLabel ? (
+        <CalendarEventDetail event={event} dimSecondary={!colorStyle} />
+      ) : (
+        <>
+          <span className="hidden truncate sm:block">{event.title}</span>
+          <span className={`hidden truncate font-normal sm:block ${colorStyle ? "" : "opacity-80"}`}>
+            {event.originLabel ? `[${event.originLabel}] ` : ""}
+            {event.timeUnspecified ? "시간 미정 · " : `${event.startTime} `}
+            {event.subtitle}
+          </span>
+        </>
+      )}
+      {variant === "private" || isHiddenCalendarRecord(event) ? (
+        <span className="block text-2xs font-normal">
+          {getDisplayedEventStatus(event, variant)}
+        </span>
+      ) : null}
+    </div>;
   };
 
   return (
@@ -125,7 +175,7 @@ export function LessonMonthCalendar({
         aria-label={ariaLabel}
         className="grid grid-cols-7 gap-1 sm:gap-2"
       >
-        {calendarDates.map((date) => {
+        {calendarDates.map((date, dateIndex) => {
           const dayEvents = eventsByDate.get(date) ?? [];
           const pendingCount = dayEvents.filter((event) => event.status === "pending" || event.status === "scheduled").length;
           const presentCount = dayEvents.filter((event) => event.status === "present").length;
@@ -147,8 +197,10 @@ export function LessonMonthCalendar({
               aria-label={`${date}${isToday ? " 오늘" : ""}`}
               aria-current={isToday ? "date" : undefined}
               aria-selected={isSelected}
-              className={`flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border p-1 text-left transition-colors aria-selected:ring-2 aria-selected:ring-calendar-strong/20 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary ring-1 ring-primary/30" : "border-calendar-line aria-selected:border-calendar-strong"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-calendar-hover"}`}
+              className={`relative flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border p-1 text-left transition-colors aria-selected:ring-2 aria-selected:ring-calendar-strong/20 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary ring-1 ring-primary/30" : "border-calendar-line aria-selected:border-calendar-strong"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-calendar-hover"}`}
               onClick={() => onSelectDate(date)}
+              onMouseEnter={() => scheduleExpand(date, dayEvents.length)}
+              onMouseLeave={() => { stopExpandTimer(); setExpandedDate(null); }}
               onDragOver={
                 onMoveEvent && draggingEventId
                   ? (event) => {
@@ -187,44 +239,19 @@ export function LessonMonthCalendar({
                   {absentCount > 0 ? <span className="text-destructive">결석 {absentCount}</span> : null}
                 </span>
               </button>
-              {dayEvents.slice(0, 3).map((event) => (
-                <div
-                  key={event.id}
-                  draggable={onMoveEvent ? Boolean(event.movable) : undefined}
-                  className={`hidden min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:block sm:px-2 ${getEventTone(event.status, variant)} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
-                  style={variant === "private" && event.instrumentId && (event.status === "scheduled" || event.status === "present")
-                    ? getInstrumentColorStyle(instrumentColors?.get(event.instrumentId), event.status)
-                    : undefined}
-                  onDragStart={(dragEvent) => {
-                    dragEvent.dataTransfer.setData(DRAG_DATA_TYPE, event.id);
-                    dragEvent.dataTransfer.effectAllowed = "move";
-                    setDraggingEventId(event.id);
-                  }}
-                  onDragEnd={finishDrag}
-                >
-                  {event.detailLabel ? (
-                    <CalendarEventDetail event={event} />
-                  ) : (
-                    <>
-                      <span className="hidden truncate sm:block">{event.title}</span>
-                      <span className="hidden truncate font-normal opacity-80 sm:block">
-                        {event.originLabel ? `[${event.originLabel}] ` : ""}
-                        {event.timeUnspecified ? "시간 미정 · " : `${event.startTime} `}
-                        {event.subtitle}
-                      </span>
-                    </>
-                  )}
-                  {variant === "private" || isHiddenCalendarRecord(event) ? (
-                    <span className="block text-2xs font-normal">
-                      {variant === "private" && event.status === "present" ? "등원" : getCalendarEventStatusLabel(event.status)}
-                    </span>
-                  ) : null}
-                </div>
-              ))}
+              {dayEvents.slice(0, 3).map((event) => <div className="hidden sm:block" key={event.id}>{renderEvent(event)}</div>)}
               {dayEvents.length > 3 ? (
                 <span className="hidden text-xs text-calendar-muted sm:block">
                   +{dayEvents.length - 3}
                 </span>
+              ) : null}
+              {expandedDate === date && dayEvents.length > 3 ? (
+                <div role="region" aria-label={`${date} 전체 일정`}
+                  className={`absolute z-30 hidden w-[min(200%,calc(100vw-2rem))] min-w-60 max-h-[min(18rem,calc(100dvh-2rem))] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-2 text-card-foreground shadow-xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200 sm:flex ${dateIndex % 7 >= 5 ? "right-0" : "left-0"} ${dateIndex >= 21 ? "bottom-0" : "top-0"} ${draggingEventId ? "pointer-events-none" : ""}`}
+                  onClick={(event) => event.stopPropagation()}>
+                  <strong className="text-xs">{date} · 일정 {dayEvents.length}건</strong>
+                  {dayEvents.map(renderEvent)}
+                </div>
               ) : null}
             </div>
           );
@@ -234,8 +261,14 @@ export function LessonMonthCalendar({
   );
 }
 
+function getDisplayedEventStatus(event: CalendarEvent, variant: "academy" | "private") {
+  if (variant === "private" && event.status === "present") return "등원";
+  if (event.creditAuthorized && event.status === "scheduled") return "외상 예정";
+  return getCalendarEventStatusLabel(event.status);
+}
+
 /** 시간 앞에 남보라 점을 두고 `원생명 (악기) - 선생님명`을 보여 주는 상세 일정 표시. */
-function CalendarEventDetail({ event }: { event: CalendarEvent }) {
+function CalendarEventDetail({ event, dimSecondary }: { event: CalendarEvent; dimSecondary: boolean }) {
   return (
     <>
       <span className="hidden items-center gap-1 truncate sm:flex">
@@ -246,10 +279,20 @@ function CalendarEventDetail({ event }: { event: CalendarEvent }) {
         />
         {event.timeLabel}
         {event.sessionLabel ? (
-          <span className="ml-auto font-normal opacity-80">{event.sessionLabel}</span>
+          <span className={`ml-auto font-normal ${dimSecondary ? "opacity-80" : ""}`}>{event.sessionLabel}</span>
         ) : null}
       </span>
       <span className="hidden truncate font-normal sm:block">{event.detailLabel}</span>
     </>
   );
+}
+
+function getPrivateEventColorStyle(
+  event: CalendarEvent,
+  variant: "academy" | "private",
+  instrumentColors: Map<string, string> | undefined,
+) {
+  if (variant !== "private" || !event.instrumentId ||
+    (event.status !== "scheduled" && event.status !== "present")) return undefined;
+  return getInstrumentColorStyle(instrumentColors?.get(event.instrumentId), event.status);
 }
