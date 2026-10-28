@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 
 import { SectionCard } from "@/components/shared/section-card";
 import { Label } from "@/components/ui/label";
@@ -22,6 +22,7 @@ import type { CalendarEvent } from "@/features/lessons/workspace-types";
 
 const DRAG_DATA_TYPE = "text/plain";
 const EXPAND_DELAY_MS = 350;
+const PANEL_VIEWPORT_MARGIN = 16;
 
 export function LessonMonthCalendar({
   ariaLabel,
@@ -57,8 +58,9 @@ export function LessonMonthCalendar({
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [showAllRecords, setShowAllRecords] = useState(false);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [expandedPanel, setExpandedPanel] = useState<{ date: string; style: CSSProperties } | null>(null);
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggingEventIdRef = useRef<string | null>(null);
   const showAllId = useId();
   const calendarDates = buildCalendarDates(selectedDate);
   const selectedMonth = selectedDate.slice(0, 7);
@@ -87,20 +89,26 @@ export function LessonMonthCalendar({
     if (expandTimer.current) clearTimeout(expandTimer.current);
     expandTimer.current = null;
   };
-  const scheduleExpand = (date: string, eventCount: number) => {
-    if (eventCount < 4 || draggingEventId) return;
+  const scheduleExpand = (date: string, eventCount: number, cell: HTMLElement) => {
+    if (eventCount < 4 || draggingEventIdRef.current) return;
     stopExpandTimer();
-    expandTimer.current = setTimeout(() => setExpandedDate(date), EXPAND_DELAY_MS);
+    expandTimer.current = setTimeout(() => {
+      setExpandedPanel({
+        date,
+        style: getExpandedPanelStyle(cell.getBoundingClientRect(), window.innerWidth, window.innerHeight),
+      });
+    }, EXPAND_DELAY_MS);
   };
   const finishDrag = () => {
+    draggingEventIdRef.current = null;
     setDraggingEventId(null);
     setDropTargetDate(null);
-    setExpandedDate(null);
+    setExpandedPanel(null);
   };
   const dropOnDate = (event: DragEvent<HTMLElement>, date: string) => {
     event.preventDefault();
     if (!date.startsWith(selectedMonth)) { finishDrag(); return; }
-    const eventId = event.dataTransfer.getData(DRAG_DATA_TYPE) || draggingEventId;
+    const eventId = event.dataTransfer.getData(DRAG_DATA_TYPE) || draggingEventIdRef.current;
     const draggedEvent = events.find((candidate) => candidate.id === eventId);
 
     finishDrag();
@@ -117,9 +125,11 @@ export function LessonMonthCalendar({
       className={`min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:px-2 ${getEventTone(event.status, variant)} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
       style={colorStyle}
       onDragStart={(dragEvent) => {
+        if (!onMoveEvent || !event.movable) return;
         dragEvent.dataTransfer.setData(DRAG_DATA_TYPE, event.id);
         dragEvent.dataTransfer.effectAllowed = "move";
         stopExpandTimer();
+        draggingEventIdRef.current = event.id;
         setDraggingEventId(event.id);
       }}
       onDragEnd={finishDrag}
@@ -175,7 +185,7 @@ export function LessonMonthCalendar({
         aria-label={ariaLabel}
         className="grid grid-cols-7 gap-1 sm:gap-2"
       >
-        {calendarDates.map((date, dateIndex) => {
+        {calendarDates.map((date) => {
           const dayEvents = eventsByDate.get(date) ?? [];
           const pendingCount = dayEvents.filter((event) => event.status === "pending" || event.status === "scheduled").length;
           const presentCount = dayEvents.filter((event) => event.status === "present").length;
@@ -197,10 +207,13 @@ export function LessonMonthCalendar({
               aria-label={`${date}${isToday ? " 오늘" : ""}`}
               aria-current={isToday ? "date" : undefined}
               aria-selected={isSelected}
-              className={`relative flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border p-1 text-left transition-colors aria-selected:ring-2 aria-selected:ring-calendar-strong/20 sm:min-h-32 sm:p-2 ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary ring-1 ring-primary/30" : "border-calendar-line aria-selected:border-calendar-strong"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-calendar-hover"}`}
+              className={`relative flex min-h-16 min-w-0 cursor-pointer flex-col gap-1 rounded-md border p-1 text-left transition-colors aria-selected:ring-2 aria-selected:ring-calendar-strong/20 sm:min-h-32 sm:p-2 ${expandedPanel?.date === date && !draggingEventId ? "z-30" : ""} ${isCurrentMonth ? "" : "opacity-45"} ${isToday ? "border-primary ring-1 ring-primary/30" : "border-calendar-line aria-selected:border-calendar-strong"} ${isDropTarget ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-calendar-hover"}`}
               onClick={() => onSelectDate(date)}
-              onMouseEnter={() => scheduleExpand(date, dayEvents.length)}
-              onMouseLeave={() => { stopExpandTimer(); setExpandedDate(null); }}
+              onMouseEnter={(event) => scheduleExpand(date, dayEvents.length, event.currentTarget)}
+              onMouseLeave={() => {
+                stopExpandTimer();
+                if (!draggingEventIdRef.current) setExpandedPanel(null);
+              }}
               onDragOver={
                 onMoveEvent && draggingEventId
                   ? (event) => {
@@ -245,10 +258,10 @@ export function LessonMonthCalendar({
                   +{dayEvents.length - 3}
                 </span>
               ) : null}
-              {expandedDate === date && dayEvents.length > 3 ? (
+              {expandedPanel?.date === date && dayEvents.length > 3 ? (
                 <div role="region" aria-label={`${date} 전체 일정`}
-                  className={`absolute z-30 hidden w-[min(200%,calc(100vw-2rem))] min-w-60 max-h-[min(18rem,calc(100dvh-2rem))] flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-2 text-card-foreground shadow-xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200 sm:flex ${dateIndex % 7 >= 5 ? "right-0" : "left-0"} ${dateIndex >= 21 ? "bottom-0" : "top-0"} ${draggingEventId ? "pointer-events-none" : ""}`}
-                  onClick={(event) => event.stopPropagation()}>
+                  className={`hidden origin-center flex-col gap-1 overflow-y-auto rounded-lg border bg-card p-2 text-card-foreground shadow-xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200 sm:flex ${draggingEventId ? "-z-10 opacity-0" : "z-40"}`}
+                  style={expandedPanel.style}>
                   <strong className="text-xs">{date} · 일정 {dayEvents.length}건</strong>
                   {dayEvents.map(renderEvent)}
                 </div>
@@ -259,6 +272,18 @@ export function LessonMonthCalendar({
       </div>
     </SectionCard>
   );
+}
+
+function getExpandedPanelStyle(cell: DOMRect, viewportWidth: number, viewportHeight: number): CSSProperties {
+  const width = Math.min(Math.max(cell.width * 2, 240), viewportWidth - PANEL_VIEWPORT_MARGIN * 2);
+  const height = Math.min(Math.max(cell.height * 2, 192), 288, viewportHeight - PANEL_VIEWPORT_MARGIN * 2);
+  const left = Math.max(PANEL_VIEWPORT_MARGIN, Math.min(
+    cell.left + (cell.width - width) / 2, viewportWidth - PANEL_VIEWPORT_MARGIN - width,
+  ));
+  const top = Math.max(PANEL_VIEWPORT_MARGIN, Math.min(
+    cell.top + (cell.height - height) / 2, viewportHeight - PANEL_VIEWPORT_MARGIN - height,
+  ));
+  return { position: "fixed", left, top, width, height };
 }
 
 function getDisplayedEventStatus(event: CalendarEvent, variant: "academy" | "private") {

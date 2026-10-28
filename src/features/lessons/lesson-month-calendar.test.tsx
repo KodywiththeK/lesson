@@ -153,6 +153,99 @@ describe("월간 레슨 캘린더", () => {
     }
   });
 
+  it.each(["academy", "private"] as const)("%s 달력의 확대 패널과 일정 클릭은 해당 날짜의 출석 확인을 연다", (variant) => {
+    vi.useFakeTimers();
+    try {
+      const onSelectDate = vi.fn();
+      const crowded = Array.from({ length: 4 }, (_, index) => ({
+        ...events[1], id: `click-${index}`, title: `원생 ${index + 1}`,
+      }));
+      render(<LessonMonthCalendar ariaLabel="레슨 달력" selectedDate="2026-10-16"
+        events={crowded} memoCounts={new Map()} variant={variant}
+        onChangeMonth={vi.fn()} onSelectDate={onSelectDate} />);
+      const day = screen.getByRole("gridcell", { name: "2026-10-16" });
+      fireEvent.mouseEnter(day);
+      act(() => vi.advanceTimersByTime(350));
+      const expanded = screen.getByRole("region", { name: "2026-10-16 전체 일정" });
+
+      fireEvent.click(within(expanded).getByText("원생 4"));
+      expect(onSelectDate).toHaveBeenCalledExactlyOnceWith("2026-10-16");
+      fireEvent.click(within(expanded).getByText("2026-10-16 · 일정 4건"));
+      expect(onSelectDate).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["academy", "private"] as const)("%s 달력의 확대 패널에서 네 번째 일정을 다른 날짜로 끌어 옮긴다", (variant) => {
+    vi.useFakeTimers();
+    try {
+      const onMoveEvent = vi.fn();
+      const onSelectDate = vi.fn();
+      const crowded = Array.from({ length: 4 }, (_, index) => ({
+        ...events[1], id: `drag-${index}`, title: `원생 ${index + 1}`, movable: true,
+      }));
+      render(<LessonMonthCalendar ariaLabel="레슨 달력" selectedDate="2026-10-16"
+        events={crowded} memoCounts={new Map()} variant={variant}
+        onChangeMonth={vi.fn()} onSelectDate={onSelectDate} onMoveEvent={onMoveEvent} />);
+      const source = screen.getByRole("gridcell", { name: "2026-10-16" });
+      const target = screen.getByRole("gridcell", { name: "2026-10-17" });
+      fireEvent.mouseEnter(source);
+      act(() => vi.advanceTimersByTime(350));
+      const expanded = screen.getByRole("region", { name: "2026-10-16 전체 일정" });
+      const fourth = within(expanded).getByText("원생 4").closest("[draggable]");
+      const dragData = new Map<string, string>();
+      const dataTransfer = {
+        setData: (type: string, value: string) => dragData.set(type, value),
+        getData: (type: string) => dragData.get(type) ?? "",
+        effectAllowed: "none", dropEffect: "none",
+      };
+      fireEvent.dragStart(fourth!, { dataTransfer });
+      fireEvent.mouseLeave(source);
+      expect(expanded).toBeInTheDocument();
+      expect(expanded).toHaveClass("opacity-0", "-z-10");
+      fireEvent.dragOver(target, { dataTransfer });
+      fireEvent.drop(target, { dataTransfer });
+
+      expect(onMoveEvent).toHaveBeenCalledExactlyOnceWith("drag-3", "2026-10-17");
+      expect(onSelectDate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("확대 패널은 날짜 칸 중앙을 기준으로 펼쳐지고 화면 경계에서만 위치를 보정한다", () => {
+    vi.useFakeTimers();
+    try {
+      const crowded = Array.from({ length: 4 }, (_, index) => ({
+        ...events[1], id: `center-${index}`, title: `원생 ${index + 1}`,
+      }));
+      render(<LessonMonthCalendar ariaLabel="레슨 달력" selectedDate="2026-10-16"
+        events={crowded} memoCounts={new Map()} variant="private"
+        onChangeMonth={vi.fn()} onSelectDate={vi.fn()} />);
+      const day = screen.getByRole("gridcell", { name: "2026-10-16" });
+      vi.spyOn(day, "getBoundingClientRect").mockReturnValue({
+        left: 400, top: 200, width: 120, height: 140, right: 520, bottom: 340,
+      } as DOMRect);
+      fireEvent.mouseEnter(day);
+      act(() => vi.advanceTimersByTime(350));
+      const expanded = screen.getByRole("region", { name: "2026-10-16 전체 일정" });
+      expect(expanded).toHaveStyle({ position: "fixed", left: "340px", top: "130px", width: "240px", height: "280px" });
+      expect(expanded).toHaveClass("overflow-y-auto");
+
+      fireEvent.mouseLeave(day);
+      vi.spyOn(day, "getBoundingClientRect").mockReturnValue({
+        left: 4, top: 4, width: 120, height: 140, right: 124, bottom: 144,
+      } as DOMRect);
+      fireEvent.mouseEnter(day);
+      act(() => vi.advanceTimersByTime(350));
+      expect(screen.getByRole("region", { name: "2026-10-16 전체 일정" }))
+        .toHaveStyle({ left: "16px", top: "16px" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("달력 헤더의 오늘로 이동 바로 옆에 받은 버튼을 둔다", () => {
     render(
       <LessonMonthCalendar
