@@ -59,6 +59,8 @@ type LessonTicketListFilters = {
   pageSize?: string;
   q?: string;
   status?: string;
+  group?: string;
+  activeStatus?: string;
 };
 
 type StatusManagementListFilters = {
@@ -201,6 +203,8 @@ export const queryKeys = {
         filters.today ?? "",
         filters.q ?? "",
         filters.status ?? "",
+        filters.group ?? "",
+        filters.activeStatus ?? "",
         filters.page ?? "",
         filters.pageSize ?? "",
       ] as const,

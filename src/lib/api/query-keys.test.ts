@@ -161,6 +161,8 @@ describe("queryKeys", () => {
       queryKeys.lessonTickets.list("academy-1", {
         q: "피아노",
         status: "low-remaining",
+        group: "active",
+        activeStatus: "normal",
         page: "2",
         pageSize: "10",
       }),
@@ -172,6 +174,8 @@ describe("queryKeys", () => {
       "",
       "피아노",
       "low-remaining",
+      "active",
+      "normal",
       "2",
       "10",
     ]);

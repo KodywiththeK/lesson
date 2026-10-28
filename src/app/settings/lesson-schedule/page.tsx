@@ -15,7 +15,9 @@ export default function LessonScheduleSettingsPage() {
 
   return <AcademySessionGate>{(academy) =>
     <AppShell academyName={academy.academyName} permissionContext={academy.permissionContext} pageTitle="설정">
-      <LessonScheduleSettingsScreen academyId={academy.academyId} demoInstruments={demoInstruments} />
+      <LessonScheduleSettingsScreen academyId={academy.academyId} demoInstruments={demoInstruments}
+        demoColors={useTestDemo ? demo.state.instrumentColors : undefined}
+        onSaveDemoColor={useTestDemo ? demo.saveInstrumentColor : undefined} />
     </AppShell>
   }</AcademySessionGate>;
 }

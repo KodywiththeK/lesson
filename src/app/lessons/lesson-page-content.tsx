@@ -46,6 +46,7 @@ export function LessonPageContent({ lessonKind }: LessonPageContentProps) {
                   ? {
                       academySheets: Object.values(demo.state.academySheets),
                       privateLessons: demo.state.privateLessons,
+                      instrumentColors: demo.state.instrumentColors,
                       ticketBalances: demo.state.tickets.map((ticket) => ({
                         academyId: ticket.academyId,
                         studentId: ticket.studentId,

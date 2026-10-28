@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
+import { getDefaultInstrumentColor, getInstrumentColorStyle } from "@/domain/instrument-color";
 
 import { LessonManagementWorkspace } from "./lesson-management-workspace";
 
@@ -43,6 +44,46 @@ async function openDay(user: ReturnType<typeof userEvent.setup>, day: RegExp) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("개인레슨 달력 일정 표시 (명세 3.3)", () => {
+  it("수강 종료된 다른 악기의 과거 일정이 있어도 설정과 같은 기본 색을 쓴다", () => {
+    const data = { ...demoLessonWorkspaceData, privateRegistrationOptions: {
+      ...demoLessonWorkspaceData.privateRegistrationOptions,
+      students: demoLessonWorkspaceData.privateRegistrationOptions.students.filter((student) => student.studentId === "student-4"),
+    } };
+    renderPrivateWorkspace({ demoData: data });
+    const text = screen.getByText(/한서아 \(바이올린\)/);
+    expect(text.parentElement).toHaveStyle(getInstrumentColorStyle(getDefaultInstrumentColor("violin"), "scheduled"));
+  });
+  it("악기 필터 밖 원생과 선생님의 날짜 메모도 수정할 수 있다", async () => {
+    const user = userEvent.setup();
+    const data = { ...demoLessonWorkspaceData, privateLessons: [
+      demoLessonWorkspaceData.privateLessons[0],
+      { ...demoLessonWorkspaceData.privateLessons[1], startAt: "2026-08-21T10:30:00+09:00", endAt: "2026-08-21T11:30:00+09:00" },
+    ], calendarMemos: [{ ...demoLessonWorkspaceData.calendarMemos[1], studentId: "student-4", studentName: "한서아" }] };
+    renderPrivateWorkspace({ demoData: data });
+    await user.click(screen.getByRole("button", { name: /악기 필터/ }));
+    await user.click(screen.getByRole("checkbox", { name: "첼로" }));
+    await user.keyboard("{Escape}");
+    const dialog = await openDay(user, /21/);
+    await user.click(within(dialog).getByRole("tab", { name: "메모 1" }));
+    await user.click(within(dialog).getByRole("button", { name: /메모 수정/ }));
+    expect(within(dialog).getByLabelText("관련 원생")).toHaveValue("student-4");
+    expect(within(dialog).getByLabelText("관련 선생님")).toHaveValue("teacher-2");
+    expect(within(dialog).getByRole("button", { name: "메모 수정 저장" })).toBeEnabled();
+  });
+  it("악기를 선택하면 달력과 출석 확인에 해당 악기만 표시한다", async () => {
+    const user = userEvent.setup();
+    renderPrivateWorkspace();
+    expect(screen.getByRole("button", { name: /악기 필터/ }).nextElementSibling).toBe(screen.getByRole("button", { name: "레슨원생 검색" }));
+    await user.click(screen.getByRole("button", { name: /악기 필터/ }));
+    await user.click(screen.getByRole("checkbox", { name: "바이올린" }));
+    const grid = screen.getByRole("grid", { name: "2026년 8월 개인레슨 캘린더" });
+    expect(grid).toHaveTextContent("한서아 (바이올린)");
+    expect(grid).not.toHaveTextContent("최도윤 (첼로)");
+    await user.keyboard("{Escape}");
+    const dialog = await openDay(user, /21/);
+    expect(within(dialog).getByText("한서아")).toBeInTheDocument();
+    expect(within(dialog).queryByText("최도윤")).not.toBeInTheDocument();
+  });
   it("날짜 칸에 시간과 `원생명 (악기) - 선생님명`을 보라색 점과 함께 보여 준다", () => {
     renderPrivateWorkspace();
 

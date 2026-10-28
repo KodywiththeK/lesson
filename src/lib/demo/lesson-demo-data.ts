@@ -5,12 +5,15 @@ import type {
 } from "@/domain/private-lesson";
 import type { PrivateLessonRegistrationOptions } from "@/lib/api/private-lessons";
 import type { LessonCalendarMemo } from "@/lib/api/lesson-memos";
+import type { AcademyInstrumentColor } from "@/lib/api/lesson-calendar-settings";
 
 export type LessonWorkspaceDemoData = {
   academySheets: DailyAcademyAttendanceSheet[];
   privateLessons: PrivateLesson[];
+  instrumentColors?: AcademyInstrumentColor[];
   hiddenCalendarEvents?: Array<{
     id: string;
+    instrumentId?: string;
     lessonKind: "academy" | "private";
     date: string;
     startTime: string;

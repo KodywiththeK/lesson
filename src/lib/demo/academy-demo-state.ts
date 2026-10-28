@@ -9,6 +9,7 @@ import {
 } from "@/domain/academy-lesson-schedule";
 import type { LedgerCategory, LedgerEntry } from "@/domain/book-sale";
 import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
+import type { AcademyInstrumentColor } from "@/lib/api/lesson-calendar-settings";
 import {
   DEFAULT_LESSON_TICKET_REFUND_POLICY,
   type LessonTicketRefundPolicy,
@@ -52,6 +53,7 @@ import type {
   AdjustLessonTicketResult,
   RegisterLessonTicketInput,
   RegisterLessonTicketResult,
+  LessonTicketCancellationHistoryRow,
 } from "@/lib/api/lesson-tickets";
 
 import { demoLessonWorkspaceData } from "./lesson-demo-data";
@@ -75,6 +77,8 @@ export type DemoAcademyState = {
   teachers: TeacherListRow[];
   enrollments: StudentEnrollment[];
   tickets: LessonTicketListItem[];
+  ticketCancellationHistory: LessonTicketCancellationHistoryRow[];
+  instrumentColors: AcademyInstrumentColor[];
   ticketRegistrations: LessonTicketIncomeRegistration[];
   ticketUsages: LessonTicketUsage[];
   ledgerEntries: LedgerEntry[];
@@ -344,6 +348,8 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     teachers: [...demoTeachers],
     enrollments: [...initialEnrollments],
     tickets: [...demoTickets],
+    ticketCancellationHistory: [],
+    instrumentColors: [],
     ticketRegistrations: initialTicketRegistrations,
     ticketUsages: [],
     ledgerEntries: [...demoLedgerEntries, ...initialTicketLedgerEntries],

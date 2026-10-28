@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
 
 import { AppProviders } from "../../providers";
 import LessonScheduleSettingsPage from "./page";
@@ -13,7 +14,8 @@ describe("레슨시간표 설정 페이지", () => {
     const navigation = screen.getByRole("navigation", { name: "주요 메뉴" });
     expect(within(navigation).getByRole("link", { name: "레슨시간표" })).toHaveAttribute("href", "/settings/lesson-schedule");
     expect(await screen.findByRole("region", { name: "레슨시간표 설정" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /기본 색/ })).toHaveLength(8);
+    await userEvent.setup().click(screen.getByRole("button", { name: "바이올린 색상" }));
+    expect(screen.getAllByRole("button", { name: /바이올린 기본 색/ })).toHaveLength(8);
     expect(screen.getByLabelText("휴원 종류")).toBeVisible();
     expect(screen.queryByRole("dialog", { name: "레슨 시간표 설정" })).not.toBeInTheDocument();
   });

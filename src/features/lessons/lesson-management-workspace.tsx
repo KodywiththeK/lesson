@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePageHeaderActions } from "@/components/layout/page-actions";
 import {
   checkAcademyLessonEditable,
@@ -33,7 +35,7 @@ import {
 } from "@/domain/academy-makeup-recommendation";
 import { buildWeekdayAttendanceSummary } from "@/domain/academy-weekday-summary";
 import { compareKoreanNames } from "@/domain/common-list";
-import { INSTRUMENT_COLOR_PRESETS } from "@/domain/instrument-color";
+import { getDefaultInstrumentColor } from "@/domain/instrument-color";
 import type { KoreanHoliday } from "@/domain/korean-holiday";
 import {
   buildMonthlyAcademyAbsences,
@@ -246,6 +248,7 @@ export function LessonManagementWorkspace({
   };
   const [academyView, setAcademyView] = useState<LessonView>("calendar");
   const [privateView, setPrivateView] = useState<LessonView>("calendar");
+  const [instrumentFilters, setInstrumentFilters] = useState<Record<LessonTab, string[]>>({ academy: [], private: [] });
   const selectedMonth = selectedDate.slice(0, 7);
   const hasInjectedData = Boolean(demoData);
   const supabaseClientState = useMemo(
@@ -341,15 +344,16 @@ export function LessonManagementWorkspace({
   const privateLessons =
     privateLessonsOverride ?? initialWorkspaceData.privateLessons;
   const instrumentColors = useMemo(() => {
+    const activeIds = initialWorkspaceData.privateRegistrationOptions.students.flatMap((student) => student.instruments.map((item) => item.instrumentId));
     const ids = [...new Set([
-      ...initialWorkspaceData.privateRegistrationOptions.students.flatMap((student) => student.instruments.map((item) => item.instrumentId)),
+      ...activeIds,
       ...privateLessons.map((lesson) => lesson.instrumentId),
     ])].sort();
-    return new Map(ids.map((id, index) => [id,
-      colorQuery.data?.find((item) => item.instrumentId === id)?.colorHex ??
-        INSTRUMENT_COLOR_PRESETS[index % INSTRUMENT_COLOR_PRESETS.length],
+    return new Map(ids.map((id) => [id,
+      (demoData?.instrumentColors ?? colorQuery.data)?.find((item) => item.instrumentId === id)?.colorHex ??
+        getDefaultInstrumentColor(id),
     ]));
-  }, [colorQuery.data, initialWorkspaceData.privateRegistrationOptions.students, privateLessons]);
+  }, [colorQuery.data, demoData?.instrumentColors, initialWorkspaceData.privateRegistrationOptions.students, privateLessons]);
   const closures = useMemo(() => closureQuery.data ?? [], [closureQuery.data]);
   const calendarMemos =
     calendarMemosOverride ?? initialWorkspaceData.calendarMemos;
@@ -414,15 +418,31 @@ export function LessonManagementWorkspace({
         .sort(compareAcademyAttendanceRows),
     [academySheets],
   );
+  const selectedInstruments = instrumentFilters[lessonKind];
+  const matchesInstrument = (id: string | undefined) => selectedInstruments.length === 0 || (id !== undefined && selectedInstruments.includes(id));
+  const visibleInstrumentOptions = lessonKind === "academy"
+    ? academyTableRows.map((row) => ({ id: row.instrumentId, name: row.instrumentName, date: row.date }))
+    : privateLessons.map((lesson) => ({ id: lesson.instrumentId, name: lesson.instrumentName, date: toSeoulDate(lesson.startAt) }));
+  const hiddenInstrumentOptions = (initialWorkspaceData.hiddenCalendarEvents ?? []).flatMap((event) =>
+    event.lessonKind === lessonKind && event.instrumentId
+      ? [{ id: event.instrumentId, name: event.subtitle, date: event.date }] : []);
+  const allInstrumentOptions = [...visibleInstrumentOptions, ...hiddenInstrumentOptions];
+  const isCalendar = lessonKind === "academy" ? academyView === "calendar" : privateView === "calendar";
+  const instrumentOptions = [...new Map(allInstrumentOptions
+    .filter((item) => isCalendar ? item.date.startsWith(selectedMonth) : item.date === selectedDate)
+    .map((item) => [item.id, { id: item.id, name: item.name }])).values()];
+  const filterOptions = [...new Map([...instrumentOptions, ...allInstrumentOptions
+    .filter((item) => selectedInstruments.includes(item.id))].map((item) => [item.id, item])).values()];
   const selectedAcademySheet =
     academySheets[selectedDate] ?? createEmptySheet(academyId, selectedDate);
-  const selectedAcademyEvents = [...selectedAcademySheet.rows].sort(
+  const selectedAcademyEvents = selectedAcademySheet.rows.filter((row) => matchesInstrument(row.instrumentId)).sort(
     (left, right) =>
       left.startTime.localeCompare(right.startTime) ||
       compareKoreanNames(left.studentName, right.studentName),
   );
-  const selectedPrivateLessons = privateLessons
-    .filter((lesson) => toSeoulDate(lesson.startAt) === selectedDate)
+  const datePrivateLessons = privateLessons.filter((lesson) => toSeoulDate(lesson.startAt) === selectedDate);
+  const selectedPrivateLessons = datePrivateLessons
+    .filter((lesson) => matchesInstrument(lesson.instrumentId))
     .sort(comparePrivateLessonsByTime);
   const selectedAcademyMemos = getLessonMemosForDate(
     calendarMemos,
@@ -434,20 +454,11 @@ export function LessonManagementWorkspace({
     "private",
     selectedDate,
   );
-  const selectedAcademyMemoTargets = toAcademyMemoTargetOptions(selectedAcademyEvents);
-  const selectedPrivateMemoTargets = toPrivateMemoTargetOptions(selectedPrivateLessons);
-  const monthlyAcademyAbsences = useMemo(
-    () => buildMonthlyAcademyAbsences(academyTableRows, selectedMonth),
-    [academyTableRows, selectedMonth],
-  );
-  const monthlyPrivateAbsences = useMemo(
-    () => buildMonthlyPrivateAbsences(privateLessons, selectedMonth),
-    [privateLessons, selectedMonth],
-  );
-  const weekdaySummary = useMemo(
-    () => buildWeekdayAttendanceSummary(academyTableRows, selectedMonth),
-    [academyTableRows, selectedMonth],
-  );
+  const selectedAcademyMemoTargets = toAcademyMemoTargetOptions(selectedAcademySheet.rows);
+  const selectedPrivateMemoTargets = toPrivateMemoTargetOptions(datePrivateLessons);
+  const monthlyAcademyAbsences = buildMonthlyAcademyAbsences(academyTableRows, selectedMonth);
+  const monthlyPrivateAbsences = buildMonthlyPrivateAbsences(privateLessons, selectedMonth);
+  const weekdaySummary = buildWeekdayAttendanceSummary(academyTableRows, selectedMonth);
   const privateRegistrationOptions =
     initialWorkspaceData.privateRegistrationOptions;
   const registrationOptionsQueryFactory = useMemo(
@@ -1050,6 +1061,18 @@ export function LessonManagementWorkspace({
     );
   }
 
+  const instrumentFilter = instrumentOptions.length > 1 || selectedInstruments.length > 0 ? <Popover>
+    <PopoverTrigger asChild><Button type="button" variant="outline" className="w-fit">악기 필터 {selectedInstruments.length > 0 ? `(${selectedInstruments.length})` : "(전체)"}</Button></PopoverTrigger>
+    <PopoverContent align="start" className="grid max-h-80 gap-3 overflow-y-auto">
+      <Button type="button" variant="outline" size="sm" onClick={() => setInstrumentFilters((current) => ({ ...current, [lessonKind]: [] }))}>전체 보기</Button>
+      {filterOptions.map((item) => <label key={item.id} className="flex items-center gap-2 text-sm">
+        <Checkbox checked={selectedInstruments.includes(item.id)} onCheckedChange={(checked) => setInstrumentFilters((current) => ({
+          ...current, [lessonKind]: checked ? [...current[lessonKind], item.id] : current[lessonKind].filter((id) => id !== item.id),
+        }))} />{item.name}
+      </label>)}
+    </PopoverContent>
+  </Popover> : null;
+
   return (
     <section className="grid gap-4" aria-label={`${academyName} 레슨 시간표 운영`}>
       {!isHeaderActionMounted && lessonHeaderActions ? (
@@ -1075,6 +1098,7 @@ export function LessonManagementWorkspace({
             labelPrefix="학원레슨"
             value={academyView}
             onValueChange={setAcademyView}
+            actions={instrumentFilter}
           />
           {canManage ? null : (
             <Alert>
@@ -1089,7 +1113,7 @@ export function LessonManagementWorkspace({
             <LessonMonthCalendar
               ariaLabel={toCalendarAriaLabel(selectedDate, "학원레슨 캘린더")}
               selectedDate={selectedDate}
-              events={academyEvents}
+              events={academyEvents.filter((event) => matchesInstrument(event.instrumentId))}
               memoCounts={academyMemoCounts}
               variant="academy"
               holidays={holidayQuery.data ?? []}
@@ -1134,14 +1158,14 @@ export function LessonManagementWorkspace({
             value={privateView}
             onValueChange={setPrivateView}
             actions={
-              <Button
+              <>{instrumentFilter}<Button
                 type="button"
                 variant="outline"
                 onClick={() => setPrivateStudentSearchOpen(true)}
               >
                 <Search aria-hidden="true" />
                 레슨원생 검색
-              </Button>
+              </Button></>
             }
           />
           {creditBalancesQuery.isError ? <ListStatusAlert
@@ -1159,7 +1183,7 @@ export function LessonManagementWorkspace({
             <LessonMonthCalendar
               ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
               selectedDate={selectedDate}
-              events={privateEvents}
+              events={privateEvents.filter((event) => matchesInstrument(event.instrumentId))}
               memoCounts={privateMemoCounts}
               variant="private"
               holidays={holidayQuery.data ?? []}

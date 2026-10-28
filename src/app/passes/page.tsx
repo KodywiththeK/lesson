@@ -46,6 +46,7 @@ export default function PassesPage() {
             academyId={academy.academyId}
             today={useTestDemo ? DEMO_TODAY : today}
             canRecordPayment={canAccessFeature(academy.permissionContext, "ticket-payment-input")}
+            cancellationHistory={useTestDemo ? demo.state.ticketCancellationHistory : undefined}
             queryOptionsFactory={
               useTestDemo ? demo.createLessonTicketListQueryOptions : undefined
             }

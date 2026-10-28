@@ -64,10 +64,18 @@ export function deleteDemoLessonTicket(
   input: { ticketId: string; mode: DeleteLessonTicketMode },
 ): { state: DemoAcademyState; result: DeleteLessonTicketResult } {
   const preview = getDemoLessonTicketRefundPreview(state, input.ticketId);
+  const ticket = getTicket(state, input.ticketId);
   const registrations = state.ticketRegistrations.filter((registration) => registration.ticketId === input.ticketId);
   const withoutTicket: DemoAcademyState = {
     ...state,
     tickets: state.tickets.filter((ticket) => ticket.ticketId !== input.ticketId),
+    ticketCancellationHistory: [...state.ticketCancellationHistory, {
+      id: `${input.ticketId}-${state.ticketCancellationHistory.length}`, mode: input.mode,
+      student_name: ticket.studentName, instrument_name: ticket.instrumentName,
+      total_count: ticket.totalGrantedCount, remaining_count: ticket.remainingCount,
+      registered_at: ticket.registeredAt, valid_until: ticket.validUntil,
+      refund_amount: input.mode === "refund" ? preview.refundAmount : 0, occurred_at: new Date().toISOString(),
+    }],
     ticketRegistrations: state.ticketRegistrations.filter((registration) => registration.ticketId !== input.ticketId),
   };
 

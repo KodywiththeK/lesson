@@ -3,6 +3,12 @@ export const INSTRUMENT_COLOR_PRESETS = [
   "#bc7325", "#af4e61", "#9a59a9", "#526b81",
 ] as const;
 
+/** 기본 색은 악기 ID만으로 정해 역할이나 조회 기간에 따라 달라지지 않는다. */
+export function getDefaultInstrumentColor(instrumentId: string) {
+  const hash = Array.from(instrumentId).reduce((value, char) => (Math.imul(value, 31) + char.codePointAt(0)!) >>> 0, 0);
+  return INSTRUMENT_COLOR_PRESETS[hash % INSTRUMENT_COLOR_PRESETS.length];
+}
+
 const WHITE = "#ffffff";
 const BLACK = "#000000";
 const BACKGROUND_ALPHA = 0.22;

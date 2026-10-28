@@ -13,6 +13,7 @@ import {
   saveAcademyClosure,
   saveAcademyInstrumentColor,
   type LessonCalendarSettingsClient,
+  type AcademyInstrumentColor,
   type SaveAcademyClosureInput,
 } from "@/lib/api/lesson-calendar-settings";
 import { fetchPrivateLessonRegistrationOptions, type PrivateLessonRegistrationOptionsSupabaseClient } from "@/lib/api/private-lessons";
@@ -27,9 +28,13 @@ type SettingsClient = LessonCalendarSettingsClient & PrivateLessonRegistrationOp
 export function LessonScheduleSettingsScreen({
   academyId,
   demoInstruments,
+  demoColors,
+  onSaveDemoColor,
 }: {
   academyId: string;
   demoInstruments?: Array<{ id: string; name: string }>;
+  demoColors?: AcademyInstrumentColor[];
+  onSaveDemoColor?: (instrumentId: string, color: string) => void;
 }) {
   const queryClient = useQueryClient();
   const clientState = useMemo(() => {
@@ -65,11 +70,15 @@ export function LessonScheduleSettingsScreen({
   ).values()];
   const saveColor = useMutation({
     mutationFn: async ({ instrumentId, color }: { instrumentId: string; color: string }) => {
-      if (!client) throw new Error("학원 설정 연결을 확인해 주세요.");
+      if (!client) {
+        if (!onSaveDemoColor) throw new Error("학원 설정 연결을 확인해 주세요.");
+        onSaveDemoColor(instrumentId, color);
+        return;
+      }
       await saveAcademyInstrumentColor(client, academyId, instrumentId, color);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: colorKey });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: colorKey });
       toast.success("악기 색상을 저장했습니다.");
     },
     onError: (error) => toast.error("악기 색상 저장에 실패했습니다.", { description: toUserMessage(error) }),
@@ -104,7 +113,7 @@ export function LessonScheduleSettingsScreen({
       {queryError ? <ListStatusAlert message="시간표 설정을 불러오지 못했습니다." detail={toUserMessage(queryError)} /> : null}
       <LessonScheduleSettingsForm
         instruments={instruments}
-        colors={colorQuery.data ?? []}
+        colors={demoColors ?? colorQuery.data ?? []}
         closures={closureQuery.data ?? []}
         isSaving={Boolean(queryError) || saveColor.isPending || saveClosure.isPending || archiveClosure.isPending}
         onSaveColor={(instrumentId, color) => saveColor.mutate({ instrumentId, color })}

@@ -35,6 +35,12 @@ export type LessonTicketGrantSupabaseRow = {
   } | null;
 };
 
+export type LessonTicketCancellationHistoryRow = {
+  id: string; mode: "refund" | "mistake"; student_name: string | null;
+  instrument_name: string | null; total_count: number | null; remaining_count: number | null;
+  registered_at: string | null; valid_until: string | null; refund_amount: number | null; occurred_at: string;
+};
+
 type LessonTicketListFromBuilder = {
   select(select: string): PagedSelectQuery<LessonTicketGrantSupabaseRow>;
 };
@@ -481,6 +487,8 @@ export function createLessonTicketListQueryKey(
     today: options.today,
     q: options.search,
     status: options.filters?.status,
+    group: options.filters?.group,
+    activeStatus: options.filters?.activeStatus,
     page: options.page?.toString(),
     pageSize: options.pageSize?.toString(),
   });

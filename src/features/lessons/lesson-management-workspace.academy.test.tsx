@@ -127,6 +127,27 @@ function withRows(
 describe("학원 레슨표 출석확인", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("악기가 하나면 필터를 숨긴다", () => {
+    renderAcademy({ demoData: withRows([{ lessonEventId: "piano" }]) });
+    expect(screen.queryByRole("button", { name: /악기 필터/ })).not.toBeInTheDocument();
+  });
+
+  it("복수 악기 중 선택한 악기만 달력과 출석 확인에 보여준다", async () => {
+    const user = userEvent.setup();
+    renderAcademy({ demoData: withRows([
+      { lessonEventId: "piano", studentName: "피아노 원생" },
+      { lessonEventId: "violin", studentName: "바이올린 원생", instrumentId: "violin", instrumentName: "바이올린" },
+    ]) });
+    await user.click(screen.getByRole("button", { name: /악기 필터/ }));
+    await user.click(screen.getByRole("checkbox", { name: "바이올린" }));
+    await user.keyboard("{Escape}");
+    expect(getCalendar()).toHaveTextContent("바이올린 원생");
+    expect(getCalendar()).not.toHaveTextContent("피아노 원생");
+    const dialog = await openDay(user, 21);
+    expect(within(dialog).getByText("바이올린 원생")).toBeInTheDocument();
+    expect(within(dialog).queryByText("피아노 원생")).not.toBeInTheDocument();
+  });
+
   it("원생별 등원/결석은 임시로 고르고 닫으면 저장하지 않고 버린다", async () => {
     const user = userEvent.setup();
     renderAcademy();

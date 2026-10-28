@@ -12,9 +12,11 @@ test("개인레슨 달력에서 설정을 분리하고 데스크톱 설정 메�
   await navigation.getByRole("button", { name: "설정 하위 메뉴 펼치기" }).click();
   await navigation.getByRole("link", { name: "레슨시간표" }).click();
   const settings = page.getByRole("region", { name: "레슨시간표 설정" });
-  await expect(settings.getByRole("button", { name: /기본 색/ })).toHaveCount(8);
+  await settings.getByRole("button", { name: "바이올린 색상" }).click();
+  await expect(page.getByRole("button", { name: /바이올린 기본 색/ })).toHaveCount(8);
   await expect(settings.getByLabel("직접 색상 선택")).toHaveCount(0);
-  await expect(settings.getByRole("button", { name: "기본 색 2" })).toHaveCSS("background-color", "rgb(207, 222, 238)");
+  await expect(page.getByRole("button", { name: "바이올린 기본 색 2" })).toHaveCSS("background-color", "rgb(207, 222, 238)");
+  await page.keyboard.press("Escape");
   await expect(settings.getByLabel("휴원 종류")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("private-calendar-settings-desktop.png") });
 });
@@ -65,10 +67,42 @@ test("모바일 설정 메뉴에서도 악기별 색상과 휴원일을 설정�
   await navigation.getByRole("button", { name: "설정 하위 메뉴 펼치기" }).click();
   await navigation.getByRole("link", { name: "레슨시간표" }).click();
   const settings = page.getByRole("region", { name: "레슨시간표 설정" });
-  await expect(settings.getByRole("button", { name: "기본 색 8" })).toBeVisible();
+  await settings.getByRole("button", { name: "바이올린 색상" }).click();
+  await expect(page.getByRole("button", { name: "바이올린 기본 색 8" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await settings.getByLabel("휴원 종류").selectOption("weekly");
   await expect(settings.getByLabel("반복 요일")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("private-calendar-settings-mobile.png") });
+});
+
+test("데모에서 악기 색상을 저장하고 시간표로 이동해도 유지한다", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
+  await page.goto("/settings/lesson-schedule");
+  await page.getByRole("button", { name: "바이올린 색상" }).click();
+  await page.getByRole("button", { name: "바이올린 기본 색 4" }).click();
+  await expect(page.getByRole("button", { name: "바이올린 색상" })).toContainText("기본 색 4");
+  const navigation = page.getByRole("navigation", { name: "주요 메뉴" });
+  await navigation.getByRole("button", { name: "레슨 시간표 하위 메뉴 펼치기" }).click();
+  await navigation.getByRole("link", { name: "개인레슨" }).click();
+  const calendar = page.getByRole("grid", { name: /개인레슨 캘린더/ });
+  await expect(calendar.getByText(/한서아 \(바이올린\)/).first().locator(".." )).toHaveCSS("background-color", "rgb(220, 228, 208)");
+});
+
+test("모바일 개인레슨 악기 필터가 달력과 출석창에 적용된다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
+  await page.goto("/lessons/private");
+  await page.getByRole("button", { name: /악기 필터/ }).click();
+  await page.getByRole("checkbox", { name: "바이올린" }).click();
+  await page.keyboard.press("Escape");
+  const calendar = page.getByRole("grid", { name: /개인레슨 캘린더/ });
+  await expect(calendar.getByText(/한서아 \(바이올린\)/)).toBeAttached();
+  await expect(calendar.getByText(/최도윤 \(첼로\)/)).toHaveCount(0);
+  await calendar.getByRole("gridcell", { name: /2026-08-21/ }).click();
+  const dialog = page.getByRole("dialog", { name: /개인레슨 출석 확인/ });
+  await expect(dialog.getByText("한서아", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("최도윤", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("회차권 등록은 악기를 선택한 뒤 원생을 고른다", async ({ page }) => {
@@ -78,6 +112,18 @@ test("회차권 등록은 악기를 선택한 뒤 원생을 고른다", async ({
   await expect(dialog.getByLabel("원생")).toBeDisabled();
   await dialog.getByLabel("악기").selectOption("violin");
   await expect(dialog.getByRole("option", { name: "한서아" })).toBeAttached();
+});
+
+test("회차권 상태를 탭으로 전환한다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/passes");
+  await expect(page.getByRole("tab", { name: "사용중" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("사용중 상세 필터")).toBeVisible();
+  await page.getByRole("tab", { name: "사용완료" }).click();
+  await expect(page.getByLabel("사용중 상세 필터")).toHaveCount(0);
+  await page.getByRole("tab", { name: "사용취소" }).click();
+  await expect(page.getByText("사용취소 이력이 없습니다.")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("같은 원생의 새 구매는 기존 회차권과 별도 행으로 보인다", async ({ page }) => {

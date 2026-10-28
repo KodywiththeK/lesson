@@ -87,7 +87,7 @@ function renderLessonTicketListScreen(
 
 function listLessonTickets(tickets: LessonTicketListItem[] = lessonTickets): LessonTicketListQueryOptionsFactory {
   return (options) => ({
-    queryKey: ["lesson-tickets", options.academyId, options.search ?? "", options.filters?.status ?? ""],
+    queryKey: ["lesson-tickets", options.academyId, options.search ?? "", options.filters?.status ?? "", options.filters?.group ?? "", options.filters?.activeStatus ?? ""],
     queryFn: async () => buildLessonTicketList(tickets, options),
   });
 }
@@ -137,6 +137,8 @@ const pagedQueryOptionsFactory: LessonTicketListQueryOptionsFactory = (options) 
     options.academyId,
     options.search ?? "",
     options.filters?.status ?? "",
+    options.filters?.group ?? "",
+    options.filters?.activeStatus ?? "",
     options.page ?? "",
     options.pageSize ?? "",
   ],
@@ -191,16 +193,19 @@ describe("LessonTicketListScreen", () => {
   });
 
   it("만료 당일은 0일 남음과 오늘까지 사용 가능을, 지난 회차권은 만료를 보여준다", async () => {
+    const user = userEvent.setup();
     renderLessonTicketListScreen(listLessonTickets([
       { ...lessonTickets[0], validUntil: "2026-09-01", remainingCount: 3 },
       { ...lessonTickets[1], validUntil: "2026-08-31" },
     ]));
     const table = await screen.findByRole("table", { name: "회차권 목록" });
     expect(within(within(table).getByRole("row", { name: /김민지/ })).getByText("0일 남음 · 오늘까지 사용 가능")).toBeInTheDocument();
-    expect(within(within(table).getByRole("row", { name: /이서윤/ })).getByText("만료")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "사용완료" }));
+    expect(within(await screen.findByRole("row", { name: /이서윤/ })).getByText("만료")).toBeInTheDocument();
   });
 
   it("잔여가 부족하거나 소진된 회차권은 눈에 띄는 배지로, 만료일이 다가오는 것만으로는 강조하지 않는다", async () => {
+    const user = userEvent.setup();
     renderLessonTicketListScreen(
       listLessonTickets([
         ...lessonTickets,
@@ -223,24 +228,39 @@ describe("LessonTicketListScreen", () => {
 
     const table = await screen.findByRole("table", { name: "회차권 목록" });
     const lowBadge = within(within(table).getByRole("row", { name: /김민지/ })).getByText("잔여 부족");
-    const exhaustedBadge = within(within(table).getByRole("row", { name: /박소진/ })).getByText("소진");
     const nearExpiryRow = within(table).getByRole("row", { name: /정임박/ });
 
     expect(lowBadge).toHaveAttribute("data-variant", "destructive");
-    expect(exhaustedBadge).toHaveAttribute("data-variant", "destructive");
     expect(within(nearExpiryRow).getByText("정상")).toBeInTheDocument();
     expect(within(nearExpiryRow).queryByText("만료 임박")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "사용완료" }));
+    expect(within(await screen.findByRole("row", { name: /박소진/ })).getByText("소진")).toHaveAttribute("data-variant", "destructive");
   });
 
-  it("상태 필터는 잔여 부족, 만료, 소진만 고를 수 있다", async () => {
+  it("사용중을 기본으로 보여 주고 정상과 잔여 부족을 다시 고를 수 있다", async () => {
     renderLessonTicketListScreen(listLessonTickets());
 
     await screen.findByRole("table", { name: "회차권 목록" });
-    const options = within(screen.getByLabelText("회차권 상태 필터"))
+    expect(screen.getByRole("tab", { name: "사용중" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "사용취소" })).toBeInTheDocument();
+    const options = within(screen.getByLabelText("사용중 상세 필터"))
       .getAllByRole("option")
       .map((option) => option.textContent);
 
-    expect(options).toEqual(["전체", "잔여 부족", "만료", "소진"]);
+    expect(options).toEqual(["전체", "정상", "잔여 부족"]);
+  });
+
+  it("다른 상태를 불러오는 동안 이전 상태의 권을 보여주지 않는다", async () => {
+    const user = userEvent.setup();
+    renderLessonTicketListScreen((options) => ({
+      queryKey: ["group", options.filters?.group],
+      queryFn: () => options.filters?.group === "completed"
+        ? new Promise(() => {}) : Promise.resolve(buildLessonTicketList(lessonTickets, options)),
+    }));
+    await screen.findByRole("cell", { name: "김민지" });
+    await user.click(screen.getByRole("tab", { name: "사용완료" }));
+    expect(screen.queryByRole("cell", { name: "김민지" })).not.toBeInTheDocument();
+    expect(screen.getByText("회차권 목록을 불러오는 중입니다.")).toBeInTheDocument();
   });
 
   it("검색어와 상태 필터 변경을 TanStack Query 입력으로 반영한다", async () => {
@@ -257,6 +277,8 @@ describe("LessonTicketListScreen", () => {
           options.academyId,
           options.search ?? "",
           options.filters?.status ?? "",
+          options.filters?.group ?? "",
+          options.filters?.activeStatus ?? "",
         ],
         queryFn: async () => buildLessonTicketList(lessonTickets, options),
       };
@@ -268,7 +290,7 @@ describe("LessonTicketListScreen", () => {
       screen.getByRole("searchbox", { name: "회차권 검색" }),
       "피아노",
     );
-    await user.selectOptions(screen.getByLabelText("회차권 상태 필터"), "low-remaining");
+    await user.selectOptions(screen.getByLabelText("사용중 상세 필터"), "low-remaining");
 
     expect(await screen.findByRole("cell", { name: "김민지" })).toBeInTheDocument();
     expect(
@@ -278,7 +300,7 @@ describe("LessonTicketListScreen", () => {
       academyId: "academy-1",
       search: "피아노",
       filters: {
-        status: "low-remaining",
+        activeStatus: "low-remaining",
       },
     });
     expect(seenOptions.at(-1)).not.toHaveProperty("expiringWithinDays");
@@ -865,7 +887,7 @@ describe("LessonTicketListScreen 페이지 이동", () => {
     await screen.findByRole("cell", { name: "원생01" });
     await user.click(screen.getByRole("button", { name: "3페이지" }));
     await screen.findByRole("cell", { name: "원생21" });
-    await user.selectOptions(screen.getByLabelText("회차권 상태 필터"), "low-remaining");
+    await user.selectOptions(screen.getByLabelText("사용중 상세 필터"), "low-remaining");
 
     expect(await screen.findByText("총 21개")).toBeInTheDocument();
     expect(await screen.findByRole("cell", { name: "원생05" })).toBeInTheDocument();

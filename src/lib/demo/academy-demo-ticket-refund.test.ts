@@ -79,6 +79,7 @@ describe("deleteDemoLessonTicket — 환불 처리", () => {
     expect(state.tickets.some((ticket) => ticket.ticketId === "ticket-1")).toBe(false);
     expect(ledgerAmountOf(state, "ticket-1")).toBe(210_000);
     expect(state.ticketRegistrations.some((registration) => registration.ticketId === "ticket-1")).toBe(false);
+    expect(state.ticketCancellationHistory).toEqual([expect.objectContaining({ mode: "refund", refund_amount: 70_000, student_name: expect.any(String) })]);
   });
 
   it("전액 환불이면 수입 행을 지운다", () => {

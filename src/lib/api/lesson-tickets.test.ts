@@ -181,6 +181,8 @@ describe("createLessonTicketListQueryOptions", () => {
       "low-remaining",
       "",
       "",
+      "",
+      "",
     ]);
     await expect(options.queryFn()).resolves.toMatchObject({ items: [], totalItems: 0 });
   });

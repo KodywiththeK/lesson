@@ -272,10 +272,24 @@ describe("summarizeLessonTicketStatus", () => {
     );
 
     expect(summary.statuses).toEqual(["exhausted", "expired"]);
+    expect(summarizeLessonTicketStatus({ ...ticket, remainingCount: 2, validUntil: "2026-08-31" }, statusOptions).statuses).toEqual(["expired"]);
   });
 });
 
 describe("buildLessonTicketList", () => {
+  it("사용중과 사용완료를 나누고 사용중에서 정상과 잔여 부족을 고른다", () => {
+    const base = { academyId: "a", studentId: "s", studentName: "원생", instrumentId: "p", instrumentName: "피아노", totalGrantedCount: 4, validFrom: "2026-01-01", registeredAt: "2026-01-01" };
+    const tickets = [
+      { ...base, ticketId: "normal", remainingCount: 3, validUntil: "2026-09-01" },
+      { ...base, ticketId: "low", remainingCount: 2, validUntil: "2026-09-02" },
+      { ...base, ticketId: "expired", remainingCount: 2, validUntil: "2026-08-31" },
+      { ...base, ticketId: "exhausted", remainingCount: 0, validUntil: "2026-09-02" },
+    ];
+    const options = { academyId: "a", today: "2026-09-01", lowRemainingThreshold: 2 };
+    expect(buildLessonTicketList(tickets, { ...options, filters: { group: "active" } }).items.map((row) => row.ticketId).sort()).toEqual(["low", "normal"]);
+    expect(buildLessonTicketList(tickets, { ...options, filters: { group: "active", activeStatus: "normal" } }).items.map((row) => row.ticketId)).toEqual(["normal"]);
+    expect(buildLessonTicketList(tickets, { ...options, filters: { group: "completed" } }).items.map((row) => row.ticketId).sort()).toEqual(["exhausted", "expired"]);
+  });
   it("현재 학원의 회차권 목록을 원생명 가나다순으로 만들고 상태를 계산한다", () => {
     const list = buildLessonTicketList(
       [

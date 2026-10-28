@@ -116,6 +116,7 @@ type DemoAcademyContextValue = {
   adjustLessonTicket: (input: AdjustLessonTicketInput) => Promise<AdjustLessonTicketResult>;
   getLessonTicketRefundPreview: (ticketId: string) => Promise<LessonTicketRefundPreview>;
   deleteLessonTicket: (input: DeleteLessonTicketInput) => Promise<DeleteLessonTicketResult>;
+  saveInstrumentColor: (instrumentId: string, colorHex: string) => void;
   setLessonTicketRefundPolicy: (policy: LessonTicketRefundPolicy) => Promise<void>;
   createLessonTicketRefundPolicyQueryOptions: (academyId: string) => {
     queryKey: readonly unknown[];
@@ -298,6 +299,11 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
         commitState((current) => deleteDemoLessonTicket(current, input).state);
 
         return result;
+      },
+      saveInstrumentColor(instrumentId, colorHex) {
+        commitState((current) => ({ ...current, instrumentColors: [
+          ...current.instrumentColors.filter((item) => item.instrumentId !== instrumentId), { instrumentId, colorHex },
+        ] }));
       },
       async setLessonTicketRefundPolicy(policy) {
         commitState((current) => setDemoLessonTicketRefundPolicy(current, policy));

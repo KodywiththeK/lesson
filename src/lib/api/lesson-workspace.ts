@@ -379,6 +379,7 @@ export async function fetchLessonWorkspaceData(
         (event.lesson_kind === "academy" || event.lesson_kind === "private"))
       .map((event) => ({
         id: event.id,
+        instrumentId: event.instrument_id ?? undefined,
         lessonKind: event.lesson_kind as "academy" | "private",
         date: toSeoulDate(event.starts_at),
         startTime: toSeoulHourMinute(event.starts_at),

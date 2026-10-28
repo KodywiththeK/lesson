@@ -163,6 +163,7 @@ export function createEmptyWorkspaceData(): LessonWorkspaceDemoData {
 export function toAcademyCalendarEvent(row: DailyAcademyAttendanceRow): CalendarEvent {
   return {
     id: row.lessonEventId,
+    instrumentId: row.instrumentId,
     date: row.date,
     startTime: row.startTime,
     endTime: row.endTime,

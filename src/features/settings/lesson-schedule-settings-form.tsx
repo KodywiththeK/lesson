@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { AcademyClosure } from "@/domain/academy-closure";
-import { INSTRUMENT_COLOR_PRESETS, getInstrumentColorStyle, resolveInstrumentColorPreset } from "@/domain/instrument-color";
+import { INSTRUMENT_COLOR_PRESETS, getDefaultInstrumentColor, getInstrumentColorStyle, resolveInstrumentColorPreset } from "@/domain/instrument-color";
 import type { AcademyInstrumentColor, SaveAcademyClosureInput } from "@/lib/api/lesson-calendar-settings";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -26,8 +27,6 @@ export function LessonScheduleSettingsForm({
   onSaveClosure: (input: Omit<SaveAcademyClosureInput, "academyId">) => void;
   onArchiveClosure: (id: string) => void;
 }) {
-  const [instrumentId, setInstrumentId] = useState("");
-  const [color, setColor] = useState<string>(INSTRUMENT_COLOR_PRESETS[0]);
   const [closureId, setClosureId] = useState<string>();
   const [kind, setKind] = useState<ClosureKind>("day");
   const [title, setTitle] = useState("");
@@ -48,23 +47,13 @@ export function LessonScheduleSettingsForm({
   return <div className="grid gap-4">
       <section className="grid gap-3 rounded-lg border p-3" aria-label="악기별 색상 설정">
         <h3 className="font-semibold">악기별 색상</h3>
-        <Label className="grid gap-1"><span>악기</span>
-          <NativeSelect aria-label="색상 설정 악기" value={instrumentId} onChange={(event) => {
-            const nextId = event.target.value;
-            setInstrumentId(nextId);
-            setColor(resolveInstrumentColorPreset(colors.find((item) => item.instrumentId === nextId)?.colorHex));
-          }}>
-            <NativeSelectOption value="">악기 선택</NativeSelectOption>
-            {instruments.map((item) => <NativeSelectOption key={item.id} value={item.id}>{item.name}</NativeSelectOption>)}
-          </NativeSelect>
-        </Label>
-        <div className="flex flex-wrap gap-2" aria-label="기본 색상 8개">
-          {INSTRUMENT_COLOR_PRESETS.map((preset, index) => <button key={preset} type="button"
-            aria-label={`기본 색 ${index + 1}`} aria-pressed={color === preset}
-            className="size-9 rounded-md border-2 border-border text-xs font-semibold focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-foreground"
-            style={getInstrumentColorStyle(preset, "scheduled")} onClick={() => setColor(preset)}>{index + 1}</button>)}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {instruments.map((instrument) => {
+            const color = resolveInstrumentColorPreset(colors.find((item) => item.instrumentId === instrument.id)?.colorHex ?? getDefaultInstrumentColor(instrument.id));
+            return <InstrumentColorPicker key={instrument.id} name={instrument.name} color={color} disabled={isSaving}
+              onSelect={(next) => onSaveColor(instrument.id, next)} />;
+          })}
         </div>
-        <Button type="button" disabled={!instrumentId || isSaving} onClick={() => onSaveColor(instrumentId, color)}>악기 색상 저장</Button>
       </section>
       <section className="grid gap-3 rounded-lg border p-3" aria-label="휴원일 설정">
         <h3 className="font-semibold">휴원일</h3>
@@ -102,5 +91,26 @@ export function LessonScheduleSettingsForm({
           </li>)}
         </ul>
       </section>
+  </div>;
+}
+
+function InstrumentColorPicker({ name, color, disabled, onSelect }: {
+  name: string; color: string; disabled: boolean; onSelect: (color: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return <div className="grid gap-1 text-sm font-medium">
+    <span>{name}</span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild><Button type="button" variant="outline" disabled={disabled} aria-label={`${name} 색상`} className="w-full justify-start">
+        <span aria-hidden="true" className="size-6 rounded border" style={getInstrumentColorStyle(color, "scheduled")} />
+        {`기본 색 ${INSTRUMENT_COLOR_PRESETS.indexOf(color as typeof INSTRUMENT_COLOR_PRESETS[number]) + 1}`}
+      </Button></PopoverTrigger>
+      <PopoverContent align="start" className="grid w-48 grid-cols-4 gap-2">
+        {INSTRUMENT_COLOR_PRESETS.map((preset, index) => <button key={preset} type="button"
+          aria-label={`${name} 기본 색 ${index + 1}`} aria-pressed={color === preset}
+          className="size-9 rounded-md border-2 border-border text-xs font-semibold focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-foreground"
+          style={getInstrumentColorStyle(preset, "scheduled")} onClick={() => { setOpen(false); onSelect(preset); }}>{index + 1}</button>)}
+      </PopoverContent>
+    </Popover>
   </div>;
 }

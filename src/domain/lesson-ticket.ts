@@ -111,6 +111,8 @@ export type LessonTicketStatusSummary = {
 
 export type LessonTicketListFilters = {
   status?: LessonTicketStatus;
+  group?: "active" | "completed";
+  activeStatus?: "normal" | "low-remaining";
 };
 
 export type BuildLessonTicketListOptions = LessonTicketStatusOptions & {
@@ -261,14 +263,15 @@ export function summarizeLessonTicketStatus(
   options: LessonTicketStatusOptions,
 ): LessonTicketStatusSummary {
   const statuses: LessonTicketStatus[] = [];
+  const expired = toUtcDayNumber(ticket.validUntil) < toUtcDayNumber(options.today);
 
   if (ticket.remainingCount <= 0) {
     statuses.push("exhausted");
-  } else if (ticket.remainingCount <= options.lowRemainingThreshold) {
+  } else if (!expired && ticket.remainingCount <= options.lowRemainingThreshold) {
     statuses.push("low-remaining");
   }
 
-  if (toUtcDayNumber(ticket.validUntil) < toUtcDayNumber(options.today)) {
+  if (expired) {
     statuses.push("expired");
   }
 
@@ -336,6 +339,11 @@ function matchesLessonTicketFilters(
   ticket: LessonTicketListRow,
   filters: LessonTicketListFilters | undefined,
 ) {
+  const completed = ticket.statuses.includes("expired") || ticket.statuses.includes("exhausted");
+  if (filters?.group === "active" && completed) return false;
+  if (filters?.group === "completed" && !completed) return false;
+  if (filters?.activeStatus === "normal" && ticket.statuses.includes("low-remaining")) return false;
+  if (filters?.activeStatus === "low-remaining" && !ticket.statuses.includes("low-remaining")) return false;
   return !filters?.status || ticket.statuses.includes(filters.status);
 }
 
