@@ -5,6 +5,17 @@ import { describe, expect, it, vi } from "vitest";
 import { LessonScheduleSettingsForm } from "./lesson-schedule-settings-form";
 
 describe("레슨 시간표 설정", () => {
+  it("공휴일과 휴원일의 정기 수업 제외 여부를 각각 설정한다", async () => {
+    const user = userEvent.setup();
+    const onSaveHolidayPolicy = vi.fn();
+    render(<LessonScheduleSettingsForm instruments={[]} colors={[]} closures={[]} isSaving={false}
+      holidayPolicy={{ excludePublicHolidays: true, excludeAcademyClosures: true }}
+      onSaveHolidayPolicy={onSaveHolidayPolicy}
+      onSaveColor={vi.fn()} onSaveClosure={vi.fn()} onArchiveClosure={vi.fn()} />);
+    expect(screen.getByRole("checkbox", { name: "공휴일은 정기 수업에서 제외" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "공휴일은 정기 수업에서 제외" }));
+    expect(onSaveHolidayPolicy).toHaveBeenCalledWith({ excludePublicHolidays: false, excludeAcademyClosures: true });
+  });
   it("기존 휴원일 수정 후 새 휴원일 입력으로 전환할 수 있다", async () => {
     const user = userEvent.setup();
     render(<LessonScheduleSettingsForm instruments={[]} colors={[]}

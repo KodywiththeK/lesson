@@ -22,6 +22,8 @@ import {
   type TuitionAction,
   type TuitionRecord,
   type TuitionStatus,
+  type TuitionPaymentMethod,
+  TUITION_PAYMENT_METHODS,
 } from "@/domain/tuition-income";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { queryKeys } from "@/lib/api/query-keys";
@@ -55,7 +57,7 @@ export type LessonIncomeRow = {
 type TuitionRow = Extract<LessonIncomeRow, { source: "tuition" }>;
 type TuitionActionKind = TuitionAction["action"];
 type TuitionCommand =
-  | { kind: "pay"; row: TuitionRow; paidAt: string }
+  | { kind: "pay"; row: TuitionRow; paidAt: string; paymentMethod: TuitionPaymentMethod }
   | { kind: "overdue" | "cancel-payment"; row: TuitionRow };
 
 const UNSUPPORTED_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
@@ -130,7 +132,7 @@ export function FinanceLessonIncomeScreen({
       const target = { academyId, tuitionId: command.row.id };
 
       if (command.kind === "pay" && markTuitionPaid) {
-        await markTuitionPaid({ ...target, paidAt: command.paidAt });
+        await markTuitionPaid({ ...target, paidAt: command.paidAt, paymentMethod: command.paymentMethod });
       } else if (command.kind === "overdue" && markTuitionOverdue) {
         await markTuitionOverdue(target);
       } else if (command.kind === "cancel-payment" && markTuitionUnpaid) {
@@ -253,6 +255,7 @@ export function FinanceLessonIncomeScreen({
         ) : null}
       </SectionCard>
       <PaymentDialog
+        requirePaymentMethod
         open={Boolean(payTarget)}
         title={payTarget?.record.status === "overdue" ? "미납 수강료 입금 확인" : "입금 처리"}
         description={payTarget
@@ -261,9 +264,9 @@ export function FinanceLessonIncomeScreen({
         dateLabel="입금일"
         contextMonth={month}
         pending={tuitionCommand.isPending}
-        onConfirm={(paidAt) => {
-          if (payTarget) {
-            tuitionCommand.mutate({ kind: "pay", row: payTarget, paidAt });
+        onConfirm={(paidAt, paymentMethod) => {
+          if (payTarget && paymentMethod) {
+            tuitionCommand.mutate({ kind: "pay", row: payTarget, paidAt, paymentMethod });
           }
         }}
         onOpenChange={(open) => !open && setPayTarget(null)}
@@ -407,6 +410,9 @@ function TuitionPaymentStatus({
       {payDisabledReason ? (
         <p id={disabledReasonId} className="text-xs text-muted-foreground">{payDisabledReason}</p>
       ) : null}
+      {status === "paid" ? <span className="text-xs text-muted-foreground">
+        {TUITION_PAYMENT_METHODS.find((item) => item.value === row.record.paymentMethod)?.label ?? "결제 방식 미기록"}
+      </span> : null}
     </div>
   );
 }

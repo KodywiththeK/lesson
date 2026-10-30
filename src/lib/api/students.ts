@@ -288,6 +288,7 @@ type UpdateStudentEnrollmentsRpcPayload = {
 type UpdateStudentEnrollmentsRpcResult = {
   added?: Array<{ student_instrument_id: string; instrument_id?: string }>;
   ended?: Array<{ student_instrument_id: string; remaining_event_count?: number }>;
+  discount_snapshot_warning?: boolean;
 };
 
 const STUDENT_LIST_SELECT =
@@ -452,6 +453,7 @@ export async function updateStudentEnrollments(
       studentInstrumentId: ended.student_instrument_id,
       remainingEventCount: ended.remaining_event_count ?? 0,
     })),
+    ...(data?.discount_snapshot_warning ? { discountSnapshotWarning: true } : {}),
   };
 }
 

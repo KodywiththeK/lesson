@@ -23,7 +23,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { getFinanceToday } from "@/domain/finance-date";
+import { TUITION_PAYMENT_METHODS, type TuitionPaymentMethod } from "@/domain/tuition-income";
 
 const DEFAULT_PAYMENT_DESCRIPTION = "확인하면 연결된 입출입내역이 자동으로 기록됩니다.";
 
@@ -45,6 +47,7 @@ export function PaymentDialog({
   onConfirm,
   open,
   pending = false,
+  requirePaymentMethod = false,
   title,
   validateDate,
   onOpenChange,
@@ -54,9 +57,10 @@ export function PaymentDialog({
   contextMonth?: string;
   dateLabel: string;
   description?: string;
-  onConfirm: (paidAt: string) => void;
+  onConfirm: (paidAt: string, paymentMethod?: TuitionPaymentMethod) => void;
   open: boolean;
   pending?: boolean;
+  requirePaymentMethod?: boolean;
   title: string;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -73,6 +77,7 @@ export function PaymentDialog({
           dateLabel={dateLabel}
           describeDate={describeDate}
           pending={pending}
+          requirePaymentMethod={requirePaymentMethod}
           validateDate={validateDate}
           onConfirm={onConfirm}
           onCancel={() => onOpenChange(false)}
@@ -89,6 +94,7 @@ export function PaymentDateForm({
   dateLabel,
   describeDate,
   pending,
+  requirePaymentMethod = false,
   validateDate,
   onConfirm,
   onCancel,
@@ -97,10 +103,12 @@ export function PaymentDateForm({
   contextMonth?: string;
   dateLabel: string;
   pending: boolean;
-  onConfirm: (paidAt: string) => void;
+  requirePaymentMethod?: boolean;
+  onConfirm: (paidAt: string, paymentMethod?: TuitionPaymentMethod) => void;
   onCancel: () => void;
 }) {
   const [paidAt, setPaidAt] = useState(getFinanceToday);
+  const [paymentMethod, setPaymentMethod] = useState<TuitionPaymentMethod | "">("");
   const [isDateDraftValid, setIsDateDraftValid] = useState(true);
   const isMissing = paidAt === "";
   const recordedMonth = paidAt.slice(0, 7);
@@ -119,6 +127,13 @@ export function PaymentDateForm({
           onValidityChange={setIsDateDraftValid}
         />
       </Label>
+      {requirePaymentMethod ? <Label className="grid gap-1 text-sm font-medium">
+        <span>결제 방식</span>
+        <NativeSelect aria-label="결제 방식" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as TuitionPaymentMethod | "")}>
+          <NativeSelectOption value="">결제 방식 선택</NativeSelectOption>
+          {TUITION_PAYMENT_METHODS.map((method) => <NativeSelectOption key={method.value} value={method.value}>{method.label}</NativeSelectOption>)}
+        </NativeSelect>
+      </Label> : null}
       {dateError ? (
         <p role="alert" className="text-sm text-destructive">
           {dateError}
@@ -138,7 +153,8 @@ export function PaymentDateForm({
         <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           취소
         </Button>
-        <Button type="button" disabled={pending || dateError !== null || !isDateDraftValid} onClick={() => onConfirm(paidAt)}>
+        <Button type="button" disabled={pending || dateError !== null || !isDateDraftValid || (requirePaymentMethod && !paymentMethod)}
+          onClick={() => requirePaymentMethod ? onConfirm(paidAt, paymentMethod || undefined) : onConfirm(paidAt)}>
           {pending ? "처리 중" : confirmLabel}
         </Button>
       </DialogFooter>

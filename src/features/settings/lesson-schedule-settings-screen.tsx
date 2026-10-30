@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ import { fetchPrivateLessonRegistrationOptions, type PrivateLessonRegistrationOp
 import { queryKeys } from "@/lib/api/query-keys";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchAcademyHolidayPolicy, saveAcademyHolidayPolicy, type AcademyHolidayPolicy, type AcademyHolidayPolicyClient } from "@/lib/api/academy-holiday-policy";
 
 import { LessonScheduleSettingsForm } from "./lesson-schedule-settings-form";
 
@@ -37,6 +38,9 @@ export function LessonScheduleSettingsScreen({
   onSaveDemoColor?: (instrumentId: string, color: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const [demoHolidayPolicy, setDemoHolidayPolicy] = useState<AcademyHolidayPolicy>({
+    excludePublicHolidays: true, excludeAcademyClosures: true,
+  });
   const clientState = useMemo(() => {
     if (demoInstruments) return { client: null, error: null };
     try {
@@ -48,6 +52,7 @@ export function LessonScheduleSettingsScreen({
   const client = clientState.client;
   const colorKey = [...queryKeys.academy(academyId), "instrument-colors"];
   const closureKey = [...queryKeys.academy(academyId), "closures"];
+  const policyKey = [...queryKeys.academy(academyId), "holiday-policy"];
   const instrumentQuery = useQuery({
     queryKey: queryKeys.privateLessons.registrationOptions(academyId),
     queryFn: () => fetchPrivateLessonRegistrationOptions(client!, academyId),
@@ -62,6 +67,26 @@ export function LessonScheduleSettingsScreen({
     queryKey: closureKey,
     queryFn: () => fetchAcademyClosures(client!, academyId),
     enabled: Boolean(client),
+  });
+  const policyQuery = useQuery({
+    queryKey: policyKey,
+    queryFn: () => fetchAcademyHolidayPolicy(client as unknown as AcademyHolidayPolicyClient, academyId),
+    enabled: Boolean(client),
+  });
+  const savePolicy = useMutation({
+    mutationFn: async (policy: AcademyHolidayPolicy) => {
+      if (demoInstruments) {
+        setDemoHolidayPolicy(policy);
+        return;
+      }
+      if (!client) throw new Error("학원 설정 연결을 확인해 주세요.");
+      await saveAcademyHolidayPolicy(client as unknown as AcademyHolidayPolicyClient, academyId, policy);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.academy(academyId) });
+      toast.success("쉬는 날 설정을 저장했습니다.");
+    },
+    onError: (error) => toast.error("쉬는 날 설정을 저장하지 못했습니다.", { description: toUserMessage(error) }),
   });
   const instruments = demoInstruments ?? [...new Map(
     (instrumentQuery.data?.students ?? []).flatMap((student) =>
@@ -89,7 +114,7 @@ export function LessonScheduleSettingsScreen({
       await saveAcademyClosure(client, input);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: closureKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.academy(academyId) });
       toast.success("휴원일을 저장했습니다.");
     },
     onError: (error) => toast.error("휴원일 저장에 실패했습니다.", { description: toUserMessage(error) }),
@@ -100,22 +125,25 @@ export function LessonScheduleSettingsScreen({
       await archiveAcademyClosure(client, academyId, id);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: closureKey });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.academy(academyId) });
       toast.success("휴원일을 해제했습니다.");
     },
     onError: (error) => toast.error("휴원일 해제에 실패했습니다.", { description: toUserMessage(error) }),
   });
-  const queryError = clientState.error ?? instrumentQuery.error ?? colorQuery.error ?? closureQuery.error;
+  const queryError = clientState.error ?? instrumentQuery.error ?? colorQuery.error ?? closureQuery.error ?? policyQuery.error;
 
   return <section aria-label="레슨시간표 설정" className="grid gap-4">
     <SectionCard className="grid gap-4">
-      <SectionHeader title="레슨시간표 설정" description="악기 색상과 학원 공통 휴원일을 설정합니다. 휴원일의 기존 수업은 그대로 남습니다." />
+      <SectionHeader title="레슨시간표 설정" description="악기 색상과 정기 수업의 쉬는 날, 학원 공통 휴원일을 설정합니다." />
+      {demoInstruments ? <p className="text-sm text-muted-foreground">데모의 쉬는 날 설정은 현재 화면에서만 유지됩니다.</p> : null}
       {queryError ? <ListStatusAlert message="시간표 설정을 불러오지 못했습니다." detail={toUserMessage(queryError)} /> : null}
       <LessonScheduleSettingsForm
         instruments={instruments}
         colors={demoColors ?? colorQuery.data ?? []}
         closures={closureQuery.data ?? []}
-        isSaving={Boolean(queryError) || saveColor.isPending || saveClosure.isPending || archiveClosure.isPending}
+        isSaving={Boolean(queryError) || saveColor.isPending || saveClosure.isPending || archiveClosure.isPending || savePolicy.isPending}
+        holidayPolicy={demoInstruments ? demoHolidayPolicy : policyQuery.data}
+        onSaveHolidayPolicy={(policy) => savePolicy.mutate(policy)}
         onSaveColor={(instrumentId, color) => saveColor.mutate({ instrumentId, color })}
         onSaveClosure={(input) => saveClosure.mutate({ ...input, academyId })}
         onArchiveClosure={(id) => archiveClosure.mutate(id)}

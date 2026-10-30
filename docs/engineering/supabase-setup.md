@@ -17,6 +17,15 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 - 기존 프로젝트 호환을 위해 `NEXT_PUBLIC_SUPABASE_ANON_KEY`도 읽을 수 있지만 새 설정에는 사용하지 않는다.
 - `SUPABASE_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY` 같은 서버 전용 키는 `NEXT_PUBLIC_` 접두사를 붙이지 않는다.
 
+공휴일을 정기 수업 배정에 적용하는 서버에는 아래 두 변수를 별도로 설정한다. 실제 값은 로컬 비공개 환경 파일과 배포 환경의 서버 비밀 설정에만 넣고 저장소에 기록하지 않는다.
+
+```ini
+KASI_HOLIDAY_API_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+`KASI_HOLIDAY_API_KEY`는 한국천문연구원 특일정보 API의 인증키다. `SUPABASE_SERVICE_ROLE_KEY`는 로그인된 요청에 대해 공식 응답을 검증한 뒤 공휴일 월 자료를 저장하는 서버 경로에서만 사용한다. 검증된 공휴일 자료는 24시간 동안 사용하고 이후 다시 확인한다. 두 값 중 하나가 없거나 공식 응답을 확인하지 못한 달에는 공휴일 적용 설정이 켜진 학원의 신규 정기 배정을 보류하고 오류와 재시도를 표시한다. 환경변수 설정만으로 DB 마이그레이션이 적용되지는 않는다.
+
 ## 원격 DB 마이그레이션 절차
 
 원격 DB migration 적용에는 공개 API key가 아니라 DB 변경 권한이 필요하다. 상세 실행 절차의 SSOT는 `docs/engineering/supabase-migration-runbook.md`다.

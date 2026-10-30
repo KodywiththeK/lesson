@@ -514,6 +514,7 @@ describe("학원 레슨수입 목록 나누기", () => {
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
     await user.click(within(table).getByRole("button", { name: "한서아 피아노 입금 처리" }));
     const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
 
     await waitFor(() =>

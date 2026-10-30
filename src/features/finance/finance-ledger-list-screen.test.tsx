@@ -326,6 +326,7 @@ describe("FinanceLedgerListScreen", () => {
     fireEvent.change(within(dialog).getByLabelText("입금일"), {
       target: { value: "2026-08-25" },
     });
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "cash");
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
 
     await waitFor(() =>
@@ -333,6 +334,7 @@ describe("FinanceLedgerListScreen", () => {
         academyId: "academy-1",
         tuitionId: "snapshot-1",
         paidAt: "2026-08-25",
+        paymentMethod: "cash",
       }),
     );
   });

@@ -143,6 +143,58 @@ describe("hasLessonRecordChangedSincePayment", () => {
 });
 
 describe("FinancePayrollScreen 표", () => {
+  it("선생님 행에서 정산 문자를 작성하고 학생별 내역을 확인한다", async () => {
+    const user = userEvent.setup();
+    renderPayroll(buildFinanceData());
+    await user.click(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" }));
+    const text = screen.getByLabelText("정산 문자 내용") as HTMLTextAreaElement;
+    expect(text.value).toContain("김동성");
+    expect(text.value).toContain("김민지");
+    expect(text.value).toContain("84,000");
+    expect(text.value).toContain("2026-08-06");
+    expect(text.value).toContain("평균 회당 21,000원");
+  });
+
+  it("기존 지급 급여의 학생별 내역을 현재 수업에서 추측하지 않는다", async () => {
+    const user = userEvent.setup();
+    renderPayroll(buildFinanceData({ salarySettlements: [buildPaidSettlement()] }));
+    await user.click(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" }));
+    expect(screen.getByText(/지급 당시 학생별 내역/)).toBeInTheDocument();
+    expect((screen.getByLabelText("정산 문자 내용") as HTMLTextAreaElement).value).not.toContain("김민지");
+    expect((screen.getByLabelText("정산 문자 내용") as HTMLTextAreaElement).value).toContain("확인 필요 강사료 정산 안내");
+  });
+
+  it("지급 당시 보존한 상세를 현재 등원 기록과 무관하게 문자에 사용한다", async () => {
+    const user = userEvent.setup();
+    renderPayroll(buildFinanceData({ payrollLessonSources: [], salarySettlements: [buildPaidSettlement({
+      studentBreakdown: [{ studentId: "old-student", studentName: "당시원생", instrumentName: "첼로", count: 1, dates: ["2026-08-01"], amount: 84000 }],
+    })] }));
+    await user.click(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" }));
+    const text = screen.getByLabelText("정산 문자 내용") as HTMLTextAreaElement;
+    expect(text.value).toContain("당시원생");
+    expect(text.value).toContain("2026-08-01");
+    expect(text.value).toContain("총 수업 횟수: 1회");
+    expect(screen.queryByText(/지급 당시 학생별 내역을 확인할 수 없습니다/)).not.toBeInTheDocument();
+  });
+
+  it("공휴일 일정이 준비되지 않으면 재시도를 안내하고 급여 지급 확정을 막는다", async () => {
+    const user = userEvent.setup();
+    const refetchFinanceData = vi.fn().mockResolvedValue(undefined);
+    renderPayroll(buildFinanceData({ holidayScheduleReady: false }), { refetchFinanceData });
+    expect(screen.getByText(/공휴일.*준비/)).toBeInTheDocument();
+    expect(within(getRow("김동성")).getByRole("button", { name: "김동성 급여 지급 확정" })).toBeDisabled();
+    expect(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "공휴일 일정 다시 확인" }));
+    await waitFor(() => expect(refetchFinanceData).toHaveBeenCalled());
+  });
+  it("급여 설정에 문제가 있는 미지급 행은 0원 문자 작성을 막는다", () => {
+    renderPayroll(buildFinanceData({ teachers: [{ ...ratioTeacher, ratioTeacherShare: undefined }] }));
+    expect(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" })).toBeDisabled();
+  });
+  it("공휴일이 미준비여도 이미 지급된 정산 문자는 확인할 수 있다", () => {
+    renderPayroll(buildFinanceData({ holidayScheduleReady: false, salarySettlements: [buildPaidSettlement()] }));
+    expect(within(getRow("김동성")).getByRole("button", { name: "김동성 정산 문자 작성" })).toBeEnabled();
+  });
   it("제목·설명과 선생님별 담당 파트·급여 형태·세전·원천징수·세후·산출 근거·지급 상태를 보여 준다", () => {
     renderPayroll(buildFinanceData());
 

@@ -203,6 +203,13 @@ export const mainNavigation: NavigationItem[] = [
         feature: "settings",
       },
       {
+        label: "선생님",
+        href: "/settings/teachers",
+        description: "선생님 관련 설정과 정산 문자 템플릿을 관리합니다.",
+        icon: GraduationCap,
+        feature: "settings",
+      },
+      {
         label: "직원 및 가입 신청",
         href: "/settings/members",
         description: "가입 신청을 승인하고 직원 권한을 관리합니다.",

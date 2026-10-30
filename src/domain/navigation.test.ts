@@ -99,8 +99,8 @@ describe("mainNavigation", () => {
     const settingsNavigation = mainNavigation.find((item) => item.label === "설정");
 
     expect(settingsNavigation?.href).toBe("/settings/lesson-schedule");
-    expect(settingsNavigation?.children?.map((item) => item.label)).toEqual(["레슨시간표", "회차권 설정", "직원 및 가입 신청"]);
-    expect(settingsNavigation?.children?.map((item) => item.href)).toEqual(["/settings/lesson-schedule", "/settings/lesson-tickets", "/settings/members"]);
-    expect(settingsNavigation?.children?.map((item) => item.feature)).toEqual(["lesson-calendar-settings", "settings", "settings"]);
+    expect(settingsNavigation?.children?.map((item) => item.label)).toEqual(["레슨시간표", "회차권 설정", "선생님", "직원 및 가입 신청"]);
+    expect(settingsNavigation?.children?.map((item) => item.href)).toEqual(["/settings/lesson-schedule", "/settings/lesson-tickets", "/settings/teachers", "/settings/members"]);
+    expect(settingsNavigation?.children?.map((item) => item.feature)).toEqual(["lesson-calendar-settings", "settings", "settings", "settings"]);
   });
 });

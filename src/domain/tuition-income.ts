@@ -22,6 +22,13 @@ export type TuitionSnapshotOptions = {
 
 /** 미입금(매달 기본) / 입금 완료 / 미납(미납 인원에 기록). DB 값은 unpaid / paid / overdue. */
 export type TuitionStatus = "unpaid" | "paid" | "overdue";
+export const TUITION_PAYMENT_METHODS = [
+  { value: "card", label: "카드(지역화폐 포함)" },
+  { value: "cash", label: "현금" },
+  { value: "transfer", label: "계좌이체" },
+  { value: "remote", label: "비대면결제" },
+] as const;
+export type TuitionPaymentMethod = typeof TUITION_PAYMENT_METHODS[number]["value"];
 
 export type TuitionRecord = {
   academyId: string;
@@ -42,6 +49,7 @@ export type TuitionRecord = {
   dueOn: string;
   status: TuitionStatus;
   paidAt?: string;
+  paymentMethod?: TuitionPaymentMethod;
   /** 입금 때 만든 입출입내역(원장) 행. DB에서 읽었는데 null이면 원장 기록이 사라진 입금 건이다. */
   paidLedgerEntryId?: string | null;
 };

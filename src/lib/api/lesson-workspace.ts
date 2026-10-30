@@ -43,6 +43,7 @@ type LessonWorkspaceEventRow = {
   starts_at: string;
   ends_at: string;
   status: string;
+  auto_excluded_for_closure?: boolean;
   credit_authorized?: boolean;
   ticket_grant_id?: string | null;
   ticket_session_number?: number | null;
@@ -167,6 +168,10 @@ export type LessonWorkspaceSupabaseClient =
       },
     ): PromiseLike<SupabaseResult<number>>;
     rpc(
+      functionName: "academy_holiday_month_ready",
+      payload: { p_academy_id: string; p_month: string },
+    ): PromiseLike<SupabaseResult<boolean>>;
+    rpc(
       functionName: "list_students_for_teacher",
       payload: { p_academy_id: string },
     ): PromiseLike<
@@ -275,7 +280,7 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, credit_authorized, ticket_grant_id, ticket_session_number, ticket_total_count, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, auto_excluded_for_closure, credit_authorized, ticket_grant_id, ticket_session_number, ticket_total_count, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
 const ATTENDEE_COUNT_EVENTS_SELECT = "student_id, lesson_kind, status, starts_at";
 const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
   "id, academy_id, lesson_kind, memo_date, content, unread";
@@ -375,7 +380,7 @@ export async function fetchLessonWorkspaceData(
       .filter((event) => event.lesson_kind === "private")
       .map(toPrivateLesson),
     hiddenCalendarEvents: (eventsResult.data ?? [])
-      .filter((event) => event.status === "cancelled" &&
+      .filter((event) => event.status === "cancelled" && !event.auto_excluded_for_closure &&
         (event.lesson_kind === "academy" || event.lesson_kind === "private"))
       .map((event) => ({
         id: event.id,
@@ -504,6 +509,14 @@ export async function fetchAcademyAttendeeCounts(
 
   if (ensureError) {
     throw new Error(`다음 달 정기 일정을 준비하지 못했습니다: ${ensureError.message}`);
+  }
+
+  const readiness = await supabase.rpc("academy_holiday_month_ready", {
+    p_academy_id: input.academyId,
+    p_month: input.month,
+  });
+  if (readiness.error || readiness.data !== true) {
+    throw new Error("다음 달 공휴일 자료를 확인하지 못했습니다. 다시 시도해 주세요.");
   }
 
   const range = toMonthRange(input.month);

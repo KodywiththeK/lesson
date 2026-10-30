@@ -269,7 +269,7 @@ export function LessonManagementWorkspace({
   const holidayQuery = useQuery({
     queryKey: ["korean-holidays", selectedMonth],
     queryFn: async (): Promise<KoreanHoliday[]> => {
-      const response = await fetch(`/api/holidays?month=${selectedMonth}`);
+      const response = await fetch(`/api/holidays?month=${selectedMonth}`, { method: "POST" });
       if (!response.ok) throw new Error("공휴일 자료를 불러오지 못했습니다. 다시 시도해 주세요.");
       const data = await response.json() as { holidays: KoreanHoliday[] };
       return data.holidays;
@@ -286,13 +286,18 @@ export function LessonManagementWorkspace({
           canManage,
         })
       : null;
+  const hasWorkspaceQuery = Boolean(workspaceQueryOptions);
   const workspaceQuery = useQuery({
     queryKey:
       workspaceQueryOptions?.queryKey ??
       queryKeys.lessonWorkspace.month(academyId, selectedMonth),
     queryFn: workspaceQueryOptions?.queryFn ?? (async () => emptyWorkspaceData),
-    enabled: Boolean(workspaceQueryOptions),
+    enabled: hasWorkspaceQuery && (Boolean(demoData) || holidayQuery.isFetched),
   });
+  useEffect(() => {
+    if (!hasWorkspaceQuery || !holidayQuery.isSuccess) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth) });
+  }, [academyId, selectedMonth, holidayQuery.dataUpdatedAt, holidayQuery.isSuccess, queryClient, hasWorkspaceQuery]);
   useEffect(() => {
     if (workspaceQuery.dataUpdatedAt === 0 || !canManage) return;
     void queryClient.invalidateQueries(
@@ -754,16 +759,30 @@ export function LessonManagementWorkspace({
     ? findMakeupWindowMonths(resolutionDraft.row.date)[1]
     : undefined;
   const attendeeCountsClient = supabaseClientState?.client ?? null;
+  const currentMonthReadiness = useQuery({
+    queryKey: [...queryKeys.lessonWorkspace.month(academyId, selectedMonth), "holiday-ready"],
+    queryFn: async () => {
+      if (!attendeeCountsClient) throw new Error("학원 연결을 확인해 주세요.");
+      const result = await attendeeCountsClient.rpc("academy_holiday_month_ready", {
+        p_academy_id: academyId, p_month: selectedMonth,
+      });
+      if (result.error) throw result.error;
+      return result.data === true;
+    },
+    enabled: Boolean(attendeeCountsClient && resolutionDraft && holidayQuery.isFetched),
+    retry: false,
+  });
   const nextMonthAttendeeCounts = useQuery({
     queryKey: [
       ...queryKeys.lessonWorkspace.month(academyId, nextMonthToCount ?? selectedMonth),
       "attendee-counts",
     ],
-    queryFn: () => {
+    queryFn: async () => {
       if (!attendeeCountsClient || !nextMonthToCount) {
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
-
+      // 공식 조회가 실패하더라도 서버에 이미 검증된 자료가 있거나 공휴일 제외가 꺼져 있으면 이용할 수 있다.
+      try { await fetch(`/api/holidays?month=${nextMonthToCount}`, { method: "POST" }); } catch { /* 준비 여부는 서버에서 확인한다. */ }
       return fetchAcademyAttendeeCounts(attendeeCountsClient, {
         academyId,
         month: nextMonthToCount,
@@ -771,9 +790,8 @@ export function LessonManagementWorkspace({
     },
     enabled: Boolean(attendeeCountsClient && nextMonthToCount),
   });
-  const makeupRecommendations = useMemo(
-    () =>
-      resolutionDraft
+  const makeupRecommendations =
+      resolutionDraft && (!attendeeCountsClient || currentMonthReadiness.data === true) && (!nextMonthToCount || !attendeeCountsClient || nextMonthAttendeeCounts.isSuccess)
         ? recommendMakeupDates({
             absentDate: resolutionDraft.row.date,
             regularWeekdays: findRegularWeekdays(
@@ -785,9 +803,12 @@ export function LessonManagementWorkspace({
               ...nextMonthAttendeeCounts.data,
             },
           })
-        : [],
-    [academyTableRows, nextMonthAttendeeCounts.data, resolutionDraft],
-  );
+        : [];
+
+  const retryHolidayData = async () => {
+    const result = await holidayQuery.refetch();
+    if (result.isSuccess) await workspaceQuery.refetch();
+  };
 
   const changeSelectedMonth = (month: string) =>
     updateSelectedMonth(month, {
@@ -1044,7 +1065,7 @@ export function LessonManagementWorkspace({
     );
   }
 
-  if (!hasInjectedData && workspaceQuery.isLoading) {
+  if (!hasInjectedData && (holidayQuery.isLoading || workspaceQuery.isLoading)) {
     return (
       <p className="text-sm text-muted-foreground">
         레슨관리표를 불러오는 중입니다.
@@ -1083,8 +1104,8 @@ export function LessonManagementWorkspace({
       ) : null}
       {holidayQuery.isError ? <Alert>
         <AlertDescription className="flex flex-wrap items-center gap-2">
-          공휴일 자료를 불러오지 못했습니다. 레슨 일정은 계속 사용할 수 있습니다.
-          <Button type="button" variant="outline" size="sm" onClick={() => void holidayQuery.refetch()}>공휴일 다시 시도</Button>
+          공휴일 자료를 불러오지 못했습니다. 공휴일 제외 설정이 켜져 있고 확인된 자료가 없으면 새 정기 일정 생성이 보류됩니다.
+          <Button type="button" variant="outline" size="sm" onClick={() => void retryHolidayData()}>공휴일 다시 시도</Button>
         </AlertDescription>
       </Alert> : null}
       {closureQuery.isError || colorQuery.isError ? <ListStatusAlert
@@ -1257,6 +1278,14 @@ export function LessonManagementWorkspace({
       <AcademyAbsenceResolutionDialog
         draft={resolutionDraft}
         recommendations={makeupRecommendations}
+        recommendationsLoading={Boolean(attendeeCountsClient && (currentMonthReadiness.isLoading || (nextMonthToCount && nextMonthAttendeeCounts.isLoading)))}
+        recommendationError={Boolean(attendeeCountsClient && (currentMonthReadiness.isError || currentMonthReadiness.data === false || nextMonthAttendeeCounts.isError))}
+        onRetryRecommendations={() => {
+          if (currentMonthReadiness.isError || currentMonthReadiness.data === false) {
+            void retryHolidayData().then(() => currentMonthReadiness.refetch());
+          }
+          if (nextMonthToCount && attendeeCountsClient) void nextMonthAttendeeCounts.refetch();
+        }}
         isSaving={academyActions.isBusy}
         onChange={setResolutionDraft}
         onClose={() => setResolutionDraft(null)}

@@ -1,10 +1,10 @@
 import type { BookSale, LedgerEntry } from "@/domain/book-sale";
-import type { PayrollLessonSource, PayrollRecord } from "@/domain/payroll";
+import type { PayrollLessonSource, PayrollRecord, PayrollStudentBreakdown } from "@/domain/payroll";
 import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import type { LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
-import type { TuitionRecord } from "@/domain/tuition-income";
+import type { TuitionPaymentMethod, TuitionRecord } from "@/domain/tuition-income";
 import { toMonthDateRange } from "@/domain/finance-date";
 
 import {
@@ -139,6 +139,7 @@ type FixedIncomeSnapshotFinanceRow = {
   amount: number;
   status: TuitionRecord["status"];
   paid_at: string | null;
+  payment_method?: TuitionPaymentMethod | null;
   due_on?: string | null;
   lesson_fee?: number | null;
   discount_total?: number | null;
@@ -162,6 +163,7 @@ type SalarySettlementFinanceRow = {
   paid_at: string | null;
   lesson_event_ids: string[] | null;
   paid_ledger_entry_id?: string | null;
+  student_breakdown?: unknown;
 };
 
 export type FinanceManagementQueryData = {
@@ -188,9 +190,9 @@ const FINANCE_STUDENT_SELECT =
 const FINANCE_LESSON_EVENT_SELECT =
   "id, academy_id, student_id, teacher_id, lesson_kind, origin, instrument_id, instrument_name, starts_at, ends_at, students!lesson_events_academy_student_fk(name), student_instruments!lesson_events_academy_student_instrument_fk(final_monthly_fee), attendance_records!attendance_records_academy_lesson_event_fk(status)";
 const FINANCE_SALARY_SETTLEMENT_SELECT =
-  "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids, paid_ledger_entry_id";
+  "id, academy_id, teacher_id, teacher_name, month, pay_type, base_pay, withholding_tax, net_pay, status, paid_at, lesson_event_ids, paid_ledger_entry_id, student_breakdown";
 const FINANCE_TUITION_SNAPSHOT_SELECT =
-  "id, academy_id, month, student_id, student_instrument_id, student_name, instrument_id, instrument_name, progress, lesson_fee, discount_total, discount_label, amount, due_on, status, paid_at, paid_ledger_entry_id, students!fixed_income_snapshots_academy_student_fk(registered_on)";
+  "id, academy_id, month, student_id, student_instrument_id, student_name, instrument_id, instrument_name, progress, lesson_fee, discount_total, discount_label, amount, due_on, status, paid_at, payment_method, paid_ledger_entry_id, students!fixed_income_snapshots_academy_student_fk(registered_on)";
 const FINANCE_TICKET_REGISTRATION_SELECT =
   "id, academy_id, lesson_ticket_grant_id, registered_at, granted_count, valid_until, original_paid_amount, ledger_entry_id";
 
@@ -328,6 +330,7 @@ export async function markMonthlyTuitionAsPaid(
     academyId: string;
     tuitionId: string;
     paidAt: string;
+    paymentMethod: TuitionPaymentMethod;
   },
 ): Promise<TuitionRecord> {
   const { data, error } = await supabase.rpc(
@@ -336,6 +339,7 @@ export async function markMonthlyTuitionAsPaid(
       p_academy_id: input.academyId,
       p_snapshot_id: input.tuitionId,
       p_paid_at: input.paidAt,
+      p_payment_method: input.paymentMethod,
     },
   );
 
@@ -696,6 +700,7 @@ function toTuitionRecord(row: FixedIncomeSnapshotFinanceRow): TuitionRecord {
     dueOn: row.due_on ?? `${row.month}-01`,
     status: row.status,
     paidAt: row.paid_at ?? undefined,
+    paymentMethod: row.payment_method ?? undefined,
     paidLedgerEntryId: row.paid_ledger_entry_id,
   };
 }
@@ -715,5 +720,23 @@ function toPayrollRecord(row: SalarySettlementFinanceRow): PayrollRecord {
     paidAt: row.paid_at ?? undefined,
     lessonEventIds: row.lesson_event_ids ?? [],
     ledgerEntryId: row.paid_ledger_entry_id,
+    studentBreakdown: parsePayrollStudentBreakdown(row.student_breakdown, row.base_pay, row.month),
   };
+}
+
+function parsePayrollStudentBreakdown(input: unknown, total: number, month: string): PayrollStudentBreakdown[] | null {
+  if (!Array.isArray(input)) return null;
+  const result: PayrollStudentBreakdown[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") return null;
+    const row = item as Record<string, unknown>;
+    if (typeof row.studentId !== "string" || !row.studentId || typeof row.studentName !== "string" || !row.studentName ||
+      typeof row.instrumentName !== "string" || !row.instrumentName || !Number.isInteger(row.count) || Number(row.count) < 1 ||
+      !Number.isInteger(row.amount) || Number(row.amount) < 0 || !Array.isArray(row.dates) || row.dates.length !== row.count ||
+      row.dates.some((date: unknown) => typeof date !== "string" || !new RegExp(`^${month}-[0-9]{2}$`).test(date) ||
+        !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date)) return null;
+    result.push({ studentId: row.studentId, studentName: row.studentName, instrumentName: row.instrumentName,
+      count: Number(row.count), amount: Number(row.amount), dates: row.dates as string[] });
+  }
+  return result.reduce((sum, row) => sum + row.amount, 0) === total ? result : null;
 }

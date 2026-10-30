@@ -327,6 +327,9 @@ export function StudentListScreen({
       const currentStudent =
         detailStudent ?? students.find((student) => student.studentId === input.studentId);
       const remainingEventNotice = result ? getRemainingEventNotice(result) : null;
+      const discountNotice = result?.discountSnapshotWarning
+        ? "기존 수강료의 할인 구성을 확인할 수 없어 자동 반영하지 않았습니다. 원장에게 정정을 요청해 주세요."
+        : null;
 
       // 합칠 원생 행을 알 수 없으면 부분 행을 만들지 않고 다시 불러온 결과를 따른다.
       if (currentStudent) {
@@ -336,7 +339,7 @@ export function StudentListScreen({
         setSelectedStudent(mergedStudent);
       }
       toast.success("원생 정보를 수정했습니다.", {
-        description: remainingEventNotice ?? undefined,
+        description: [remainingEventNotice, discountNotice].filter(Boolean).join(" ") || undefined,
       });
       invalidateAfterPeopleChange(queryClient, academyId);
     },

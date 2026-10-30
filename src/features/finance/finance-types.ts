@@ -19,6 +19,8 @@ export type FinanceLedgerListQueryOptionsFactory = (
 ) => FinanceLedgerListQueryOptions;
 
 export type FinanceManagementData = {
+  /** 공휴일 검증과 정기 일정 재계산을 완료했는지. 데모에는 적용하지 않는다. */
+  holidayScheduleReady?: boolean;
   ledgerEntries: LedgerEntry[];
   enrollments: StudentEnrollment[];
   studentRegisteredOnById?: Record<string, string>;
@@ -66,6 +68,7 @@ export type FinanceDataScreenProps = {
     academyId: string;
     tuitionId: string;
     paidAt: string;
+    paymentMethod: import("@/domain/tuition-income").TuitionPaymentMethod;
   }) => Promise<TuitionRecord>;
   markTuitionUnpaid?: (input: {
     academyId: string;

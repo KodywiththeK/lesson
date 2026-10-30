@@ -18,6 +18,7 @@ import {
 import { readFreshData, useFinanceMonth } from "@/features/finance/finance-shared";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { createFinanceLedgerListQueryOptions } from "@/lib/api/finance";
+import { preparePayrollHolidaySchedule } from "@/lib/api/payroll-holiday-readiness";
 import { bookOrderQueryKey, fetchBookOrders, type BookOrderReadClient } from "@/lib/api/book-orders";
 import {
   cancelPayrollSettlementPaid,
@@ -173,6 +174,7 @@ function renderFinanceScreen(
       <FinanceDataScreen
         academyId={context.academyId}
         fallbackData={fallbackData}
+        preparePayroll
         useTestDemo={context.useTestDemo}
       >
         {(financeData, client, refetchFinanceData) => (
@@ -258,6 +260,7 @@ function FinanceDataScreen({
   children,
   fallbackData,
   needsManagementData = true,
+  preparePayroll = false,
   useTestDemo,
 }: {
   academyId: string;
@@ -268,6 +271,7 @@ function FinanceDataScreen({
   ) => ReactNode;
   fallbackData: FinanceManagementData;
   needsManagementData?: boolean;
+  preparePayroll?: boolean;
   useTestDemo: boolean;
 }) {
   const { month } = useFinanceMonth();
@@ -283,6 +287,7 @@ function FinanceDataScreen({
       "finance",
       "management-data",
       useTestDemo ? "demo" : "remote",
+      preparePayroll ? "payroll" : "other",
       month,
     ] as const,
     queryFn: async () => {
@@ -290,7 +295,11 @@ function FinanceDataScreen({
         return fallbackData;
       }
 
-      return fetchFinanceManagementData(supabaseClientState.client, academyId, { month });
+      if (!preparePayroll) return fetchFinanceManagementData(supabaseClientState.client, academyId, { month });
+      const holidayScheduleReady = await preparePayrollHolidaySchedule(
+        supabaseClientState.client as unknown as Parameters<typeof preparePayrollHolidaySchedule>[0], academyId, month,
+      );
+      return { ...await fetchFinanceManagementData(supabaseClientState.client, academyId, { month }), holidayScheduleReady };
     },
     // 월을 바꾸면 이전 월 데이터를 새 월에 섞어 보여 주지 않고 로딩 표시를 거친다(월별로 캐시되어 다시 열면 바로 보인다).
     enabled: shouldRead,

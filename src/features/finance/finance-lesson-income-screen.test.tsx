@@ -204,6 +204,16 @@ describe("학원 고정 수입 입금 상태", () => {
     expect(document.body).not.toHaveTextContent("수납");
   });
 
+  it("입금 완료 항목에 결제 방식을 표시하고 과거 항목은 미기록으로 표시한다", async () => {
+    renderScreen([
+      buildTuition({ status: "paid", paymentMethod: "remote" }),
+      buildTuition({ tuitionId: "old", studentId: "old", studentName: "이서윤", status: "paid" }),
+    ]);
+    const table = getIncomeTable();
+    expect(within(await within(table).findByRole("row", { name: /김민지/ })).getByText("비대면결제")).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /이서윤/ })).getByText("결제 방식 미기록")).toBeInTheDocument();
+  });
+
   it("입금은 입금일을 받고 입출입내역에 기록된다고 안내한 뒤 입금 처리한다", async () => {
     const user = userEvent.setup();
     const markTuitionPaid = vi.fn().mockResolvedValue(buildTuition({ status: "paid" }));
@@ -213,6 +223,8 @@ describe("학원 고정 수입 입금 상태", () => {
     const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
     expect(dialog).toHaveTextContent("확인하면 입출입내역에 수입이 기록됩니다.");
     expect(within(dialog).getByLabelText("입금일")).toHaveValue("2026-08-21");
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
 
     fireEvent.change(within(dialog).getByLabelText("입금일"), { target: { value: "2026-09-02" } });
     expect(within(dialog).getByText("입금일이 속한 9월 입출입내역으로 기록됩니다.")).toBeInTheDocument();
@@ -224,6 +236,7 @@ describe("학원 고정 수입 입금 상태", () => {
         academyId: "academy-1",
         tuitionId: "snapshot-1",
         paidAt: "2026-08-25",
+        paymentMethod: "card",
       }),
     );
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -258,9 +271,10 @@ describe("학원 고정 수입 입금 상태", () => {
     expect(dialog).toHaveTextContent("피아노");
     await user.clear(within(dialog).getByRole("textbox", { name: "입금일" }));
     await user.type(within(dialog).getByRole("textbox", { name: "입금일" }), "2026-08-25");
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "transfer");
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
     await waitFor(() => expect(markTuitionPaid).toHaveBeenCalledWith({
-      academyId: "academy-1", tuitionId: "snapshot-1", paidAt: "2026-08-25",
+      academyId: "academy-1", tuitionId: "snapshot-1", paidAt: "2026-08-25", paymentMethod: "transfer",
     }));
     expect(markTuitionUnpaid).not.toHaveBeenCalled();
   });
@@ -369,6 +383,7 @@ describe("학원 고정 수입 입금 상태", () => {
 
     await user.click(await screen.findByRole("button", { name: "김민지 피아노 입금 처리" }));
     const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "remote");
     await user.click(within(dialog).getByRole("button", { name: "확인" }));
 
     await waitFor(() =>

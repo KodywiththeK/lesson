@@ -471,6 +471,17 @@ describe("원생 수정 폼 수업 형태 정책", () => {
 });
 
 describe("원생 수정 저장 결과", () => {
+  it("구성을 알 수 없는 과거 소개 할인은 수강료 정정 안내를 보여준다", async () => {
+    const updateStudent = vi.fn().mockResolvedValue({
+      addedStudentInstrumentIds: [], ended: [], discountSnapshotWarning: true,
+    });
+    const { user, dialog } = await openEditForm("한소희", updateStudent);
+    const confirmation = await confirmEnd(user, dialog, "바이올린");
+    await user.click(within(confirmation).getByRole("button", { name: "종료 예정으로 표시" }));
+    await user.click(within(dialog).getByRole("button", { name: "수정완료" }));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("원생 정보를 수정했습니다.",
+      expect.objectContaining({ description: expect.stringContaining("기존 수강료의 할인 구성") })));
+  });
   it("종료한 악기는 상세와 목록에서 사라지고 남은 예정 일정이 있으면 안내한다", async () => {
     const result: StudentEnrollmentSaveResult = {
       addedStudentInstrumentIds: [],

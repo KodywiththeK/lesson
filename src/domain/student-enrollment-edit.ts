@@ -73,6 +73,8 @@ export type StudentEnrollmentSaveResult = {
   addedStudentInstrumentIds: string[];
   /** 종료한 수강과, 종료 뒤에도 남은 예정 일정(이동·보강·개인레슨 등) 건수. */
   ended: Array<{ studentInstrumentId: string; remainingEventCount: number }>;
+  /** 기존 월별 수강료의 할인 구성을 확인할 수 없어 자동 반영하지 못했다. */
+  discountSnapshotWarning?: boolean;
 };
 
 type EnrollmentKey = { instrumentId: string; lessonType: string };

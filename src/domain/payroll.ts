@@ -1,6 +1,7 @@
 import { toFinanceDate, toFinanceMonth } from "./finance-date";
 import type { TeacherListRow } from "./teacher-list";
 import { calculateScheduledWorkMinutes, formatWorkDuration } from "./teacher-work-minutes";
+import { allocatePayrollAmounts } from "./payroll-message";
 
 export type PayrollRounding = "floor" | "round" | "ceil";
 
@@ -111,6 +112,16 @@ export type PayrollLessonSource = {
 
 export type PayrollStatus = "pending" | "paid";
 
+/** 지급 확정 당시 서버가 검증해 보존한 학생·악기별 상세. */
+export type PayrollStudentBreakdown = {
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  count: number;
+  dates: string[];
+  amount: number;
+};
+
 export type PayrollRecord = {
   academyId: string;
   payrollId: string;
@@ -124,6 +135,7 @@ export type PayrollRecord = {
   status: PayrollStatus;
   paidAt?: string;
   lessonEventIds: string[];
+  studentBreakdown?: PayrollStudentBreakdown[] | null;
   /** 지급 때 만든 입출입내역(원장) 행. DB에서 읽었는데 null이면 원장 기록이 사라진 지급 건이다. */
   ledgerEntryId?: string | null;
   /** 계산 근거를 사용자에게 보여 주는 한 줄(예: "등원 4회 / 예정 4회"). 지급 완료 정산에는 없다. */
@@ -201,6 +213,38 @@ export function buildCompletedLessonRevenues(
   options: BuildCompletedLessonRevenuesOptions,
 ): CompletedLessonRevenue[] {
   return analyzeLessonRevenues(lessons, options).revenues;
+}
+
+/** 월 급여와 같은 수업별 매출과 분모를 사용해 비율제 선생님의 학생별 정산액을 만든다. */
+export function buildPayrollStudentBreakdown(input: {
+  academyId: string;
+  month: string;
+  teacherId: string;
+  teacherShareRatio: number;
+  basePay: number;
+  lessons: PayrollLessonSource[];
+  privateLessonFees?: PrivateLessonFeeSource[];
+  tuitionFees?: PayrollTuitionFee[];
+}) {
+  if (!Number.isInteger(input.teacherShareRatio) || input.teacherShareRatio < 0 || input.teacherShareRatio > 100) {
+    throw new Error("선생님 비율을 확인해 주세요.");
+  }
+  const lessons = applyTuitionFees(input.lessons, input.tuitionFees);
+  const analysis = analyzeLessonRevenues(lessons.filter((lesson) => lesson.teacherId === input.teacherId), input, lessons);
+  if (analysis.missingPrivateFeeCount || analysis.missingAcademyFeeCount) {
+    throw new Error("수업별 수강료를 확인한 뒤 정산 내역을 작성해 주세요.");
+  }
+  const grouped = new Map<string, { studentId: string; studentName: string; instrumentName: string; count: number; dates: string[]; amount: number }>();
+  for (const lesson of analysis.revenues) {
+    const key = JSON.stringify([lesson.studentId, lesson.instrumentName]);
+    const current = grouped.get(key) ?? { studentId: lesson.studentId, studentName: lesson.studentName, instrumentName: lesson.instrumentName, count: 0, dates: [], amount: 0 };
+    current.count += 1;
+    current.dates.push(lesson.completedOn);
+    current.amount += lesson.lessonRevenue * input.teacherShareRatio / 100;
+    grouped.set(key, current);
+  }
+  const allocations = allocatePayrollAmounts([...grouped].map(([id, row]) => ({ id, amount: row.amount })), input.basePay);
+  return allocations.map(({ id, amount }) => ({ ...grouped.get(id)!, dates: [...grouped.get(id)!.dates].sort(), amount }));
 }
 
 /**

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -11,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { AcademyClosure } from "@/domain/academy-closure";
 import { INSTRUMENT_COLOR_PRESETS, getDefaultInstrumentColor, getInstrumentColorStyle, resolveInstrumentColorPreset } from "@/domain/instrument-color";
 import type { AcademyInstrumentColor, SaveAcademyClosureInput } from "@/lib/api/lesson-calendar-settings";
+import type { AcademyHolidayPolicy } from "@/lib/api/academy-holiday-policy";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 type ClosureKind = "day" | "range" | "weekly";
@@ -18,6 +20,7 @@ type ClosureKind = "day" | "range" | "weekly";
 export function LessonScheduleSettingsForm({
   instruments, colors, closures, isSaving,
   onSaveColor, onSaveClosure, onArchiveClosure,
+  holidayPolicy, onSaveHolidayPolicy,
 }: {
   instruments: Array<{ id: string; name: string }>;
   colors: AcademyInstrumentColor[];
@@ -26,6 +29,8 @@ export function LessonScheduleSettingsForm({
   onSaveColor: (instrumentId: string, color: string) => void;
   onSaveClosure: (input: Omit<SaveAcademyClosureInput, "academyId">) => void;
   onArchiveClosure: (id: string) => void;
+  holidayPolicy?: AcademyHolidayPolicy;
+  onSaveHolidayPolicy?: (policy: AcademyHolidayPolicy) => void;
 }) {
   const [closureId, setClosureId] = useState<string>();
   const [kind, setKind] = useState<ClosureKind>("day");
@@ -45,6 +50,14 @@ export function LessonScheduleSettingsForm({
     (kind === "day" || (endsOn && endsOn >= startsOn))) && !isSaving;
 
   return <div className="grid gap-4">
+      {holidayPolicy && onSaveHolidayPolicy ? <section className="grid gap-3 rounded-lg border p-3" aria-label="정기 수업 쉬는 날 설정">
+        <h3 className="font-semibold">정기 수업 쉬는 날</h3>
+        <p className="text-sm text-muted-foreground">선택한 쉬는 날의 미처리 정기 수업은 인원 배정에서 제외합니다.</p>
+        <Label className="flex items-center gap-2"><Checkbox checked={holidayPolicy.excludePublicHolidays} disabled={isSaving}
+          onCheckedChange={(checked) => onSaveHolidayPolicy({ ...holidayPolicy, excludePublicHolidays: checked === true })} />공휴일은 정기 수업에서 제외</Label>
+        <Label className="flex items-center gap-2"><Checkbox checked={holidayPolicy.excludeAcademyClosures} disabled={isSaving}
+          onCheckedChange={(checked) => onSaveHolidayPolicy({ ...holidayPolicy, excludeAcademyClosures: checked === true })} />학원 휴원일은 정기 수업에서 제외</Label>
+      </section> : null}
       <section className="grid gap-3 rounded-lg border p-3" aria-label="악기별 색상 설정">
         <h3 className="font-semibold">악기별 색상</h3>
         <div className="grid gap-3 sm:grid-cols-2">

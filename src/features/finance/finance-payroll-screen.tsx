@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { StatTile } from "@/components/shared/stat-tile";
 import { SectionCard, SectionHeader } from "@/components/shared/section-card";
@@ -13,14 +13,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { buildListView } from "@/domain/common-list";
 import {
   buildPayrollRows as buildDomainPayrollRows,
+  buildPayrollStudentBreakdown,
   formatPayType,
   type PayrollLessonSource,
   type PayrollRecord,
+  type PayrollStudentBreakdown,
   type PrivateLessonFeeSource,
 } from "@/domain/payroll";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import { toUserMessage } from "@/lib/errors/user-message";
+import { fetchTeacherMessageTemplates, type TeacherMessageTemplateClient } from "@/lib/api/teacher-message-templates";
+import { queryKeys } from "@/lib/api/query-keys";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hasLessonRecordChangedSincePayment } from "./finance-payroll-changes";
+import { PayrollMessageDialog } from "./payroll-message-dialog";
 import { FinanceDataScreenProps, FinanceManagementData } from "./finance-types";
 import { FinanceConfirmDialog, PaymentDialog } from "@/components/management/payment-dialog";
 import {
@@ -58,6 +64,13 @@ export function FinancePayrollScreen({
   const { search, changeSearch, paging } = useSearchableListPaging();
   const [paymentTarget, setPaymentTarget] = useState<PayrollRecord | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PayrollRecord | null>(null);
+  const [messageTarget, setMessageTarget] = useState<PayrollRecord | null>(null);
+  const templates = useQuery({
+    queryKey: [...queryKeys.academy(academyId), "teacher-message-templates"],
+    queryFn: () => fetchTeacherMessageTemplates(createSupabaseBrowserClient() as unknown as TeacherMessageTemplateClient, academyId),
+    enabled: Boolean(messageTarget),
+    retry: false,
+  });
   // 급여는 선생님 전체로 계산하고, 검색과 페이지는 표에 보여 줄 행만 고른다.
   const rows = useMemo(
     () => buildPayrollViewRows(financeData, academyId, month),
@@ -76,11 +89,21 @@ export function FinancePayrollScreen({
   );
   const pendingPayTotal = sumNetPay(rows, (payroll) => payroll.status === "pending" && !payroll.issue);
   const paidPayTotal = sumNetPay(rows, (payroll) => payroll.status === "paid");
+  const holidayReady = financeData.holidayScheduleReady !== false;
+  const refreshHolidaySchedule = useMutation({
+    mutationFn: async () => {
+      if (!refetchFinanceData) throw new Error("급여 자료를 다시 불러올 수 없습니다.");
+      const result = await refetchFinanceData();
+      if (!result || result.holidayScheduleReady === false) throw new Error("공휴일 일정을 준비하지 못했습니다. 다시 시도해 주세요.");
+    },
+    onError: (error) => toast.error("공휴일 일정 확인에 실패했습니다.", { description: toUserMessage(error) }),
+  });
   const markPayrollPaidMutation = useMutation({
     mutationFn: async (input: { payroll: PayrollRecord; paidAt: string }) => {
       if (!markPayrollPaid) {
         throw new Error(UNSUPPORTED_HANDLER_MESSAGE);
       }
+      if (!holidayReady) throw new Error("공휴일 일정을 준비한 뒤 지급을 확정해 주세요.");
 
       // 오래된 화면이나 다른 곳에서 바뀐 등원 기록으로 계산한 금액이 확정되지 않도록, 확정 직전에 최신 데이터로 다시 계산한다.
       const payroll = refetchFinanceData
@@ -135,6 +158,11 @@ export function FinancePayrollScreen({
   return (
     <section className="grid gap-4" aria-label="선생님 월급">
       <SectionHeader title="선생님 월급 관리" description="등록된 선생님별 급여를 설정하고 관리합니다." />
+      {!holidayReady ? <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md border p-3 text-sm">
+        공휴일 일정이 준비되지 않아 급여의 예정 수업을 확인할 수 없습니다. 일정을 다시 확인한 뒤 지급을 확정해 주세요.
+        <Button type="button" variant="outline" size="sm" disabled={!refetchFinanceData || refreshHolidaySchedule.isPending}
+          onClick={() => refreshHolidaySchedule.mutate()}>공휴일 일정 다시 확인</Button>
+      </div> : null}
       <FinanceMonthSummary
         amount={pendingPayTotal}
         label="지급 예정 급여"
@@ -171,6 +199,8 @@ export function FinancePayrollScreen({
                 row={row}
                 onRequestPayment={setPaymentTarget}
                 onRequestCancel={setCancelTarget}
+                onRequestMessage={setMessageTarget}
+                holidayReady={holidayReady}
               />
             ))}
           </TableBody>
@@ -188,6 +218,9 @@ export function FinancePayrollScreen({
           onPageSizeChange={paging.changePageSize}
         />
       </SectionCard>
+      {messageTarget ? <PayrollMessageDialog open onOpenChange={(open) => !open && setMessageTarget(null)}
+        templates={templates.data ?? []} {...buildPayrollMessageData(financeData, academyId, messageTarget)}
+        templateWarning={templates.isError ? "저장된 템플릿을 불러오지 못했습니다. 기본 템플릿을 표시합니다." : undefined} /> : null}
       <PaymentDialog
         open={Boolean(paymentTarget)}
         title="급여 지급 확정"
@@ -236,10 +269,14 @@ function PayrollTableRow({
   row,
   onRequestPayment,
   onRequestCancel,
+  onRequestMessage,
+  holidayReady,
 }: {
   row: PayrollRow;
   onRequestPayment: (payroll: PayrollRecord) => void;
   onRequestCancel: (payroll: PayrollRecord) => void;
+  onRequestMessage: (payroll: PayrollRecord) => void;
+  holidayReady: boolean;
 }) {
   const { payroll } = row;
   const [teacher, part, setting, basePay, tax, netPay, basis, status, manage] = PAYROLL_COLUMNS;
@@ -259,10 +296,57 @@ function PayrollTableRow({
         <PayrollStatus payroll={payroll} />
       </TableCell>
       <TableCell label={manage} className="whitespace-normal">
-        <PayrollActions payroll={payroll} onRequestPayment={onRequestPayment} onRequestCancel={onRequestCancel} />
+        <PayrollActions payroll={payroll} holidayReady={holidayReady} onRequestPayment={onRequestPayment} onRequestCancel={onRequestCancel} />
+        <Button type="button" size="sm" variant="outline" aria-label={`${payroll.teacherName} 정산 문자 작성`}
+          disabled={payroll.status !== "paid" && (!holidayReady || Boolean(payroll.issue))}
+          onClick={() => onRequestMessage(payroll)}>문자 작성</Button>
       </TableCell>
     </TableRow>
   );
+}
+
+function buildPayrollMessageData(data: FinanceManagementData, academyId: string, payroll: PayrollRecord) {
+  let detailWarning: string | undefined;
+  let detail = "직접 확인 후 입력해 주세요.";
+  let count = "확인 필요";
+  const teacher = data.teachers.find((item) => item.teacherId === payroll.teacherId);
+  if (payroll.status === "paid") {
+    if (payroll.studentBreakdown) {
+      ({ count, detail } = formatStudentBreakdown(payroll.studentBreakdown));
+    } else {
+      detailWarning = "지급 당시 학생별 내역을 확인할 수 없습니다. 직접 확인해 입력해 주세요.";
+    }
+  } else if (payroll.payType !== "ratio" || teacher?.ratioTeacherShare === undefined || payroll.issue) {
+    detailWarning = "학생별 정산 내역을 직접 확인해 입력해 주세요.";
+  } else {
+    try {
+      const rows = buildPayrollStudentBreakdown({ academyId, month: payroll.month, teacherId: payroll.teacherId,
+        teacherShareRatio: teacher.ratioTeacherShare, basePay: payroll.basePay,
+        lessons: data.payrollLessonSources ?? toPayrollLessonSources(data, academyId),
+        privateLessonFees: toPrivateLessonFeeSources(data),
+        tuitionFees: (data.monthTuitionSnapshots ?? []).map((item) => ({ studentId: item.studentId, instrumentName: item.instrumentName, amount: item.amount })),
+      });
+      ({ count, detail } = formatStudentBreakdown(rows));
+    } catch {
+      detailWarning = "학생별 정산 내역을 계산할 수 없습니다. 직접 확인해 입력해 주세요.";
+    }
+  }
+  const instruments = payroll.status === "paid"
+    ? [...new Set(payroll.studentBreakdown?.map((row) => row.instrumentName) ?? [])].join(", ") || "확인 필요"
+    : teacher?.part ?? "확인 필요";
+  return { detailWarning, values: { 선생님: payroll.teacherName, 월: String(Number(payroll.month.slice(5))), 악기: instruments,
+    수업횟수: count, 정산총액: payroll.basePay.toLocaleString("ko-KR"), 원천징수액: payroll.withholdingTax.toLocaleString("ko-KR"),
+    실수령액: payroll.netPay.toLocaleString("ko-KR"), 학생별내역: detail } };
+}
+
+function formatStudentBreakdown(rows: PayrollStudentBreakdown[]) {
+  return {
+    count: String(rows.reduce((sum, row) => sum + row.count, 0)),
+    detail: rows.map((row) => {
+      const average = row.amount % row.count === 0 ? `, 평균 회당 ${(row.amount / row.count).toLocaleString("ko-KR")}원` : "";
+      return `- ${row.studentName} (${row.instrumentName}, ${row.count}회): ${row.amount.toLocaleString("ko-KR")}원${average}\n  수업일: ${row.dates.join(", ")}`;
+    }).join("\n") || "수업 내역 없음",
+  };
 }
 
 function PayrollBasis({ row }: { row: PayrollRow }) {
@@ -294,10 +378,12 @@ function PayrollStatus({ payroll }: { payroll: PayrollRecord }) {
 
 function PayrollActions({
   payroll,
+  holidayReady,
   onRequestPayment,
   onRequestCancel,
 }: {
   payroll: PayrollRecord;
+  holidayReady: boolean;
   onRequestPayment: (payroll: PayrollRecord) => void;
   onRequestCancel: (payroll: PayrollRecord) => void;
 }) {
@@ -327,7 +413,7 @@ function PayrollActions({
       <Button
         type="button"
         size="sm"
-        disabled={hasNothingToPay}
+        disabled={hasNothingToPay || !holidayReady}
         aria-label={`${payroll.teacherName} 급여 지급 확정`}
         aria-describedby={hasNothingToPay ? reasonId : undefined}
         onClick={() => onRequestPayment(payroll)}
@@ -365,6 +451,7 @@ async function readFreshPayroll(
 
   if (
     !current ||
+    fresh?.holidayScheduleReady === false ||
     current.netPay !== shown.netPay ||
     current.basePay !== shown.basePay ||
     hasLessonRecordChangedSincePayment(shown.lessonEventIds, current.lessonEventIds)

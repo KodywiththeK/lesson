@@ -41,6 +41,9 @@ import type { AbsenceResolutionDraft } from "@/features/lessons/workspace-types"
 export function AcademyAbsenceResolutionDialog({
   draft,
   recommendations,
+  recommendationsLoading = false,
+  recommendationError = false,
+  onRetryRecommendations,
   isSaving,
   onChange,
   onClose,
@@ -48,6 +51,9 @@ export function AcademyAbsenceResolutionDialog({
 }: {
   draft: AbsenceResolutionDraft | null;
   recommendations: MakeupDateRecommendation[];
+  recommendationsLoading?: boolean;
+  recommendationError?: boolean;
+  onRetryRecommendations?: () => void;
   isSaving: boolean;
   onChange: (draft: AbsenceResolutionDraft) => void;
   onClose: () => void;
@@ -69,6 +75,9 @@ export function AcademyAbsenceResolutionDialog({
             <ResolutionForm
               draft={draft}
               recommendations={recommendations}
+              recommendationsLoading={recommendationsLoading}
+              recommendationError={recommendationError}
+              onRetryRecommendations={onRetryRecommendations}
               onChange={onChange}
             />
             <DialogFooter>
@@ -114,10 +123,16 @@ export function AcademyAbsenceResolutionDialog({
 function ResolutionForm({
   draft,
   recommendations,
+  recommendationsLoading,
+  recommendationError,
+  onRetryRecommendations,
   onChange,
 }: {
   draft: AbsenceResolutionDraft;
   recommendations: MakeupDateRecommendation[];
+  recommendationsLoading: boolean;
+  recommendationError: boolean;
+  onRetryRecommendations?: () => void;
   onChange: (draft: AbsenceResolutionDraft) => void;
 }) {
   const isMakeup = draft.resolution === "makeup";
@@ -149,7 +164,12 @@ function ResolutionForm({
 
       <fieldset className="grid gap-3">
         <legend className="mb-1 text-sm font-semibold">② 보강 날짜·시간</legend>
-        {isMakeup ? (
+        {isMakeup && recommendationsLoading ? <p>보강 추천을 준비하고 있습니다.</p> : null}
+        {isMakeup && recommendationError ? <div role="alert" className="grid gap-2 text-sm">
+          <p>공휴일 자료를 확인하지 못해 보강일 추천을 보류했습니다. 보강일은 직접 선택할 수 있습니다.</p>
+          {onRetryRecommendations ? <Button type="button" variant="outline" onClick={onRetryRecommendations}>보강 추천 다시 시도</Button> : null}
+        </div> : null}
+        {isMakeup && !recommendationsLoading && !recommendationError ? (
           <AcademyMakeupRecommendation
             recommendations={recommendations}
             selectedDate={draft.targetDate}

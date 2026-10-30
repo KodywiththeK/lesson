@@ -905,6 +905,12 @@ describe("updateStudentEnrollments", () => {
     });
   });
 
+  it("과거 소개 할인 구성이 불명확하다는 서버 안내를 전달한다", async () => {
+    const { client } = createRecorder({ data: { added: [], ended: [], discount_snapshot_warning: true } });
+    const result = await updateStudentEnrollments(client, { ...baseInput, changes: [] });
+    expect(result.discountSnapshotWarning).toBe(true);
+  });
+
   it("검증에 걸리면 RPC를 부르지 않는다", async () => {
     const { client, calls } = createRecorder();
 

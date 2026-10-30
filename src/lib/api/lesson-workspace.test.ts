@@ -102,6 +102,18 @@ describe("fetchLessonWorkspaceData", () => {
     })]);
   });
 
+  it("쉬는 날에 자동 제외된 정기 수업은 사용자 취소 일정으로 집계하지 않는다", async () => {
+    const client = createLessonWorkspaceClient([], { eventRows: [{
+      id: "holiday", academy_id: "academy-1", student_id: "student-1", students: { name: "김민지" },
+      instrument_id: "piano", instrument_name: "피아노", teacher_id: "teacher-1", teachers: { name: "박선생" },
+      lesson_kind: "academy", origin: "regular", starts_at: "2026-08-21T15:00:00+09:00",
+      ends_at: "2026-08-21T15:50:00+09:00", status: "cancelled", auto_excluded_for_closure: true,
+      attendance_records: [],
+    }] });
+    const result = await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-08" });
+    expect(result.hiddenCalendarEvents).toEqual([]);
+  });
+
   it("개인레슨의 출석·결석 상태는 출결 기록에서 가져와 재조회 후에도 유지한다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const privateRow = (id: string, attendanceStatus: string | null) => ({
@@ -594,6 +606,13 @@ describe("deleteAcademyLessonEvent", () => {
 });
 
 describe("fetchAcademyAttendeeCounts", () => {
+  it("다음 달 공휴일 자료가 준비되지 않으면 불완전한 인원 추천을 막는다", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = createLessonWorkspaceClient(calls, { holidayReady: false });
+    await expect(fetchAcademyAttendeeCounts(client, { academyId: "academy-1", month: "2026-09" }))
+      .rejects.toThrow("다음 달 공휴일 자료를 확인하지 못했습니다");
+    expect(calls.some((call) => call.table === "lesson_events")).toBe(false);
+  });
   it("그 달 정기 일정을 준비한 뒤 날짜별 학원 레슨 등원 인원을 원생 기준으로 센다", async () => {
     const calls: Array<Record<string, unknown>> = [];
     const eventRow = (id: string, studentId: string, startsAt: string, overrides = {}) => ({
@@ -708,11 +727,16 @@ function createLessonWorkspaceClient(
     lessonMemoMissingTargetColumns?: boolean;
     resolveResult?: Record<string, unknown>;
     teacherRosterRows?: Array<Record<string, unknown>>;
+    holidayReady?: boolean;
   } = {},
 ): LessonWorkspaceSupabaseClient {
   return {
     async rpc(functionName: string, payload: Record<string, unknown>) {
       calls.push({ functionName, payload });
+
+      if (functionName === "academy_holiday_month_ready") {
+        return { data: options.holidayReady ?? true, error: null };
+      }
 
       if (functionName === "list_students_for_teacher") {
         return { data: options.teacherRosterRows ?? [], error: null };

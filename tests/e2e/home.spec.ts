@@ -374,7 +374,7 @@ test("회차권 표는 화면 폭에 따라 데스크톱 표·태블릿 행·모
       expect(layout.bodyColumns).toBe(width <= 480 ? 1 : 2);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    const filterBox = await page.getByLabel("회차권 상태 필터").boundingBox();
+    const filterBox = await page.getByRole("tablist", { name: "회차권 상태" }).boundingBox();
     expect(filterBox).not.toBeNull();
     expect(filterBox!.x + filterBox!.width).toBeLessThanOrEqual(width);
     if ([320, 481, 768, 1024].includes(width)) {

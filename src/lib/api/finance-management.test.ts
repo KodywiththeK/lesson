@@ -181,6 +181,16 @@ describe("finance management payment API", () => {
     })]);
   });
 
+  it("서버에 보존된 학생별 정산은 합계가 맞는 경우에만 사용한다", async () => {
+    const detail = [{ studentId: "s1", studentName: "원생", instrumentName: "피아노", count: 1, dates: ["2026-08-01"], amount: 1000 }];
+    const row = { id: "paid", academy_id: "academy-1", teacher_id: "t1", teacher_name: "선생님", month: MONTH,
+      pay_type: "ratio", base_pay: 1000, withholding_tax: 33, net_pay: 967, status: "paid", paid_at: "2026-08-31", lesson_event_ids: ["e1"] };
+    const { result } = await loadFinanceData({ salary_settlements: [{ ...row, student_breakdown: detail }] });
+    expect(result.salarySettlements[0].studentBreakdown).toEqual(detail);
+    const invalid = await loadFinanceData({ salary_settlements: [{ ...row, student_breakdown: [{ ...detail[0], amount: 999 }] }] });
+    expect(invalid.result.salarySettlements[0].studentBreakdown).toBeNull();
+  });
+
   it("급여 계산용 수업은 취소·삭제 일정을 빼고 보강 일정을 보강으로 구분해 origin과 함께 읽는다", async () => {
     const { result, queriesFor } = await loadFinanceData({
       lesson_events: [
@@ -458,6 +468,7 @@ describe("finance management payment API", () => {
         academyId: "academy-1",
         tuitionId: "snapshot-1",
         paidAt: "2026-08-25",
+        paymentMethod: "card",
       }),
     ).resolves.toMatchObject({
       tuitionId: "snapshot-1",
@@ -481,6 +492,7 @@ describe("finance management payment API", () => {
           p_academy_id: "academy-1",
           p_snapshot_id: "snapshot-1",
           p_paid_at: "2026-08-25",
+          p_payment_method: "card",
         },
       },
       {

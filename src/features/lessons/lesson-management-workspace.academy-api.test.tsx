@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
 
@@ -16,9 +16,10 @@ const api = vi.hoisted(() => ({
   resetAttendance: vi.fn(),
   attendeeCounts: vi.fn(),
   markAttendance: vi.fn(),
+  holidayReady: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/client", () => ({ createSupabaseBrowserClient: () => ({}) }));
+vi.mock("@/lib/supabase/client", () => ({ createSupabaseBrowserClient: () => ({ rpc: api.holidayReady }) }));
 vi.mock("@/lib/api/lesson-monthly-notes", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/lesson-monthly-notes")>()),
   fetchLessonMonthlyNote: vi.fn(async () => null),
@@ -57,6 +58,7 @@ async function renderConnectedWorkspace() {
   );
 
   await screen.findByRole("grid", { name: "2026년 8월 학원레슨 캘린더" });
+  await waitFor(() => expect(api.fetchWorkspace).toHaveBeenCalled());
 }
 
 async function openResolutionSheet(user: User) {
@@ -76,11 +78,57 @@ async function chooseMakeupAndConfirm(user: User, sheet: HTMLElement) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ holidays: [] }), { status: 200 })));
   api.fetchWorkspace.mockResolvedValue(demoLessonWorkspaceData);
   api.attendeeCounts.mockResolvedValue({});
+  api.holidayReady.mockResolvedValue({ data: true, error: null });
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe("학원 레슨표 서버 연결", () => {
+  it("공휴일 준비가 끝나기 전에는 정기 일정 조회를 시작하지 않는다", async () => {
+    let finishHoliday!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { finishHoliday = resolve; })));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><LessonManagementWorkspace academyId="academy-demo"
+      academyName="더 클래식" lessonKind="academy" initialDate="2026-08-21" /></QueryClientProvider>);
+    expect(api.fetchWorkspace).not.toHaveBeenCalled();
+    finishHoliday(new Response(JSON.stringify({ holidays: [] }), { status: 200 }));
+    await screen.findByRole("grid", { name: "2026년 8월 학원레슨 캘린더" });
+    expect(api.fetchWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it("공휴일 재시도가 성공하면 정기 일정을 다시 조회한다", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValue(new Response(JSON.stringify({ holidays: [] }), { status: 200 })));
+    await renderConnectedWorkspace();
+    expect(api.fetchWorkspace).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "공휴일 다시 시도" }));
+    await waitFor(() => expect(api.fetchWorkspace).toHaveBeenCalledTimes(2));
+  });
+
+  it("다음 달 자료 준비가 실패하면 추천을 보류하고 재시도한다", async () => {
+    const user = userEvent.setup();
+    api.attendeeCounts.mockRejectedValueOnce(new Error("다음 달 공휴일 자료를 확인하지 못했습니다."))
+      .mockResolvedValue({ "2026-09-01": 0 });
+    await renderConnectedWorkspace();
+    const sheet = await openResolutionSheet(user);
+    await user.click(within(sheet).getByRole("radio", { name: "보강" }));
+    expect(await within(sheet).findByText(/공휴일 자료를 확인하지 못해/)).toBeInTheDocument();
+    expect(within(sheet).queryByRole("radiogroup", { name: "추천 보강일" })).not.toBeInTheDocument();
+    await user.click(within(sheet).getByRole("button", { name: "보강 추천 다시 시도" }));
+    expect(await within(sheet).findByRole("radiogroup", { name: "추천 보강일" })).toBeInTheDocument();
+  });
+
+  it("공휴일 조회가 실패해도 서버에서 해당 월 준비를 확인하면 추천할 수 있다", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+    await renderConnectedWorkspace();
+    const sheet = await openResolutionSheet(user);
+    await user.click(within(sheet).getByRole("radio", { name: "보강" }));
+    expect(await within(sheet).findByRole("radiogroup", { name: "추천 보강일" })).toBeInTheDocument();
+  });
   it("보강 확정은 사유서 내용을 서버에 보내고 서버가 만든 보강 일정을 달력에 보여 준다", async () => {
     const user = userEvent.setup();
     api.resolveAbsence.mockResolvedValue({
