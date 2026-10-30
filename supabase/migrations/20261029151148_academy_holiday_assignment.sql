@@ -6,6 +6,11 @@ create table private.korean_holiday_months (
 );
 revoke all on private.korean_holiday_months from public, anon, authenticated;
 
+-- 기존 앱은 공휴일 검증 자료를 저장하지 않으므로 배포 완료까지 기존 배정 동작을 유지한다.
+create table private.academy_holiday_rollout (singleton boolean primary key default true check (singleton), enabled boolean not null default false);
+insert into private.academy_holiday_rollout(singleton, enabled) values (true, false);
+revoke all on private.academy_holiday_rollout from public, anon, authenticated;
+
 create table public.academy_holiday_policies (
   academy_id uuid primary key references public.academies(id) on delete cascade,
   exclude_public_holidays boolean not null default true,
@@ -70,6 +75,7 @@ begin
     raise exception '학원 쉬는 날을 확인할 권한이 없습니다.';
   end if;
   if p_month is null or p_month !~ '^[0-9]{4}-(0[1-9]|1[0-2])$' then raise exception '월 형식은 YYYY-MM이어야 합니다.'; end if;
+  if not (select enabled from private.academy_holiday_rollout where singleton) then return true; end if;
   select exclude_public_holidays into v_exclude from public.academy_holiday_policies where academy_id = p_academy_id;
   return not coalesce(v_exclude, true) or exists (select 1 from private.korean_holiday_months where month = p_month and verified_at > now() - interval '24 hours');
 end;
@@ -112,6 +118,9 @@ begin
   if p_month is null or p_month !~ '^[0-9]{4}-(0[1-9]|1[0-2])$' then raise exception '월 형식은 YYYY-MM이어야 합니다.'; end if;
   if not pg_try_advisory_xact_lock(hashtextextended(p_academy_id::text, 5320)) then
     raise exception '다른 작업이 진행 중입니다. 잠시 후 다시 시도해 주세요.';
+  end if;
+  if not (select enabled from private.academy_holiday_rollout where singleton) then
+    return private.ensure_monthly_academy_lesson_events_without_holidays(p_academy_id, p_month);
   end if;
   select * into v_policy from public.academy_holiday_policies where academy_id = p_academy_id;
   v_policy.exclude_public_holidays := coalesce(v_policy.exclude_public_holidays, true);
