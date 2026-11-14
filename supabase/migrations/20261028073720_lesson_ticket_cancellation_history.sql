@@ -1,3 +1,7 @@
+-- 2026-11-14: Supabase CLI(v2.122+/v3)는 migration을 트랜잭션으로 감싸지 않아 LOCK TABLE이 실패한다.
+-- 운영 DB에는 이미 적용된 파일이고 내용은 그대로이며, 로컬 실행을 위해 트랜잭션 경계만 더했다(사용자 승인).
+begin;
+
 -- 회차권 원본은 환불 규칙에 따라 삭제될 수 있으므로 조회에 필요한 당시 정보를 별도로 보존한다.
 create table public.lesson_ticket_cancellation_history (
   id uuid primary key default gen_random_uuid(),
@@ -179,3 +183,5 @@ $$;
 revoke all on function public.delete_lesson_ticket(uuid, uuid, text) from public, anon;
 grant execute on function public.delete_lesson_ticket(uuid, uuid, text) to authenticated;
 notify pgrst, 'reload schema';
+
+commit;

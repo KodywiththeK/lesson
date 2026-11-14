@@ -109,6 +109,9 @@ set
   role = excluded.role,
   status = excluded.status;
 
+-- 선생님 계정 연결·원생 변경 trigger는 원장 권한을 요구하므로 seed는 데모 원장으로 실행한다(끝에서 해제).
+select set_config('request.jwt.claims', '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}', false);
+
 insert into public.teachers (id, academy_id, member_id, name, part, phone, registered_on, salary_type) values
   ('cccccccc-cccc-cccc-cccc-ccccccccccc1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2', '김하늘', '피아노', '010-1111-2222', '2026-03-02', 'monthly'),
   ('cccccccc-cccc-cccc-cccc-ccccccccccc2', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', null, '오유진', '바이올린', '010-3333-4444', '2026-04-01', 'ratio'),
@@ -191,6 +194,43 @@ set
   instrument_name = excluded.instrument_name,
   active = true;
 
+insert into public.lesson_ticket_grants (
+  id,
+  academy_id,
+  student_id,
+  instrument_id,
+  instrument_name,
+  total_granted_count,
+  remaining_count,
+  valid_from,
+  valid_until,
+  registered_at,
+  paid_amount,
+  paid_at,
+  created_by,
+  payment_status
+) values
+  ('99999999-9999-4999-8999-999999999991', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', 'violin', '바이올린', 8, 2, '2026-08-01', '2026-08-28', '2026-08-01', 320000, '2026-08-01', '11111111-1111-1111-1111-111111111111', 'paid'),
+  ('99999999-9999-4999-8999-999999999992', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd5', 'cello', '첼로', 4, 1, '2026-08-10', '2026-08-24', '2026-08-10', 180000, '2026-08-10', '11111111-1111-1111-1111-111111111111', 'paid')
+on conflict (id) do update
+set
+  instrument_name = excluded.instrument_name,
+  total_granted_count = excluded.total_granted_count,
+  valid_from = excluded.valid_from,
+  valid_until = excluded.valid_until,
+  registered_at = excluded.registered_at,
+  paid_amount = excluded.paid_amount,
+  paid_at = excluded.paid_at,
+  created_by = excluded.created_by;
+
+-- 개인레슨 예약은 유효한 회차권 등록 이력이 있어야 배정되므로(예약 guard) 일정보다 먼저 넣는다.
+insert into public.lesson_ticket_registrations (
+  id, academy_id, lesson_ticket_grant_id, registered_at, granted_count, valid_until, original_paid_amount, created_by
+) values
+  ('98989898-9898-4898-8898-989898989891', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-4999-8999-999999999991', '2026-08-01', 8, '2026-08-28', 320000, '11111111-1111-1111-1111-111111111111'),
+  ('98989898-9898-4898-8898-989898989892', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-4999-8999-999999999992', '2026-08-10', 4, '2026-08-24', 180000, '11111111-1111-1111-1111-111111111111')
+on conflict (id) do nothing;
+
 insert into public.lesson_events (
   id,
   academy_id,
@@ -235,37 +275,9 @@ insert into public.attendance_records (
   ('15151515-1515-4515-8515-151515151503', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'f3333333-3333-4333-8333-333333333333', 'dddddddd-dddd-dddd-dddd-ddddddddddd3', 'absent', '보호자 연락: 독감 증상', '2026-08-21 17:03:00+09', '11111111-1111-1111-1111-111111111111')
 on conflict (academy_id, lesson_event_id, student_id) do nothing;
 
-insert into public.monthly_memos (academy_id, month, content, unread, updated_by) values
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08', '8월 말 정기 발표회 리허설 일정 확인. 결석 원생 보강 우선 배정.', true, '11111111-1111-1111-1111-111111111111')
-on conflict (academy_id, month) do nothing;
-
-insert into public.lesson_ticket_grants (
-  id,
-  academy_id,
-  student_id,
-  instrument_id,
-  instrument_name,
-  total_granted_count,
-  remaining_count,
-  valid_from,
-  valid_until,
-  registered_at,
-  paid_amount,
-  paid_at,
-  created_by
-) values
-  ('99999999-9999-4999-8999-999999999991', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd4', 'violin', '바이올린', 8, 2, '2026-08-01', '2026-08-28', '2026-08-01', 320000, '2026-08-01', '11111111-1111-1111-1111-111111111111'),
-  ('99999999-9999-4999-8999-999999999992', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dddddddd-dddd-dddd-dddd-ddddddddddd5', 'cello', '첼로', 4, 1, '2026-08-10', '2026-08-24', '2026-08-10', 180000, '2026-08-10', '11111111-1111-1111-1111-111111111111')
-on conflict (id) do update
-set
-  instrument_name = excluded.instrument_name,
-  total_granted_count = excluded.total_granted_count,
-  valid_from = excluded.valid_from,
-  valid_until = excluded.valid_until,
-  registered_at = excluded.registered_at,
-  paid_amount = excluded.paid_amount,
-  paid_at = excluded.paid_at,
-  created_by = excluded.created_by;
+insert into public.monthly_memos (academy_id, lesson_kind, month, content, unread, updated_by) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'academy', '2026-08', '8월 말 정기 발표회 리허설 일정 확인. 결석 원생 보강 우선 배정.', true, '11111111-1111-1111-1111-111111111111')
+on conflict (academy_id, lesson_kind, month) do nothing;
 
 insert into public.vendors (id, academy_id, name, phone, vendor_type, note) values
   ('abababab-abab-4bab-8bab-ababababab01', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '클래식 악기사', '02-1000-2000', '악기', '피아노 조율, 현 교체'),
@@ -327,11 +339,12 @@ insert into public.fixed_income_snapshots (
   instrument_id,
   instrument_name,
   amount,
+  due_on,
   status,
   paid_at
 ) values
-  ('18181818-1818-4818-8818-181818181801', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08', 'dddddddd-dddd-dddd-dddd-ddddddddddd1', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '김민지', 'piano', '피아노', 140000, 'paid', '2026-08-05'),
-  ('18181818-1818-4818-8818-181818181802', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08', 'dddddddd-dddd-dddd-dddd-ddddddddddd2', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2', '이서윤', 'piano', '피아노', 150000, 'unpaid', null)
+  ('18181818-1818-4818-8818-181818181801', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08', 'dddddddd-dddd-dddd-dddd-ddddddddddd1', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '김민지', 'piano', '피아노', 140000, '2026-08-05', 'paid', '2026-08-05'),
+  ('18181818-1818-4818-8818-181818181802', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-08', 'dddddddd-dddd-dddd-dddd-ddddddddddd2', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2', '이서윤', 'piano', '피아노', 150000, '2026-08-10', 'unpaid', null)
 on conflict (academy_id, month, student_id, instrument_id) do update
 set
   student_name = excluded.student_name,
@@ -408,3 +421,5 @@ set
 insert into public.audit_events (id, academy_id, actor_id, event_type, entity_table, entity_id, reason, metadata) values
   ('22222222-2222-4222-8222-222222222201', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'seed.created', 'academies', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '로컬 개발 예시 데이터', '{"source":"supabase/seed.sql"}'::jsonb)
 on conflict (id) do nothing;
+
+select set_config('request.jwt.claims', '', false);
