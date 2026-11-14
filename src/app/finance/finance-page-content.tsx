@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/finance-management";
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { applyLessonTicketPaymentChange, type LessonTicketPaymentSupabaseClient } from "@/lib/api/lesson-tickets";
 
 import { AppShell } from "../app-shell";
 
@@ -131,6 +132,13 @@ function renderFinanceScreen(
             markTuitionOverdue={
               client
                 ? (input) => markMonthlyTuitionAsOverdue(client, input)
+                : undefined
+            }
+            changeLessonTicketPayment={
+              context.useTestDemo
+                ? context.demo.changeLessonTicketPayment
+                : client
+                ? (input) => applyLessonTicketPaymentChange(client as unknown as LessonTicketPaymentSupabaseClient, input)
                 : undefined
             }
             tuitionSnapshotsQueryOptionsFactory={

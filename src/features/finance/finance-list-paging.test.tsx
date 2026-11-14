@@ -398,7 +398,7 @@ describe("학원 레슨수입 목록 나누기", () => {
 
     const table = screen.getByRole("table", { name: "학원 레슨수입" });
     expect(columnTexts(table, 0)).toEqual(["김민지", "김민지", "한서아"]);
-    expect(columnTexts(table, 3)).toEqual(["바이올린", "첼로", "피아노"]);
+    expect(columnTexts(table, 4)).toEqual(["바이올린", "첼로", "피아노"]);
   });
 
   it("페이지당 20건을 고르면 1페이지로 돌아가 12건을 모두 보여준다", async () => {

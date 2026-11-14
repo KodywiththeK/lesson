@@ -6,7 +6,8 @@ import { type LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-inco
 import { type PayrollLessonSource, type PayrollRecord } from "@/domain/payroll";
 import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
-import { type TuitionRecord } from "@/domain/tuition-income";
+import { type TuitionPaymentMethod, type TuitionRecord } from "@/domain/tuition-income";
+import type { LessonTicketPaymentChangeInput } from "@/lib/api/lesson-tickets";
 import { type FinanceLedgerListSupabaseClient, type FinanceLedgerMutationSupabaseClient } from "@/lib/api/finance";
 
 export type FinanceLedgerListQueryOptions = {
@@ -68,12 +69,16 @@ export type FinanceDataScreenProps = {
     academyId: string;
     tuitionId: string;
     paidAt: string;
-    paymentMethod: import("@/domain/tuition-income").TuitionPaymentMethod;
+    paymentMethod: TuitionPaymentMethod;
   }) => Promise<TuitionRecord>;
   markTuitionUnpaid?: (input: {
     academyId: string;
     tuitionId: string;
   }) => Promise<TuitionRecord>;
+  /** 개인레슨 회차권의 입금 상태 버튼(입금대기·입금 처리·입금 취소). */
+  changeLessonTicketPayment?: (
+    input: LessonTicketPaymentChangeInput,
+  ) => Promise<void>;
   markTuitionOverdue?: (input: {
     academyId: string;
     tuitionId: string;

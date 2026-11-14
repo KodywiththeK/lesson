@@ -537,9 +537,17 @@ export function buildPayrollRows(
   });
 }
 
-/** 개인레슨 1회 레슨비 계산에 쓰는 회차권 등록 기록(결제 금액 ÷ 부여 회수). */
-function toPrivateLessonFeeSources(data: FinanceManagementData): PrivateLessonFeeSource[] {
-  const ticketsById = new Map(data.tickets.map((ticket) => [ticket.ticketId, ticket]));
+/**
+ * 개인레슨 1회 레슨비 계산에 쓰는 회차권 등록 기록(결제 금액 ÷ 부여 회수).
+ * 취소된 회차권(한 번도 쓰지 않음)은 빼고, 환불 회차권은 환불 전에 수업한 회차를 원래 단가로 계산하도록 넣는다.
+ * 입금 전(등록·입금대기) 회차권도 등록 금액으로 넣는다.
+ */
+export function toPrivateLessonFeeSources(data: FinanceManagementData): PrivateLessonFeeSource[] {
+  const ticketsById = new Map(
+    data.tickets
+      .filter((ticket) => ticket.paymentStatus !== "cancelled")
+      .map((ticket) => [ticket.ticketId, ticket]),
+  );
 
   return (data.ticketRegistrations ?? []).flatMap((registration) => {
     const ticket = ticketsById.get(registration.ticketId);

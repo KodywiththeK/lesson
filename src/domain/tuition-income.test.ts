@@ -4,6 +4,7 @@ import {
   createMonthlyTuitionSnapshot,
   formatTuitionStatus,
   getTuitionActions,
+  isTuitionPastDue,
   selectOverdueTuitions,
   summarizeTuitionStatus,
   type TuitionRecord,
@@ -164,6 +165,22 @@ function tuition(overrides: Partial<TuitionRecord>): TuitionRecord {
     ...overrides,
   };
 }
+
+describe("납입일 경과", () => {
+  it("입금 전(미입금) 수강료의 납입일이 오늘보다 앞서면 경과로 본다", () => {
+    expect(isTuitionPastDue(tuition({ status: "unpaid", dueOn: "2026-08-04" }), "2026-08-05")).toBe(true);
+  });
+
+  it("납입일 당일과 앞으로 올 납입일은 경과가 아니다", () => {
+    expect(isTuitionPastDue(tuition({ status: "unpaid", dueOn: "2026-08-05" }), "2026-08-05")).toBe(false);
+    expect(isTuitionPastDue(tuition({ status: "unpaid", dueOn: "2026-08-06" }), "2026-08-05")).toBe(false);
+  });
+
+  it("입금 완료와 원장이 직접 누른 미납은 납입일이 지나도 경과 표시를 따로 하지 않는다", () => {
+    expect(isTuitionPastDue(tuition({ status: "paid", dueOn: "2026-08-01" }), "2026-08-05")).toBe(false);
+    expect(isTuitionPastDue(tuition({ status: "overdue", dueOn: "2026-08-01" }), "2026-08-05")).toBe(false);
+  });
+});
 
 describe("입금 상태 3상태", () => {
   it("상태 이름은 미입금·입금 완료·미납이다", () => {

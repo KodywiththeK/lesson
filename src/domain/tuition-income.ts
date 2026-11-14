@@ -113,6 +113,14 @@ export function formatTuitionStatus(status: TuitionStatus) {
   return labels[status];
 }
 
+/**
+ * 납입일이 지났는데 아직 입금하지 않은(미입금) 수강료. 화면에서만 계산하는 표시이고 DB 상태는 바꾸지 않는다.
+ * 원장이 직접 누른 미납(overdue)은 이미 미납으로 보이고, 월말 자동 전환은 없다는 결정을 그대로 지킨다.
+ */
+export function isTuitionPastDue(record: Pick<TuitionRecord, "status" | "dueOn">, today: string) {
+  return record.status === "unpaid" && record.dueOn < today;
+}
+
 /** 미납 인원: 미납을 누른 원생만. 아직 처리하지 않은 미입금은 포함하지 않고, 입금하면 상태가 바뀌어 자동으로 빠진다. */
 export function selectOverdueTuitions(records: TuitionRecord[]) {
   return records.filter((record) => record.status === "overdue");

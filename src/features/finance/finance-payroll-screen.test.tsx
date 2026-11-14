@@ -8,7 +8,7 @@ import type { PayrollLessonSource, PayrollRecord } from "@/domain/payroll";
 import type { TeacherListRow } from "@/domain/teacher-list";
 
 import { hasLessonRecordChangedSincePayment } from "./finance-payroll-changes";
-import { FinancePayrollScreen } from "./finance-payroll-screen";
+import { FinancePayrollScreen, toPrivateLessonFeeSources } from "./finance-payroll-screen";
 import { resetFinanceMonthForTest } from "./finance-shared";
 import type { FinanceManagementData } from "./finance-types";
 
@@ -657,5 +657,43 @@ describe("FinancePayrollScreen 지급 완료 행", () => {
     renderPayroll(buildFinanceData({ salarySettlements: [buildPaidSettlement()] }));
 
     expect(screen.queryByText(/지급 후 등원 기록이 변경되었습니다/)).not.toBeInTheDocument();
+  });
+});
+
+describe("toPrivateLessonFeeSources", () => {
+  const baseTicket = {
+    academyId: "academy-1",
+    studentId: "student-1",
+    studentName: "김민지",
+    instrumentId: "piano",
+    instrumentName: "피아노",
+    totalGrantedCount: 4,
+    remainingCount: 4,
+    validFrom: "2026-08-01",
+    validUntil: "2026-08-31",
+    registeredAt: "2026-08-01",
+  };
+  const registration = (ticketId: string) => ({
+    registrationId: `registration-${ticketId}`,
+    academyId: "academy-1",
+    ticketId,
+    registeredAt: "2026-08-01",
+    grantedCount: 4,
+    validUntil: "2026-08-31",
+    originalPaidAmount: 140_000,
+    ledgerEntryId: null,
+  });
+
+  it("취소된 회차권만 단가에서 빼고 환불 회차권(환불 전 수업분)은 원래 단가로, 입금 전·입금완료 회차권도 넣는다", () => {
+    const data = {
+      tickets: (["registered", "payment-pending", "paid", "refunded", "cancelled"] as const).map((paymentStatus) => ({
+        ...baseTicket,
+        ticketId: paymentStatus,
+        paymentStatus,
+      })),
+      ticketRegistrations: ["registered", "payment-pending", "paid", "refunded", "cancelled"].map(registration),
+    } as unknown as FinanceManagementData;
+
+    expect(toPrivateLessonFeeSources(data).map((source) => source.paidAmount)).toEqual([140_000, 140_000, 140_000, 140_000]);
   });
 });

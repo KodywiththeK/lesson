@@ -59,7 +59,7 @@ describe("buildPrivateLessonIncomeRows", () => {
       entry.ledgerId === "ledger-july" ? { ...entry, amount: 90000 } : entry,
     );
 
-    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({
         id: "ticket:registration-july",
         studentName: "김민지",
@@ -67,7 +67,7 @@ describe("buildPrivateLessonIncomeRows", () => {
         finalAmount: 90000,
         status: "paid",
       })]);
-    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-08"))
+    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-08", "2026-11"))
       .toEqual([expect.objectContaining({
         id: "ticket:registration-august",
         finalAmount: 140000,
@@ -80,9 +80,9 @@ describe("buildPrivateLessonIncomeRows", () => {
       entry.ledgerId === "ledger-july" ? { ...entry, occurredOn: "2026-09-03" } : entry,
     );
 
-    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-07", "2026-11"))
       .toEqual([]);
-    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-09"))
+    expect(buildPrivateLessonIncomeRows(registrations, [ticket], editedLedger, "academy-1", "2026-09", "2026-11"))
       .toEqual([expect.objectContaining({ id: "ticket:registration-july", finalAmount: 100000 })]);
   });
 
@@ -92,7 +92,7 @@ describe("buildPrivateLessonIncomeRows", () => {
       ledgerEntryId: null,
     };
 
-    expect(buildPrivateLessonIncomeRows([freeRegistration], [ticket], [], "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows([freeRegistration], [ticket], [], "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({
         id: "ticket:registration-free", finalAmount: 0, status: "zero-amount",
       })]);
@@ -101,26 +101,130 @@ describe("buildPrivateLessonIncomeRows", () => {
   it("양수 결제 원장이 삭제되거나 수입이 아니면 누락 상태로 구분하고 금액은 집계하지 않는다", () => {
     const expense = { ...ledgerEntries[0], type: "expense" as const };
 
-    expect(buildPrivateLessonIncomeRows([registrations[0]], [ticket], [], "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows([registrations[0]], [ticket], [], "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({ finalAmount: 0, status: "missing-ledger" })]);
-    expect(buildPrivateLessonIncomeRows([registrations[0]], [ticket], [expense], "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows([registrations[0]], [ticket], [expense], "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({ finalAmount: 0, status: "missing-ledger" })]);
   });
 
   it("다른 학원 등록과 원장 행을 섞거나 이름을 추측하지 않는다", () => {
     expect(buildPrivateLessonIncomeRows(registrations, [ticket], [
       { ...ledgerEntries[0], academyId: "academy-2" },
-    ], "academy-1", "2026-07"))
+    ], "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({ finalAmount: 0, status: "missing-ledger" })]);
-    expect(buildPrivateLessonIncomeRows(registrations, [], ledgerEntries, "academy-1", "2026-07"))
+    expect(buildPrivateLessonIncomeRows(registrations, [], ledgerEntries, "academy-1", "2026-07", "2026-11"))
       .toEqual([]);
     expect(buildPrivateLessonIncomeRows([
       { ...registrations[0], academyId: "academy-2" },
-    ], [ticket], ledgerEntries, "academy-1", "2026-07"))
+    ], [ticket], ledgerEntries, "academy-1", "2026-07", "2026-11"))
       .toEqual([]);
     expect(buildPrivateLessonIncomeRows([registrations[0]], [ticket], [
       { ...ledgerEntries[0], refId: "other-ticket" },
-    ], "academy-1", "2026-07"))
+    ], "academy-1", "2026-07", "2026-11"))
       .toEqual([expect.objectContaining({ status: "missing-ledger", finalAmount: 0 })]);
+  });
+});
+
+describe("환불·취소된 회차권", () => {
+  it("학원 레슨수입 행에서 빠진다(남은 수입은 입출입내역에서 본다)", () => {
+    for (const paymentStatus of ["refunded", "cancelled"] as const) {
+      expect(
+        buildPrivateLessonIncomeRows(registrations, [{ ...ticket, paymentStatus }], ledgerEntries, "academy-1", "2026-08", "2026-11"),
+      ).toEqual([]);
+    }
+  });
+});
+
+describe("회차권 입금 상태가 있는 수입 행", () => {
+  const pendingRegistration: LessonTicketIncomeRegistration = {
+    registrationId: "registration-new",
+    academyId: "academy-1",
+    ticketId: "ticket-new",
+    registeredAt: "2026-11-05",
+    grantedCount: 4,
+    validUntil: "2026-12-05",
+    originalPaidAmount: 200000,
+    ledgerEntryId: null,
+  };
+
+  function newTicket(paymentStatus: LessonTicketListItem["paymentStatus"], dueOn = "2026-11-20"): LessonTicketListItem {
+    return { ...ticket, ticketId: "ticket-new", registeredAt: "2026-11-05", paymentStatus, dueOn };
+  }
+
+  it("입금 전(등록·입금대기) 회차권은 납입일이 속한 달에 청구 금액과 상태·납입일로 보인다(원장 기록 없음으로 보지 않는다)", () => {
+    for (const status of ["registered", "payment-pending"] as const) {
+      const rows = buildPrivateLessonIncomeRows([pendingRegistration], [newTicket(status)], [], "academy-1", "2026-11", "2026-11");
+
+      expect(rows).toEqual([
+        expect.objectContaining({
+          ticketId: "ticket-new",
+          status,
+          paymentStatus: status,
+          dueOn: "2026-11-20",
+          finalAmount: 200000,
+        }),
+      ]);
+    }
+  });
+
+  it("납입일이 다른 달이면 그 달에만 보인다", () => {
+    const rows = buildPrivateLessonIncomeRows(
+      [pendingRegistration],
+      [newTicket("payment-pending", "2026-12-03")],
+      [],
+      "academy-1",
+      "2026-11",
+      "2026-11",
+    );
+
+    expect(rows).toEqual([]);
+  });
+
+  it("입금 전 회차권은 납입일이 지난 뒤에도 입금될 때까지 이번 달까지 매달 이월해 보인다", () => {
+    const build = (month: string) =>
+      buildPrivateLessonIncomeRows([pendingRegistration], [newTicket("payment-pending", "2026-09-20")], [], "academy-1", month, "2026-11");
+
+    expect(build("2026-08")).toEqual([]);
+    for (const month of ["2026-09", "2026-10", "2026-11"]) {
+      expect(build(month)).toEqual([expect.objectContaining({ ticketId: "ticket-new", dueOn: "2026-09-20", finalAmount: 200000 })]);
+    }
+    expect(build("2026-12")).toEqual([]);
+  });
+
+  it("입금완료된 회차권은 이월하지 않고 입금한 달에만 보인다", () => {
+    const paidLedger = [{
+      academyId: "academy-1", ledgerId: "ledger-new", occurredOn: "2026-10-02", type: "income" as const,
+      source: "lesson-ticket" as const, category: "lesson-ticket" as const, amount: 200000, description: "", refId: "ticket-new",
+    }];
+    const registration = { ...pendingRegistration, ledgerEntryId: "ledger-new" };
+    const paidTicket = newTicket("paid", "2026-09-20");
+
+    expect(buildPrivateLessonIncomeRows([registration], [paidTicket], paidLedger, "academy-1", "2026-11", "2026-11")).toEqual([]);
+    expect(buildPrivateLessonIncomeRows([registration], [paidTicket], paidLedger, "academy-1", "2026-10", "2026-11")).toHaveLength(1);
+  });
+
+  it("입금완료 회차권은 지금처럼 입금일(원장 날짜) 기준이고 납입일·결제 방식을 함께 싣는다", () => {
+    const paidLedger: LedgerEntry = {
+      academyId: "academy-1",
+      ledgerId: "ledger-new",
+      occurredOn: "2026-11-21",
+      type: "income",
+      source: "lesson-ticket",
+      amount: 200000,
+      description: "회차권",
+      refId: "ticket-new",
+    };
+    const rows = buildPrivateLessonIncomeRows(
+      [{ ...pendingRegistration, ledgerEntryId: "ledger-new" }],
+      [{ ...newTicket("paid"), paymentMethod: "cash" }],
+      [paidLedger],
+      "academy-1",
+      "2026-11",
+      "2026-11",
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({ status: "paid", paymentStatus: "paid", dueOn: "2026-11-20", paymentMethod: "cash", finalAmount: 200000 }),
+    ]);
   });
 });

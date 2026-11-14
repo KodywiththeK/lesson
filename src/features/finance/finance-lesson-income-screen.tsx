@@ -13,11 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { buildListView, compareKoreanNames } from "@/domain/common-list";
+import { getFinanceCurrentMonth, getFinanceToday } from "@/domain/finance-date";
 import { buildPrivateLessonIncomeRows, type PrivateLessonIncomeRow } from "@/domain/lesson-ticket-income";
 import {
   createMonthlyTuitionSnapshot,
   formatTuitionStatus,
   getTuitionActions,
+  isTuitionPastDue,
   selectOverdueTuitions,
   type TuitionAction,
   type TuitionRecord,
@@ -26,9 +28,16 @@ import {
   TUITION_PAYMENT_METHODS,
 } from "@/domain/tuition-income";
 import { toUserMessage } from "@/lib/errors/user-message";
+import { invalidateAfterLessonTicketChange } from "@/lib/api/query-invalidation";
 import { queryKeys } from "@/lib/api/query-keys";
 import { FinanceDataScreenProps, FinanceManagementData } from "./finance-types";
 import { FinanceConfirmDialog, PaymentDialog } from "@/components/management/payment-dialog";
+import type { LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import {
+  LessonTicketPaymentControl,
+  type LessonTicketPaymentActionInput,
+} from "@/features/lesson-tickets/lesson-ticket-payment-control";
+import type { LessonTicketPaymentChangeInput } from "@/lib/api/lesson-tickets";
 import {
   FinanceAmount,
   FinanceListSearch,
@@ -51,7 +60,10 @@ export type LessonIncomeRow = {
   finalAmount: number;
 } & (
   | { source: "tuition"; lessonKindLabel: "학원레슨 월수강료"; record: TuitionRecord }
-  | { source: "lesson-ticket"; lessonKindLabel: "개인레슨 회차권"; status: PrivateLessonIncomeRow["status"] }
+  | ({ source: "lesson-ticket"; lessonKindLabel: "개인레슨 회차권" } & Pick<
+      PrivateLessonIncomeRow,
+      "status" | "ticketId" | "paymentStatus" | "dueOn" | "paymentMethod" | "legacyMerged"
+    >)
 );
 
 type TuitionRow = Extract<LessonIncomeRow, { source: "tuition" }>;
@@ -61,6 +73,12 @@ type TuitionCommand =
   | { kind: "overdue" | "cancel-payment"; row: TuitionRow };
 
 const UNSUPPORTED_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
+
+const TICKET_PAYMENT_MESSAGES: Record<LessonTicketPaymentAction, string> = {
+  "start-payment-wait": "회차권을 입금대기로 바꿨습니다.",
+  "mark-paid": "회차권 입금 처리했습니다.",
+  "cancel-payment": "회차권 입금을 취소했습니다.",
+};
 const LEDGER_MISSING_LABEL = "원장 기록 없음";
 
 const COMMAND_MESSAGES: Record<TuitionCommand["kind"], { success: string; failure: string }> = {
@@ -91,12 +109,14 @@ export function FinanceLessonIncomeScreen({
   markTuitionOverdue,
   markTuitionPaid,
   markTuitionUnpaid,
+  changeLessonTicketPayment,
   tuitionSnapshotsQueryOptionsFactory,
 }: FinanceDataScreenProps) {
   const queryClient = useQueryClient();
   const headingId = useId();
   const { month, setMonth, maxMonth } = useFinanceMonth();
   const { search, changeSearch, paging } = useSearchableListPaging();
+  const today = getFinanceToday();
   const [payTarget, setPayTarget] = useState<TuitionRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<TuitionRow | null>(null);
   const tuitionSnapshotsQuery = useQuery(
@@ -114,6 +134,7 @@ export function FinanceLessonIncomeScreen({
       buildListView(rows, {
         getName: (row) => row.studentName,
         getTieBreaker: getLessonIncomeTieBreaker,
+        getSortValue: getLessonIncomeDueOn,
         search,
         searchFields: [(row) => row.studentName, (row) => row.instrumentName],
         page: paging.page,
@@ -151,6 +172,23 @@ export function FinanceLessonIncomeScreen({
       toast.error(COMMAND_MESSAGES[command.kind].failure, {
         description: toUserMessage(error),
       });
+    },
+  });
+
+  const ticketPaymentMutation = useMutation({
+    mutationFn: async (input: LessonTicketPaymentChangeInput) => {
+      if (!changeLessonTicketPayment) {
+        throw new Error(UNSUPPORTED_MESSAGE);
+      }
+
+      await changeLessonTicketPayment(input);
+    },
+    onSuccess: (_result, input) => {
+      toast.success(TICKET_PAYMENT_MESSAGES[input.action]);
+      invalidateAfterLessonTicketChange(queryClient, academyId);
+    },
+    onError: (error) => {
+      toast.error("회차권 입금 상태를 바꾸지 못했습니다.", { description: toUserMessage(error) });
     },
   });
 
@@ -208,6 +246,7 @@ export function FinanceLessonIncomeScreen({
             <TableRow>
               <TableHead>이름</TableHead>
               <TableHead>최초 등록일</TableHead>
+              <TableHead>납입일</TableHead>
               <TableHead>레슨종류</TableHead>
               <TableHead>악기</TableHead>
               <TableHead>진도</TableHead>
@@ -222,6 +261,7 @@ export function FinanceLessonIncomeScreen({
               <TableRow key={row.id}>
                 <TableCell label="이름" className="font-medium">{row.studentName}</TableCell>
                 <TableCell label="최초 등록일" className="tabular-nums">{row.registeredOn || "확인 필요"}</TableCell>
+                <TableCell label="납입일" className="tabular-nums">{getLessonIncomeDueOn(row) || "-"}</TableCell>
                 <TableCell label="레슨종류">{row.lessonKindLabel}</TableCell>
                 <TableCell label="악기">{row.instrumentName}</TableCell>
                 <TableCell label="진도">{row.progress}</TableCell>
@@ -233,8 +273,12 @@ export function FinanceLessonIncomeScreen({
                 <TableCell label="입금 상태" className="text-right">
                   <LessonIncomePaymentStatus
                     row={row}
-                    disabled={tuitionCommand.isPending}
+                    today={today}
+                    disabled={tuitionCommand.isPending || ticketPaymentMutation.isPending}
                     onAction={requestTuitionAction}
+                    onTicketAction={async (ticketId, action, input) => {
+                      await ticketPaymentMutation.mutateAsync({ academyId, ticketId, action, ...input });
+                    }}
                   />
                 </TableCell>
               </TableRow>
@@ -346,31 +390,64 @@ function OverdueTuitionDialog({
 
 function LessonIncomePaymentStatus({
   row,
+  today,
   disabled,
   onAction,
+  onTicketAction,
 }: {
   row: LessonIncomeRow;
+  /** YYYY-MM-DD. 납입일 경과 판정 기준. */
+  today: string;
   disabled: boolean;
   onAction: (action: TuitionActionKind, row: TuitionRow) => void;
+  onTicketAction: (
+    ticketId: string,
+    action: LessonTicketPaymentAction,
+    input: LessonTicketPaymentActionInput,
+  ) => Promise<void>;
 }) {
   if (row.source === "lesson-ticket") {
-    const statusLabel = {
-      paid: "입금 완료",
-      "zero-amount": "0원 등록",
-      "missing-ledger": LEDGER_MISSING_LABEL,
-    }[row.status];
-    return <Badge variant={row.status === "missing-ledger" ? "destructive" : "secondary"}>{statusLabel}</Badge>;
+    if (row.status === "zero-amount" || row.status === "missing-ledger") {
+      return (
+        <Badge variant={row.status === "missing-ledger" ? "destructive" : "secondary"}>
+          {row.status === "zero-amount" ? "0원 등록" : LEDGER_MISSING_LABEL}
+        </Badge>
+      );
+    }
+
+    return (
+      <div className="grid justify-items-end">
+        <LessonTicketPaymentControl
+          ticket={{
+            ticketId: row.ticketId,
+            studentName: row.studentName,
+            instrumentName: row.instrumentName,
+            paymentStatus: row.paymentStatus,
+            dueOn: row.dueOn,
+            amount: row.finalAmount,
+            paymentMethod: row.paymentMethod,
+            legacyMerged: row.legacyMerged,
+          }}
+          today={today}
+          canManage
+          pending={disabled}
+          onAction={(action, input) => onTicketAction(row.ticketId, action, input)}
+        />
+      </div>
+    );
   }
 
-  return <TuitionPaymentStatus row={row} disabled={disabled} onAction={onAction} />;
+  return <TuitionPaymentStatus row={row} today={today} disabled={disabled} onAction={onAction} />;
 }
 
 function TuitionPaymentStatus({
   row,
+  today,
   disabled,
   onAction,
 }: {
   row: TuitionRow;
+  today: string;
   disabled: boolean;
   onAction: (action: TuitionActionKind, row: TuitionRow) => void;
 }) {
@@ -381,11 +458,13 @@ function TuitionPaymentStatus({
     (candidate): candidate is Extract<TuitionAction, { action: "pay" }> => candidate.action === "pay",
   )?.disabledReason;
   const isLedgerMissing = status === "paid" && paidLedgerEntryId === null;
+  const isPastDue = isTuitionPastDue(row.record, today);
 
   return (
     <div className="grid justify-items-end gap-1">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Badge variant={TUITION_STATUS_BADGE_VARIANTS[status]}>{formatTuitionStatus(status)}</Badge>
+        {isPastDue ? <Badge variant="warning">납입일 경과</Badge> : null}
         {isLedgerMissing ? <Badge variant="destructive">{LEDGER_MISSING_LABEL}</Badge> : null}
         {actions.map((candidate) => {
           const button = ACTION_BUTTONS[candidate.action];
@@ -446,6 +525,7 @@ export function buildLessonIncomeRows(
     data.ledgerEntries,
     academyId,
     month,
+    getFinanceCurrentMonth(),
   );
 
   return [...academyRows, ...privateRows.map((row) => ({
@@ -457,6 +537,11 @@ export function buildLessonIncomeRows(
       compareKoreanNames(left.studentName, right.studentName) ||
       compareKoreanNames(getLessonIncomeTieBreaker(left), getLessonIncomeTieBreaker(right)),
   );
+}
+
+/** 납입일 순 정렬 기준. 학원 월수강료와 개인레슨 회차권이 같은 납입일 순으로 섞인다. */
+export function getLessonIncomeDueOn(row: LessonIncomeRow) {
+  return row.source === "tuition" ? row.record.dueOn : row.dueOn;
 }
 
 /** 이름이 같은 원생은 악기 순서, 그다음 id로 순서를 고정한다. */

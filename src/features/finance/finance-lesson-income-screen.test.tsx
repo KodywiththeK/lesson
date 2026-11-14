@@ -90,6 +90,31 @@ describe("학원 고정 수입 화면 구성", () => {
     expect(within(row).getByRole("cell", { name: "2026-01-04" })).toHaveAttribute("data-label", "최초 등록일");
   });
 
+  it("레슨수입 표에 납입일을 보여 준다", async () => {
+    renderScreen([buildTuition({ dueOn: "2026-08-06" })]);
+
+    await screen.findByText("김민지");
+    const row = within(getIncomeTable()).getByRole("row", { name: /김민지/ });
+    expect(within(row).getByRole("cell", { name: "2026-08-06" })).toHaveAttribute("data-label", "납입일");
+  });
+
+  it("기본 정렬은 납입일 순(빠른 날부터)이고 같은 날은 이름 순이다", async () => {
+    renderScreen([
+      buildTuition({ tuitionId: "s1", studentId: "student-1", studentName: "김민지", dueOn: "2026-08-20" }),
+      buildTuition({ tuitionId: "s2", studentId: "student-2", studentName: "이서윤", dueOn: "2026-08-04" }),
+      buildTuition({ tuitionId: "s3", studentId: "student-3", studentName: "박지후", dueOn: "2026-08-12" }),
+      buildTuition({ tuitionId: "s4", studentId: "student-4", studentName: "강하늘", dueOn: "2026-08-12" }),
+    ]);
+
+    await screen.findByText("김민지");
+    const names = within(getIncomeTable())
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[0].textContent);
+
+    expect(names).toEqual(["이서윤", "강하늘", "박지후", "김민지"]);
+  });
+
   it("명세의 제목과 설명, 파란색 전체 금액 합산을 보여 준다", async () => {
     renderScreen([
       buildTuition({ amount: 150000 }),
@@ -195,6 +220,25 @@ describe("학원 고정 수입 입금 상태", () => {
     expect(within(paidRow).getByText("입금 완료")).toBeInTheDocument();
     expect(within(paidRow).getByRole("button", { name: "박지후 피아노 입금 취소" })).toBeEnabled();
     expect(within(paidRow).queryByRole("button", { name: /입금 처리|미납/ })).not.toBeInTheDocument();
+  });
+
+  it("입금 전이고 납입일이 지났으면 납입일 경과를 알리고, 입금했거나 아직 납입일 전이면 알리지 않는다", async () => {
+    renderScreen([
+      buildTuition({ tuitionId: "late", studentName: "김민지", status: "unpaid", dueOn: "2026-08-20" }),
+      buildTuition({ tuitionId: "today", studentId: "student-2", studentName: "이서윤", status: "unpaid", dueOn: "2026-08-21" }),
+      buildTuition({ tuitionId: "upcoming", studentId: "student-3", studentName: "박지후", status: "unpaid", dueOn: "2026-08-25" }),
+      buildTuition({ tuitionId: "paid", studentId: "student-4", studentName: "최도윤", status: "paid", dueOn: "2026-08-02", paidAt: "2026-08-03", paidLedgerEntryId: "ledger-1" }),
+      buildTuition({ tuitionId: "manual", studentId: "student-5", studentName: "한서아", status: "overdue", dueOn: "2026-08-02" }),
+    ]);
+
+    const table = getIncomeTable();
+    const lateRow = await within(table).findByRole("row", { name: /김민지/ });
+
+    expect(within(lateRow).getByText("납입일 경과")).toBeInTheDocument();
+    expect(within(lateRow).getByText("미입금")).toBeInTheDocument();
+    for (const name of [/이서윤/, /박지후/, /최도윤/, /한서아/]) {
+      expect(within(within(table).getByRole("row", { name })).queryByText("납입일 경과")).not.toBeInTheDocument();
+    }
   });
 
   it("'수납' 용어를 쓰지 않는다", async () => {
@@ -437,5 +481,77 @@ describe("미납 인원", () => {
     renderScreen(() => []);
 
     expect(screen.queryByRole("button", { name: /미납 인원/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("개인레슨 회차권 입금 상태", () => {
+  const ticketData: FinanceManagementData = {
+    ...emptyFinanceData,
+    tickets: [
+      {
+        academyId: "academy-1",
+        ticketId: "ticket-new",
+        studentId: "student-9",
+        studentName: "한서아",
+        instrumentId: "violin",
+        instrumentName: "바이올린",
+        totalGrantedCount: 4,
+        remainingCount: 4,
+        validFrom: "2026-08-05",
+        validUntil: "2026-09-05",
+        registeredAt: "2026-08-05",
+        paymentStatus: "payment-pending",
+        dueOn: "2026-08-10",
+      },
+    ],
+    ticketRegistrations: [
+      {
+        registrationId: "registration-new",
+        academyId: "academy-1",
+        ticketId: "ticket-new",
+        registeredAt: "2026-08-05",
+        grantedCount: 4,
+        validUntil: "2026-09-05",
+        originalPaidAmount: 200000,
+        ledgerEntryId: null,
+      },
+    ],
+  };
+
+  it("입금 전 회차권 행에 입금 상태·납입일 경과와 입금 처리 버튼을 보이고, 납입일 순 정렬에 함께 들어간다", async () => {
+    renderScreen([buildTuition({ dueOn: "2026-08-20" })], { financeData: ticketData });
+
+    const table = getIncomeTable();
+    const ticketRow = await within(table).findByRole("row", { name: /한서아/ });
+    expect(within(ticketRow).getByRole("cell", { name: "2026-08-10" })).toHaveAttribute("data-label", "납입일");
+    expect(within(ticketRow).getByText("입금대기")).toBeInTheDocument();
+    expect(within(ticketRow).getByText("납입일 경과")).toBeInTheDocument();
+    expect(within(ticketRow).getByRole("button", { name: "한서아 바이올린 입금 처리" })).toBeInTheDocument();
+
+    const names = within(table).getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
+    expect(names).toEqual(["한서아", "김민지"]);
+  });
+
+  it("입금 처리하면 입금일·결제 방식과 함께 요청하고 알린다", async () => {
+    const user = userEvent.setup();
+    const changeLessonTicketPayment = vi.fn().mockResolvedValue(undefined);
+    renderScreen([], { financeData: ticketData, changeLessonTicketPayment });
+
+    await user.click(await screen.findByRole("button", { name: "한서아 바이올린 입금 처리" }));
+    const dialog = await screen.findByRole("dialog", { name: "회차권 입금 처리" });
+    expect(dialog).toHaveTextContent("200,000원");
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(changeLessonTicketPayment).toHaveBeenCalledWith({
+        academyId: "academy-1",
+        ticketId: "ticket-new",
+        action: "mark-paid",
+        paidOn: "2026-08-21",
+        paymentMethod: "card",
+      }),
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("회차권 입금 처리했습니다."));
   });
 });
