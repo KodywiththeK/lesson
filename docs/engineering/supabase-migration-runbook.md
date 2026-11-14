@@ -31,12 +31,13 @@
   - 처음 한 번은 Postgres 이미지(약 1~2GB)를 내려받는다. 시작하면 `supabase/migrations` 전체와 `supabase/seed.sql`이 적용된다.
 - 다시 처음부터: `npx -y supabase@3.1.0 db reset --local`. 끄기: `npx -y supabase@3.1.0 stop --no-backup`.
 - SQL 확인: `docker exec -i supabase_db_mingyu psql -U postgres`. 역할별 확인은 `select set_config('request.jwt.claims', '{"sub":"<user id>","role":"authenticated"}', false); set role authenticated;`처럼 사용자를 바꿔 RPC를 부른다.
-- CLI v2.122+/v3는 migration 파일을 트랜잭션으로 감싸지 않는다. `LOCK TABLE`처럼 트랜잭션이 필요한 문장은 파일 안에 `begin;` … `commit;`을 직접 둔다. 이 때문에 이미 운영에 적용된 `20261028073720_lesson_ticket_cancellation_history.sql`에 내용 변경 없이 트랜잭션 경계만 더했다(2026-11-14 사용자 승인, 운영 DB는 다시 실행하지 않음).
+- CLI v2.122+/v3는 migration 파일을 트랜잭션으로 감싸지 않는다. `LOCK TABLE`처럼 트랜잭션이 필요한 문장은 파일 안에 `begin;` … `commit;`을 직접 둔다. 이 때문에 `20261028073720_lesson_ticket_cancellation_history.sql`에 내용 변경 없이 트랜잭션 경계만 더했다(2026-11-14 사용자 승인). 이 파일은 그때까지 운영에 적용되지 않은 상태였고, 2026-11-14 피드백 migration과 함께 처음 적용했다.
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
-## 2026-11-14 학원 피드백 migration 적용 순서 (미적용)
+## 2026-11-14 학원 피드백 migration — 2026-11-14 운영 적용 완료
 
+- 적용 결과(2026-11-14): CLI `db push --remote=<ref> --include-all`로 `20261028073720`(이전부터 미적용)과 `000000`~`000500`을 먼저 적용하고, `main` push로 Vercel 운영 배포(`60f3d49`) 성공과 배포 번들에 `credit_authorized` 참조가 없음을 확인한 뒤 `000600`을 적용했다. 적용 전 운영 외상 일정·기록 0건, 합쳐진 이전 회차권 4건. 적용 후 원격 이력 73건이 로컬과 모두 일치하고 마지막 버전은 `20261114000600`이다. `db push`는 대기 migration을 한 번에 적용하므로 `000600` 파일을 잠시 작업 폴더 밖으로 옮겨 두고 앞의 7건만 적용했다.
 - 대상: `20261114000000`~`20261114000600` 7개. 로컬 DB에서 전체 적용과 시나리오를 확인했다(evidence `2026-11-14-academy-feedback-batch1.md`).
 - 순서: `20261114000000`~`000500` 적용 → 새 앱 배포 → `000600` 적용. 새 앱은 새 RPC(`register_book_releases`, 10인자 `register_lesson_ticket`, 입금 상태 RPC)와 `payment_status`·`legacy_merged` 칸을 쓰므로 `000500`까지가 배포보다 먼저여야 한다. 그 사이 옛 앱에서는 환불·취소한 회차권이 지워지지 않고 잔여 0 행으로 남아 보이고 다시 처리하면 "이미 환불되었거나 취소된 회차권입니다."로 거부된다. 적용과 배포 사이 간격을 짧게 둔다.
 - `20261114000600_drop_private_lesson_credit.sql`은 `lesson_events.credit_authorized` 칸을 지운다. 지금 배포된 앱이 이 칸을 읽고 있으면 오류가 나므로 **새 앱을 먼저 배포한 뒤** 마지막에 적용한다.
