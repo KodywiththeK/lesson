@@ -9,6 +9,8 @@ import {
 
 import type { LessonTicketRefundPolicy, LessonTicketRefundQuote } from "@/domain/lesson-ticket-refund";
 
+import type { LessonTicketPaymentAction, LessonTicketPaymentStatus } from "@/domain/lesson-ticket-payment";
+import type { TuitionPaymentMethod } from "@/domain/tuition-income";
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
@@ -30,6 +32,10 @@ export type LessonTicketGrantSupabaseRow = {
   valid_from: string;
   valid_until: string;
   registered_at: string;
+  payment_status?: LessonTicketPaymentStatus;
+  due_on?: string;
+  payment_method?: TuitionPaymentMethod | null;
+  legacy_merged?: boolean;
   students: {
     name: string | null;
   } | null;
@@ -117,6 +123,8 @@ export type RegisterLessonTicketInput = {
   /** 일반 등록은 양수, 서비스 지급은 0원이다. */
   paidAmount?: number;
   isService?: boolean;
+  /** 납입일. 비우면 등록일과 같다. */
+  dueOn?: string;
 };
 
 export type RevokeServiceLessonTicketInput = {
@@ -201,6 +209,7 @@ export type RegisterLessonTicketSupabaseClient = {
       p_registered_at: string;
       p_paid_amount: number;
       p_is_service: boolean;
+      p_due_on: string;
     },
   ): PromiseLike<SupabaseQueryResult<RegisterLessonTicketRpcRow>>;
 };
@@ -239,6 +248,8 @@ export type DeleteLessonTicketResult = {
   /** 환불 처리에서 규정에 맞아 수입이 감액되었는지. */
   refunded: boolean;
   refundAmount: number;
+  /** 수입 원장이 실제로 바뀌었는지. 입금 전 환불은 금액이 있어도 원장이 그대로다. */
+  ledgerChanged: boolean;
 };
 
 type LessonTicketRefundPreviewRpcRow = {
@@ -254,6 +265,7 @@ type DeleteLessonTicketRpcRow = {
   mode: DeleteLessonTicketMode;
   refunded: boolean;
   refund_amount: number;
+  ledger_changed?: boolean;
 };
 
 export type LessonTicketRefundPreviewSupabaseClient = {
@@ -271,7 +283,7 @@ export type DeleteLessonTicketSupabaseClient = {
 };
 
 const LESSON_TICKET_LIST_SELECT =
-  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)";
+  "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, payment_status, due_on, payment_method, legacy_merged, students!lesson_ticket_grants_academy_student_fk(name)";
 
 /** 재무 집계처럼 페이지로 자르면 안 되는 용도. 학원의 회차권 전체를 준다. */
 export async function fetchAllLessonTickets(
@@ -363,7 +375,10 @@ export function createLessonTicketRegistrationOptionsQueryOptions(
   };
 }
 
-/** 신규 구매마다 별도 회차권을 서버 RPC 한 번으로 만들고 수입 원장까지 함께 기록한다. */
+/**
+ * 신규 구매마다 별도 회차권을 서버 RPC 한 번으로 만든다. 유료 회차권은 '등록' 상태로 시작하고
+ * 수입은 입금 처리(`markLessonTicketPaid`) 때 기록한다. 서비스 지급은 바로 입금완료다.
+ */
 export async function registerLessonTicket(
   supabase: RegisterLessonTicketSupabaseClient,
   input: RegisterLessonTicketInput,
@@ -381,6 +396,7 @@ export async function registerLessonTicket(
     p_registered_at: input.registeredAt,
     p_paid_amount: input.paidAmount ?? 0,
     p_is_service: Boolean(input.isService),
+    p_due_on: input.dueOn ?? input.registeredAt,
   });
 
   if (error) {
@@ -477,7 +493,12 @@ export async function deleteLessonTicket(
     throw new Error("회차권을 삭제했지만 반환된 데이터가 없습니다.");
   }
 
-  return { mode: data.mode, refunded: data.refunded, refundAmount: data.refund_amount };
+  return {
+    mode: data.mode,
+    refunded: data.refunded,
+    refundAmount: data.refund_amount,
+    ledgerChanged: data.ledger_changed ?? false,
+  };
 }
 
 export function createLessonTicketListQueryKey(
@@ -521,6 +542,10 @@ function toLessonTicketListItem(
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     registeredAt: row.registered_at,
+    paymentStatus: row.payment_status ?? "paid",
+    dueOn: row.due_on ?? row.registered_at,
+    ...(row.payment_method ? { paymentMethod: row.payment_method } : {}),
+    ...(row.legacy_merged ? { legacyMerged: true } : {}),
   };
 }
 
@@ -548,4 +573,101 @@ function toLessonTicketRegistrationStudentOption(
       ];
     }),
   };
+}
+
+type LessonTicketPaymentRpcArgs = {
+  start_lesson_ticket_payment_wait: { p_academy_id: string; p_ticket_id: string };
+  mark_lesson_ticket_paid: { p_academy_id: string; p_ticket_id: string; p_paid_on: string; p_payment_method: TuitionPaymentMethod };
+  cancel_lesson_ticket_payment: { p_academy_id: string; p_ticket_id: string };
+};
+
+export type LessonTicketPaymentSupabaseClient = {
+  rpc<TName extends keyof LessonTicketPaymentRpcArgs>(
+    functionName: TName,
+    payload: LessonTicketPaymentRpcArgs[TName],
+  ): PromiseLike<SupabaseQueryResult<unknown>>;
+};
+
+async function callLessonTicketPaymentRpc<TName extends keyof LessonTicketPaymentRpcArgs>(
+  supabase: LessonTicketPaymentSupabaseClient,
+  functionName: TName,
+  payload: LessonTicketPaymentRpcArgs[TName],
+  failure: string,
+) {
+  const { error } = await supabase.rpc(functionName, payload);
+
+  if (error) {
+    throw new Error(`${failure}: ${error.message}`);
+  }
+}
+
+/** 등록 → 입금대기. 이때부터 예약·출석에 쓸 수 있다. */
+export function startLessonTicketPaymentWait(
+  supabase: LessonTicketPaymentSupabaseClient,
+  input: { academyId: string; ticketId: string },
+) {
+  return callLessonTicketPaymentRpc(
+    supabase,
+    "start_lesson_ticket_payment_wait",
+    { p_academy_id: input.academyId, p_ticket_id: input.ticketId },
+    "입금대기로 바꾸지 못했습니다",
+  );
+}
+
+/** 입금대기 → 입금완료. 입금일·결제 방식과 함께 수입 내역이 같은 트랜잭션으로 기록된다. */
+export function markLessonTicketPaid(
+  supabase: LessonTicketPaymentSupabaseClient,
+  input: { academyId: string; ticketId: string; paidOn: string; paymentMethod: TuitionPaymentMethod },
+) {
+  return callLessonTicketPaymentRpc(
+    supabase,
+    "mark_lesson_ticket_paid",
+    {
+      p_academy_id: input.academyId,
+      p_ticket_id: input.ticketId,
+      p_paid_on: input.paidOn,
+      p_payment_method: input.paymentMethod,
+    },
+    "입금 처리하지 못했습니다",
+  );
+}
+
+/** 입금완료 → 입금대기. 연결된 수입 내역을 지운다. */
+export function cancelLessonTicketPayment(
+  supabase: LessonTicketPaymentSupabaseClient,
+  input: { academyId: string; ticketId: string },
+) {
+  return callLessonTicketPaymentRpc(
+    supabase,
+    "cancel_lesson_ticket_payment",
+    { p_academy_id: input.academyId, p_ticket_id: input.ticketId },
+    "입금을 취소하지 못했습니다",
+  );
+}
+
+export type LessonTicketPaymentChangeInput = {
+  academyId: string;
+  ticketId: string;
+  action: LessonTicketPaymentAction;
+  paidOn?: string;
+  paymentMethod?: TuitionPaymentMethod;
+};
+
+/** 화면의 입금 상태 버튼 하나를 알맞은 RPC로 보낸다. 회차권 목록과 수입 관리가 같이 쓴다. */
+export async function applyLessonTicketPaymentChange(
+  supabase: LessonTicketPaymentSupabaseClient,
+  input: LessonTicketPaymentChangeInput,
+) {
+  const target = { academyId: input.academyId, ticketId: input.ticketId };
+
+  if (input.action === "start-payment-wait") {
+    await startLessonTicketPaymentWait(supabase, target);
+  } else if (input.action === "mark-paid") {
+    if (!input.paidOn || !input.paymentMethod) {
+      throw new Error("입금일과 결제 방식을 입력해 주세요.");
+    }
+    await markLessonTicketPaid(supabase, { ...target, paidOn: input.paidOn, paymentMethod: input.paymentMethod });
+  } else {
+    await cancelLessonTicketPayment(supabase, target);
+  }
 }

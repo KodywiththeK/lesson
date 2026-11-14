@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 
+import { isLessonTicketUsable } from "@/domain/lesson-ticket-payment";
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import {
   LessonManagementWorkspace,
@@ -47,14 +48,17 @@ export function LessonPageContent({ lessonKind }: LessonPageContentProps) {
                       academySheets: Object.values(demo.state.academySheets),
                       privateLessons: demo.state.privateLessons,
                       instrumentColors: demo.state.instrumentColors,
-                      ticketBalances: demo.state.tickets.map((ticket) => ({
-                        academyId: ticket.academyId,
-                        studentId: ticket.studentId,
-                        instrumentId: ticket.instrumentId,
-                        instrumentName: ticket.instrumentName,
-                        remainingCount: ticket.remainingCount,
-                        totalGrantedCount: ticket.totalGrantedCount,
-                      })),
+                      // 서버와 같이 예약·출석에 쓸 수 있는(입금대기·입금완료) 회차권만 예약 가능 회차로 센다.
+                      ticketBalances: demo.state.tickets
+                        .filter((ticket) => isLessonTicketUsable(ticket.paymentStatus ?? "paid"))
+                        .map((ticket) => ({
+                          academyId: ticket.academyId,
+                          studentId: ticket.studentId,
+                          instrumentId: ticket.instrumentId,
+                          instrumentName: ticket.instrumentName,
+                          remainingCount: ticket.remainingCount,
+                          totalGrantedCount: ticket.totalGrantedCount,
+                        })),
                       registrationOptions: {
                         students: demo.state.students
                           .map((student) => ({

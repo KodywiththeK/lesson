@@ -1,3 +1,4 @@
+import { isLessonTicketUsable, type LessonTicketPaymentStatus } from "@/domain/lesson-ticket-payment";
 import {
   formatAcademyLessonOriginLabel,
   toDailyAcademyAttendanceSheet,
@@ -44,7 +45,6 @@ type LessonWorkspaceEventRow = {
   ends_at: string;
   status: string;
   auto_excluded_for_closure?: boolean;
-  credit_authorized?: boolean;
   ticket_grant_id?: string | null;
   ticket_session_number?: number | null;
   ticket_total_count?: number | null;
@@ -80,6 +80,8 @@ type LessonTicketBalanceRow = {
   total_granted_count?: number | null;
   valid_from?: string | null;
   valid_until?: string | null;
+  /** 없으면 상태 도입 전 자료라 입금완료로 본다. */
+  payment_status?: LessonTicketPaymentStatus;
 };
 
 export type CreateAcademyLessonEventInput = {
@@ -280,7 +282,7 @@ export type FetchLessonWorkspaceInput = {
 };
 
 const LESSON_WORKSPACE_EVENTS_SELECT =
-  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, auto_excluded_for_closure, credit_authorized, ticket_grant_id, ticket_session_number, ticket_total_count, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
+  "id, academy_id, student_id, students!lesson_events_academy_student_fk(name), instrument_id, instrument_name, teacher_id, teachers!lesson_events_academy_teacher_fk(name), lesson_kind, origin, source_lesson_event_id, starts_at, ends_at, status, auto_excluded_for_closure, ticket_grant_id, ticket_session_number, ticket_total_count, time_unspecified, attendance_records!attendance_records_academy_lesson_event_fk(status, absence_reason, marked_at, absence_resolutions!absence_resolutions_academy_attendance_record_fk(resolved_as))";
 const ATTENDEE_COUNT_EVENTS_SELECT = "student_id, lesson_kind, status, starts_at";
 const LEGACY_LESSON_CALENDAR_MEMO_SELECT =
   "id, academy_id, lesson_kind, memo_date, content, unread";
@@ -345,7 +347,7 @@ export async function fetchLessonWorkspaceData(
       supabase
         .from("lesson_ticket_grants")
         .select(
-          "academy_id, student_id, instrument_id, instrument_name, remaining_count, total_granted_count, valid_from, valid_until",
+          "academy_id, student_id, instrument_id, instrument_name, remaining_count, total_granted_count, valid_from, valid_until, payment_status",
         )
         .eq("academy_id", input.academyId),
       fetchLessonCalendarMemoRows(supabase, input.academyId, range),
@@ -721,7 +723,8 @@ function sumValidTicketBalances(rows: LessonTicketBalanceRow[], today: string): 
   for (const row of rows) {
     const isValidToday =
       (!row.valid_from || row.valid_from <= today) && (!row.valid_until || row.valid_until >= today);
-    if (!isValidToday) {
+    // 등록(입금대기 전)·환불·취소 회차권은 예약·출석에 쓸 수 없어 잔여에 넣지 않는다(서버 가용량 규칙과 같다).
+    if (!isValidToday || !isLessonTicketUsable(row.payment_status ?? "paid")) {
       continue;
     }
 
@@ -827,7 +830,6 @@ function toPrivateLesson(row: LessonWorkspaceEventRow): PrivateLesson {
     startAt: row.starts_at,
     endAt: row.ends_at,
     status,
-    creditAuthorized: row.credit_authorized ?? false,
     ticketGrantId: row.ticket_grant_id ?? undefined,
     ticketSessionNumber: row.ticket_session_number ?? undefined,
     ticketTotalCount: row.ticket_total_count ?? undefined,

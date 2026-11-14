@@ -269,6 +269,38 @@ describe("fetchLessonWorkspaceData", () => {
     expect(eventsSelect).toContain("absence_resolutions");
   });
 
+  it("회차권 잔여에는 쓸 수 있는(입금대기·입금완료) 회차권만 넣고 등록·환불·취소 상태는 뺀다", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-10T03:00:00Z"));
+    const grant = (id: string, remaining: number, paymentStatus?: string) => ({
+      id,
+      academy_id: "academy-1",
+      student_id: "student-1",
+      instrument_id: "piano",
+      instrument_name: "피아노",
+      remaining_count: remaining,
+      total_granted_count: remaining,
+      valid_from: "2026-09-01",
+      valid_until: "2026-09-30",
+      ...(paymentStatus ? { payment_status: paymentStatus } : {}),
+    });
+    const client = createLessonWorkspaceClient([], {
+      ticketRows: [
+        grant("legacy", 1),
+        grant("pending", 2, "payment-pending"),
+        grant("paid", 4, "paid"),
+        grant("registered", 8, "registered"),
+        grant("refunded", 16, "refunded"),
+        grant("cancelled", 32, "cancelled"),
+      ],
+    });
+
+    const result = await fetchLessonWorkspaceData(client, { academyId: "academy-1", month: "2026-09" });
+
+    expect(result.ticketBalances).toEqual([expect.objectContaining({ remainingCount: 7, totalGrantedCount: 7 })]);
+    vi.useRealTimers();
+  });
+
   it("회차권 잔여는 오늘 유효한 회차권만 같은 원생·악기끼리 합산한다", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-09-10T03:00:00Z"));

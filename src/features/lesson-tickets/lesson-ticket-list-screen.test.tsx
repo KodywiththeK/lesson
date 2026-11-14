@@ -62,6 +62,7 @@ function renderLessonTicketListScreen(
     | "canRecordPayment"
     | "getLessonTicketRefundPreview"
     | "deleteLessonTicket"
+    | "changeLessonTicketPayment"
   >> = {},
 ) {
   const queryClient = new QueryClient({
@@ -168,6 +169,7 @@ describe("LessonTicketListScreen", () => {
       "만료일",
       "남은 일수",
       "상태",
+      "입금 상태",
       "관리",
     ]);
 
@@ -182,7 +184,8 @@ describe("LessonTicketListScreen", () => {
       "2026-09-07",
       "6일 남음",
       "잔여 부족",
-      "수정삭제",
+      "입금완료납입일 2026-08-01입금 취소",
+      "수정환불·취소",
     ]);
     expect(
       within(row).getByRole("button", { name: "김민지 피아노 회차권 수정" }),
@@ -422,7 +425,7 @@ describe("회차권 등록 폼", () => {
     fireEvent.change(amountInput, { target: { value: "2147483648" } });
     expect(within(dialog).getByRole("button", { name: "저장" })).toBeDisabled();
     expect(
-      within(dialog).getByText(/양수 금액을 입력하면 수입 내역에 기록됩니다/),
+      within(dialog).getByText(/수입 내역은 입금 처리할 때 기록됩니다/),
     ).toBeInTheDocument();
   });
 
@@ -465,6 +468,7 @@ describe("회차권 등록 폼", () => {
           registeredAt: "2026-09-01",
           paidAmount: 0,
           isService: true,
+          dueOn: "2026-09-01",
         },
       ]);
     });
@@ -729,8 +733,8 @@ describe("회차권 삭제", () => {
       getLessonTicketRefundPreview: async () => refundPreview,
       ...extraProps,
     });
-    await user.click(await screen.findByRole("button", { name: "김민지 피아노 회차권 삭제" }));
-    const dialog = await screen.findByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+    await user.click(await screen.findByRole("button", { name: "김민지 피아노 회차권 환불·취소" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "회차권을 환불하거나 취소할까요?" });
     await within(dialog).findByText(/현재 규정/);
 
     return { user, dialog };
@@ -739,8 +743,8 @@ describe("회차권 삭제", () => {
   it("행마다 삭제 버튼을 두고 눌러야 확인창이 열린다", async () => {
     renderLessonTicketListScreen(listLessonTickets());
 
-    expect(await screen.findByRole("button", { name: "김민지 피아노 회차권 삭제" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "이서윤 바이올린 회차권 삭제" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "김민지 피아노 회차권 환불·취소" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "이서윤 바이올린 회차권 환불·취소" })).toBeInTheDocument();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
@@ -750,28 +754,42 @@ describe("회차권 삭제", () => {
       deleteLessonTicket: async (input) => {
         deletions.push(input);
 
-        return { mode: "refund", refunded: true, refundAmount: 50_000 };
+        return { mode: "refund", refunded: true, refundAmount: 50_000, ledgerChanged: true };
       },
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(within(dialog).getByRole("button", { name: "환불 처리" }));
 
     await waitFor(() => {
       expect(deletions).toEqual([{ academyId: "academy-1", ticketId: "ticket-1", mode: "refund" }]);
-      expect(toastMock.success).toHaveBeenCalledWith("회차권을 삭제하고 50,000원을 환불 처리했습니다.");
+      expect(toastMock.success).toHaveBeenCalledWith("회차권을 환불 처리했습니다. 50,000원을 환불했습니다.");
     });
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   });
 
   it("환불할 금액이 없으면 수입 내역이 그대로라고 알린다", async () => {
     const { user, dialog } = await openDeleteDialog({
-      deleteLessonTicket: async () => ({ mode: "refund", refunded: false, refundAmount: 0 }),
+      deleteLessonTicket: async () => ({ mode: "refund", refunded: false, refundAmount: 0, ledgerChanged: false }),
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(within(dialog).getByRole("button", { name: "환불 처리" }));
 
     await waitFor(() =>
-      expect(toastMock.success).toHaveBeenCalledWith("회차권을 삭제했습니다. 환불할 금액이 없어 수입 내역은 그대로입니다."),
+      expect(toastMock.success).toHaveBeenCalledWith("회차권을 환불 상태로 바꿨습니다. 환불할 금액이 없어 수입 내역은 그대로입니다."),
+    );
+  });
+
+  it("입금 전 회차권을 환불하면 수입은 그대로이고 규정 환불 금액만 알린다", async () => {
+    const { user, dialog } = await openDeleteDialog({
+      deleteLessonTicket: async () => ({ mode: "refund", refunded: true, refundAmount: 30_000, ledgerChanged: false }),
+    });
+
+    await user.click(within(dialog).getByRole("button", { name: "환불 처리" }));
+
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith(
+        "회차권을 환불 상태로 바꿨습니다. 입금 전이라 수입 내역은 그대로이며 규정상 환불 금액은 30,000원입니다.",
+      ),
     );
   });
 
@@ -782,16 +800,16 @@ describe("회차권 삭제", () => {
       deleteLessonTicket: async (input) => {
         deletions.push(input);
 
-        return { mode: "mistake", refunded: false, refundAmount: 0 };
+        return { mode: "mistake", refunded: false, refundAmount: 0, ledgerChanged: true };
       },
     });
 
-    await user.click(await within(dialog).findByRole("radio", { name: /잘못 등록해서 삭제/ }));
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(await within(dialog).findByRole("radio", { name: /취소\(잘못 등록\)/ }));
+    await user.click(within(dialog).getByRole("button", { name: "취소 처리" }));
 
     await waitFor(() => {
       expect(deletions).toEqual([{ academyId: "academy-1", ticketId: "ticket-1", mode: "mistake" }]);
-      expect(toastMock.success).toHaveBeenCalledWith("잘못 등록한 회차권과 수입 기록을 삭제했습니다.");
+      expect(toastMock.success).toHaveBeenCalledWith("회차권을 취소했습니다. 입금된 수입 내역이 있으면 함께 지웠습니다.");
     });
   });
 
@@ -802,14 +820,14 @@ describe("회차권 삭제", () => {
       },
     });
 
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(within(dialog).getByRole("button", { name: "환불 처리" }));
 
     await waitFor(() =>
-      expect(toastMock.error).toHaveBeenCalledWith("회차권 삭제에 실패했습니다.", {
+      expect(toastMock.error).toHaveBeenCalledWith("회차권 환불·취소에 실패했습니다.", {
         description: "이미 삭제되었거나 찾을 수 없습니다. 목록을 새로고침해 주세요.",
       }),
     );
-    expect(screen.getByRole("alertdialog", { name: "회차권을 삭제할까요?" })).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "회차권을 환불하거나 취소할까요?" })).toBeInTheDocument();
   });
 });
 
@@ -917,5 +935,53 @@ describe("LessonTicketListScreen 페이지 이동", () => {
 
     expect(await screen.findByText("조건에 맞는 회차권이 없습니다.")).toBeInTheDocument();
     expect(screen.getByText("총 0개")).toBeInTheDocument();
+  });
+});
+
+describe("회차권 입금 상태", () => {
+  const registered: LessonTicketListItem = {
+    ...lessonTickets[1],
+    ticketId: "ticket-new",
+    paymentStatus: "registered",
+    dueOn: "2026-08-25",
+  };
+
+  it("목록에 입금 상태와 납입일을 보여 주고, 입금 전이며 납입일이 지났으면 알린다", async () => {
+    renderLessonTicketListScreen(listLessonTickets([lessonTickets[0], registered]));
+
+    const table = await screen.findByRole("table", { name: "회차권 목록" });
+    const newRow = within(table).getByRole("row", { name: /이서윤/ });
+    expect(within(newRow).getByRole("cell", { name: /등록/ })).toHaveAttribute("data-label", "입금 상태");
+    expect(within(newRow).getByText("납입일 2026-08-25")).toBeInTheDocument();
+    expect(within(newRow).getByText("납입일 경과")).toBeInTheDocument();
+    // 상태 도입 전 자료는 입금완료로 본다.
+    expect(within(within(table).getByRole("row", { name: /김민지/ })).getByText("입금완료")).toBeInTheDocument();
+  });
+
+  it("입금대기 버튼을 누르면 전환을 요청하고 알린 뒤 목록을 다시 불러온다", async () => {
+    const user = userEvent.setup();
+    const changeLessonTicketPayment = vi.fn().mockResolvedValue(undefined);
+    renderLessonTicketListScreen(listLessonTickets([registered]), { changeLessonTicketPayment });
+
+    await user.click(await screen.findByRole("button", { name: "이서윤 바이올린 입금대기로 전환" }));
+
+    await waitFor(() =>
+      expect(changeLessonTicketPayment).toHaveBeenCalledWith({ ticketId: "ticket-new", action: "start-payment-wait" }),
+    );
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("입금대기로 바꿨습니다. 이제 레슨에 쓸 수 있습니다."));
+  });
+
+  it("전환에 실패하면 이유를 알린다", async () => {
+    const user = userEvent.setup();
+    const changeLessonTicketPayment = vi.fn().mockRejectedValue(new Error("등록 상태인 회차권만 입금대기로 바꿀 수 있습니다."));
+    renderLessonTicketListScreen(listLessonTickets([registered]), { changeLessonTicketPayment });
+
+    await user.click(await screen.findByRole("button", { name: "이서윤 바이올린 입금대기로 전환" }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith("회차권 입금 상태를 바꾸지 못했습니다.", {
+        description: "등록 상태인 회차권만 입금대기로 바꿀 수 있습니다.",
+      }),
+    );
   });
 });

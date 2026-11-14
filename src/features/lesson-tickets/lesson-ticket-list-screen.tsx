@@ -7,7 +7,7 @@ import {
   useQueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import { RotateCcw, TicketPlus, Trash2 } from "lucide-react";
+import { RotateCcw, TicketPlus, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -80,15 +80,20 @@ import {
   type RevokeServiceLessonTicketClient,
   type RevokeServiceLessonTicketInput,
 } from "@/lib/api/lesson-tickets";
+import { invalidateAfterLessonTicketChange } from "@/lib/api/query-invalidation";
 import { queryKeys } from "@/lib/api/query-keys";
-import {
-  fetchPrivateLessonCreditBalances,
-  type PrivateLessonCreditBalance,
-  type PrivateLessonCreditBalanceClient,
-} from "@/lib/api/private-lesson-credits";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import { LessonTicketAdjustDialog } from "./lesson-ticket-adjust-dialog";
+import {
+  LessonTicketPaymentControl,
+  type LessonTicketPaymentActionInput,
+} from "./lesson-ticket-payment-control";
+import type { LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import {
+  applyLessonTicketPaymentChange,
+  type LessonTicketPaymentSupabaseClient,
+} from "@/lib/api/lesson-tickets";
 import { LessonTicketDeleteDialog } from "./lesson-ticket-delete-dialog";
 import { LessonTicketRegistrationForm } from "./lesson-ticket-registration-form";
 import { LessonTicketServiceRevokeDialog } from "./lesson-ticket-service-revoke-dialog";
@@ -131,6 +136,19 @@ type LessonTicketListScreenProps = {
     input: DeleteLessonTicketInput,
   ) => Promise<DeleteLessonTicketResult>;
   cancellationHistory?: LessonTicketCancellationHistoryRow[];
+  /** 입금 상태 전환(데모·테스트 주입용). 없으면 Supabase RPC를 부른다. */
+  changeLessonTicketPayment?: (input: LessonTicketPaymentChange) => Promise<void>;
+};
+
+export type LessonTicketPaymentChange = {
+  ticketId: string;
+  action: LessonTicketPaymentAction;
+} & LessonTicketPaymentActionInput;
+
+const PAYMENT_CHANGE_MESSAGES: Record<LessonTicketPaymentAction, string> = {
+  "start-payment-wait": "입금대기로 바꿨습니다. 이제 레슨에 쓸 수 있습니다.",
+  "mark-paid": "입금 처리했습니다. 수입 내역에 기록했습니다.",
+  "cancel-payment": "입금을 취소했습니다. 입금대기로 돌아갔습니다.",
 };
 
 type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
@@ -161,6 +179,7 @@ export function LessonTicketListScreen({
   getLessonTicketRefundPreview,
   deleteLessonTicket,
   cancellationHistory,
+  changeLessonTicketPayment,
 }: LessonTicketListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -227,16 +246,6 @@ export function LessonTicketListScreen({
       group !== "cancelled" &&
       (hasInjectedQueryOptions || !supabaseClientState?.error),
   });
-  const creditBalancesQuery = useQuery({
-    queryKey: [...queryKeys.academy(academyId), "private-credits"],
-    queryFn: () =>
-      fetchPrivateLessonCreditBalances(
-        supabaseClientState!
-          .client as unknown as PrivateLessonCreditBalanceClient,
-        academyId,
-      ),
-    enabled: Boolean(supabaseClientState?.client),
-  });
   const ticketListView = lessonTicketListQuery.data;
   const registrationOptionsQueryOptions = registrationOptionsQueryFactory
     ? registrationOptionsQueryFactory(academyId)
@@ -252,17 +261,7 @@ export function LessonTicketListScreen({
       (hasInjectedRegistrationOptions || !supabaseClientState?.error),
   });
   function invalidateTicketRelatedQueries() {
-    for (const section of ["lesson-tickets", "finance", "lesson-workspace"]) {
-      void queryClient.invalidateQueries({
-        queryKey: [...queryKeys.academy(academyId), section],
-      });
-    }
-    void queryClient.invalidateQueries({
-      queryKey: ["private-lesson-availability", academyId],
-    });
-    void queryClient.invalidateQueries({
-      queryKey: [...queryKeys.academy(academyId), "private-credits"],
-    });
+    invalidateAfterLessonTicketChange(queryClient, academyId);
   }
 
   const registerMutation = useMutation({
@@ -323,9 +322,21 @@ export function LessonTicketListScreen({
       invalidateTicketRelatedQueries();
     },
     onError: (error) => {
-      toast.error("회차권 삭제에 실패했습니다.", {
+      toast.error("회차권 환불·취소에 실패했습니다.", {
         description: toUserMessage(error),
       });
+    },
+  });
+  const paymentMutation = useMutation({
+    mutationFn: (input: LessonTicketPaymentChange) =>
+      (changeLessonTicketPayment ??
+        createDefaultChangeLessonTicketPayment(academyId, supabaseClientState ?? createMissingSupabaseClientState()))(input),
+    onSuccess: (_result, input) => {
+      toast.success(PAYMENT_CHANGE_MESSAGES[input.action]);
+      invalidateTicketRelatedQueries();
+    },
+    onError: (error) => {
+      toast.error("회차권 입금 상태를 바꾸지 못했습니다.", { description: toUserMessage(error) });
     },
   });
   const serviceRevokeMutation = useMutation({
@@ -435,17 +446,17 @@ export function LessonTicketListScreen({
               {
                 value: "active",
                 label: "사용중",
-                dotClassName: "bg-emerald-600",
+                dotClassName: "bg-success",
               },
               {
                 value: "completed",
                 label: "사용완료",
-                dotClassName: "bg-red-600",
+                dotClassName: "bg-destructive",
               },
               {
                 value: "cancelled",
                 label: "사용취소",
-                dotClassName: "bg-slate-600",
+                dotClassName: "bg-muted-foreground",
               },
             ]}
           />
@@ -499,23 +510,6 @@ export function LessonTicketListScreen({
             {lessonTicketListQuery.isLoading ? (
               <EmptyState>회차권 목록을 불러오는 중입니다.</EmptyState>
             ) : null}
-            {creditBalancesQuery.isError ? (
-              <ListStatusAlert
-                message="미정산 레슨을 불러오지 못했습니다."
-                detail={toUserMessage(creditBalancesQuery.error)}
-              />
-            ) : null}
-            {(creditBalancesQuery.data?.length ?? 0) > 0 ? (
-              <div className="grid gap-1 border-b p-4 text-sm">
-                <strong>미정산 출석</strong>
-                {creditBalancesQuery.data?.map((balance) => (
-                  <p key={`${balance.studentId}:${balance.instrumentId}`}>
-                    {balance.studentName} · {balance.instrumentName} · 미정산{" "}
-                    {balance.openCount}회
-                  </p>
-                ))}
-              </div>
-            ) : null}
 
             {group === "cancelled" ? (
               <LessonTicketCancellationHistory
@@ -534,8 +528,9 @@ export function LessonTicketListScreen({
             !lessonTicketListQuery.isError ? (
               <>
                 <LessonTicketTable
+                  isChangingPayment={paymentMutation.isPending}
+                  onChangePayment={(input) => paymentMutation.mutateAsync(input)}
                   tickets={ticketListView.items}
-                  creditBalances={creditBalancesQuery.data ?? []}
                   today={today}
                   isAdjusting={adjustMutation.isPending}
                   isRevokingService={serviceRevokeMutation.isPending}
@@ -675,12 +670,18 @@ function createDefaultRefundPreviewLoader(
 
 function describeDeletion(result: DeleteLessonTicketResult) {
   if (result.mode === "mistake") {
-    return "잘못 등록한 회차권과 수입 기록을 삭제했습니다.";
+    return "회차권을 취소했습니다. 입금된 수입 내역이 있으면 함께 지웠습니다.";
   }
 
-  return result.refunded
-    ? `회차권을 삭제하고 ${result.refundAmount.toLocaleString("ko-KR")}원을 환불 처리했습니다.`
-    : "회차권을 삭제했습니다. 환불할 금액이 없어 수입 내역은 그대로입니다.";
+  const amount = result.refundAmount.toLocaleString("ko-KR");
+
+  if (!result.refunded) {
+    return "회차권을 환불 상태로 바꿨습니다. 환불할 금액이 없어 수입 내역은 그대로입니다.";
+  }
+
+  return result.ledgerChanged
+    ? `회차권을 환불 처리했습니다. ${amount}원을 환불했습니다.`
+    : `회차권을 환불 상태로 바꿨습니다. 입금 전이라 수입 내역은 그대로이며 규정상 환불 금액은 ${amount}원입니다.`;
 }
 
 function describeRegistration(
@@ -715,8 +716,9 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 
 function LessonTicketTable({
   tickets,
-  creditBalances,
   today,
+  isChangingPayment,
+  onChangePayment,
   isAdjusting,
   isRevokingService,
   onAdjust,
@@ -724,8 +726,9 @@ function LessonTicketTable({
   onRevokeService,
 }: {
   tickets: LessonTicketListRow[];
-  creditBalances: PrivateLessonCreditBalance[];
   today: string;
+  isChangingPayment: boolean;
+  onChangePayment: (input: LessonTicketPaymentChange) => Promise<unknown>;
   isAdjusting: boolean;
   isRevokingService: boolean;
   onAdjust: ComponentProps<typeof LessonTicketAdjustDialog>["onAdjust"];
@@ -754,17 +757,13 @@ function LessonTicketTable({
           <TableHead>만료일</TableHead>
           <TableHead>남은 일수</TableHead>
           <TableHead>상태</TableHead>
+          <TableHead>입금 상태</TableHead>
           <TableHead>관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {tickets.map((ticket) => {
           const needsAttention = hasLowOrNoRemaining(ticket);
-          const openCredit = creditBalances.find(
-            (balance) =>
-              balance.studentId === ticket.studentId &&
-              balance.instrumentId === ticket.instrumentId,
-          );
 
           return (
             <TableRow
@@ -777,7 +776,7 @@ function LessonTicketTable({
               <TableCell label="악기">{ticket.instrumentName}</TableCell>
               <TableCell label="총 부여">
                 {formatCount(ticket.totalGrantedCount)}
-                <span className="block text-xs text-muted-foreground">
+                <span className="block text-xs whitespace-normal text-muted-foreground">
                   유료{" "}
                   {formatCount(
                     ticket.totalGrantedCount - (ticket.serviceTotalCount ?? 0),
@@ -795,18 +794,13 @@ function LessonTicketTable({
                 }
               >
                 {formatCount(ticket.remainingCount)}
-                <span className="block text-xs font-normal text-muted-foreground">
+                <span className="block text-xs font-normal whitespace-normal text-muted-foreground">
                   유료{" "}
                   {formatCount(
                     ticket.remainingCount - (ticket.serviceRemainingCount ?? 0),
                   )}{" "}
                   · 서비스 {formatCount(ticket.serviceRemainingCount ?? 0)}
                 </span>
-                {openCredit ? (
-                  <span className="block text-xs font-semibold text-amber-700 dark:text-amber-300">
-                    미정산 {openCredit.openCount}회
-                  </span>
-                ) : null}
               </TableCell>
               <TableCell label="등록일">{ticket.registeredAt}</TableCell>
               <TableCell label="만료일">{ticket.validUntil}</TableCell>
@@ -825,6 +819,26 @@ function LessonTicketTable({
                     <Badge variant="secondary">정상</Badge>
                   )}
                 </span>
+              </TableCell>
+              <TableCell label="입금 상태">
+                <LessonTicketPaymentControl
+                  ticket={{
+                    ticketId: ticket.ticketId,
+                    studentName: ticket.studentName,
+                    instrumentName: ticket.instrumentName,
+                    paymentStatus: ticket.paymentStatus ?? "paid",
+                    dueOn: ticket.dueOn ?? ticket.registeredAt,
+                    isService: ticket.totalGrantedCount === (ticket.serviceTotalCount ?? 0),
+                    legacyMerged: ticket.legacyMerged,
+                    paymentMethod: ticket.paymentMethod,
+                  }}
+                  today={today}
+                  canManage
+                  pending={isChangingPayment}
+                  onAction={async (action, input) => {
+                    await onChangePayment({ ticketId: ticket.ticketId, action, ...input });
+                  }}
+                />
               </TableCell>
               <TableCell label="관리">
                 <span className="flex flex-wrap gap-2">
@@ -851,11 +865,11 @@ function LessonTicketTable({
                       type="button"
                       variant="outline"
                       size="sm"
-                      aria-label={`${ticket.studentName} ${ticket.instrumentName} 회차권 삭제`}
+                      aria-label={`${ticket.studentName} ${ticket.instrumentName} 회차권 환불·취소`}
                       onClick={() => onDelete(ticket)}
                     >
-                      <Trash2 aria-hidden="true" />
-                      삭제
+                      <Undo2 aria-hidden="true" />
+                      환불·취소
                     </Button>
                   ) : null}
                 </span>
@@ -883,4 +897,14 @@ function getStatusVariant(status: LessonTicketStatus) {
 
 function formatCount(count: number) {
   return `${count}회`;
+}
+
+function createDefaultChangeLessonTicketPayment(academyId: string, state: SupabaseClientState) {
+  return async (input: LessonTicketPaymentChange) => {
+    if (!state.client) {
+      throw state.error;
+    }
+
+    await applyLessonTicketPaymentChange(state.client as unknown as LessonTicketPaymentSupabaseClient, { academyId, ...input });
+  };
 }

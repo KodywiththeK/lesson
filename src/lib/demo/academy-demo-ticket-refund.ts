@@ -1,3 +1,4 @@
+import { isLessonTicketClosed } from "@/domain/lesson-ticket-payment";
 import {
   allocateLessonTicketRefund,
   canDeleteLessonTicketAsMistake,
@@ -14,7 +15,8 @@ import type { DemoAcademyState } from "./academy-demo-state";
  */
 
 const NOT_FOUND_MESSAGE = "이미 삭제되었거나 찾을 수 없습니다. 목록을 새로고침해 주세요.";
-const USED_TICKET_MISTAKE_MESSAGE = "사용한 회차권은 잘못 등록으로 삭제할 수 없습니다. 환불 처리로 삭제해 주세요.";
+const USED_TICKET_MISTAKE_MESSAGE = "사용한 유료 회차가 있어 취소할 수 없습니다. 환불로 처리해 주세요.";
+const RESERVED_TICKET_MESSAGE = "예약된 개인레슨이 있어 환불·취소할 수 없습니다. 일정을 먼저 정리해 주세요.";
 
 export function setDemoLessonTicketRefundPolicy(
   state: DemoAcademyState,
@@ -65,10 +67,29 @@ export function deleteDemoLessonTicket(
 ): { state: DemoAcademyState; result: DeleteLessonTicketResult } {
   const preview = getDemoLessonTicketRefundPreview(state, input.ticketId);
   const ticket = getTicket(state, input.ticketId);
+  const status = ticket.paymentStatus ?? "paid";
+
+  if (isLessonTicketClosed(status)) {
+    throw new Error("이미 환불되었거나 취소된 회차권입니다.");
+  }
+
+  if (input.mode === "refund" && status === "registered") {
+    throw new Error("등록 상태인 회차권은 환불이 아니라 취소로 처리해 주세요.");
+  }
+
+  if (state.privateLessons.some((lesson) => lesson.ticketGrantId === input.ticketId && lesson.status === "scheduled")) {
+    throw new Error(RESERVED_TICKET_MESSAGE);
+  }
+
   const registrations = state.ticketRegistrations.filter((registration) => registration.ticketId === input.ticketId);
-  const withoutTicket: DemoAcademyState = {
+  // 서버와 같이 회차권을 지우지 않고 환불·취소 상태로 남긴다(잔여 0, 등록·사용 이력 보존).
+  const closedTicketState: DemoAcademyState = {
     ...state,
-    tickets: state.tickets.filter((ticket) => ticket.ticketId !== input.ticketId),
+    tickets: state.tickets.map((candidate) =>
+      candidate.ticketId === input.ticketId
+        ? { ...candidate, paymentStatus: input.mode === "refund" ? "refunded" : "cancelled", remainingCount: 0 }
+        : candidate,
+    ),
     ticketCancellationHistory: [...state.ticketCancellationHistory, {
       id: `${input.ticketId}-${state.ticketCancellationHistory.length}`, mode: input.mode,
       student_name: ticket.studentName, instrument_name: ticket.instrumentName,
@@ -76,7 +97,6 @@ export function deleteDemoLessonTicket(
       registered_at: ticket.registeredAt, valid_until: ticket.validUntil,
       refund_amount: input.mode === "refund" ? preview.refundAmount : 0, occurred_at: new Date().toISOString(),
     }],
-    ticketRegistrations: state.ticketRegistrations.filter((registration) => registration.ticketId !== input.ticketId),
   };
 
   if (input.mode === "mistake") {
@@ -88,14 +108,19 @@ export function deleteDemoLessonTicket(
 
     return {
       state: {
-        ...withoutTicket,
+        ...closedTicketState,
         ledgerEntries: state.ledgerEntries.filter((entry) => !linkedLedgerIds.has(entry.ledgerId)),
       },
-      result: { mode: "mistake", refunded: false, refundAmount: 0 },
+      result: { mode: "mistake", refunded: false, refundAmount: 0, ledgerChanged: linkedLedgerIds.size > 0 },
     };
   }
 
   const refundAmount = preview.refundAmount;
+
+  // 입금 전(입금대기)이면 받은 돈이 없어 수입은 그대로 두고 계산한 금액만 이력에 남긴다.
+  if (status !== "paid") {
+    return { state: closedTicketState, result: { mode: "refund", refunded: refundAmount > 0, refundAmount, ledgerChanged: false } };
+  }
   // 수입 행은 등록 이력의 ledgerEntryId로 찾는다(서버와 같다). 연결된 수입 행이 없는 등록은 감액할 대상이 없다.
   const remainingByLedgerId = new Map(
     allocateLessonTicketRefund(
@@ -110,7 +135,7 @@ export function deleteDemoLessonTicket(
 
   return {
     state: {
-      ...withoutTicket,
+      ...closedTicketState,
       ledgerEntries: state.ledgerEntries.flatMap((entry) => {
         const remaining = remainingByLedgerId.get(entry.ledgerId);
 
@@ -120,6 +145,6 @@ export function deleteDemoLessonTicket(
         return [{ ...entry, amount: remaining }];
       }),
     },
-    result: { mode: "refund", refunded: refundAmount > 0, refundAmount },
+    result: { mode: "refund", refunded: refundAmount > 0, refundAmount, ledgerChanged: refundAmount > 0 && remainingByLedgerId.size > 0 },
   };
 }

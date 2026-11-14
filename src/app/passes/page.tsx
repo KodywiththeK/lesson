@@ -67,6 +67,9 @@ export default function PassesPage() {
             deleteLessonTicket={
               useTestDemo ? demo.deleteLessonTicket : undefined
             }
+            changeLessonTicketPayment={
+              useTestDemo ? demo.changeLessonTicketPayment : undefined
+            }
           />}
         </AppShell>
       )}

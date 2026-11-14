@@ -18,6 +18,10 @@ import {
   type LessonTicketListSupabaseClient,
   type LessonTicketRegistrationOptionsSupabaseClient,
   type RegisterLessonTicketSupabaseClient,
+  cancelLessonTicketPayment,
+  markLessonTicketPaid,
+  startLessonTicketPaymentWait,
+  type LessonTicketPaymentSupabaseClient,
 } from "./lesson-tickets";
 import { createFakeSupabase } from "./test-support/fake-supabase";
 
@@ -109,7 +113,7 @@ describe("fetchLessonTicketList", () => {
       expect.objectContaining({
         table: "lesson_ticket_grants",
         select:
-          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, students!lesson_ticket_grants_academy_student_fk(name)",
+          "id, academy_id, student_id, instrument_id, instrument_name, total_granted_count, remaining_count, service_total_count, service_remaining_count, valid_from, valid_until, registered_at, payment_status, due_on, payment_method, legacy_merged, students!lesson_ticket_grants_academy_student_fk(name)",
         eq: [["academy_id", "academy-1"]],
         order: [["id", undefined]],
         range: [[0, 999]],
@@ -381,6 +385,7 @@ describe("registerLessonTicket", () => {
           p_registered_at: "2026-09-20",
           p_paid_amount: 150000,
           p_is_service: false,
+          p_due_on: "2026-09-20",
         },
       },
     ]);
@@ -550,7 +555,7 @@ describe("회차권 삭제·환불 미리보기", () => {
       rpc(name: string, payload: unknown) {
         calls.push({ name, payload });
 
-        return Promise.resolve({ data: { mode: "refund", refunded: true, refund_amount: 70000 }, error: null });
+        return Promise.resolve({ data: { mode: "refund", refunded: true, refund_amount: 70000, ledger_changed: true }, error: null });
       },
     } as unknown as DeleteLessonTicketSupabaseClient;
 
@@ -558,6 +563,7 @@ describe("회차권 삭제·환불 미리보기", () => {
       mode: "refund",
       refunded: true,
       refundAmount: 70000,
+      ledgerChanged: true,
     });
     expect(calls).toEqual([
       { name: "delete_lesson_ticket", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_mode: "refund" } },
@@ -572,5 +578,44 @@ describe("회차권 삭제·환불 미리보기", () => {
     await expect(
       deleteLessonTicket(client, { academyId: "academy-1", ticketId: "ticket-1", mode: "mistake" }),
     ).rejects.toThrow("회차권을 삭제하지 못했습니다: 사용한 회차권은 잘못 등록으로 삭제할 수 없습니다.");
+  });
+});
+
+describe("회차권 입금 상태 전환 API", () => {
+  function createClient(error: Error | null = null) {
+    const calls: Array<{ functionName: string; payload: Record<string, unknown> }> = [];
+    const client = {
+      async rpc(functionName: string, payload: Record<string, unknown>) {
+        calls.push({ functionName, payload });
+        return { data: error ? null : {}, error };
+      },
+    } as unknown as LessonTicketPaymentSupabaseClient;
+
+    return { client, calls };
+  }
+
+  it("입금대기 시작·입금 처리·입금 취소 RPC에 학원·회차권과 입금일·결제 방식을 보낸다", async () => {
+    const { client, calls } = createClient();
+
+    await startLessonTicketPaymentWait(client, { academyId: "academy-1", ticketId: "ticket-1" });
+    await markLessonTicketPaid(client, { academyId: "academy-1", ticketId: "ticket-1", paidOn: "2026-11-14", paymentMethod: "cash" });
+    await cancelLessonTicketPayment(client, { academyId: "academy-1", ticketId: "ticket-1" });
+
+    expect(calls).toEqual([
+      { functionName: "start_lesson_ticket_payment_wait", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1" } },
+      {
+        functionName: "mark_lesson_ticket_paid",
+        payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_paid_on: "2026-11-14", p_payment_method: "cash" },
+      },
+      { functionName: "cancel_lesson_ticket_payment", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1" } },
+    ]);
+  });
+
+  it("실패하면 서버 문구와 함께 알린다", async () => {
+    const { client } = createClient(new Error("입금대기 상태인 회차권만 입금 처리할 수 있습니다."));
+
+    await expect(
+      markLessonTicketPaid(client, { academyId: "academy-1", ticketId: "ticket-1", paidOn: "2026-11-14", paymentMethod: "cash" }),
+    ).rejects.toThrow("입금 처리하지 못했습니다: 입금대기 상태인 회차권만 입금 처리할 수 있습니다.");
   });
 });

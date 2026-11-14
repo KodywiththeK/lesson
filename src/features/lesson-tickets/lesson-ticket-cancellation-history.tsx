@@ -35,7 +35,7 @@ export function LessonTicketCancellationHistory({ academyId, client, rows, searc
     sortDirection: "desc", getTieBreaker: (row) => row.id, search,
     searchFields: [(row) => row.student_name ?? "", (row) => row.instrument_name ?? "",
       (row) => row.registered_at ?? "", (row) => row.valid_until ?? "", (row) => toFinanceDate(row.occurred_at),
-      (row) => row.mode === "refund" ? "환불" : "삭제"],
+      (row) => row.mode === "refund" ? "환불" : "취소"],
     page, pageSize,
   });
   return <>
@@ -45,7 +45,7 @@ export function LessonTicketCancellationHistory({ academyId, client, rows, searc
     </TableRow></TableHeader><TableBody>{view.items.map((row) => <TableRow key={row.id}>
       <TableCell label="원생">{row.student_name ?? "알 수 없음"}</TableCell>
       <TableCell label="악기">{row.instrument_name ?? "알 수 없음"}</TableCell>
-      <TableCell label="상태">{row.mode === "refund" ? "환불" : "삭제"}</TableCell>
+      <TableCell label="상태">{row.mode === "refund" ? "환불" : "취소"}</TableCell>
       <TableCell label="부여 / 잔여">{row.total_count ?? "알 수 없음"} / {row.remaining_count ?? "알 수 없음"}</TableCell>
       <TableCell label="등록일">{row.registered_at ?? "알 수 없음"}</TableCell>
       <TableCell label="만료일">{row.valid_until ?? "알 수 없음"}</TableCell>

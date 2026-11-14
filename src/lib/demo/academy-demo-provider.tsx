@@ -19,6 +19,7 @@ import {
 } from "@/domain/book-sale";
 import {
   buildBookStockList,
+  type BookReleaseBatchInput,
   type BookStockRow,
   type BuildBookStockListOptions,
 } from "@/domain/book-stock";
@@ -70,6 +71,8 @@ import {
   registerDemoAcademyTeacher,
   registerDemoConsultation,
   registerDemoLessonTicket,
+  changeDemoLessonTicketPayment,
+  type DemoLessonTicketPaymentChange,
   registerDemoManualLedgerEntry,
   deleteDemoVendor,
   registerDemoVendor,
@@ -95,7 +98,7 @@ import {
   cancelDemoBookPayment,
   deleteDemoBook,
   deleteDemoBookRelease,
-  registerDemoBookRelease,
+  registerDemoBookReleases,
   registerDemoBookStock,
   updateDemoBook,
   updateDemoBookRelease,
@@ -113,6 +116,7 @@ type DemoAcademyContextValue = {
   updateTeacher: (input: DemoTeacherUpdateInput) => void;
   updateTeacherStatus: (input: DemoTeacherStatusInput) => void;
   registerLessonTicket: (input: RegisterLessonTicketInput) => Promise<RegisterLessonTicketResult>;
+  changeLessonTicketPayment: (input: DemoLessonTicketPaymentChange) => Promise<void>;
   adjustLessonTicket: (input: AdjustLessonTicketInput) => Promise<AdjustLessonTicketResult>;
   getLessonTicketRefundPreview: (ticketId: string) => Promise<LessonTicketRefundPreview>;
   deleteLessonTicket: (input: DeleteLessonTicketInput) => Promise<DeleteLessonTicketResult>;
@@ -143,7 +147,7 @@ type DemoAcademyContextValue = {
   registerBookStock: (input: DemoBookStockInput) => void;
   updateBook: (input: DemoBookStockInput & { bookId: string }) => void;
   deleteBook: (input: { bookId: string }) => void;
-  registerBookRelease: (input: DemoBookReleaseRegisterInput) => void;
+  registerBookReleases: (input: DemoBookReleaseBatchRegisterInput) => void;
   updateBookRelease: (input: DemoBookReleaseUpdateInput) => void;
   deleteBookRelease: (input: { releaseId: string }) => void;
   cancelBookPayment: (input: { releaseId: string; reason: string }) => void;
@@ -228,7 +232,7 @@ export type DemoBookReleaseUpdateInput = {
   shippedOn: string;
 };
 
-export type DemoBookReleaseRegisterInput = Omit<DemoBookReleaseUpdateInput, "releaseId"> & {
+export type DemoBookReleaseBatchRegisterInput = BookReleaseBatchInput & {
   status: "payment-pending" | "paid";
   paidOn?: string;
 };
@@ -284,6 +288,10 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
         commitState((current) => registerDemoLessonTicket(current, input).state);
 
         return result;
+      },
+      async changeLessonTicketPayment(input) {
+        changeDemoLessonTicketPayment(state, input);
+        commitState((current) => changeDemoLessonTicketPayment(current, input));
       },
       async adjustLessonTicket(input) {
         const { result } = adjustDemoLessonTicket(state, input);
@@ -387,8 +395,8 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       deleteBook(input) {
         commitBookChange((current) => deleteDemoBook(current, input));
       },
-      registerBookRelease(input) {
-        commitBookChange((current) => registerDemoBookRelease(current, input));
+      registerBookReleases(input) {
+        commitBookChange((current) => registerDemoBookReleases(current, input));
       },
       updateBookRelease(input) {
         commitBookChange((current) => updateDemoBookRelease(current, input));

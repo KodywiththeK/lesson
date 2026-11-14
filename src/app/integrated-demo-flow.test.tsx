@@ -8,7 +8,7 @@ import PrivateLessonsPage from "./lessons/private/page";
 import PassesPage from "./passes/page";
 
 describe("integrated demo flow", () => {
-  it("회차권 구매 금액을 수입 페이지에 자동 반영한다", async () => {
+  it("회차권은 등록 후 입금대기·입금 처리를 거쳐 수입 페이지에 반영된다", async () => {
     const user = userEvent.setup();
     const view = render(
       <AppProviders>
@@ -37,6 +37,15 @@ describe("integrated demo flow", () => {
     fireEvent.submit(
       within(dialog).getByRole("form", { name: "회차권 등록 입력" }),
     );
+
+    // 등록 상태에서는 수입이 없고, 입금대기 → 입금 처리 때 기록된다.
+    await user.click(await screen.findByRole("button", { name: "한서아 바이올린 입금대기로 전환" }));
+    await user.click(await screen.findByRole("button", { name: "한서아 바이올린 입금 처리" }));
+    const payment = await screen.findByRole("dialog", { name: "회차권 입금 처리" });
+    fireEvent.change(within(payment).getByLabelText("입금일"), { target: { value: "2026-08-21" } });
+    await user.selectOptions(within(payment).getByLabelText("결제 방식"), "transfer");
+    await user.click(within(payment).getByRole("button", { name: "확인" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "회차권 입금 처리" })).not.toBeInTheDocument());
 
     view.rerender(
       <AppProviders>

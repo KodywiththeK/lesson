@@ -33,6 +33,7 @@ const eligiblePreview: LessonTicketRefundPreview = {
 };
 
 function renderDialog({
+  target = ticket,
   preview = eligiblePreview,
   loadError,
   isDeleting = false,
@@ -44,13 +45,14 @@ function renderDialog({
   isDeleting?: boolean;
   onClose?: () => void;
   onConfirm?: (ticket: LessonTicketListRow, mode: "refund" | "mistake") => void;
+  target?: LessonTicketListRow;
 } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
     <QueryClientProvider client={client}>
       <LessonTicketDeleteDialog
-        ticket={ticket}
+        ticket={target}
         loadPreview={async () => {
           if (loadError) throw loadError;
           return preview;
@@ -85,7 +87,7 @@ describe("LessonTicketDeleteDialog", () => {
   it("규정에 맞으면 현재 규정과 사용 횟수, 환불 예정 금액을 알린다", async () => {
     renderDialog();
 
-    const dialog = await screen.findByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+    const dialog = await screen.findByRole("alertdialog", { name: "회차권을 환불하거나 취소할까요?" });
     expect(within(dialog).getByText(/한서아 바이올린 회차권/)).toBeInTheDocument();
     expect(await within(dialog).findByText(/현재 규정: 언제든 남은 회수 비례 환불/)).toBeInTheDocument();
     expect(within(dialog).getByText(/사용 6\/8회/)).toBeInTheDocument();
@@ -98,7 +100,7 @@ describe("LessonTicketDeleteDialog", () => {
 
     const dialog = await screen.findByRole("alertdialog");
     expect(await within(dialog).findByText(/현재 규정으로는 환불할 수 없습니다/)).toBeInTheDocument();
-    expect(within(dialog).getByText(/회차권만 삭제되고 수입 내역은 그대로 남습니다/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/회차권만 환불 상태로 바뀌고 수입 내역은 그대로 남습니다/)).toBeInTheDocument();
   });
 
   it("환불 대상이어도 결제 금액이 없으면 돌려줄 금액이 없다고 알린다", async () => {
@@ -112,8 +114,8 @@ describe("LessonTicketDeleteDialog", () => {
 
     const dialog = await screen.findByRole("alertdialog");
     await within(dialog).findByText(/현재 규정/);
-    expect(within(dialog).getByRole("radio", { name: /잘못 등록해서 삭제/ })).toBeDisabled();
-    expect(within(dialog).getByText(/이미 사용한 회차권이라 선택할 수 없습니다/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /취소\(잘못 등록\)/ })).toBeDisabled();
+    expect(within(dialog).getByText(/이미 사용한 회차권은 취소할 수 없습니다/)).toBeInTheDocument();
   });
 
   it("환불 처리를 기본으로 삭제를 확인한다", async () => {
@@ -122,7 +124,7 @@ describe("LessonTicketDeleteDialog", () => {
 
     const dialog = await screen.findByRole("alertdialog");
     await within(dialog).findByText(/현재 규정/);
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(within(dialog).getByRole("button", { name: "환불 처리" }));
 
     expect(onConfirm).toHaveBeenCalledWith(ticket, "refund");
   });
@@ -134,9 +136,9 @@ describe("LessonTicketDeleteDialog", () => {
     });
 
     const dialog = await screen.findByRole("alertdialog");
-    await user.click(await within(dialog).findByRole("radio", { name: /잘못 등록해서 삭제/ }));
-    expect(within(dialog).getByText(/수입 내역에 기록된 결제도 함께 지워집니다/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "삭제" }));
+    await user.click(await within(dialog).findByRole("radio", { name: /취소\(잘못 등록\)/ }));
+    expect(within(dialog).getByText(/입금된 수입 내역은 함께 지워집니다/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "취소 처리" }));
 
     expect(onConfirm).toHaveBeenCalledWith(ticket, "mistake");
   });
@@ -145,9 +147,9 @@ describe("LessonTicketDeleteDialog", () => {
     renderDialog({ loadError: new Error("환불 정보를 불러오지 못했습니다: 권한이 없습니다.") });
 
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByRole("button", { name: "삭제" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "환불 처리" })).toBeDisabled();
     expect(await within(dialog).findByText(/권한이 없습니다/)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "삭제" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "환불 처리" })).toBeDisabled();
   });
 
   it("처리 중에는 중복 삭제와 취소를 막는다", async () => {
@@ -155,15 +157,35 @@ describe("LessonTicketDeleteDialog", () => {
 
     const dialog = await screen.findByRole("alertdialog");
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "처리 중" })).toBeDisabled());
-    expect(within(dialog).getByRole("button", { name: "취소" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "닫기" })).toBeDisabled();
   });
 
   it("취소하면 닫는다", async () => {
     const user = userEvent.setup();
     const { onClose } = renderDialog();
 
-    await user.click(await screen.findByRole("button", { name: "취소" }));
+    await user.click(await screen.findByRole("button", { name: "닫기" }));
 
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("LessonTicketDeleteDialog 입금 상태별 처리", () => {
+  it("등록 상태(받은 돈 없음)는 환불을 막고 취소를 기본으로 고른다", async () => {
+    renderDialog({
+      target: { ...ticket, paymentStatus: "registered" } as LessonTicketListRow,
+      preview: { ...eligiblePreview, canDeleteAsMistake: true },
+    });
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(await within(dialog).findByRole("radio", { name: /환불 처리/ })).toBeDisabled();
+    expect(within(dialog).getByText(/등록 상태라 받은 돈이 없어 취소로 처리합니다/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", { name: /취소\(잘못 등록\)/ })).toBeChecked();
+  });
+
+  it("입금대기 환불은 수입 내역을 바꾸지 않고 계산한 금액만 이력에 남긴다고 알린다", async () => {
+    renderDialog({ target: { ...ticket, paymentStatus: "payment-pending" } as LessonTicketListRow });
+
+    expect(await screen.findByText(/입금 전이라 수입 내역은 바뀌지 않고 계산한 금액만 사용취소 이력에 남습니다/)).toBeInTheDocument();
   });
 });

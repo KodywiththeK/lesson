@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { ListStatusAlert } from "@/components/management/list-controls";
 import { DateField } from "@/components/operations/date-time-fields";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ import {
 } from "@/domain/lesson-ticket";
 import { LEDGER_AMOUNT_MAX } from "@/domain/book-stock";
 import { parseWonInput } from "@/domain/money-input";
+import { resolveLessonTicketDueOn } from "@/domain/lesson-ticket-payment";
 import type {
   LessonTicketRegistrationStudentOption,
   RegisterLessonTicketInput,
@@ -58,6 +60,9 @@ export function LessonTicketRegistrationForm({
   const [registeredAt, setRegisteredAt] = useState(today);
   const [paidAmountText, setPaidAmountText] = useState("");
   const [isService, setIsService] = useState(false);
+  const [dueOnSameAsRegistered, setDueOnSameAsRegistered] = useState(true);
+  const [chosenDueOn, setChosenDueOn] = useState(today);
+  const dueOn = resolveLessonTicketDueOn({ registeredAt, dueOn: chosenDueOn, sameAsRegistered: dueOnSameAsRegistered });
   const eligibleOptions = options.filter((option) => option.instruments.length > 0);
   const instruments = [...new Map(eligibleOptions.flatMap((option) =>
     option.instruments.map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
@@ -109,6 +114,7 @@ export function LessonTicketRegistrationForm({
           registeredAt,
           paidAmount: paidAmount ?? 0,
           isService,
+          dueOn,
         });
       }}
     >
@@ -206,10 +212,29 @@ export function LessonTicketRegistrationForm({
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={isService} onChange={(event) => setIsService(event.target.checked)} />
+      <div className="grid gap-2">
+        <Label className="flex items-center gap-2 text-sm font-normal">
+          <Checkbox
+            checked={dueOnSameAsRegistered}
+            onCheckedChange={(checked) => {
+              setDueOnSameAsRegistered(checked === true);
+              setChosenDueOn(registeredAt);
+            }}
+          />
+          납입일을 등록일과 동일하게
+        </Label>
+        {dueOnSameAsRegistered ? null : (
+          <Label className="grid gap-1 sm:max-w-xs">
+            <span>납입일</span>
+            <DateField aria-label="납입일" required value={chosenDueOn} onValueChange={setChosenDueOn} />
+          </Label>
+        )}
+      </div>
+
+      <Label className="flex items-center gap-2 text-sm font-normal">
+        <Checkbox checked={isService} onCheckedChange={(checked) => setIsService(checked === true)} />
         서비스로 지급하기
-      </label>
+      </Label>
       {canRecordPayment && !isService ? <div className="grid gap-1">
         <Label className="grid gap-1">
           <span>결제 금액(필수)</span>
@@ -225,7 +250,7 @@ export function LessonTicketRegistrationForm({
           />
         </Label>
         <p id={paidAmountHintId} className="text-xs text-muted-foreground">
-          양수 금액을 입력하면 수입 내역에 기록됩니다. 서비스 지급은 0원으로 기록합니다.
+          {"유료 회차권은 '등록' 상태로 저장되고, 입금대기로 바꾼 뒤부터 레슨에 쓸 수 있습니다. 수입 내역은 입금 처리할 때 기록됩니다."}
         </p>
         {!hasValidPaidAmount ? <p className="text-xs text-destructive">결제 금액은 1~{LEDGER_AMOUNT_MAX.toLocaleString("ko-KR")}원 사이의 정수로 입력해 주세요.</p> : null}
       </div> : null}

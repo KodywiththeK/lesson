@@ -6,6 +6,7 @@ import {
   markDemoPrivateLessonAttendance,
   registerDemoAcademyStudent,
   adjustDemoLessonTicket,
+  changeDemoLessonTicketPayment,
   registerDemoLessonTicket,
   registerDemoConsultation,
   deleteDemoVendor,
@@ -60,7 +61,7 @@ describe("academy demo state", () => {
     ).toBe(true);
   });
 
-  it("같은 원생·악기 구매도 별도 회차권과 수입 행으로 남긴다", () => {
+  it("같은 원생·악기 구매도 별도 회차권으로 남기고 유료 회차권은 수입 없이 '등록'으로 시작한다", () => {
     const state = createInitialDemoAcademyState();
 
     const { state: next, result } = registerDemoLessonTicket(state, {
@@ -94,14 +95,44 @@ describe("academy demo state", () => {
       validFrom: "2026-08-21",
       validUntil: "2026-09-20",
     });
-    expect(next.ledgerEntries).toContainEqual(
-      expect.objectContaining({
-        type: "income",
-        source: "lesson-ticket",
-        amount: 160000,
-        description: "한서아 바이올린 회차권 4회 구매",
-      }),
+    expect(next.tickets.at(-1)).toMatchObject({ paymentStatus: "registered", dueOn: "2026-08-21" });
+    expect(next.ledgerEntries).toHaveLength(state.ledgerEntries.length);
+    expect(next.ticketRegistrations.at(-1)).toMatchObject({ originalPaidAmount: 160000, ledgerEntryId: null });
+  });
+
+  it("회차권 입금 상태는 등록 → 입금대기 → 입금완료로 바뀌고 입금 처리 때 수입을 기록하며 입금 취소로 되돌린다", () => {
+    const state = createInitialDemoAcademyState();
+    const { state: registered, result } = registerDemoLessonTicket(state, {
+      academyId: state.academyId,
+      studentId: "student-4",
+      instrumentId: "violin",
+      instrumentName: "바이올린",
+      grantedCount: 4,
+      validDays: 30,
+      registeredAt: "2026-08-21",
+      paidAmount: 160000,
+      dueOn: "2026-08-25",
+    });
+    const ticketOf = (target: typeof state) => target.tickets.find((ticket) => ticket.ticketId === result.ticketId)!;
+
+    expect(ticketOf(registered).dueOn).toBe("2026-08-25");
+    expect(() => changeDemoLessonTicketPayment(registered, { ticketId: result.ticketId, action: "mark-paid", paidOn: "2026-08-22", paymentMethod: "cash" }))
+      .toThrow("입금대기 상태인 회차권만 입금 처리할 수 있습니다.");
+
+    const waiting = changeDemoLessonTicketPayment(registered, { ticketId: result.ticketId, action: "start-payment-wait" });
+    expect(ticketOf(waiting).paymentStatus).toBe("payment-pending");
+
+    const paid = changeDemoLessonTicketPayment(waiting, { ticketId: result.ticketId, action: "mark-paid", paidOn: "2026-08-22", paymentMethod: "cash" });
+    expect(ticketOf(paid)).toMatchObject({ paymentStatus: "paid", paidAt: "2026-08-22", paymentMethod: "cash" });
+    expect(paid.ledgerEntries).toContainEqual(
+      expect.objectContaining({ source: "lesson-ticket", amount: 160000, occurredOn: "2026-08-22", refId: result.ticketId }),
     );
+    expect(paid.ticketRegistrations.at(-1)?.ledgerEntryId).toEqual(expect.any(String));
+
+    const cancelled = changeDemoLessonTicketPayment(paid, { ticketId: result.ticketId, action: "cancel-payment" });
+    expect(ticketOf(cancelled)).toMatchObject({ paymentStatus: "payment-pending", paidAt: undefined, paymentMethod: undefined });
+    expect(cancelled.ledgerEntries.some((entry) => entry.refId === result.ticketId)).toBe(false);
+    expect(cancelled.ticketRegistrations.at(-1)?.ledgerEntryId).toBeNull();
   });
 
   it("권을 삭제한 뒤 다시 구매해도 남은 권과 ID가 겹치지 않는다", () => {
@@ -157,6 +188,7 @@ describe("academy demo state", () => {
     });
     expect(result).toMatchObject({ merged: false, remainingCount: 8, validUntil: "2026-09-20" });
     expect(next.ledgerEntries).toHaveLength(state.ledgerEntries.length);
+    expect(next.tickets.at(-1)).toMatchObject({ paymentStatus: "paid" });
   });
 
   it("서비스 선택 없이 결제 금액을 비운 일반 구매는 거부한다", () => {

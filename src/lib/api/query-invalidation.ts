@@ -25,3 +25,14 @@ export function invalidateAfterBookChange(queryClient: QueryClient, academyId: s
   void queryClient.invalidateQueries({ queryKey: queryKeys.books.all(academyId) });
   void queryClient.invalidateQueries({ queryKey: queryKeys.finance.all(academyId) });
 }
+
+/**
+ * 회차권 등록·입금 상태·환불·취소 변경 뒤 함께 갱신해야 하는 쿼리.
+ * 입금 상태에 따라 예약·출석 가능 여부가 바뀌므로 레슨표와 예약 가능 회차도 함께 무효화한다.
+ */
+export function invalidateAfterLessonTicketChange(queryClient: QueryClient, academyId: string) {
+  for (const section of ["lesson-tickets", "finance", "lesson-workspace"] as const) {
+    void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), section] });
+  }
+  void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
+}

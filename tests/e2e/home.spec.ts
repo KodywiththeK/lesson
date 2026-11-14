@@ -650,7 +650,7 @@ for (const viewport of [
   });
 }
 
-test("원장은 설정에서 환불 규정을 고르고 회차권을 환불 처리로 삭제한다", async ({ page }) => {
+test("원장은 설정에서 환불 규정을 고르고 회차권을 환불 처리하면 사용취소 이력으로 옮겨진다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
 
@@ -665,33 +665,33 @@ test("원장은 설정에서 환불 규정을 고르고 회차권을 환불 처�
 
   // 같은 화면 상태를 이어서 쓰도록 새로고침하지 않고 메뉴로 이동한다.
   await mainNavigation(page).getByRole("link", { name: "회차권", exact: true }).click();
-  await page.getByRole("button", { name: "한서아 바이올린 회차권 삭제" }).click();
+  await page.getByRole("button", { name: "한서아 바이올린 회차권 환불·취소" }).click();
 
-  const dialog = page.getByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+  const dialog = page.getByRole("alertdialog", { name: "회차권을 환불하거나 취소할까요?" });
   await expect(dialog.getByText(/현재 규정: 언제든 남은 회수 비례 환불/)).toBeVisible();
   await expect(dialog.getByText(/환불 예정 금액 70,000원/)).toBeVisible();
-  await dialog.getByRole("button", { name: "삭제" }).click();
+  await dialog.getByRole("button", { name: "환불 처리" }).click();
 
   await expect(page.getByRole("alertdialog")).toBeHidden();
-  await expect(page.getByRole("button", { name: "한서아 바이올린 회차권 삭제" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "최도윤 첼로 회차권 삭제" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "한서아 바이올린 회차권 환불·취소" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "최도윤 첼로 회차권 환불·취소" })).toBeVisible();
 });
 
-test("작은 모바일에서도 회차권 삭제 확인창이 화면 안에 들어오고 환불 불가 규정을 알린다", async ({ page }) => {
+test("작은 모바일에서도 회차권 환불·취소 확인창이 화면 안에 들어오고 환불 불가 규정을 알린다", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/passes");
 
-  await page.getByRole("button", { name: "최도윤 첼로 회차권 삭제" }).click();
+  await page.getByRole("button", { name: "최도윤 첼로 회차권 환불·취소" }).click();
 
-  const dialog = page.getByRole("alertdialog", { name: "회차권을 삭제할까요?" });
+  const dialog = page.getByRole("alertdialog", { name: "회차권을 환불하거나 취소할까요?" });
   await expect(dialog.getByText(/현재 규정으로는 환불할 수 없습니다/)).toBeVisible();
-  await expect(dialog.getByRole("radio", { name: /잘못 등록해서 삭제/ })).toBeDisabled();
+  await expect(dialog.getByRole("radio", { name: /취소\(잘못 등록\)/ })).toBeDisabled();
   const box = await dialog.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(320);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 
-  await dialog.getByRole("button", { name: "취소" }).click();
+  await dialog.getByRole("button", { name: "닫기" }).click();
   await expect(page.getByRole("alertdialog")).toBeHidden();
 });

@@ -28,7 +28,7 @@ export const LESSON_TICKET_REFUND_POLICY_OPTIONS: ReadonlyArray<{
   {
     value: "none",
     label: "환불 불가",
-    description: "한 번 결제한 회차권은 환불하지 않습니다. 삭제해도 수입 내역은 그대로 남습니다.",
+    description: "한 번 결제한 회차권은 환불하지 않습니다. 사용하지 않은 회차권은 취소(잘못 등록)로 처리할 수 있습니다.",
   },
 ];
 

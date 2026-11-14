@@ -1,3 +1,5 @@
+import { isLessonTicketClosed, type LessonTicketPaymentStatus } from "./lesson-ticket-payment";
+import type { TuitionPaymentMethod } from "./tuition-income";
 import {
   buildListView,
   type ListView,
@@ -37,6 +39,13 @@ export type LessonTicketListItem = LessonTicket & {
   serviceRemainingCount?: number;
   paidAmount?: number;
   paidAt?: string;
+  /** 입금 상태. 없으면 상태 도입 전 자료라 입금완료로 본다. */
+  paymentStatus?: LessonTicketPaymentStatus;
+  /** 납입일. 없으면 등록일과 같다. */
+  dueOn?: string;
+  paymentMethod?: TuitionPaymentMethod;
+  /** 여러 유료 구매가 합쳐진 이전 회차권(입금 취소 불가). */
+  legacyMerged?: boolean;
 };
 
 export type AttendanceConfirmation = {
@@ -179,6 +188,8 @@ export function buildLessonTicketList(
 ): ListView<LessonTicketListRow> {
   const rows = tickets
     .filter((ticket) => ticket.academyId === options.academyId)
+    // 환불·취소된 회차권은 지우지 않고 남기지만 사용중·사용완료가 아니라 사용취소 이력으로 본다.
+    .filter((ticket) => !isLessonTicketClosed(ticket.paymentStatus ?? "paid"))
     .map((ticket) => ({
       ...ticket,
       ...summarizeLessonTicketStatus(ticket, options),

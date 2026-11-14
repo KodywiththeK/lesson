@@ -1,3 +1,5 @@
+import { isLessonTicketUsable, type LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import type { TuitionPaymentMethod } from "@/domain/tuition-income";
 import {
   buildDailyAcademyAttendance,
   DEFAULT_ABSENCE_REASON,
@@ -634,40 +636,21 @@ export function registerDemoLessonTicket(
     state.students.find((student) => student.studentId === input.studentId)?.name ??
     "이름 없음";
   const paidAmount = input.paidAmount ?? 0;
+  // 서버 10인자 등록과 같다: 유료 회차권은 수입 없이 '등록'으로 시작하고 서비스(0원)는 바로 입금완료다.
   const ticket: LessonTicketListItem = {
     ...registered.ticket,
     ticketId: `ticket-demo-${crypto.randomUUID()}`,
     studentName,
     instrumentName: input.instrumentName,
     paidAmount,
-    paidAt: paidAmount > 0 ? input.registeredAt : undefined,
     serviceTotalCount: input.isService ? input.grantedCount : 0,
     serviceRemainingCount: input.isService ? input.grantedCount : 0,
+    paymentStatus: paidAmount > 0 ? "registered" : "paid",
+    dueOn: input.dueOn ?? input.registeredAt,
   };
   const tickets = [...state.tickets, ticket];
-  const ledgerId = paidAmount > 0
-    ? `ledger-ticket-${ticket.ticketId}-${state.ticketRegistrations.length + 1}`
-    : null;
-  const ledgerEntries =
-    paidAmount > 0
-      ? buildFinanceLedgerList(
-          [
-            ...state.ledgerEntries,
-            {
-              academyId: state.academyId,
-              ledgerId: ledgerId!,
-              occurredOn: input.registeredAt,
-              type: "income",
-              source: "lesson-ticket",
-              category: "lesson-ticket",
-              amount: paidAmount,
-              description: `${studentName} ${input.instrumentName} 회차권 ${input.grantedCount}회 구매`,
-              refId: ticket.ticketId,
-            },
-          ],
-          { academyId: state.academyId },
-        )
-      : state.ledgerEntries;
+  const ledgerEntries = state.ledgerEntries;
+  const ledgerId = null;
 
   return {
     state: {
@@ -757,11 +740,13 @@ export function markDemoPrivateLessonAttendance(
     };
   }
 
+  // 입금대기·입금완료 회차권만 차감한다(등록 상태는 아직 쓸 수 없다).
   const ticket = state.tickets.find(
     (candidate) =>
       candidate.academyId === lesson.academyId &&
       candidate.studentId === lesson.studentId &&
-      candidate.instrumentId === lesson.instrumentId,
+      candidate.instrumentId === lesson.instrumentId &&
+      isLessonTicketUsable(candidate.paymentStatus ?? "paid"),
   );
 
   if (!ticket) {
@@ -1150,4 +1135,82 @@ function uniqueNonEmpty(values: Array<string | null | undefined>) {
 
 function getPhoneLast4(phone: string) {
   return phone.replace(/\D/g, "").slice(-4) || undefined;
+}
+
+export type DemoLessonTicketPaymentChange = {
+  ticketId: string;
+  action: LessonTicketPaymentAction;
+  paidOn?: string;
+  paymentMethod?: TuitionPaymentMethod;
+};
+
+/** 회차권 입금 상태 전환. 서버 RPC(start_lesson_ticket_payment_wait 등)와 같은 규칙이다. */
+export function changeDemoLessonTicketPayment(
+  state: DemoAcademyState,
+  input: DemoLessonTicketPaymentChange,
+): DemoAcademyState {
+  const ticket = state.tickets.find((candidate) => candidate.ticketId === input.ticketId);
+
+  if (!ticket) {
+    throw new Error("회차권을 찾을 수 없습니다. 목록을 새로고침해 주세요.");
+  }
+
+  const status = ticket.paymentStatus ?? "paid";
+  const replaceTicket = (next: LessonTicketListItem) =>
+    state.tickets.map((candidate) => (candidate.ticketId === ticket.ticketId ? next : candidate));
+  const registration = [...state.ticketRegistrations]
+    .reverse()
+    .find((candidate) => candidate.ticketId === ticket.ticketId && candidate.originalPaidAmount > 0);
+
+  if (input.action === "start-payment-wait") {
+    if (status !== "registered") throw new Error("등록 상태인 회차권만 입금대기로 바꿀 수 있습니다.");
+
+    return { ...state, tickets: replaceTicket({ ...ticket, paymentStatus: "payment-pending" }) };
+  }
+
+  if (input.action === "mark-paid") {
+    if (status !== "payment-pending") throw new Error("입금대기 상태인 회차권만 입금 처리할 수 있습니다.");
+    if (!input.paidOn) throw new Error("입금일을 입력해 주세요.");
+    if (!input.paymentMethod) throw new Error("결제 방식을 선택해 주세요.");
+    if (!registration) throw new Error("입금할 결제 금액이 없습니다.");
+
+    const ledgerId = `ledger-ticket-${ticket.ticketId}-${state.ledgerEntries.length + 1}`;
+
+    return {
+      ...state,
+      tickets: replaceTicket({ ...ticket, paymentStatus: "paid", paidAt: input.paidOn, paymentMethod: input.paymentMethod }),
+      ledgerEntries: buildFinanceLedgerList(
+        [
+          ...state.ledgerEntries,
+          {
+            academyId: state.academyId,
+            ledgerId,
+            occurredOn: input.paidOn,
+            type: "income",
+            source: "lesson-ticket",
+            category: "lesson-ticket",
+            amount: registration.originalPaidAmount,
+            description: `${ticket.studentName} ${ticket.instrumentName} 회차권 ${registration.grantedCount}회 구매`,
+            refId: ticket.ticketId,
+          },
+        ],
+        { academyId: state.academyId },
+      ),
+      ticketRegistrations: state.ticketRegistrations.map((candidate) =>
+        candidate === registration ? { ...candidate, ledgerEntryId: ledgerId } : candidate,
+      ),
+    };
+  }
+
+  if (status !== "paid") throw new Error("입금완료 상태인 회차권만 입금을 취소할 수 있습니다.");
+  if (!registration) throw new Error("서비스로 지급한 회차권은 입금을 취소할 수 없습니다.");
+
+  return {
+    ...state,
+    tickets: replaceTicket({ ...ticket, paymentStatus: "payment-pending", paidAt: undefined, paymentMethod: undefined }),
+    ledgerEntries: state.ledgerEntries.filter((entry) => entry.ledgerId !== registration.ledgerEntryId),
+    ticketRegistrations: state.ticketRegistrations.map((candidate) =>
+      candidate === registration ? { ...candidate, ledgerEntryId: null } : candidate,
+    ),
+  };
 }

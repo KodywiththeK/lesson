@@ -30,9 +30,10 @@ type LessonTicketDeleteDialogProps = {
 };
 
 /**
- * 회차권 삭제 확인. 기본은 환불 처리(학원 환불 규정을 검사해 수입을 정리)이고,
- * 사용 이력이 없는 회차권은 "잘못 등록해서 삭제"로 수입 기록까지 지울 수 있다.
- * 끝나기 전에는 닫히지 않으며 처리 중에는 중복 클릭을 막는다.
+ * 회차권 환불·취소 확인. 처리한 회차권은 지우지 않고 '환불'·'취소' 상태로 남는다.
+ * 환불은 학원 환불 규정으로 금액을 계산하고(입금완료면 수입을 줄이고, 입금대기면 계산 금액만 이력에 남김),
+ * 취소는 한 번도 쓰지 않은 회차권만 고를 수 있으며 입금된 수입 내역을 함께 지운다.
+ * 등록 상태(받은 돈 없음)는 환불을 막고 취소만 고른다. 끝나기 전에는 닫히지 않고 처리 중에는 중복 클릭을 막는다.
  */
 export function LessonTicketDeleteDialog({
   ticket,
@@ -67,7 +68,9 @@ function LessonTicketDeleteContent({
   isDeleting: boolean;
   onConfirm: (ticket: LessonTicketListRow, mode: DeleteLessonTicketMode) => void;
 }) {
-  const [mode, setMode] = useState<DeleteLessonTicketMode>("refund");
+  const paymentStatus = ticket.paymentStatus ?? "paid";
+  const canRefund = paymentStatus !== "registered";
+  const [mode, setMode] = useState<DeleteLessonTicketMode>(canRefund ? "refund" : "mistake");
   const previewQuery = useQuery({
     queryKey: queryKeys.lessonTickets.refundPreview(ticket.academyId, ticket.ticketId),
     queryFn: () => loadPreview(ticket.ticketId),
@@ -81,9 +84,9 @@ function LessonTicketDeleteContent({
   return (
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>회차권을 삭제할까요?</AlertDialogTitle>
+        <AlertDialogTitle>회차권을 환불하거나 취소할까요?</AlertDialogTitle>
         <AlertDialogDescription>
-          {ticket.studentName} {ticket.instrumentName} 회차권을 삭제합니다. 삭제한 회차권은 되돌릴 수 없습니다.
+          {ticket.studentName} {ticket.instrumentName} 회차권을 환불 또는 취소합니다. 처리한 회차권은 다시 쓸 수 없고 사용취소 이력에 남습니다.
         </AlertDialogDescription>
       </AlertDialogHeader>
 
@@ -96,23 +99,28 @@ function LessonTicketDeleteContent({
 
       {preview ? (
         <RadioGroup
-          aria-label="삭제 방식"
+          aria-label="처리 방식"
           value={mode}
           onValueChange={(value) => setMode(value as DeleteLessonTicketMode)}
         >
           <DeleteModeOption
             value="refund"
             label="환불 처리"
-            description={describeRefund(preview)}
+            description={
+              canRefund
+                ? describeRefund(preview, paymentStatus === "payment-pending")
+                : "등록 상태라 받은 돈이 없어 취소로 처리합니다."
+            }
             checked={mode === "refund"}
+            disabled={!canRefund}
           />
           <DeleteModeOption
             value="mistake"
-            label="잘못 등록해서 삭제"
+            label="취소(잘못 등록)"
             description={
               preview.canDeleteAsMistake
-                ? "수입 내역에 기록된 결제도 함께 지워집니다. 아직 한 번도 쓰지 않은 회차권만 고를 수 있습니다."
-                : "이미 사용한 회차권이라 선택할 수 없습니다."
+                ? "아직 한 번도 쓰지 않은 회차권을 취소합니다. 입금된 수입 내역은 함께 지워집니다."
+                : "이미 사용한 회차권은 취소할 수 없습니다. 환불로 처리해 주세요."
             }
             checked={mode === "mistake"}
             disabled={!preview.canDeleteAsMistake}
@@ -121,7 +129,7 @@ function LessonTicketDeleteContent({
       ) : null}
 
       <AlertDialogFooter>
-        <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+        <AlertDialogCancel disabled={isDeleting}>닫기</AlertDialogCancel>
         <AlertDialogAction
           variant="destructive"
           disabled={!preview || isDeleting}
@@ -131,7 +139,7 @@ function LessonTicketDeleteContent({
             onConfirm(ticket, mode);
           }}
         >
-          {isDeleting ? "처리 중" : "삭제"}
+          {isDeleting ? "처리 중" : mode === "refund" ? "환불 처리" : "취소 처리"}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
@@ -165,16 +173,20 @@ function DeleteModeOption({
   );
 }
 
-function describeRefund(preview: LessonTicketRefundPreview) {
+function describeRefund(preview: LessonTicketRefundPreview, isBeforePayment: boolean) {
   const standing = `현재 규정: ${formatLessonTicketRefundPolicy(preview.policy)}. 사용 ${preview.usedCount}/${preview.totalGrantedCount}회.`;
 
   if (!preview.eligible) {
-    return `${standing} 현재 규정으로는 환불할 수 없습니다. 회차권만 삭제되고 수입 내역은 그대로 남습니다.`;
+    return `${standing} 현재 규정으로는 환불할 수 없습니다. 회차권만 환불 상태로 바뀌고 수입 내역은 그대로 남습니다.`;
   }
 
   if (preview.refundAmount === 0) {
-    return `${standing} 돌려줄 금액이 없습니다. 회차권만 삭제되고 수입 내역은 그대로 남습니다.`;
+    return `${standing} 돌려줄 금액이 없습니다. 회차권만 환불 상태로 바뀌고 수입 내역은 그대로 남습니다.`;
   }
 
-  return `${standing} 환불 예정 금액 ${preview.refundAmount.toLocaleString("ko-KR")}원이며 수입 내역에서 같은 금액이 줄어듭니다.`;
+  const amount = `환불 금액 ${preview.refundAmount.toLocaleString("ko-KR")}원`;
+
+  return isBeforePayment
+    ? `${standing} ${amount}. 입금 전이라 수입 내역은 바뀌지 않고 계산한 금액만 사용취소 이력에 남습니다.`
+    : `${standing} 환불 예정 금액 ${preview.refundAmount.toLocaleString("ko-KR")}원이며 수입 내역에서 같은 금액이 줄어듭니다.`;
 }

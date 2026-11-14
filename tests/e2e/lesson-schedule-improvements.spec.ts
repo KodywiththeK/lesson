@@ -21,20 +21,19 @@ test("개인레슨 달력에서 설정을 분리하고 데스크톱 설정 메�
   await page.screenshot({ path: testInfo.outputPath("private-calendar-settings-desktop.png") });
 });
 
-test("개인레슨 출석 카드와 모바일 일별 표의 악기 태그는 밝은·어두운 테마에서 진한 글자를 유지한다", async ({ page }, testInfo) => {
+test("개인레슨 출석 카드는 악기 색 왼쪽 띠를, 모바일 일별 표의 악기 태그는 밝은·어두운 테마에서 진한 글자를 유지한다", async ({ page }, testInfo) => {
   await page.clock.setFixedTime(new Date("2026-08-21T12:00:00+09:00"));
   await page.goto("/lessons/private");
   await page.getByRole("gridcell", { name: /2026-08-21/ }).click();
   const dialog = page.getByRole("dialog", { name: /개인레슨 출석 확인/ });
   const card = dialog.locator("div.grid.rounded-md").filter({ hasText: "한서아" }).first();
-  const detail = card.getByText(/바이올린 · 오유진/);
-  const cardColor = await card.evaluate((element) => getComputedStyle(element).color);
-  await expect(detail).toHaveCSS("color", cardColor);
-  await expect(card).toHaveCSS("background-color", /rgb\(2[0-5][0-9], 2[0-5][0-9], 2[0-5][0-9]\)/);
+  // 2026-11-14: 카드 배경은 악기 색 대신 기본 배경이고 악기 색은 왼쪽 띠로만 보인다.
+  await expect(card).toHaveCSS("border-left-width", "4px");
+  await expect(card).toHaveCSS("border-left-color", /rgb\(/);
   await page.screenshot({ path: testInfo.outputPath("private-attendance-light-desktop.png") });
 
   await page.evaluate(() => document.documentElement.classList.add("dark"));
-  await expect(detail).toHaveCSS("color", cardColor);
+  await expect(card).toHaveCSS("border-left-width", "4px");
   await page.waitForTimeout(250);
   await page.screenshot({ path: testInfo.outputPath("private-attendance-dark-desktop.png") });
 
@@ -46,7 +45,8 @@ test("개인레슨 출석 카드와 모바일 일별 표의 악기 태그는 밝
   const studentName = row.locator('td[data-label="원생"]').getByText("한서아", { exact: true });
   await expect(row).not.toHaveAttribute("data-instrument-color", "");
   await expect(instrumentTag).toHaveCSS("background-color", /rgb\(/);
-  await expect(instrumentTag).toHaveCSS("color", cardColor);
+  expect(await instrumentTag.evaluate((element) => getComputedStyle(element).color))
+    .not.toBe(await instrumentTag.evaluate((element) => getComputedStyle(element).backgroundColor));
   await expect(studentName).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   expect(await instrumentTag.evaluate((element) => getComputedStyle(element).backgroundColor))
     .not.toBe(await row.evaluate((element) => getComputedStyle(element).backgroundColor));
@@ -85,7 +85,8 @@ test("데모에서 악기 색상을 저장하고 시간표로 이동해도 유�
   await navigation.getByRole("button", { name: "레슨 시간표 하위 메뉴 펼치기" }).click();
   await navigation.getByRole("link", { name: "개인레슨" }).click();
   const calendar = page.getByRole("grid", { name: /개인레슨 캘린더/ });
-  await expect(calendar.getByText(/한서아 \(바이올린\)/).first().locator(".." )).toHaveCSS("background-color", "rgb(220, 228, 208)");
+  // 2026-11-14: 칩 배경은 상태색이고 저장한 악기 색(기본 색 4 = #62852b)은 칩 왼쪽 띠로 남는다.
+  await expect(calendar.locator("[data-tone]").filter({ hasText: /한서아 \(바이올린\)/ }).first()).toHaveCSS("border-left-color", "rgb(98, 133, 43)");
 });
 
 test("모바일 개인레슨 악기 필터가 달력과 출석창에 적용된다", async ({ page }) => {
