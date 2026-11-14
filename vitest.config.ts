@@ -31,6 +31,20 @@ export default defineConfig({
           },
         },
       }),
+      defineProject({
+        plugins: [react()],
+        test: {
+          name: "platform-admin",
+          include: ["apps/platform-admin/src/**/*.test.{ts,tsx}"],
+          environment: "jsdom",
+          setupFiles: ["src/test/setup.ts"],
+        },
+        resolve: {
+          alias: {
+            "@": path.resolve(__dirname, "src"),
+          },
+        },
+      }),
     ],
   },
 });
