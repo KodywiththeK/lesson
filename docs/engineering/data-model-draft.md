@@ -41,7 +41,7 @@
 - 정기 일정 수정은 기존 series를 닫고 새 series를 만들며, 과거 event와 출석 기록이 있는 event는 보존한다.
 - 비정기 학원레슨, 보강, 특강, 개인레슨은 series 없이 event로 직접 생성할 수 있다.
 - event 출처는 `origin`으로 구분한다: `regular`, `manual`, `makeup`, `private`, `special`.
-- 개인레슨 회차권 차감 여부는 event의 `counts_for_ticket`로 결정한다. 일반 일정은 `ticket_grant_id`로 구매 권에 연결하고 `ticket_session_number`·`ticket_total_count`로 당시 회차를 표시한다. 외상 일정은 실제 사용·정산 때 권에 연결한다.
+- 개인레슨 회차권 차감 여부는 event의 `counts_for_ticket`로 결정한다. 일반 일정은 `ticket_grant_id`로 구매 권에 연결하고 `ticket_session_number`·`ticket_total_count`로 당시 회차를 표시한다. (2026-11-14) 외상 일정과 `private_lesson_credits`는 폐지했고 정리 migration `20261114000600`으로 표·칸을 지운다.
 
 ## Tickets
 

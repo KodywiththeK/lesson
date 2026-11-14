@@ -21,6 +21,28 @@
 - 현재 CLI 버전 확인 명령: `pnpm supabase --version`
 - CLI advisor 주의: Supabase CLI `2.81.3+`가 아니면 `supabase db advisors`를 신뢰 경로로 쓰지 않는다.
 
+## 로컬 DB로 migration 실행 검증 (2026-11-14)
+
+운영 DB에 적용하기 전에 Docker 위 로컬 Supabase에서 migration 전체와 seed를 실제로 실행해 본다.
+
+- 준비: Docker Desktop 실행(로그인만 하면 된다). Supabase CLI는 설치하지 않고 `npx -y supabase@3.1.0`로 실행한다.
+- 시작(DB·Auth만, 다른 서비스 제외):
+  `npx -y supabase@3.1.0 start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor`
+  - 처음 한 번은 Postgres 이미지(약 1~2GB)를 내려받는다. 시작하면 `supabase/migrations` 전체와 `supabase/seed.sql`이 적용된다.
+- 다시 처음부터: `npx -y supabase@3.1.0 db reset --local`. 끄기: `npx -y supabase@3.1.0 stop --no-backup`.
+- SQL 확인: `docker exec -i supabase_db_mingyu psql -U postgres`. 역할별 확인은 `select set_config('request.jwt.claims', '{"sub":"<user id>","role":"authenticated"}', false); set role authenticated;`처럼 사용자를 바꿔 RPC를 부른다.
+- CLI v2.122+/v3는 migration 파일을 트랜잭션으로 감싸지 않는다. `LOCK TABLE`처럼 트랜잭션이 필요한 문장은 파일 안에 `begin;` … `commit;`을 직접 둔다. 이 때문에 이미 운영에 적용된 `20261028073720_lesson_ticket_cancellation_history.sql`에 내용 변경 없이 트랜잭션 경계만 더했다(2026-11-14 사용자 승인, 운영 DB는 다시 실행하지 않음).
+- `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
+- `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
+
+## 2026-11-14 학원 피드백 migration 적용 순서 (미적용)
+
+- 대상: `20261114000000`~`20261114000600` 7개. 로컬 DB에서 전체 적용과 시나리오를 확인했다(evidence `2026-11-14-academy-feedback-batch1.md`).
+- 순서: `20261114000000`~`000500` 적용 → 새 앱 배포 → `000600` 적용. 새 앱은 새 RPC(`register_book_releases`, 10인자 `register_lesson_ticket`, 입금 상태 RPC)와 `payment_status`·`legacy_merged` 칸을 쓰므로 `000500`까지가 배포보다 먼저여야 한다. 그 사이 옛 앱에서는 환불·취소한 회차권이 지워지지 않고 잔여 0 행으로 남아 보이고 다시 처리하면 "이미 환불되었거나 취소된 회차권입니다."로 거부된다. 적용과 배포 사이 간격을 짧게 둔다.
+- `20261114000600_drop_private_lesson_credit.sql`은 `lesson_events.credit_authorized` 칸을 지운다. 지금 배포된 앱이 이 칸을 읽고 있으면 오류가 나므로 **새 앱을 먼저 배포한 뒤** 마지막에 적용한다.
+- 적용 전 운영에서 확인: `select count(*) from public.lesson_events where credit_authorized;`, `select count(*) from public.private_lesson_credits;`. 하나라도 0이 아니면 migration이 멈추므로 정리 방법을 먼저 정한다.
+- `20261114000500_payroll_exclude_cancelled_tickets.sql`(급여 단가에서 취소 회차권 제외)은 독립적이라 앱 배포와 순서 관계가 없다. 환불 회차권으로 환불 전에 수업한 회차는 원래 단가로 계속 계산된다.
+
 ## 권장 경로: Supabase MCP로 적용
 
 MCP 도구가 보이면 이 경로를 먼저 사용한다.
