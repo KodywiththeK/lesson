@@ -8,10 +8,12 @@ import {
   BOOK_MESSAGES,
   calculateBookAmount,
   findBookByTitle,
+  validateBookReleaseBatchInput,
   validateBookReleaseInput,
   validateBookStockInput,
   validatePaymentDate,
   BOOK_LIMITS,
+  type BookReleaseBatchInput,
 } from "@/domain/book-stock";
 import { buildFinanceLedgerList } from "@/domain/finance-ledger";
 import { getFinanceToday } from "@/domain/finance-date";
@@ -141,6 +143,8 @@ type BookReleaseDemoInput = {
   shippedOn: string;
 };
 
+type BookReleaseBatchDemoInput = BookReleaseBatchInput & { status: BookSale["status"]; paidOn?: string };
+
 function findEnrolledStudent(state: DemoAcademyState, studentId: string) {
   const student = state.students.find((candidate) => candidate.studentId === studentId);
 
@@ -193,6 +197,38 @@ export function registerDemoBookRelease(
   return input.status === "paid"
     ? completeDemoBookRelease(registered, { releaseId: saleId, paidAt: input.paidOn ?? input.shippedOn })
     : registered;
+}
+
+/**
+ * 원생 한 명의 여러 도서 일괄 출고. 서버 RPC `register_book_releases`처럼 전체를 먼저 확인한 뒤
+ * 도서별로 재고를 줄이고 출고 건을 만든다. 한 줄이라도 문제가 있으면 아무것도 바꾸지 않는다.
+ */
+export function registerDemoBookReleases(
+  state: DemoAcademyState,
+  input: BookReleaseBatchDemoInput,
+): DemoAcademyState {
+  if (!findEnrolledStudent(state, input.studentId)) {
+    throw new Error(BOOK_MESSAGES.studentRequired);
+  }
+
+  throwIfInvalid(
+    validateBookReleaseBatchInput(input, {
+      today: getFinanceToday(),
+      getAvailableQuantity: (bookId) => getActiveBook(state, bookId)?.quantity ?? 0,
+    }),
+  );
+
+  return input.items.reduce(
+    (current, item) =>
+      registerDemoBookRelease(current, {
+        studentId: input.studentId,
+        shippedOn: input.shippedOn,
+        status: input.status,
+        paidOn: input.paidOn,
+        ...item,
+      }),
+    state,
+  );
 }
 
 function findSale(state: DemoAcademyState, releaseId: string) {

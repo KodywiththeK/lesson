@@ -31,7 +31,7 @@ function renderScreen(props: Partial<ComponentProps<typeof BookShipmentScreen>> 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
   const handlers = {
-    registerBookRelease: vi.fn(),
+    registerBookReleases: vi.fn(),
     updateBookRelease: vi.fn(),
     deleteBookRelease: vi.fn(),
   };
@@ -183,17 +183,15 @@ describe("BookShipmentScreen", () => {
 
     it("등록하면 폼을 비우고 알린 뒤 교재·수입 조회를 새로 불러온다", async () => {
       const user = userEvent.setup();
-      const { registerBookRelease, invalidateQueries } = renderScreen();
+      const { registerBookReleases, invalidateQueries } = renderScreen();
 
       await fillAndSubmit(user);
 
       await waitFor(() =>
-        expect(registerBookRelease).toHaveBeenCalledWith({
+        expect(registerBookReleases).toHaveBeenCalledWith({
           studentId: "student-1",
-          bookId: "book-1",
-          price: 12000,
-          quantity: 1,
           shippedOn: "2026-10-15",
+          items: [{ bookId: "book-1", price: 12000, quantity: 1 }],
           status: "payment-pending",
         }),
       );
@@ -204,10 +202,34 @@ describe("BookShipmentScreen", () => {
       expect(screen.getByLabelText("도서명")).toHaveValue("");
     });
 
+    it("여러 도서를 한 번에 등록하면 몇 종을 등록했는지 알린다", async () => {
+      const user = userEvent.setup();
+      const { registerBookReleases } = renderScreen();
+      await screen.findByRole("option", { name: "바이엘 상 (남은 재고 9권)" });
+
+      await user.selectOptions(screen.getByLabelText("이름(원생)"), "student-1");
+      await user.selectOptions(screen.getByLabelText("도서명"), "book-1");
+      await user.click(screen.getByRole("button", { name: "도서 추가" }));
+      await user.selectOptions(within(screen.getByRole("group", { name: "도서 2" })).getByLabelText("도서명"), "book-2");
+      await user.click(screen.getByRole("button", { name: "출고 등록" }));
+
+      await waitFor(() =>
+        expect(registerBookReleases).toHaveBeenCalledWith(
+          expect.objectContaining({
+            items: [
+              { bookId: "book-1", price: 12000, quantity: 1 },
+              { bookId: "book-2", price: 18000, quantity: 1 },
+            ],
+          }),
+        ),
+      );
+      await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("교재 2종 출고를 등록했습니다."));
+    });
+
     it("등록에 실패하면 이유를 알리고 입력한 내용을 그대로 둔다", async () => {
       const user = userEvent.setup();
       renderScreen({
-        registerBookRelease: vi.fn().mockRejectedValue(new Error("재고가 부족합니다. 남은 재고는 0권입니다.")),
+        registerBookReleases: vi.fn().mockRejectedValue(new Error("재고가 부족합니다. 남은 재고는 0권입니다.")),
       });
 
       await fillAndSubmit(user);
@@ -223,13 +245,13 @@ describe("BookShipmentScreen", () => {
     it("처리하는 동안 등록 버튼을 막아 중복 등록을 막는다", async () => {
       const user = userEvent.setup();
       let finish: () => void = () => undefined;
-      const registerBookRelease = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-      renderScreen({ registerBookRelease });
+      const registerBookReleases = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+      renderScreen({ registerBookReleases });
 
       await fillAndSubmit(user);
 
       expect(screen.getByRole("button", { name: "출고 등록" })).toBeDisabled();
-      expect(registerBookRelease).toHaveBeenCalledTimes(1);
+      expect(registerBookReleases).toHaveBeenCalledTimes(1);
 
       finish();
       await waitFor(() => expect(toastMock.success).toHaveBeenCalled());
@@ -334,7 +356,7 @@ describe("BookShipmentScreen", () => {
   });
 
   describe("Supabase 연결", () => {
-    it("주입된 동작이 없으면 교재 RPC로 출고를 등록한다", async () => {
+    it("주입된 동작이 없으면 일괄 출고 RPC로 출고를 등록한다", async () => {
       const user = userEvent.setup();
       const bookRows = testBooks.map((book) => ({
         id: book.bookId,
@@ -348,19 +370,21 @@ describe("BookShipmentScreen", () => {
         select: () => resolvedQuery(table === "books" ? bookRows : []),
       }));
       supabaseMock.client.rpc.mockResolvedValue({
-        data: {
-          id: "sale-new",
-          academy_id: TEST_ACADEMY_ID,
-          book_id: "book-1",
-          student_id: "student-1",
-          student_name: "김민지",
-          book_title: "바이엘 상",
-          price: 12000,
-          quantity: 1,
-          shipped_at: "2026-10-15",
-          status: "payment-pending",
-          paid_at: null,
-        },
+        data: [
+          {
+            id: "sale-new",
+            academy_id: TEST_ACADEMY_ID,
+            book_id: "book-1",
+            student_id: "student-1",
+            student_name: "김민지",
+            book_title: "바이엘 상",
+            price: 12000,
+            quantity: 1,
+            shipped_at: "2026-10-15",
+            status: "payment-pending",
+            paid_at: null,
+          },
+        ],
         error: null,
       });
       render(
@@ -375,13 +399,11 @@ describe("BookShipmentScreen", () => {
       await user.click(screen.getByRole("button", { name: "출고 등록" }));
 
       await waitFor(() =>
-        expect(supabaseMock.client.rpc).toHaveBeenCalledWith("register_book_release", {
+        expect(supabaseMock.client.rpc).toHaveBeenCalledWith("register_book_releases", {
           p_academy_id: TEST_ACADEMY_ID,
           p_student_id: "student-1",
-          p_book_id: "book-1",
-          p_price: 12000,
-          p_quantity: 1,
           p_shipped_on: "2026-10-15",
+          p_items: [{ book_id: "book-1", price: 12000, quantity: 1 }],
           p_status: "payment-pending",
           p_paid_on: null,
         }),

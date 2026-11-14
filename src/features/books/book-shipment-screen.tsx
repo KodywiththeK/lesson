@@ -61,7 +61,7 @@ export function BookShipmentScreen({
   queryOptionsFactory,
   bookOptionsQueryOptionsFactory,
   students,
-  registerBookRelease,
+  registerBookReleases,
   updateBookRelease,
   deleteBookRelease,
 }: BookShipmentScreenProps) {
@@ -80,7 +80,7 @@ export function BookShipmentScreen({
   );
   const client = clientState?.client ?? null;
   const operations = createBookShipmentOperations(academyId, clientState, {
-    registerBookRelease,
+    registerBookReleases,
     updateBookRelease,
     deleteBookRelease,
   });
@@ -108,9 +108,13 @@ export function BookShipmentScreen({
 
   const registerMutation = useMutation({
     mutationFn: operations.register,
-    onSuccess: () => {
+    onSuccess: (_result, registration) => {
       setFormVersion((version) => version + 1);
-      toast.success("교재 출고를 등록했습니다.");
+      toast.success(
+        registration.items.length > 1
+          ? `교재 ${registration.items.length}종 출고를 등록했습니다.`
+          : "교재 출고를 등록했습니다.",
+      );
       invalidateAfterBookChange(queryClient, academyId);
     },
     onError: (error) => {

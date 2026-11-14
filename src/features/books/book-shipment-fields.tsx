@@ -96,7 +96,7 @@ export function BookShipmentFields({ values, students, books, onChange }: BookSh
   );
 }
 
-function formatBookChoiceLabel(book: BookChoice) {
+export function formatBookChoiceLabel(book: BookChoice) {
   if (book.quantity === null) {
     return `${book.title} (보관된 교재)`;
   }

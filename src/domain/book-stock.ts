@@ -49,6 +49,9 @@ export const BOOK_MESSAGES = {
   studentRequired: "재원 중인 원생을 선택해 주세요.",
   bookRequired: "도서를 선택해 주세요.",
   bookNotFound: "교재를 찾을 수 없습니다. 목록을 새로고침해 주세요.",
+  releaseItemsRequired: "출고할 도서를 하나 이상 추가해 주세요.",
+  duplicateReleaseBook: "같은 도서를 두 번 선택할 수 없습니다. 수량으로 입력해 주세요.",
+  releaseItemPrefix: (position: number) => `${position}번째 도서: `,
   outOfStock: "재고가 없습니다. 교재를 입고한 뒤 출고해 주세요.",
   insufficientStock: (remaining: number) => `재고가 부족합니다. 남은 재고는 ${remaining}권입니다.`,
   duplicateTitle: "이미 등록된 도서명입니다. 같은 이름의 교재의 권수를 수정해 주세요.",
@@ -209,6 +212,45 @@ export function validateBookReleaseInput(
   if (context.availableQuantity <= 0) return BOOK_MESSAGES.outOfStock;
   if (input.quantity > context.availableQuantity) {
     return BOOK_MESSAGES.insufficientStock(context.availableQuantity);
+  }
+
+  return null;
+}
+
+export type BookReleaseBatchItem = { bookId: string; price: number; quantity: number };
+
+/** 원생 한 명에게 여러 도서를 한 번에 출고하는 입력. 원생과 출고일은 묶음 전체에 한 번만 적용한다. */
+export type BookReleaseBatchInput = {
+  studentId: string;
+  shippedOn: string;
+  items: BookReleaseBatchItem[];
+};
+
+/**
+ * 일괄 출고 입력을 확인한다. 문제가 없으면 null, 있으면 사용자에게 보일 문구를 돌려준다.
+ * 도서가 둘 이상일 때는 문제가 있는 줄 번호를 앞에 붙인다. 한 줄이라도 잘못되면 전체를 등록하지 않는다.
+ */
+export function validateBookReleaseBatchInput(
+  input: BookReleaseBatchInput,
+  context: { today: string; getAvailableQuantity: (bookId: string) => number },
+): string | null {
+  if (!input.studentId) return BOOK_MESSAGES.studentRequired;
+  if (!input.shippedOn) return BOOK_MESSAGES.shippedOnRequired;
+  if (input.shippedOn > context.today) return BOOK_MESSAGES.futureShippedOn;
+  if (input.items.length === 0) return BOOK_MESSAGES.releaseItemsRequired;
+
+  const chosenBookIds = input.items.map((item) => item.bookId).filter(Boolean);
+  if (new Set(chosenBookIds).size !== chosenBookIds.length) return BOOK_MESSAGES.duplicateReleaseBook;
+
+  for (const [index, item] of input.items.entries()) {
+    const message = validateBookReleaseInput(
+      { studentId: input.studentId, shippedOn: input.shippedOn, ...item },
+      { today: context.today, availableQuantity: context.getAvailableQuantity(item.bookId) },
+    );
+
+    if (message) {
+      return input.items.length > 1 ? `${BOOK_MESSAGES.releaseItemPrefix(index + 1)}${message}` : message;
+    }
   }
 
   return null;

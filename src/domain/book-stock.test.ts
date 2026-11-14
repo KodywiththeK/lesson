@@ -7,6 +7,7 @@ import {
   calculateRestockPreview,
   findBookByTitle,
   normalizeBookTitle,
+  validateBookReleaseBatchInput,
   validateBookReleaseInput,
   validateBookStockInput,
   validatePaymentDate,
@@ -134,6 +135,56 @@ describe("calculateRestockPreview", () => {
 
   it("새 도서명이면 합산 대상이 없다", () => {
     expect(calculateRestockPreview(books, "academy-1", { title: "새 교재", price: 1000, quantity: 1 })).toBeNull();
+  });
+});
+
+describe("validateBookReleaseBatchInput", () => {
+  const stock: Record<string, number> = { "book-1": 10, "book-2": 4, "book-3": 0 };
+  const context = { today: TODAY, getAvailableQuantity: (bookId: string) => stock[bookId] ?? 0 };
+  const valid = {
+    studentId: "student-1",
+    shippedOn: "2026-10-17",
+    items: [
+      { bookId: "book-1", price: 12000, quantity: 2 },
+      { bookId: "book-2", price: 18000, quantity: 1 },
+    ],
+  };
+
+  it("원생 한 명에 여러 도서를 담아도 올바르면 오류가 없다", () => {
+    expect(validateBookReleaseBatchInput(valid, context)).toBeNull();
+  });
+
+  it("원생·출고일은 묶음 전체에 한 번만 확인한다", () => {
+    expect(validateBookReleaseBatchInput({ ...valid, studentId: "" }, context)).toBe(BOOK_MESSAGES.studentRequired);
+    expect(validateBookReleaseBatchInput({ ...valid, shippedOn: "" }, context)).toBe(BOOK_MESSAGES.shippedOnRequired);
+    expect(validateBookReleaseBatchInput({ ...valid, shippedOn: "2026-10-18" }, context)).toBe(
+      BOOK_MESSAGES.futureShippedOn,
+    );
+  });
+
+  it("도서를 하나도 담지 않으면 안내한다", () => {
+    expect(validateBookReleaseBatchInput({ ...valid, items: [] }, context)).toBe(BOOK_MESSAGES.releaseItemsRequired);
+  });
+
+  it("같은 도서를 두 줄에 담으면 수량으로 입력하라고 안내한다", () => {
+    const items = [valid.items[0], { bookId: "book-1", price: 12000, quantity: 1 }];
+
+    expect(validateBookReleaseBatchInput({ ...valid, items }, context)).toBe(BOOK_MESSAGES.duplicateReleaseBook);
+  });
+
+  it("도서가 둘 이상이면 문제가 있는 줄 번호를 앞에 붙이고, 하나뿐이면 붙이지 않는다", () => {
+    const secondTooMany = [valid.items[0], { bookId: "book-2", price: 18000, quantity: 5 }];
+    const noBook = [valid.items[0], { bookId: "", price: 12000, quantity: 1 }];
+
+    expect(validateBookReleaseBatchInput({ ...valid, items: secondTooMany }, context)).toBe(
+      `2번째 도서: ${BOOK_MESSAGES.insufficientStock(4)}`,
+    );
+    expect(validateBookReleaseBatchInput({ ...valid, items: noBook }, context)).toBe(
+      `2번째 도서: ${BOOK_MESSAGES.bookRequired}`,
+    );
+    expect(
+      validateBookReleaseBatchInput({ ...valid, items: [{ bookId: "book-3", price: 15000, quantity: 1 }] }, context),
+    ).toBe(BOOK_MESSAGES.outOfStock);
   });
 });
 

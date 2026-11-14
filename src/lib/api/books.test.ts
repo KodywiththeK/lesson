@@ -11,7 +11,7 @@ import {
   fetchPaidBookReleases,
   fetchPendingBookReleaseCount,
   fetchPendingBookReleases,
-  registerBookRelease,
+  registerBookReleases,
   registerBookStock,
   updateBook,
   updateBookRelease,
@@ -287,52 +287,63 @@ describe("교재·출고 변경 RPC", () => {
     expect(remove.calls[0]).toEqual({ name: "delete_book", args: { p_academy_id: "academy-1", p_book_id: "book-1" } });
   });
 
-  it("출고 등록은 교재 id·수량·출고일과 선택적 결제 완료·입금일을 보낸다", async () => {
-    const { client, calls } = createMutationClient(releaseRow());
+  it("일괄 출고 등록은 원생·출고일과 도서 줄을 jsonb 배열로 한 번에 보내고 출고 건들을 돌려준다", async () => {
+    const { client, calls } = createMutationClient([
+      releaseRow(),
+      releaseRow({ id: "sale-2", book_id: "book-2", book_title: "스즈키 바이올린 1", price: 18000, quantity: 1 }),
+    ]);
 
-    const sale = await registerBookRelease(client, {
+    const sales = await registerBookReleases(client, {
       academyId: "academy-1",
       studentId: "student-1",
-      bookId: "book-1",
-      price: 12000,
-      quantity: 2,
       shippedOn: "2026-10-10",
+      items: [
+        { bookId: "book-1", price: 12000, quantity: 2 },
+        { bookId: "book-2", price: 18000, quantity: 1 },
+      ],
     });
 
-    expect(calls[0]).toEqual({
-      name: "register_book_release",
-      args: {
-        p_academy_id: "academy-1",
-        p_student_id: "student-1",
-        p_book_id: "book-1",
-        p_price: 12000,
-        p_quantity: 2,
-        p_shipped_on: "2026-10-10",
-        p_status: "payment-pending",
-        p_paid_on: null,
+    expect(calls).toEqual([
+      {
+        name: "register_book_releases",
+        args: {
+          p_academy_id: "academy-1",
+          p_student_id: "student-1",
+          p_shipped_on: "2026-10-10",
+          p_items: [
+            { book_id: "book-1", price: 12000, quantity: 2 },
+            { book_id: "book-2", price: 18000, quantity: 1 },
+          ],
+          p_status: "payment-pending",
+          p_paid_on: null,
+        },
       },
-    });
-    expect(sale).toMatchObject({ saleId: "sale-1", status: "payment-pending", quantity: 2 });
+    ]);
+    expect(sales.map((sale) => sale.saleId)).toEqual(["sale-1", "sale-2"]);
   });
 
-  it("원장의 바로 결제 완료 등록은 입금일을 함께 보낸다", async () => {
-    const { client, calls } = createMutationClient(
-      releaseRow({ status: "paid", paid_at: "2026-10-12", paid_ledger_entry_id: "ledger-1" }),
-    );
+  it("일괄 출고의 결제 완료는 입금일을 함께 보내고, 실패하면 서버 문구를 그대로 올린다", async () => {
+    const paid = createMutationClient([releaseRow({ status: "paid", paid_at: "2026-10-12" })]);
 
-    const sale = await registerBookRelease(client, {
+    await registerBookReleases(paid.client, {
       academyId: "academy-1",
       studentId: "student-1",
-      bookId: "book-1",
-      price: 12000,
-      quantity: 1,
       shippedOn: "2026-10-10",
+      items: [{ bookId: "book-1", price: 12000, quantity: 1 }],
       status: "paid",
       paidOn: "2026-10-12",
     });
+    expect(paid.calls[0].args).toMatchObject({ p_status: "paid", p_paid_on: "2026-10-12" });
 
-    expect(calls[0].args).toMatchObject({ p_status: "paid", p_paid_on: "2026-10-12" });
-    expect(sale).toMatchObject({ status: "paid", paidAt: "2026-10-12", paidLedgerEntryId: "ledger-1" });
+    const failed = createMutationClient(null, new Error("재고가 부족합니다. 바이엘 상 남은 재고는 1권입니다."));
+    await expect(
+      registerBookReleases(failed.client, {
+        academyId: "academy-1",
+        studentId: "student-1",
+        shippedOn: "2026-10-10",
+        items: [{ bookId: "book-1", price: 12000, quantity: 5 }],
+      }),
+    ).rejects.toThrow("교재 출고를 등록하지 못했습니다: 재고가 부족합니다. 바이엘 상 남은 재고는 1권입니다.");
   });
 
   it("출고 수정·삭제·결제 처리·결제 취소 RPC 인자를 맞춘다", async () => {
@@ -377,21 +388,6 @@ describe("교재·출고 변경 RPC", () => {
       args: { p_academy_id: "academy-1", p_release_id: "sale-1", p_reason: "입금 확인 착오" },
     });
     expect(cancelled.status).toBe("payment-pending");
-  });
-
-  it("서버 거부 문구를 앞부분 안내와 함께 그대로 전달한다", async () => {
-    const { client } = createMutationClient(null, new Error("재고가 부족합니다. 남은 재고는 2권입니다."));
-
-    await expect(
-      registerBookRelease(client, {
-        academyId: "academy-1",
-        studentId: "student-1",
-        bookId: "book-1",
-        price: 12000,
-        quantity: 3,
-        shippedOn: "2026-10-10",
-      }),
-    ).rejects.toThrow("교재 출고를 등록하지 못했습니다: 재고가 부족합니다. 남은 재고는 2권입니다.");
   });
 
   it("반환 데이터가 없으면 알려 준다", async () => {

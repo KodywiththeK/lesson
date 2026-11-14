@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,33 @@ describe("BookShipmentForm", () => {
     expect(screen.queryByLabelText("결제 상태")).not.toBeInTheDocument();
   });
 
+  it("도서 선택지는 이름 속 숫자를 크기 순으로 정렬한다(1, 2, … 10, 11)", () => {
+    const series = ["계이름 여행 10", "계이름 여행 2", "계이름 여행 12", "계이름 여행 1", "계이름 여행 11"];
+    renderForm({
+      books: series.map((title, index) => ({
+        academyId: "academy-1",
+        bookId: `series-${index}`,
+        title,
+        price: 10000,
+        quantity: 2,
+        stockedOn: "2026-08-01",
+      })),
+    });
+
+    const labels = within(screen.getByLabelText("도서명"))
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+
+    expect(labels).toEqual([
+      "도서를 선택하세요",
+      "계이름 여행 1 (남은 재고 2권)",
+      "계이름 여행 2 (남은 재고 2권)",
+      "계이름 여행 10 (남은 재고 2권)",
+      "계이름 여행 11 (남은 재고 2권)",
+      "계이름 여행 12 (남은 재고 2권)",
+    ]);
+  });
+
   it("도서를 고르면 가격이 자동 입력되고 고칠 수 있으며 도서를 바꾸면 다시 자동 입력된다", async () => {
     const user = userEvent.setup();
     renderForm();
@@ -73,7 +100,9 @@ describe("BookShipmentForm", () => {
     expect(screen.getByLabelText("가격(원)")).toHaveValue("140,000");
     await user.click(screen.getByRole("button", { name: "출고 등록" }));
 
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ price: 140000 }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ items: [expect.objectContaining({ price: 140000 })] }),
+    );
   });
 
   it("가격은 텍스트 입력을 유지하고 유효성은 폼에서 검사한다", () => {
@@ -145,11 +174,128 @@ describe("BookShipmentForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       studentId: "student-1",
-      bookId: "book-1",
-      price: 12000,
-      quantity: 2,
       shippedOn: "2026-10-15",
+      items: [{ bookId: "book-1", price: 12000, quantity: 2 }],
       status: "payment-pending",
+    });
+  });
+
+  describe("여러 도서 일괄 출고", () => {
+    async function addSecondBook(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole("button", { name: "도서 추가" }));
+      return screen.getByRole("group", { name: "도서 2" });
+    }
+
+    it("처음에는 도서 한 줄로 시작하고 한 줄뿐일 때는 삭제 버튼이 없다", () => {
+      renderForm();
+
+      expect(screen.getByRole("group", { name: "도서 1" })).toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "도서 2" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /도서 \d 삭제/ })).not.toBeInTheDocument();
+    });
+
+    it("도서 추가를 누르면 줄이 늘고, 줄마다 도서·가격·수량을 따로 입력한다", async () => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderForm();
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+
+      await user.selectOptions(within(second).getByLabelText("도서명"), "book-2");
+      expect(within(second).getByLabelText("가격(원)")).toHaveValue("18000");
+      await user.clear(within(second).getByLabelText("수량"));
+      await user.type(within(second).getByLabelText("수량"), "2");
+      await user.click(screen.getByRole("button", { name: "출고 등록" }));
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        studentId: "student-1",
+        shippedOn: "2026-10-15",
+        items: [
+          { bookId: "book-1", price: 12000, quantity: 1 },
+          { bookId: "book-2", price: 18000, quantity: 2 },
+        ],
+        status: "payment-pending",
+      });
+    });
+
+    it("다른 줄에서 이미 고른 도서는 선택지에서 빠져 같은 도서를 두 번 고를 수 없다", async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+
+      const optionNames = within(second)
+        .getAllByRole("option")
+        .map((option) => option.textContent);
+
+      expect(optionNames).not.toContain("바이엘 상 (남은 재고 9권)");
+      expect(optionNames).toContain("스즈키 바이올린 1 (남은 재고 4권)");
+    });
+
+    it("줄을 삭제하면 남은 줄 번호가 다시 매겨진다", async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+      await user.selectOptions(within(second).getByLabelText("도서명"), "book-2");
+
+      await user.click(screen.getByRole("button", { name: "도서 1 삭제" }));
+
+      expect(screen.queryByRole("group", { name: "도서 2" })).not.toBeInTheDocument();
+      expect(within(screen.getByRole("group", { name: "도서 1" })).getByLabelText("도서명")).toHaveValue("book-2");
+    });
+
+    it("줄을 추가하면 새 줄의 도서 선택으로, 줄을 지우면 도서 추가 버튼으로 포커스가 옮겨 간다", async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+
+      expect(within(second).getByLabelText("도서명")).toHaveFocus();
+
+      await user.click(screen.getByRole("button", { name: "도서 2 삭제" }));
+
+      expect(screen.getByRole("button", { name: "도서 추가" })).toHaveFocus();
+    });
+
+    it("줄 하나라도 비어 있으면 줄 번호와 함께 이유를 알리고 등록을 막는다", async () => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderForm();
+      await fillValidRelease(user);
+      await addSecondBook(user);
+
+      const submit = screen.getByRole("button", { name: "출고 등록" });
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveAccessibleDescription("2번째 도서: 도서를 선택해 주세요.");
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it("남은 재고보다 많은 수량은 어느 줄인지 알려 준다", async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+      await user.selectOptions(within(second).getByLabelText("도서명"), "book-2");
+      await user.clear(within(second).getByLabelText("수량"));
+      await user.type(within(second).getByLabelText("수량"), "5");
+
+      expect(screen.getByText("2번째 도서: 재고가 부족합니다. 남은 재고는 4권입니다.")).toBeInTheDocument();
+    });
+
+    it("원장의 결제 상태·입금일은 묶음 전체에 한 번만 입력한다", async () => {
+      const user = userEvent.setup();
+      const { onSubmit } = renderForm({ canRecordPayment: true });
+      await fillValidRelease(user);
+      const second = await addSecondBook(user);
+      await user.selectOptions(within(second).getByLabelText("도서명"), "book-2");
+      await user.selectOptions(screen.getByLabelText("결제 상태"), "paid");
+
+      expect(screen.getAllByLabelText("결제 상태")).toHaveLength(1);
+      expect(screen.getAllByLabelText("입금일")).toHaveLength(1);
+      await user.click(screen.getByRole("button", { name: "출고 등록" }));
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "paid", paidOn: "2026-10-15", items: expect.arrayContaining([expect.anything(), expect.anything()]) }),
+      );
     });
   });
 

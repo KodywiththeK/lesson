@@ -1,14 +1,20 @@
 import type { BookShipmentRow } from "@/domain/book-sale";
 import {
   BOOK_LIMITS,
+  validateBookReleaseBatchInput,
   validateBookReleaseInput,
+  type BookReleaseBatchInput,
   type BookReleaseInput,
   type BookStockRow,
 } from "@/domain/book-stock";
+import { compareKoreanNames } from "@/domain/common-list";
 import { parseWonInput } from "@/domain/money-input";
 
-/** 출고 등록 폼이 화면 밖으로 내보내는 값. 원장만 `paid`와 입금일을 보낼 수 있다. */
-export type BookReleaseRegistration = BookReleaseInput & {
+/**
+ * 출고 등록 폼이 화면 밖으로 내보내는 값. 원생 한 명에게 여러 도서를 한 번에 등록하며
+ * 결제 상태·입금일은 묶음 전체에 한 번 적용한다. 원장만 `paid`와 입금일을 보낼 수 있다.
+ */
+export type BookReleaseBatchRegistration = BookReleaseBatchInput & {
   status: "payment-pending" | "paid";
   paidOn?: string;
 };
@@ -34,10 +40,49 @@ export type BookShipmentValues = {
   shippedOn: string;
 };
 
+/** 일괄 출고 폼의 도서 한 줄. `key`는 줄을 지우거나 추가해도 입력 칸이 섞이지 않게 하는 식별자다. */
+export type BookShipmentItemValues = { key: string; bookId: string; price: string; quantity: string };
+
+/** 일괄 출고 폼의 입력값. 원생과 출고일은 묶음 전체가 공유한다. */
+export type BookShipmentBatchValues = {
+  studentId: string;
+  shippedOn: string;
+  items: BookShipmentItemValues[];
+};
+
 const DEFAULT_RELEASE_QUANTITY = "1";
 
-export function createEmptyShipmentValues(today: string): BookShipmentValues {
-  return { studentId: "", bookId: "", price: "", quantity: DEFAULT_RELEASE_QUANTITY, shippedOn: today };
+export function createEmptyShipmentItem(key: string): BookShipmentItemValues {
+  return { key, bookId: "", price: "", quantity: DEFAULT_RELEASE_QUANTITY };
+}
+
+export function createEmptyShipmentBatchValues(today: string, firstItemKey: string): BookShipmentBatchValues {
+  return { studentId: "", shippedOn: today, items: [createEmptyShipmentItem(firstItemKey)] };
+}
+
+/** 일괄 출고 입력값을 서버 입력으로 바꾼다. 가격·수량이 숫자가 아니면 NaN으로 넘겨 검증에서 걸러지게 한다. */
+export function toBookReleaseBatchInput(values: BookShipmentBatchValues): BookReleaseBatchInput {
+  return {
+    studentId: values.studentId,
+    shippedOn: values.shippedOn,
+    items: values.items.map((item) => ({
+      bookId: item.bookId,
+      price: parseWonInput(item.price) ?? Number.NaN,
+      quantity: Number(item.quantity),
+    })),
+  };
+}
+
+/** 일괄 출고 입력을 확인한다. 문제가 없으면 null, 있으면 사용자에게 보일 문구를 돌려준다. */
+export function validateShipmentBatchValues(
+  values: BookShipmentBatchValues,
+  context: { today: string; books: BookChoice[] },
+): string | null {
+  return validateBookReleaseBatchInput(toBookReleaseBatchInput(values), {
+    today: context.today,
+    getAvailableQuantity: (bookId) =>
+      calculateAvailableQuantity(context.books.find((candidate) => candidate.bookId === bookId), undefined),
+  });
 }
 
 export function toShipmentValues(shipment: BookShipmentRow): BookShipmentValues {
@@ -74,9 +119,14 @@ export function buildStudentChoices(
   return [{ studentId: currentStudentId, name: currentShipment.studentName }, ...students];
 }
 
-/** 출고 선택지의 도서. 수정하는 출고의 현재 도서가 이미 보관됐다면 그 도서만 현재 선택으로 남긴다. */
+/**
+ * 출고 선택지의 도서. 도서명 속 숫자를 크기 순으로 정렬한다(1, 2, … 10, 11).
+ * 수정하는 출고의 현재 도서가 이미 보관됐다면 그 도서만 현재 선택으로 맨 앞에 남긴다.
+ */
 export function buildBookChoices(books: BookStockRow[], currentShipment?: BookShipmentRow): BookChoice[] {
-  const choices = books.map(({ bookId, title, price, quantity }) => ({ bookId, title, price, quantity }));
+  const choices = books
+    .map(({ bookId, title, price, quantity }) => ({ bookId, title, price, quantity }))
+    .sort((left, right) => compareKoreanNames(left.title, right.title));
 
   if (!currentShipment || choices.some((choice) => choice.bookId === currentShipment.bookId)) {
     return choices;
@@ -92,12 +142,15 @@ export function buildBookChoices(books: BookStockRow[], currentShipment?: BookSh
   return [archivedChoice, ...choices];
 }
 
-/** 도서를 고르면 교재 가격을 단가로 자동 입력한다. 도서를 지우면 입력한 가격은 그대로 둔다. */
-export function selectBook(
-  values: BookShipmentValues,
+/**
+ * 도서를 고르면 그 도서의 판매가를 가격 칸에 채운다. 도서를 지우면 입력한 가격은 그대로 둔다.
+ * 단건 수정 값과 일괄 출고의 도서 줄에 같이 쓴다.
+ */
+export function selectBook<T extends { bookId: string; price: string }>(
+  values: T,
   bookId: string,
   choices: BookChoice[],
-): BookShipmentValues {
+): T {
   const choice = choices.find((candidate) => candidate.bookId === bookId);
 
   return { ...values, bookId, price: choice ? String(choice.price) : values.price };

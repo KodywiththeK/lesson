@@ -6,6 +6,7 @@ import {
   deleteDemoBook,
   deleteDemoBookRelease,
   registerDemoBookRelease,
+  registerDemoBookReleases,
   registerDemoBookStock,
   updateDemoBook,
   updateDemoBookRelease,
@@ -185,6 +186,81 @@ describe("출고 등록", () => {
         refId: sale?.saleId,
       }),
     );
+  });
+});
+
+describe("일괄 출고 등록", () => {
+  function releaseAll(state: DemoAcademyState, overrides = {}) {
+    return registerDemoBookReleases(state, {
+      studentId: "student-1",
+      shippedOn: "2026-10-10",
+      status: "payment-pending",
+      items: [
+        { bookId: "book-1", price: 12000, quantity: 2 },
+        { bookId: "book-2", price: 18000, quantity: 1 },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("한 원생의 여러 도서를 한 번에 출고하며 도서별로 재고를 줄이고 출고 건을 만든다", () => {
+    const state = createInitialDemoAcademyState();
+    const before = [stockOf(state, "book-1") ?? 0, stockOf(state, "book-2") ?? 0];
+
+    const next = releaseAll(state);
+
+    expect([stockOf(next, "book-1"), stockOf(next, "book-2")]).toEqual([before[0] - 2, before[1] - 1]);
+    expect(next.bookSales.slice(-2)).toEqual([
+      expect.objectContaining({ bookTitle: "바이엘 상", studentName: "김민지", quantity: 2, status: "payment-pending" }),
+      expect.objectContaining({ bookTitle: "스즈키 바이올린 1", studentName: "김민지", quantity: 1, status: "payment-pending" }),
+    ]);
+  });
+
+  it("바로 결제 완료는 묶음 전체에 한 번 적용하되 입출입내역 수입 행은 도서별로 만든다", () => {
+    const state = createInitialDemoAcademyState();
+
+    const next = releaseAll(state, { status: "paid", paidOn: "2026-10-12" });
+
+    expect(next.bookSales.slice(-2).map((sale) => [sale.status, "paidAt" in sale ? sale.paidAt : null])).toEqual([
+      ["paid", "2026-10-12"],
+      ["paid", "2026-10-12"],
+    ]);
+    const newSaleIds = next.bookSales.slice(-2).map((sale) => sale.saleId);
+    expect(next.ledgerEntries.filter((entry) => newSaleIds.includes(entry.refId ?? ""))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ amount: 24000, occurredOn: "2026-10-12", source: "book-sale" }),
+        expect.objectContaining({ amount: 18000, occurredOn: "2026-10-12", source: "book-sale" }),
+      ]),
+    );
+    expect(next.ledgerEntries.filter((entry) => newSaleIds.includes(entry.refId ?? ""))).toHaveLength(2);
+  });
+
+  it("한 권이라도 재고가 부족하면 전체를 등록하지 않고 줄 번호와 함께 안내한다", () => {
+    const state = createInitialDemoAcademyState();
+
+    expect(() =>
+      releaseAll(state, {
+        items: [
+          { bookId: "book-1", price: 12000, quantity: 1 },
+          { bookId: "book-2", price: 18000, quantity: 99 },
+        ],
+      }),
+    ).toThrow(`2번째 도서: 재고가 부족합니다. 남은 재고는 ${stockOf(state, "book-2")}권입니다.`);
+    expect(state.bookSales).toEqual(createInitialDemoAcademyState().bookSales);
+  });
+
+  it("같은 도서를 두 줄에 담거나 도서를 담지 않으면 거부한다", () => {
+    const state = createInitialDemoAcademyState();
+
+    expect(() =>
+      releaseAll(state, {
+        items: [
+          { bookId: "book-1", price: 12000, quantity: 1 },
+          { bookId: "book-1", price: 12000, quantity: 1 },
+        ],
+      }),
+    ).toThrow("같은 도서를 두 번 선택할 수 없습니다. 수량으로 입력해 주세요.");
+    expect(() => releaseAll(state, { items: [] })).toThrow("출고할 도서를 하나 이상 추가해 주세요.");
   });
 });
 

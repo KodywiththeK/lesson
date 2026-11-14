@@ -216,13 +216,11 @@ type BookRpcArgs = {
     p_purchase_vendor_name: string | null;
   };
   delete_book: { p_academy_id: string; p_book_id: string };
-  register_book_release: {
+  register_book_releases: {
     p_academy_id: string;
     p_student_id: string;
-    p_book_id: string;
-    p_price: number;
-    p_quantity: number;
     p_shipped_on: string;
+    p_items: Array<{ book_id: string; price: number; quantity: number }>;
     p_status: "payment-pending" | "paid";
     p_paid_on: string | null;
   };
@@ -243,7 +241,7 @@ type BookRpcResult = {
   register_book_stock: BookSupabaseRow;
   update_book: BookSupabaseRow;
   delete_book: null;
-  register_book_release: BookReleaseSupabaseRow;
+  register_book_releases: BookReleaseSupabaseRow[];
   update_book_release: BookReleaseSupabaseRow;
   delete_book_release: null;
   cancel_book_release_payment: BookReleaseSupabaseRow;
@@ -330,31 +328,29 @@ export async function deleteBook(
   }
 }
 
-export type RegisterBookReleaseInput = {
+export type RegisterBookReleasesInput = {
   academyId: string;
   studentId: string;
-  bookId: string;
-  /** 출고 단가. 교재 가격에서 자동 입력된 값을 고쳐 보낼 수 있다. */
-  price: number;
-  quantity: number;
   shippedOn: string;
-  /** 원장만 `paid`를 보낼 수 있다. */
+  items: Array<{ bookId: string; price: number; quantity: number }>;
+  /** 원장만 `paid`를 보낼 수 있다. 결제 상태와 입금일은 묶음 전체에 한 번 적용한다. */
   status?: "payment-pending" | "paid";
-  /** `paid`일 때 입금일. 비우면 서버가 출고일을 쓴다. */
   paidOn?: string;
 };
 
-export async function registerBookRelease(
+/**
+ * 원생 한 명에게 여러 도서를 한 번에 출고한다. 서버가 한 트랜잭션으로 재고를 차감하고,
+ * 한 권이라도 재고가 부족하면 전체를 등록하지 않는다.
+ */
+export async function registerBookReleases(
   supabase: BookMutationSupabaseClient,
-  input: RegisterBookReleaseInput,
-): Promise<BookSale> {
-  const { data, error } = await supabase.rpc("register_book_release", {
+  input: RegisterBookReleasesInput,
+): Promise<BookSale[]> {
+  const { data, error } = await supabase.rpc("register_book_releases", {
     p_academy_id: input.academyId,
     p_student_id: input.studentId,
-    p_book_id: input.bookId,
-    p_price: input.price,
-    p_quantity: input.quantity,
     p_shipped_on: input.shippedOn,
+    p_items: input.items.map((item) => ({ book_id: item.bookId, price: item.price, quantity: item.quantity })),
     p_status: input.status ?? "payment-pending",
     p_paid_on: input.paidOn ?? null,
   });
@@ -363,11 +359,11 @@ export async function registerBookRelease(
     throw new Error(`교재 출고를 등록하지 못했습니다: ${error.message}`);
   }
 
-  if (!data) {
+  if (!data || data.length === 0) {
     throw new Error("교재 출고를 등록했지만 반환된 데이터가 없습니다.");
   }
 
-  return toBookSale(data);
+  return data.map(toBookSale);
 }
 
 export type UpdateBookReleaseInput = {

@@ -36,7 +36,7 @@ export default function BookShipmentsPage() {
                   )
                 : undefined
             }
-            registerBookRelease={useTestDemo ? demo.registerBookRelease : undefined}
+            registerBookReleases={useTestDemo ? demo.registerBookReleases : undefined}
             updateBookRelease={useTestDemo ? demo.updateBookRelease : undefined}
             deleteBookRelease={useTestDemo ? demo.deleteBookRelease : undefined}
           />

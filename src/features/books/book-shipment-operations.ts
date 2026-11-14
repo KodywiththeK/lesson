@@ -1,20 +1,20 @@
 import {
   deleteBookRelease as deleteBookReleaseApi,
-  registerBookRelease as registerBookReleaseApi,
+  registerBookReleases as registerBookReleasesApi,
   updateBookRelease as updateBookReleaseApi,
 } from "@/lib/api/books";
 
 import { requireBookSupabaseClient, type BookSupabaseClientState } from "./book-supabase";
-import type { BookReleaseRegistration, BookReleaseUpdate } from "./book-shipment-values";
+import type { BookReleaseBatchRegistration, BookReleaseUpdate } from "./book-shipment-values";
 
 export type BookShipmentOperationOverrides = {
-  registerBookRelease?: (input: BookReleaseRegistration) => void | Promise<void>;
+  registerBookReleases?: (input: BookReleaseBatchRegistration) => void | Promise<void>;
   updateBookRelease?: (input: BookReleaseUpdate) => void | Promise<void>;
   deleteBookRelease?: (input: { releaseId: string }) => void | Promise<void>;
 };
 
 export type BookShipmentOperations = {
-  register: (input: BookReleaseRegistration) => Promise<void>;
+  register: (input: BookReleaseBatchRegistration) => Promise<void>;
   update: (input: BookReleaseUpdate) => Promise<void>;
   remove: (input: { releaseId: string }) => Promise<void>;
 };
@@ -27,12 +27,12 @@ export function createBookShipmentOperations(
 ): BookShipmentOperations {
   return {
     register: async (input) => {
-      if (overrides.registerBookRelease) {
-        await overrides.registerBookRelease(input);
+      if (overrides.registerBookReleases) {
+        await overrides.registerBookReleases(input);
         return;
       }
 
-      await registerBookReleaseApi(requireBookSupabaseClient(clientState), { academyId, ...input });
+      await registerBookReleasesApi(requireBookSupabaseClient(clientState), { academyId, ...input });
     },
     update: async (input) => {
       if (overrides.updateBookRelease) {
