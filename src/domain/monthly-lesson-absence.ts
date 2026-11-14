@@ -1,7 +1,7 @@
 import type { DailyAcademyAttendanceRow } from "./academy-lesson-attendance";
 import { compareKoreanNames } from "./common-list";
 import { toFinanceMonth } from "./finance-date";
-import type { PrivateLesson } from "./private-lesson";
+import { comparePrivateLessonStartAt, type PrivateLesson } from "./private-lesson";
 
 export type MonthlyAcademyAbsenceSummary = {
   total: number;
@@ -56,7 +56,7 @@ export function buildMonthlyPrivateAbsences(
     .filter((lesson) => lesson.status === "absent" && toFinanceMonth(lesson.startAt) === month)
     .sort(
       (left, right) =>
-        left.startAt.localeCompare(right.startAt) ||
+        comparePrivateLessonStartAt(left.startAt, right.startAt) ||
         compareKoreanNames(left.studentName, right.studentName) ||
         left.id.localeCompare(right.id),
     );

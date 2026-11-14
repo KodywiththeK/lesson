@@ -46,7 +46,7 @@ function renderView(props: Partial<ComponentProps<typeof PrivateLessonDayView>> 
 
 describe("PrivateLessonDayView", () => {
   it("행 전체와 원생 이름은 채우지 않고 악기 이름에만 색상 태그를 표시한다", () => {
-    const tone = getInstrumentColorTone("#246bb2", "scheduled");
+    const tone = getInstrumentColorTone("#246bb2");
     renderView({ canManage: false,
       instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]),
       assignedTicketBalances: [{ studentId: lesson.studentId, instrumentId: lesson.instrumentId, remainingCount: 3, validUntil: "2026-12-31" }],
@@ -61,7 +61,7 @@ describe("PrivateLessonDayView", () => {
 
   it("등원한 악기 이름 태그도 예정과 같은 색을 쓴다", () => {
     const present = { ...lesson, status: "present" as const };
-    const tone = getInstrumentColorTone("#246bb2", "present");
+    const tone = getInstrumentColorTone("#246bb2");
     renderView({ lessons: [present], instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]) });
     expect(screen.getByText(lesson.instrumentName)).toHaveStyle({ backgroundColor: tone.background, color: tone.foreground });
   });

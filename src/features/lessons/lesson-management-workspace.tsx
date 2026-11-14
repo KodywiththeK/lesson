@@ -87,7 +87,6 @@ import {
   type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
 import { queryKeys } from "@/lib/api/query-keys";
-import { fetchPrivateLessonCreditBalances, type PrivateLessonCreditBalanceClient } from "@/lib/api/private-lesson-credits";
 import {
   fetchAcademyClosures, fetchAcademyInstrumentColors,
   type LessonCalendarSettingsClient,
@@ -100,6 +99,9 @@ import { AcademyDayAttendanceDialog } from "@/features/lessons/academy-day-atten
 import { AcademyLessonDeleteDialog } from "@/features/lessons/academy-lesson-delete-dialog";
 import { AcademyLessonEventDialog } from "@/features/lessons/academy-lesson-event-dialog";
 import { AcademyLessonDayView } from "@/features/lessons/academy-lesson-day-view";
+import { LessonStudentPresence } from "@/features/lessons/lesson-student-presence";
+import { buildPresenceRoster } from "@/domain/student-presence";
+import type { StudentPresenceSupabaseClient } from "@/lib/api/student-presence";
 import { MoveAcademyLessonDialog } from "@/features/lessons/academy-move-dialog";
 import { AcademyWeekdaySummary } from "@/features/lessons/academy-weekday-summary";
 import { LessonMonthCalendar } from "@/features/lessons/lesson-month-calendar";
@@ -305,6 +307,14 @@ export function LessonManagementWorkspace({
       { cancelRefetch: false },
     );
   }, [academyId, canManage, lessonKind, queryClient, selectedDate, workspaceQuery.dataUpdatedAt]);
+  useEffect(() => {
+    // 일정 등록·수정·삭제로 레슨표가 다시 불리면 그날 오기로 한 학생(등하원 명단)도 바뀔 수 있다.
+    if (workspaceQuery.dataUpdatedAt === 0) return;
+    void queryClient.invalidateQueries(
+      { queryKey: [...queryKeys.academy(academyId), "student-presence"] },
+      { cancelRefetch: false },
+    );
+  }, [academyId, queryClient, workspaceQuery.dataUpdatedAt]);
   const assignedTicketQueryOptions = assignedTicketBalancesQueryFactory?.(academyId) ??
     (!canManage && !hasInjectedData && supabaseClientState?.client
       ? createAssignedLessonTicketBalancesQueryOptions(supabaseClientState.client, academyId)
@@ -314,13 +324,6 @@ export function LessonManagementWorkspace({
       queryKeys.lessonTickets.assignedBalances(academyId),
     queryFn: assignedTicketQueryOptions?.queryFn ?? (async () => []),
     enabled: !canManage && Boolean(assignedTicketQueryOptions),
-  });
-  const creditBalancesQuery = useQuery({
-    queryKey: [...queryKeys.academy(academyId), "private-credits"],
-    queryFn: () => fetchPrivateLessonCreditBalances(
-      supabaseClientState!.client as unknown as PrivateLessonCreditBalanceClient, academyId,
-    ),
-    enabled: lessonKind === "private" && Boolean(supabaseClientState?.client),
   });
   const monthlyNote = useLessonMonthlyNote({
     academyId,
@@ -491,7 +494,6 @@ export function LessonManagementWorkspace({
     onSuccess: (_data, input) => {
       setPrivateLessonStatus(input.lessonEventId, input.status, input.reason);
       void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "private-credits"] });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
@@ -532,7 +534,6 @@ export function LessonManagementWorkspace({
         setPrivateLessonStatus(input.lessonEventId, "scheduled");
       }
       void queryClient.invalidateQueries({ queryKey: ["private-lesson-availability", academyId] });
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.academy(academyId), "private-credits"] });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lessonWorkspace.month(academyId, selectedMonth),
       });
@@ -612,6 +613,14 @@ export function LessonManagementWorkspace({
 
       return updateLessonCalendarMemo(supabaseClientState.client, input);
     },
+    // 체크 줄처럼 연달아 저장해도 다음 수정이 최신 내용에서 계산되도록 화면에 먼저 반영하고, 실패하면 되돌린다.
+    onMutate: (input) => {
+      const previous = (calendarMemosOverride ?? calendarMemos).find((memo) => memo.id === input.memoId);
+      setCalendarMemosOverride((current) =>
+        (current ?? calendarMemos).map((memo) => (memo.id === input.memoId ? { ...memo, content: input.content } : memo)),
+      );
+      return { previous };
+    },
     onSuccess: (memo) => {
       setCalendarMemosOverride((current) =>
         (current ?? calendarMemos).map((candidate) =>
@@ -623,7 +632,13 @@ export function LessonManagementWorkspace({
       });
       toast.success("메모를 수정했습니다.");
     },
-    onError: (error) => {
+    onError: (error, _input, context) => {
+      const previous = context?.previous;
+      if (previous) {
+        setCalendarMemosOverride((current) =>
+          (current ?? calendarMemos).map((memo) => (memo.id === previous.id ? previous : memo)),
+        );
+      }
       toast.error("메모 수정에 실패했습니다.", {
         description: toUserMessage(error),
       });
@@ -1035,6 +1050,27 @@ export function LessonManagementWorkspace({
     lessonKind === "academy" ? academyHeaderActions : privateHeaderActions;
   const isHeaderActionMounted = usePageHeaderActions(lessonHeaderActions);
   // 학원 레슨 메모는 원장·데스크만 읽을 수 있어 관리 권한이 없으면 메모지를 두지 않는다.
+  // 등하원 현황은 일정별 출결과 별개라 학원·개인레슨 일별 화면에 같은 구획으로 붙는다. 데모만 화면 안 명단을 쓴다.
+  const presenceRoster = useMemo(
+    () =>
+      hasInjectedData
+        ? buildPresenceRoster({
+            date: selectedDate,
+            academyRows: (academySheets[selectedDate] ?? createEmptySheet(academyId, selectedDate)).rows,
+            privateLessons,
+          })
+        : undefined,
+    [academyId, academySheets, hasInjectedData, privateLessons, selectedDate],
+  );
+  const studentPresencePanel = (
+    <LessonStudentPresence
+      academyId={academyId}
+      date={selectedDate}
+      canManage={canManage}
+      client={(supabaseClientState?.client as unknown as StudentPresenceSupabaseClient | undefined) ?? null}
+      localRoster={presenceRoster}
+    />
+  );
   const monthlyNoteButton = canManage ? (
     <LessonMonthlyNoteDialog
       lessonKind={lessonKind}
@@ -1149,6 +1185,7 @@ export function LessonManagementWorkspace({
               }}
             />
           ) : (
+            <>
             <AcademyLessonDayView
               academyId={academyId}
               date={selectedDate}
@@ -1170,6 +1207,8 @@ export function LessonManagementWorkspace({
               onUpdateMemo={updateCalendarMemo}
               onDeleteMemo={deleteCalendarMemo}
             />
+            {studentPresencePanel}
+            </>
           )}
         </div>
       ) : (
@@ -1189,17 +1228,6 @@ export function LessonManagementWorkspace({
               </Button></>
             }
           />
-          {creditBalancesQuery.isError ? <ListStatusAlert
-            message="미정산 출석을 불러오지 못했습니다."
-            detail={toUserMessage(creditBalancesQuery.error)}
-          /> : null}
-          {(creditBalancesQuery.data?.length ?? 0) > 0 ? <Alert>
-            <AlertDescription>
-              <strong>미정산 출석</strong>{" "}
-              {creditBalancesQuery.data?.map((balance) =>
-                `${balance.studentName} ${balance.instrumentName} ${balance.openCount}회`).join(" · ")}
-            </AlertDescription>
-          </Alert> : null}
           {privateView === "calendar" ? (
             <LessonMonthCalendar
               ariaLabel={toCalendarAriaLabel(selectedDate, "개인레슨 캘린더")}
@@ -1225,6 +1253,7 @@ export function LessonManagementWorkspace({
               } : undefined}
             />
           ) : (
+            <>
             <PrivateLessonDayView
               academyId={academyId}
               date={selectedDate}
@@ -1247,6 +1276,8 @@ export function LessonManagementWorkspace({
               onUpdateMemo={updateCalendarMemo}
               onDeleteMemo={deleteCalendarMemo}
             />
+            {studentPresencePanel}
+            </>
           )}
         </div>
       )}
@@ -1429,6 +1460,7 @@ export function LessonManagementWorkspace({
         key={privateEditDraft.lesson.id + (privateEditDraft.targetDate ?? "")}
         lesson={privateEditDraft.lesson}
         teachers={privateRegistrationOptions.teachers}
+        existingLessons={privateLessons}
         closures={closures}
         initialDate={privateEditDraft.targetDate}
         isSaving={updatePrivateLessonMutation.isPending || deletePrivateLessonMutation.isPending}

@@ -4,7 +4,6 @@ import { CalendarPlus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type PrivateLesson } from "@/domain/private-lesson";
-import { getInstrumentColorStyle } from "@/domain/instrument-color";
+import { getInstrumentMarkerStyle } from "@/domain/instrument-color";
 import {
   type LessonCalendarMemo,
   type LessonCalendarMemoPayload,
@@ -103,7 +102,7 @@ export function PrivateDayAttendanceDialog({
         <DialogHeader>
           <DialogTitle>{date} 개인레슨 출석 확인</DialogTitle>
           <DialogDescription>
-            수업 후 등원 확인을 누르면 사용 가능한 회차권을 차감합니다. 외상 일정에 회차가 없으면 미정산 1회가 기록됩니다.
+            수업 후 등원 확인을 누르면 사용 가능한 회차권을 차감합니다.
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="attendance" className="gap-3">
@@ -121,23 +120,19 @@ export function PrivateDayAttendanceDialog({
               </p>
             ) : null}
             {lessons.map((lesson) => {
-              const colorStyle = lesson.status === "scheduled" || lesson.status === "present"
-                ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
-                : undefined;
               return <div
                 key={lesson.id}
-                className="grid gap-3 rounded-md border border-border bg-background p-3"
-                style={colorStyle}
+                className="grid gap-3 rounded-md border border-l-4 border-border bg-background p-3"
+                style={getInstrumentMarkerStyle(instrumentColors?.get(lesson.instrumentId))}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex items-center gap-2">
                       <strong className="text-sm">{lesson.studentName}</strong>
-                      <OriginBadge label={lesson.originLabel} textColor={colorStyle?.color} />
+                      <OriginBadge label={lesson.originLabel} />
                       <PrivateLessonStatusBadge status={lesson.status} label={formatPrivateLessonStatus(lesson.status)} />
-                      {lesson.creditAuthorized && lesson.status === "scheduled" ? <Badge variant="warning" className="border-warning">외상 예정</Badge> : null}
                     </div>
-                    <p className="mt-1 text-sm text-muted-foreground" style={colorStyle ? { color: colorStyle.color } : undefined}>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {toSeoulHourMinute(lesson.startAt)}-
                       {toSeoulHourMinute(lesson.endAt)} ·{" "}
                       {lesson.instrumentName} · {lesson.teacherName}
@@ -153,7 +148,6 @@ export function PrivateDayAttendanceDialog({
                         lesson={lesson}
                         balances={assignedTicketBalances}
                         className="mt-1"
-                        textColor={colorStyle?.color}
                       />
                     ) : null}
                   </div>

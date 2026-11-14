@@ -4,7 +4,6 @@ import { CalendarPlus } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 
 import { SectionCard } from "@/components/shared/section-card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -148,7 +147,7 @@ export function PrivateLessonDayView({
             ) : null}
             {lessons.map((lesson) => {
               const colorStyle = lesson.status === "scheduled" || lesson.status === "present"
-                ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId), lesson.status)
+                ? getInstrumentColorStyle(instrumentColors?.get(lesson.instrumentId))
                 : undefined;
               return <Fragment key={lesson.id}>
                 <TableRow>
@@ -173,7 +172,6 @@ export function PrivateLessonDayView({
                     <div className="flex flex-wrap gap-1">
                       <OriginBadge label={lesson.originLabel} />
                       <PrivateLessonStatusBadge status={lesson.status} label={formatPrivateLessonStatus(lesson.status)} />
-                      {lesson.creditAuthorized && lesson.status === "scheduled" ? <Badge variant="warning" className="border-warning">외상 예정</Badge> : null}
                     </div>
                   </TableCell>
                   <TableCell label="처리" className="text-right">

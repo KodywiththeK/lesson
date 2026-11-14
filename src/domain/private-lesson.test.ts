@@ -4,6 +4,7 @@ import {
   PRIVATE_LESSON_REGISTRATION_STEPS,
   addMinutesToDateTime,
   buildPrivateLessonSessionLabels,
+  comparePrivateLessonStartAt,
   buildPrivateLessonStudentSearchResults,
   deriveLessonMinutes,
   describePrivateAttendanceCancellation,
@@ -19,6 +20,7 @@ import {
   formatPrivateLessonScheduleMessage,
   getPrivateLessonRegistrationFlowState,
   getSelectablePrivateLessonInstruments,
+  parseLessonMinutes,
 } from "./private-lesson";
 
 describe("findPrivateLessonRegistrationBlocker", () => {
@@ -706,6 +708,24 @@ describe("pickDefaultTeacherId", () => {
   });
 });
 
+describe("comparePrivateLessonStartAt", () => {
+  it("UTC 표기와 +09:00 표기가 섞여도 실제 시각 순서로 비교한다", () => {
+    // 한국 15:00(= UTC 06:00)은 UTC 06:30보다 이르지만 문자열로는 더 크다.
+    const editedLesson = "2026-08-12T15:00:00+09:00";
+    const reloadedLesson = "2026-08-12T06:30:00+00:00";
+
+    expect(comparePrivateLessonStartAt(editedLesson, reloadedLesson)).toBeLessThan(0);
+    expect(comparePrivateLessonStartAt(reloadedLesson, editedLesson)).toBeGreaterThan(0);
+    expect(
+      [reloadedLesson, editedLesson].sort(comparePrivateLessonStartAt),
+    ).toEqual([editedLesson, reloadedLesson]);
+  });
+
+  it("같은 순간이면 0이다", () => {
+    expect(comparePrivateLessonStartAt("2026-08-12T15:00:00+09:00", "2026-08-12T06:00:00.000Z")).toBe(0);
+  });
+});
+
 describe("getPrivateAbsenceReasonError", () => {
   it("비어 있거나 100자 이하이면 통과한다", () => {
     expect(getPrivateAbsenceReasonError(undefined)).toBeNull();
@@ -717,5 +737,17 @@ describe("getPrivateAbsenceReasonError", () => {
     expect(PRIVATE_ABSENCE_REASON_MAX_LENGTH).toBe(100);
     expect(getPrivateAbsenceReasonError(`  ${"가".repeat(100)}  `)).toBeNull();
     expect(getPrivateAbsenceReasonError("가".repeat(101))).toBe("사유는 100자 이하로 입력해 주세요.");
+  });
+});
+
+describe("parseLessonMinutes", () => {
+  it("5~240 사이 정수만 레슨 시간으로 받는다", () => {
+    expect(parseLessonMinutes("50")).toBe(50);
+    expect(parseLessonMinutes("5")).toBe(5);
+    expect(parseLessonMinutes("240")).toBe(240);
+    expect(parseLessonMinutes("4")).toBeUndefined();
+    expect(parseLessonMinutes("241")).toBeUndefined();
+    expect(parseLessonMinutes("30.5")).toBeUndefined();
+    expect(parseLessonMinutes("")).toBeUndefined();
   });
 });

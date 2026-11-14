@@ -58,8 +58,8 @@ export function contrastRatio(left: string, right: string) {
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
 
-export function getInstrumentColorTone(color: string, status: "scheduled" | "present") {
-  void status;
+/** 설정 화면 견본처럼 악기 색을 연한 배경과 진한 글자로 보여 줄 때 쓴다. 일정 상태 색과는 별개다. */
+export function getInstrumentColorTone(color: string) {
   const preset = resolveInstrumentColorPreset(color);
   const background = mix(WHITE, preset, BACKGROUND_ALPHA);
   let foreground = mix(preset, BLACK, 0.66);
@@ -69,7 +69,12 @@ export function getInstrumentColorTone(color: string, status: "scheduled" | "pre
   return { background, foreground };
 }
 
-export function getInstrumentColorStyle(color: string | undefined, status: "scheduled" | "present") {
-  const tone = getInstrumentColorTone(color ?? INSTRUMENT_COLOR_PRESETS[0], status);
+export function getInstrumentColorStyle(color: string | undefined) {
+  const tone = getInstrumentColorTone(color ?? INSTRUMENT_COLOR_PRESETS[0]);
   return { backgroundColor: tone.background, color: tone.foreground };
+}
+
+/** 일정 칩은 상태 색을 배경으로 쓰므로 악기 색은 칩 왼쪽 띠로만 보여 준다. */
+export function getInstrumentMarkerStyle(color: string | undefined) {
+  return { borderLeftColor: resolveInstrumentColorPreset(color) };
 }

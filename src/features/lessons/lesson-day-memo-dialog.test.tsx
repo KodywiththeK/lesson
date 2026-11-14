@@ -38,6 +38,63 @@ function renderMemo(props: Partial<React.ComponentProps<typeof LessonDayMemoDial
   return { onCreateMemo, user: userEvent.setup() };
 }
 
+describe("LessonDayMemoDialog 체크 항목", () => {
+  const CHECKLIST_MEMO: LessonCalendarMemo = {
+    ...MEMO,
+    content: "학부모 전화 옴\n- [ ] 교재 주문\n- [x] 보강 안내",
+    studentId: "student-1",
+    studentName: "김하늘",
+    teacherId: "teacher-1",
+    teacherName: "이선생",
+  };
+
+  it("저장된 메모의 체크 줄을 누르면 대상 원생·선생님은 그대로 두고 본문만 바꿔 바로 저장한다", async () => {
+    const onUpdateMemo = vi.fn();
+    const { user } = renderMemo({ memos: [CHECKLIST_MEMO], onUpdateMemo });
+
+    await user.click(screen.getByRole("button", { name: /^8월 21일 메모지/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByRole("checkbox", { name: "보강 안내" })).toBeChecked();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: "교재 주문" }));
+
+    expect(onUpdateMemo).toHaveBeenCalledWith({
+      academyId: "academy-demo",
+      memoId: "memo-1",
+      content: "학부모 전화 옴\n- [x] 교재 주문\n- [x] 보강 안내",
+      studentId: "student-1",
+      studentName: "김하늘",
+      teacherId: "teacher-1",
+      teacherName: "이선생",
+    });
+  });
+
+  it("수정 중인 메모의 저장된 체크 줄은 눌러도 바로 저장하지 않는다", async () => {
+    const onUpdateMemo = vi.fn();
+    const { user } = renderMemo({ memos: [CHECKLIST_MEMO], onUpdateMemo });
+
+    await user.click(screen.getByRole("button", { name: /^8월 21일 메모지/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /메모 수정$/ }));
+
+    const savedCard = within(dialog).getAllByRole("checkbox", { name: "교재 주문" })[0];
+    expect(savedCard).toBeDisabled();
+    expect(onUpdateMemo).not.toHaveBeenCalled();
+  });
+
+  it("새 메모를 쓸 때 체크 항목 추가로 빈 체크 줄을 넣을 수 있다", async () => {
+    const { user } = renderMemo();
+
+    await user.click(screen.getByRole("button", { name: /^8월 21일 메모지/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.click(within(dialog).getByRole("button", { name: "체크 항목 추가" }));
+
+    expect(within(dialog).getByLabelText("메모 내용")).toHaveValue("- [ ] ");
+  });
+});
+
 describe("LessonDayMemoDialog", () => {
   it("버튼에 날짜를 보여 주고 평소에는 메모를 펼쳐 두지 않는다", () => {
     renderMemo({ memos: [MEMO] });

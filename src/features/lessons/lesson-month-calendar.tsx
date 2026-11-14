@@ -7,15 +7,16 @@ import { SectionCard } from "@/components/shared/section-card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { getClosuresOnDate, type AcademyClosure } from "@/domain/academy-closure";
-import { getInstrumentColorStyle } from "@/domain/instrument-color";
+import { getInstrumentMarkerStyle } from "@/domain/instrument-color";
 import type { KoreanHoliday } from "@/domain/korean-holiday";
 
 import { LessonMonthControl } from "@/features/lessons/lesson-toolbar";
 import {
   buildCalendarDates,
   getTodayDate,
-  getEventTone,
   getCalendarEventStatusLabel,
+  getCalendarEventTone,
+  getEventToneClassName,
   isHiddenCalendarRecord,
 } from "@/features/lessons/workspace-helpers";
 import type { CalendarEvent } from "@/features/lessons/workspace-types";
@@ -68,7 +69,6 @@ export function LessonMonthCalendar({
   const variantLabel = variant === "academy" ? "학원 레슨 캘린더" : "개인레슨 캘린더";
   const hiddenCount = events.filter(isHiddenCalendarRecord).length;
   const hiddenByStatus = {
-    absent: events.filter((event) => event.status === "absent").length,
     passed: events.filter((event) => event.status === "passed").length,
     cancelled: events.filter((event) => event.status === "cancelled").length,
   };
@@ -118,12 +118,16 @@ export function LessonMonthCalendar({
     }
   };
   const renderEvent = (event: CalendarEvent) => {
-    const colorStyle = getPrivateEventColorStyle(event, variant, instrumentColors);
+    const tone = getCalendarEventTone(event.status);
+    const instrumentMarker = variant === "private" && event.instrumentId
+      ? getInstrumentMarkerStyle(instrumentColors?.get(event.instrumentId))
+      : undefined;
     return <div
       key={event.id}
+      data-tone={tone}
       draggable={onMoveEvent ? Boolean(event.movable) : undefined}
-      className={`min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:px-2 ${getEventTone(event.status, variant)} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
-      style={colorStyle}
+      className={`min-w-0 rounded-sm px-1 py-1 text-xs font-medium leading-4 sm:px-2 ${getEventToneClassName(tone)} ${instrumentMarker ? "border-l-4" : ""} ${onMoveEvent && event.movable ? "cursor-grab active:cursor-grabbing" : ""} ${event.id === draggingEventId ? "opacity-50" : ""}`}
+      style={instrumentMarker}
       onDragStart={(dragEvent) => {
         if (!onMoveEvent || !event.movable) return;
         dragEvent.dataTransfer.setData(DRAG_DATA_TYPE, event.id);
@@ -135,18 +139,18 @@ export function LessonMonthCalendar({
       onDragEnd={finishDrag}
     >
       {event.detailLabel ? (
-        <CalendarEventDetail event={event} dimSecondary={!colorStyle} />
+        <CalendarEventDetail event={event} />
       ) : (
         <>
           <span className="hidden truncate sm:block">{event.title}</span>
-          <span className={`hidden truncate font-normal sm:block ${colorStyle ? "" : "opacity-80"}`}>
+          <span className="hidden truncate font-normal sm:block">
             {event.originLabel ? `[${event.originLabel}] ` : ""}
             {event.timeUnspecified ? "시간 미정 · " : `${event.startTime} `}
             {event.subtitle}
           </span>
         </>
       )}
-      {variant === "private" || isHiddenCalendarRecord(event) ? (
+      {variant === "private" || (event.status !== "scheduled" && event.status !== "pending") ? (
         <span className="block text-2xs font-normal">
           {getDisplayedEventStatus(event, variant)}
         </span>
@@ -172,7 +176,7 @@ export function LessonMonthCalendar({
       </div>
       {hiddenCount > 0 ? (
         <p className="mb-2 text-xs text-muted-foreground">
-          결석 {hiddenByStatus.absent}건 · 패스 {hiddenByStatus.passed}건 · 취소 {hiddenByStatus.cancelled}건은 기본 달력에서 숨깁니다. 전체 기록 보기로 확인할 수 있습니다.
+          패스 {hiddenByStatus.passed}건 · 취소 {hiddenByStatus.cancelled}건은 기본 달력에서 숨깁니다. 전체 기록 보기로 확인할 수 있습니다.
         </p>
       ) : null}
       <div className="mb-3 grid grid-cols-7 gap-1 text-center text-xs font-medium text-calendar-muted">
@@ -189,7 +193,7 @@ export function LessonMonthCalendar({
           const dayEvents = eventsByDate.get(date) ?? [];
           const pendingCount = dayEvents.filter((event) => event.status === "pending" || event.status === "scheduled").length;
           const presentCount = dayEvents.filter((event) => event.status === "present").length;
-          const absentCount = dayEvents.filter(isHiddenCalendarRecord).length;
+          const absentCount = dayEvents.filter((event) => event.status === "absent").length;
           const isSelected = date === selectedDate;
           const memoCount = memoCounts.get(date) ?? 0;
           const isCurrentMonth = date.startsWith(selectedMonth);
@@ -245,7 +249,7 @@ export function LessonMonthCalendar({
                   </span>
                 ) : null}
                 {dayHolidays.map((holiday) => <span key={holiday.name} className="text-2xs font-medium text-destructive">{holiday.name}</span>)}
-                {dayClosures.map((closure) => <span key={closure.id} className="text-2xs font-medium text-amber-700 dark:text-amber-300">{closure.title}</span>)}
+                {dayClosures.map((closure) => <span key={closure.id} className="text-2xs font-medium text-warning-soft-foreground">{closure.title}</span>)}
                 <span className="flex flex-col text-2xs leading-tight sm:hidden">
                   {pendingCount > 0 ? <span className="text-primary">예정 {pendingCount}</span> : null}
                   {presentCount > 0 ? <span className="text-foreground">등원 {presentCount}</span> : null}
@@ -288,12 +292,11 @@ function getExpandedPanelStyle(cell: DOMRect, viewportWidth: number, viewportHei
 
 function getDisplayedEventStatus(event: CalendarEvent, variant: "academy" | "private") {
   if (variant === "private" && event.status === "present") return "등원";
-  if (event.creditAuthorized && event.status === "scheduled") return "외상 예정";
   return getCalendarEventStatusLabel(event.status);
 }
 
 /** 시간 앞에 남보라 점을 두고 `원생명 (악기) - 선생님명`을 보여 주는 상세 일정 표시. */
-function CalendarEventDetail({ event, dimSecondary }: { event: CalendarEvent; dimSecondary: boolean }) {
+function CalendarEventDetail({ event }: { event: CalendarEvent }) {
   return (
     <>
       <span className="hidden items-center gap-1 truncate sm:flex">
@@ -304,20 +307,10 @@ function CalendarEventDetail({ event, dimSecondary }: { event: CalendarEvent; di
         />
         {event.timeLabel}
         {event.sessionLabel ? (
-          <span className={`ml-auto font-normal ${dimSecondary ? "opacity-80" : ""}`}>{event.sessionLabel}</span>
+          <span className="ml-auto font-normal">{event.sessionLabel}</span>
         ) : null}
       </span>
       <span className="hidden truncate font-normal sm:block">{event.detailLabel}</span>
     </>
   );
-}
-
-function getPrivateEventColorStyle(
-  event: CalendarEvent,
-  variant: "academy" | "private",
-  instrumentColors: Map<string, string> | undefined,
-) {
-  if (variant !== "private" || !event.instrumentId ||
-    (event.status !== "scheduled" && event.status !== "present")) return undefined;
-  return getInstrumentColorStyle(instrumentColors?.get(event.instrumentId), event.status);
 }

@@ -40,18 +40,20 @@ function renderDialog(props: Partial<ComponentProps<typeof PrivateDayAttendanceD
 }
 
 describe("PrivateDayAttendanceDialog", () => {
-  it("예정·등원 카드의 안내 문구와 상태 글자를 연한 배경에서 진하게 읽을 수 있다", () => {
+  it("카드는 악기 색을 왼쪽 띠로만 쓰고 배경이나 글자색은 입히지 않으며 상태는 글자로 구분한다", () => {
     renderDialog({
       lessons: [lesson, { ...lesson, id: "present", status: "present" }],
       instrumentColors: new Map([[lesson.instrumentId, "#246bb2"]]),
       assignedTicketBalances: [{ studentId: lesson.studentId, instrumentId: lesson.instrumentId, remainingCount: 3, validUntil: "2026-12-31" }],
     });
-    const tones = [getInstrumentColorTone("#246bb2", "scheduled"), getInstrumentColorTone("#246bb2", "present")];
-    screen.getAllByText(/잔여 3회/).forEach((note, index) => {
-      expect(note).toHaveStyle({ color: tones[index].foreground });
-      expect(note.closest("div.grid.rounded-md")).toHaveStyle({ backgroundColor: tones[index].background });
-    });
-    expect(screen.getByText("예정")).toHaveStyle({ color: tones[0].foreground });
+    const cards = screen.getAllByText(/잔여 3회/).map((note) => note.closest("div.grid.rounded-md"));
+
+    expect(cards).toHaveLength(2);
+    for (const card of cards) {
+      expect(card).toHaveStyle({ borderLeftColor: "#246bb2" });
+      expect(card).not.toHaveStyle({ backgroundColor: getInstrumentColorTone("#246bb2").background });
+    }
+    expect(screen.getByText("예정")).toBeInTheDocument();
     expect(screen.getByText("출석")).toBeInTheDocument();
   });
 

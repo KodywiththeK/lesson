@@ -115,14 +115,14 @@ function InstrumentColorPicker({ name, color, disabled, onSelect }: {
     <span>{name}</span>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button type="button" variant="outline" disabled={disabled} aria-label={`${name} 색상`} className="w-full justify-start">
-        <span aria-hidden="true" className="size-6 rounded border" style={getInstrumentColorStyle(color, "scheduled")} />
+        <span aria-hidden="true" className="size-6 rounded border" style={getInstrumentColorStyle(color)} />
         {`기본 색 ${INSTRUMENT_COLOR_PRESETS.indexOf(color as typeof INSTRUMENT_COLOR_PRESETS[number]) + 1}`}
       </Button></PopoverTrigger>
       <PopoverContent align="start" className="grid w-48 grid-cols-4 gap-2">
         {INSTRUMENT_COLOR_PRESETS.map((preset, index) => <button key={preset} type="button"
           aria-label={`${name} 기본 색 ${index + 1}`} aria-pressed={color === preset}
           className="size-9 rounded-md border-2 border-border text-xs font-semibold focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-foreground"
-          style={getInstrumentColorStyle(preset, "scheduled")} onClick={() => { setOpen(false); onSelect(preset); }}>{index + 1}</button>)}
+          style={getInstrumentColorStyle(preset)} onClick={() => { setOpen(false); onSelect(preset); }}>{index + 1}</button>)}
       </PopoverContent>
     </Popover>
   </div>;

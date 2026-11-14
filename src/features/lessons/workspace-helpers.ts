@@ -8,6 +8,7 @@ import {
 import type { MakeupLessonTimes } from "@/domain/academy-lesson-absence";
 import { compareKoreanNames } from "@/domain/common-list";
 import {
+  comparePrivateLessonStartAt,
   describePrivateAttendanceChange,
   formatKoreanTimeLabel,
   type PrivateLesson,
@@ -197,7 +198,6 @@ export function toPrivateCalendarEvent(
     status: lesson.status === "makeup" ? "scheduled" : lesson.status,
     origin: lesson.origin,
     originLabel: lesson.originLabel,
-    creditAuthorized: lesson.creditAuthorized,
     movable: lesson.status === "scheduled",
   };
 }
@@ -212,7 +212,7 @@ export function compareCalendarEvents(left: CalendarEvent, right: CalendarEvent)
 
 export function comparePrivateLessonsByTime(left: PrivateLesson, right: PrivateLesson) {
   return (
-    left.startAt.localeCompare(right.startAt) ||
+    comparePrivateLessonStartAt(left.startAt, right.startAt) ||
     compareKoreanNames(left.studentName, right.studentName) ||
     compareKoreanNames(left.id, right.id)
   );
@@ -310,31 +310,31 @@ export function toSeoulHourMinute(value: string) {
   return hourMinuteFormatter.format(new Date(value));
 }
 
-export function getEventTone(
-  status: CalendarEvent["status"],
-  variant: "academy" | "private",
-) {
-  if (status === "present") {
-    return "bg-accent text-accent-foreground";
-  }
+/** 달력 일정 칩의 상태 색. 개인·학원 레슨이 같은 규칙을 쓴다(예정 회색, 등원·출석 초록, 결석 빨강). */
+export type CalendarEventTone = "neutral" | "success" | "destructive" | "muted";
 
-  if (status === "absent") {
-    return "bg-destructive/10 text-destructive";
-  }
+export function getCalendarEventTone(status: CalendarEvent["status"]): CalendarEventTone {
+  if (status === "present") return "success";
+  if (status === "absent") return "destructive";
+  if (status === "passed" || status === "cancelled") return "muted";
 
-  if (status === "passed" || status === "cancelled") {
-    return "bg-muted text-muted-foreground";
-  }
-
-  if (variant === "private") {
-    return "bg-secondary text-secondary-foreground";
-  }
-
-  return "bg-primary/10 text-primary";
+  return "neutral";
 }
 
+const CALENDAR_EVENT_TONE_CLASSES: Record<CalendarEventTone, string> = {
+  neutral: "bg-secondary text-secondary-foreground",
+  success: "bg-success-soft text-success-soft-foreground",
+  destructive: "bg-destructive-soft text-destructive-soft-foreground",
+  muted: "bg-muted text-muted-foreground",
+};
+
+export function getEventToneClassName(tone: CalendarEventTone) {
+  return CALENDAR_EVENT_TONE_CLASSES[tone];
+}
+
+/** 패스·취소는 일어나지 않은 수업이라 기본 달력에서 숨기고, 결석은 색으로 구분해 기본으로 보여 준다. */
 export function isHiddenCalendarRecord(event: CalendarEvent) {
-  return event.status === "absent" || event.status === "passed" || event.status === "cancelled";
+  return event.status === "passed" || event.status === "cancelled";
 }
 
 const CALENDAR_EVENT_STATUS_LABELS: Record<CalendarEvent["status"], string> = {

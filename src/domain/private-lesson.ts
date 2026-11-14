@@ -28,7 +28,6 @@ export type PrivateLesson = {
   startAt: string;
   endAt: string;
   status: PrivateLessonStatus;
-  creditAuthorized?: boolean;
   ticketGrantId?: string;
   ticketSessionNumber?: number;
   ticketTotalCount?: number;
@@ -399,6 +398,19 @@ export function deriveLessonMinutes(
   return end - start;
 }
 
+export const MIN_LESSON_MINUTES = 5;
+export const MAX_LESSON_MINUTES = 240;
+export const LESSON_MINUTES_RANGE_MESSAGE = `레슨 시간은 ${MIN_LESSON_MINUTES}~${MAX_LESSON_MINUTES}분 사이 정수로 입력해 주세요.`;
+
+/** 입력한 레슨 시간(분)이 정수이고 허용 범위 안이면 숫자로, 아니면 undefined를 돌려준다. */
+export function parseLessonMinutes(text: string) {
+  const minutes = Number(text);
+
+  return Number.isInteger(minutes) && minutes >= MIN_LESSON_MINUTES && minutes <= MAX_LESSON_MINUTES
+    ? minutes
+    : undefined;
+}
+
 /** `YYYY-MM-DDTHH:mm`에 분을 더해 같은 형식으로 돌려준다. 시간대 변환 없이 달력 숫자만 계산한다. */
 export function addMinutesToDateTime(dateTime: string, minutes: number) {
   const { year, month, day, hour, minute } = parseIsoLocalParts(dateTime);
@@ -671,6 +683,14 @@ function timeRangesOverlap(
 
 function toTimestamp(dateTime: string) {
   return new Date(dateTime).getTime();
+}
+
+/**
+ * 개인레슨 시작 시각 비교. 저장 직후 화면은 `+09:00`, DB에서 다시 읽은 값은 `+00:00`처럼
+ * 시간대 표기가 섞일 수 있어 문자열이 아니라 실제 시각으로 비교한다.
+ */
+export function comparePrivateLessonStartAt(left: string, right: string) {
+  return toTimestamp(left) - toTimestamp(right);
 }
 
 function formatKoreanDate(dateTime: string) {

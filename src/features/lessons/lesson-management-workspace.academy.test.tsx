@@ -733,8 +733,7 @@ describe("일정 이동·삭제는 원생 기본 정보를 바꾸지 않는다",
     await waitFor(() => expect(within(getDayCell(24)).getByText("이서윤")).toBeInTheDocument());
 
     expect(within(getDayCell(21)).getByText("김민지")).toBeInTheDocument();
-    expect(within(getDayCell(21)).queryByText("박지호")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("switch", { name: "전체 기록 보기" }));
+    // 결석은 기본으로 보이고 같은 날 다른 원생 일정도 그대로다.
     expect(within(getDayCell(21)).getByText("박지호")).toBeInTheDocument();
     await expectStudentStillRegistrable(user);
   });

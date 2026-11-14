@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { ListStatusAlert } from "@/components/management/list-controls";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/operations/date-time-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,10 @@ import {
   addMinutesToDateTime,
   filterTeachersForInstrument,
   findPrivateLessonConflictNotice,
+  MAX_LESSON_MINUTES,
+  LESSON_MINUTES_RANGE_MESSAGE,
+  MIN_LESSON_MINUTES,
+  parseLessonMinutes,
   pickDefaultTeacherId,
   type PrivateLesson,
   type PrivateLessonTicketSearchBalance,
@@ -33,10 +38,8 @@ import type {
   RegisterPrivateLessonEventInput,
 } from "@/lib/api/private-lessons";
 import { toUserMessage } from "@/lib/errors/user-message";
-import { getTodayDate } from "@/features/lessons/workspace-helpers";
+import { getTodayDate, toSeoulIsoOffset } from "@/features/lessons/workspace-helpers";
 
-const MIN_LESSON_MINUTES = 5;
-const MAX_LESSON_MINUTES = 240;
 
 type RegistrationInstrument =
   PrivateLessonRegistrationOptions["students"][number]["instruments"][number];
@@ -76,8 +79,6 @@ export function PrivateLessonRegistrationForm({
   const [startTime, setStartTime] = useState("");
   const [minutesText, setMinutesText] = useState("");
   const [closureConfirmed, setClosureConfirmed] = useState(false);
-  const [creditMode, setCreditMode] = useState(false);
-  const [creditConfirmed, setCreditConfirmed] = useState(false);
   const matchingClosures = getClosuresOnDate(closures, date);
   const allStudents = useMemo(
     () =>
@@ -98,12 +99,12 @@ export function PrivateLessonRegistrationForm({
     student.instruments.filter((instrument) => availability.some((row) =>
       row.studentId === student.studentId && row.instrumentId === instrument.instrumentId &&
       row.availableCount > 0,
-    ) === !creditMode).map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
+    )).map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
   )).entries()];
   const students = allStudents.filter((student) =>
     student.instruments.some((instrument) => instrument.instrumentId === instrumentId) &&
     availability.some((row) => row.studentId === student.studentId &&
-      row.instrumentId === instrumentId && row.availableCount > 0) === !creditMode,
+      row.instrumentId === instrumentId && row.availableCount > 0),
   );
   const selectedStudent = students.find(
     (student) => student.studentId === studentId,
@@ -124,6 +125,8 @@ export function PrivateLessonRegistrationForm({
   const selectedAvailability = availability.find((row) =>
     row.studentId === studentId && row.instrumentId === instrumentId);
   const lessonMinutes = parseLessonMinutes(minutesText);
+  const isMinutesInvalid = Boolean(selectedInstrument) && !lessonMinutes;
+  const minutesErrorId = useId();
   const startAt = date && startTime ? `${date}T${startTime}` : "";
   const endAt =
     startAt && lessonMinutes ? addMinutesToDateTime(startAt, lessonMinutes) : "";
@@ -143,8 +146,7 @@ export function PrivateLessonRegistrationForm({
     Boolean(selectedStudent) &&
     Boolean(selectedInstrument) &&
     Boolean(selectedTeacher) &&
-    (creditMode ? creditConfirmed && (selectedAvailability?.availableCount ?? 0) === 0
-      : (selectedAvailability?.availableCount ?? 0) > 0) &&
+    (selectedAvailability?.availableCount ?? 0) > 0 &&
     Boolean(startAt) &&
     Boolean(endAt) &&
     !conflictNotice &&
@@ -185,7 +187,6 @@ export function PrivateLessonRegistrationForm({
           teacherName: selectedTeacher.teacherName,
           startAt: toSeoulIsoOffset(startAt),
           endAt: toSeoulIsoOffset(endAt),
-          creditAuthorized: creditMode,
         });
       }}
     >
@@ -194,24 +195,6 @@ export function PrivateLessonRegistrationForm({
           <li key={label}><Badge variant="outline">{label}</Badge></li>
         ))}
       </ol>
-
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={creditMode} onChange={(event) => {
-          setCreditMode(event.target.checked);
-          setCreditConfirmed(false);
-          setInstrumentId("");
-          setStudentId("");
-          selectStudentInstrument(undefined);
-        }} />
-        외상 예정으로 등록
-      </label>
-      {creditMode ? <div className="rounded-md border border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
-        <p>회차권 없이 일정을 등록합니다. 출석 시 사용 가능한 회차가 없으면 미정산 1회가 생깁니다.</p>
-        <label className="mt-2 flex items-center gap-2">
-          <input type="checkbox" checked={creditConfirmed} onChange={(event) => setCreditConfirmed(event.target.checked)} />
-          외상 등록 내용을 확인했습니다
-        </label>
-      </div> : null}
 
       {error ? (
         <ListStatusAlert
@@ -228,9 +211,9 @@ export function PrivateLessonRegistrationForm({
       {availabilityQuery.isError ? (
         <ListStatusAlert message="예약 가능 회차를 불러오지 못했습니다." detail={toUserMessage(availabilityQuery.error)} />
       ) : null}
-      {!creditMode && !isLoading && !error && !availabilityQuery.isLoading && !availabilityQuery.isError && instruments.length === 0 ? (
+      {!isLoading && !error && !availabilityQuery.isLoading && !availabilityQuery.isError && instruments.length === 0 ? (
         <p role="status" className="text-sm text-destructive">
-          선택한 날짜에 예약 가능한 회차권이 없습니다. 회차권을 등록하거나 외상 예정으로 등록해 주세요.
+          선택한 날짜에 예약 가능한 회차권이 없습니다. 회차권을 등록하고 입금대기로 바꾼 뒤 다시 시도해 주세요.
         </p>
       ) : null}
 
@@ -248,9 +231,9 @@ export function PrivateLessonRegistrationForm({
           }}
         />
       </Label>
-      {matchingClosures.length > 0 ? <div className="rounded-md border border-amber-500 p-2 text-sm">
+      {matchingClosures.length > 0 ? <div className="grid gap-2 rounded-md border border-warning bg-warning-soft p-2 text-sm text-warning-soft-foreground">
         <p>휴원일: {matchingClosures.map((closure) => closure.title).join(", ")}</p>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={closureConfirmed} onChange={(event) => setClosureConfirmed(event.target.checked)} />휴원일 일정을 확인하고 등록</label>
+        <Label className="flex items-center gap-2"><Checkbox checked={closureConfirmed} onCheckedChange={(checked) => setClosureConfirmed(checked === true)} />휴원일 일정을 확인하고 등록</Label>
       </div> : null}
       <Label className="grid gap-1">
         <span>악기</span>
@@ -349,10 +332,14 @@ export function PrivateLessonRegistrationForm({
             max={MAX_LESSON_MINUTES}
             step={5}
             value={minutesText}
-            aria-invalid={Boolean(selectedInstrument) && !lessonMinutes}
+            aria-invalid={isMinutesInvalid}
+            aria-describedby={isMinutesInvalid ? minutesErrorId : undefined}
             disabled={!selectedInstrument}
             onChange={(event) => setMinutesText(event.target.value)}
           />
+          {isMinutesInvalid ? (
+            <span id={minutesErrorId} className="text-xs text-destructive">{LESSON_MINUTES_RANGE_MESSAGE}</span>
+          ) : null}
         </Label>
         <Label className="grid gap-1">
           <span>종료 시간</span>
@@ -381,16 +368,6 @@ export function PrivateLessonRegistrationForm({
       </DialogFooter>
     </form>
   );
-}
-
-function parseLessonMinutes(text: string) {
-  const minutes = Number(text);
-
-  return Number.isInteger(minutes) &&
-    minutes >= MIN_LESSON_MINUTES &&
-    minutes <= MAX_LESSON_MINUTES
-    ? minutes
-    : undefined;
 }
 
 /** 종료 시각을 `HH:mm`으로 보여 준다. 날짜가 넘어가면 날짜를 함께 적는다. */
@@ -423,6 +400,3 @@ function buildLocalAvailability(
   });
 }
 
-function toSeoulIsoOffset(value: string) {
-  return `${value}:00+09:00`;
-}

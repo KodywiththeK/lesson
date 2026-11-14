@@ -1,13 +1,14 @@
 "use client";
 
 import { StickyNote } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { MonthlyMemoLessonKind } from "@/domain/monthly-memo";
+import { MemoChecklistAddButton, MemoChecklistItems } from "@/features/lessons/memo-checklist";
 import { MEMO_LESSON_KIND_LABELS, MemoPaperDialog, RULED_PAPER_STYLE } from "@/features/lessons/memo-paper-dialog";
 import type { LessonMonthlyNote } from "@/lib/api/lesson-monthly-notes";
 
@@ -190,13 +191,27 @@ function PostitEditor({
   "draft" | "savedContent" | "hasConflict" | "onDraftChange" | "onUseSavedContent"
 >) {
   const canSave = draft !== savedContent && !isSaving;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   return (
     <>
       {note === null ? (
         <p className="text-xs text-warning-soft-foreground/80">이 달의 메모가 없습니다.</p>
       ) : null}
+      <MemoChecklistItems
+        content={draft}
+        disabled={isSaving}
+        onContentChange={(content) => {
+          // 체크는 누르는 즉시 저장한다(작성 중이던 내용도 함께). 다른 저장본과 충돌하면 초안만 바꾸고 충돌 안내를 따른다.
+          onDraftChange(content);
+          if (!hasConflict) onSave(content);
+        }}
+      />
+      <div>
+        <MemoChecklistAddButton content={draft} onContentChange={onDraftChange} textareaRef={textareaRef} />
+      </div>
       <Textarea
+        ref={textareaRef}
         aria-label={`${monthNumber}월 메모 내용`}
         placeholder="예) ○○ 학부모님 전화 옴"
         value={draft}

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { demoLessonWorkspaceData } from "@/lib/demo/lesson-demo-data";
-import { getDefaultInstrumentColor, getInstrumentColorStyle } from "@/domain/instrument-color";
+import { getDefaultInstrumentColor } from "@/domain/instrument-color";
 
 import { LessonManagementWorkspace } from "./lesson-management-workspace";
 
@@ -51,7 +51,7 @@ describe("개인레슨 달력 일정 표시 (명세 3.3)", () => {
     } };
     renderPrivateWorkspace({ demoData: data });
     const text = screen.getByText(/한서아 \(바이올린\)/);
-    expect(text.parentElement).toHaveStyle(getInstrumentColorStyle(getDefaultInstrumentColor("violin"), "scheduled"));
+    expect(text.closest("[data-tone]")).toHaveStyle({ borderLeftColor: getDefaultInstrumentColor("violin") });
   });
   it("악기 필터 밖 원생과 선생님의 날짜 메모도 수정할 수 있다", async () => {
     const user = userEvent.setup();
@@ -309,7 +309,18 @@ describe("선생님별 레슨시간표 (명세 3.6)", () => {
 
     await user.selectOptions(within(dialog).getByLabelText("선생님 선택"), "teacher-3");
 
-    expect(within(dialog).getByLabelText("시간표 내용")).toHaveValue("8/22 최도윤 10:30 첼로");
+    expect(within(dialog).getByLabelText("시간표 내용")).toHaveValue(
+      [
+        "[더 클래식 음악학원]",
+        "",
+        "안녕하세요, 음악학원입니다",
+        "8월 선생님 스케줄표 입니다",
+        "",
+        "8/22 최도윤 10:30 첼로",
+        "",
+        "스케줄 변동사항이 있으시면 연락 부탁드립니다!",
+      ].join("\n"),
+    );
     expect(
       within(dialog).queryByText("선생님을 선택하면 해당 월의 레슨 일정이 표시됩니다."),
     ).toBeNull();

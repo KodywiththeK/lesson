@@ -124,6 +124,18 @@ describe("월 개인레슨 결석 목록", () => {
     ]);
   });
 
+  it("시간대 표기가 섞여도 실제 시각 순서로 정렬한다", () => {
+    const lessons = [
+      buildPrivateLesson({ id: "reloaded", startAt: "2026-08-12T06:30:00+00:00" }),
+      buildPrivateLesson({ id: "edited", startAt: "2026-08-12T15:00:00+09:00" }),
+    ];
+
+    expect(buildMonthlyPrivateAbsences(lessons, "2026-08").map((lesson) => lesson.id)).toEqual([
+      "edited",
+      "reloaded",
+    ]);
+  });
+
   it("달 경계는 한국 시간 기준으로 판정한다", () => {
     const lessons = [
       // UTC 7/31 16:00 = 한국 8/1 01:00 → 8월

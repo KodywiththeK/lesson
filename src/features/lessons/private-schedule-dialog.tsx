@@ -19,12 +19,9 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
-import { type PrivateLesson } from "@/domain/private-lesson";
+import type { PrivateLesson } from "@/domain/private-lesson";
+import { formatTeacherMonthScheduleMessage } from "@/domain/teacher-schedule-message";
 import type { PrivateLessonRegistrationOptions } from "@/lib/api/private-lessons";
-import {
-  toSeoulDate,
-  toSeoulHourMinute,
-} from "@/features/lessons/workspace-helpers";
 
 export function ScheduleDialog({
   open,
@@ -42,7 +39,7 @@ export function ScheduleDialog({
   const [teacherId, setTeacherId] = useState("");
   const monthPrefix = selectedDate.slice(0, 7);
   const scheduleText = teacherId
-    ? buildTeacherMonthSchedule(lessons, teacherId, monthPrefix)
+    ? formatTeacherMonthScheduleMessage({ lessons, teacherId, month: monthPrefix })
     : "";
 
   return (
@@ -111,29 +108,4 @@ export function ScheduleDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-/** 선택한 선생님의 해당 월 개인레슨을 `8/22 최도윤 10:30 첼로` 줄 단위로 만든다. */
-function buildTeacherMonthSchedule(
-  lessons: PrivateLesson[],
-  teacherId: string,
-  monthPrefix: string,
-) {
-  const teacherLessons = lessons
-    .filter(
-      (lesson) =>
-        lesson.teacherId === teacherId && toSeoulDate(lesson.startAt).startsWith(monthPrefix),
-    )
-    .sort((left, right) => left.startAt.localeCompare(right.startAt));
-
-  if (teacherLessons.length === 0) {
-    return "해당 월에 등록된 레슨이 없습니다.";
-  }
-
-  return teacherLessons
-    .map((lesson) => {
-      const date = toSeoulDate(lesson.startAt);
-      return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))} ${lesson.studentName} ${toSeoulHourMinute(lesson.startAt)} ${lesson.instrumentName}`;
-    })
-    .join("\n");
 }

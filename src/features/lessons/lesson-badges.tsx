@@ -26,14 +26,14 @@ export function PrivateLessonStatusBadge({ status, label }: {
 }) {
   if (status === "present") return <Badge variant="success" className="border-success">{label}</Badge>;
   if (status === "absent") return <Badge variant="destructive" className="border-destructive">{label}</Badge>;
-  if (status === "scheduled") return <Badge variant="secondary" className="border-slate-500 bg-slate-200 text-slate-950">{label}</Badge>;
+  if (status === "scheduled") return <Badge variant="secondary" className="border-border">{label}</Badge>;
   return <Badge variant="outline">{label}</Badge>;
 }
 
-export function OriginBadge({ label, textColor }: { label: string | undefined; textColor?: string }) {
+export function OriginBadge({ label }: { label: string | undefined }) {
   if (!label) {
     return null;
   }
 
-  return <Badge variant="outline" style={textColor ? { color: textColor } : undefined}>{label}</Badge>;
+  return <Badge variant="outline">{label}</Badge>;
 }

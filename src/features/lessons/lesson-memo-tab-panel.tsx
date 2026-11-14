@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ import {
   type LessonCalendarMemoPayload,
   type UpdateLessonCalendarMemoInput,
 } from "@/lib/api/lesson-memos";
+import { MemoChecklistAddButton, MemoContent } from "@/features/lessons/memo-checklist";
 import {
   createEmptyMemoDraft,
   toLessonMemoDraft,
@@ -64,6 +65,7 @@ export function LessonMemoTabPanel({
   const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
   const [memoToDelete, setMemoToDelete] = useState<LessonCalendarMemo | null>(null);
   const [isDeletingMemo, setIsDeletingMemo] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editingMemo = memos.find((memo) => memo.id === editingMemoId) ?? null;
   const canSubmit = canSubmitLessonMemo(draft, targets);
   const submitLabel = editingMemo ? "메모 수정 저장" : "메모 등록";
@@ -89,6 +91,9 @@ export function LessonMemoTabPanel({
     }
     setMemoToDelete(null);
   };
+
+  const changeDraftContent = (content: string) =>
+    setDraft((current) => ({ ...current, content }));
 
   const submitMemo = () => {
     const resolvedTarget = resolveLessonMemoTarget(draft, targets);
@@ -174,15 +179,11 @@ export function LessonMemoTabPanel({
         <Label className="grid gap-2 text-sm font-medium">
           <span>메모 내용</span>
           <Textarea
+            ref={textareaRef}
             aria-label="메모 내용"
             className="min-h-28"
             value={draft.content}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                content: event.target.value,
-              }))
-            }
+            onChange={(event) => changeDraftContent(event.target.value)}
           />
         </Label>
         <div className="flex flex-wrap gap-2">
@@ -190,6 +191,11 @@ export function LessonMemoTabPanel({
             <FileText aria-hidden="true" />
             {submitLabel}
           </Button>
+          <MemoChecklistAddButton
+            content={draft.content}
+            onContentChange={changeDraftContent}
+            textareaRef={textareaRef}
+          />
           {editingMemo ? (
             <Button
               type="button"
@@ -224,7 +230,21 @@ export function LessonMemoTabPanel({
                   </Badge>
                 ))}
               </div>
-              <p className="whitespace-pre-wrap text-sm">{memo.content}</p>
+              <MemoContent
+                content={memo.content}
+                disabled={memo.id === editingMemoId}
+                onContentChange={(content) =>
+                  onUpdateMemo({
+                    academyId,
+                    memoId: memo.id,
+                    content,
+                    studentId: memo.studentId,
+                    studentName: memo.studentName,
+                    teacherId: memo.teacherId,
+                    teacherName: memo.teacherName,
+                  })
+                }
+              />
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
               <Button

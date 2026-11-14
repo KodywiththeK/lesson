@@ -15,7 +15,19 @@ import { LessonManagementWorkspace } from "./lesson-management-workspace";
 type RenderWorkspaceOptions = {
   lessonKind?: "academy" | "private";
   demoData?: LessonWorkspaceDemoData;
+  canManage?: boolean;
 };
+
+const AUGUST_TEACHER_SCHEDULE_MESSAGE = [
+  "[더 클래식 음악학원]",
+  "",
+  "안녕하세요, 음악학원입니다",
+  "8월 선생님 스케줄표 입니다",
+  "",
+  "8/22 최도윤 10:30 첼로",
+  "",
+  "스케줄 변동사항이 있으시면 연락 부탁드립니다!",
+].join("\n");
 
 function buildPrivateLesson(
   id: string,
@@ -42,6 +54,7 @@ function buildPrivateLesson(
 function renderWorkspace({
   lessonKind = "academy",
   demoData = demoLessonWorkspaceData,
+  canManage,
 }: RenderWorkspaceOptions = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -59,10 +72,82 @@ function renderWorkspace({
         lessonKind={lessonKind}
         initialDate="2026-08-21"
         demoData={demoData}
+        canManage={canManage}
       />
     </QueryClientProvider>,
   );
 }
+
+describe("LessonManagementWorkspace 등하원 현황", () => {
+  beforeEach(() => {
+    window.history.pushState(null, "", "/lessons/academy");
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("일별 테이블뷰에서 그날 학원레슨과 개인레슨에 오는 학생을 한 구획에 모아 보여 준다", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+
+    expect(screen.queryByRole("heading", { name: "등하원 현황" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    expect(screen.getByRole("heading", { name: "등하원 현황" })).toBeInTheDocument();
+    const academyStudent = screen.getByRole("listitem", { name: /김민지/ });
+    expect(within(academyStudent).getByText("학원레슨")).toBeInTheDocument();
+    const privateStudent = screen.getByRole("listitem", { name: /한서아/ });
+    expect(within(privateStudent).getByText("개인레슨")).toBeInTheDocument();
+  });
+
+  it("개인레슨 일별 테이블뷰에도 같은 구획이 있다", async () => {
+    const user = userEvent.setup();
+    renderWorkspace({ lessonKind: "private" });
+
+    await user.click(screen.getByRole("tab", { name: "개인레슨 일별 테이블뷰" }));
+
+    expect(screen.getByRole("heading", { name: "등하원 현황" })).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /김민지/ })).toBeInTheDocument();
+  });
+
+  it("오늘 날짜에는 등원·하원을 기록할 수 있고 출결 상태와는 별개다", async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date("2026-08-21T06:02:00Z"));
+    renderWorkspace();
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    const attendanceRadio = () =>
+      within(screen.getByRole("table", { name: "2026-08-21 출석 확인 목록" })).getByRole("radio", { name: "김민지 등원" });
+    const attendanceBefore = attendanceRadio().getAttribute("aria-checked");
+
+    await user.click(screen.getByRole("button", { name: "김민지 등원" }));
+
+    const row = screen.getByRole("listitem", { name: /김민지/ });
+    expect(within(row).getByText("학원에 있음")).toBeInTheDocument();
+    expect(within(row).getByText("등원 15:02")).toBeInTheDocument();
+    // 일정별 출결(등원 확인)은 등하원 기록과 상관없이 그대로다.
+    expect(attendanceRadio().getAttribute("aria-checked")).toBe(attendanceBefore);
+  });
+
+  it("오늘이 아닌 날짜에는 기록 버튼 없이 안내만 보여 준다", async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date("2026-08-22T06:02:00Z"));
+    renderWorkspace();
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    expect(screen.getByText("등하원은 오늘 날짜에만 기록할 수 있습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "김민지 등원" })).not.toBeInTheDocument();
+  });
+
+  it("선생님(관리 권한 없음)은 현황만 읽을 수 있고 기록 버튼이 없다", async () => {
+    const user = userEvent.setup();
+    vi.setSystemTime(new Date("2026-08-21T06:02:00Z"));
+    renderWorkspace({ canManage: false });
+    await user.click(screen.getByRole("tab", { name: "학원레슨 일별 테이블뷰" }));
+
+    expect(screen.getByRole("heading", { name: "등하원 현황" })).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: /김민지/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "김민지 등원" })).not.toBeInTheDocument();
+  });
+});
 
 describe("LessonManagementWorkspace", () => {
   beforeEach(() => {
@@ -592,7 +677,7 @@ describe("LessonManagementWorkspace", () => {
       await user.click(within(dialog).getByRole("button", { name: "복사" }));
 
       await waitFor(() => expect(success).toHaveBeenCalledWith("시간표를 복사했습니다. 메시지에 붙여넣어 보내세요."));
-      expect(await navigator.clipboard.readText()).toBe("8/22 최도윤 10:30 첼로");
+      expect(await navigator.clipboard.readText()).toBe(AUGUST_TEACHER_SCHEDULE_MESSAGE);
     });
 
     it("복사에 실패하면 성공이라고 하지 않고 직접 복사하도록 안내한다", async () => {
@@ -641,7 +726,7 @@ describe("LessonManagementWorkspace", () => {
     );
 
     expect(within(scheduleDialog).getByLabelText("시간표 내용")).toHaveValue(
-      "8/22 최도윤 10:30 첼로",
+      AUGUST_TEACHER_SCHEDULE_MESSAGE,
     );
 
     await user.click(within(scheduleDialog).getByRole("button", { name: "Close" }));

@@ -39,6 +39,56 @@ async function openNote(user: UserEvent) {
   return screen.findByRole("dialog");
 }
 
+describe("LessonMonthlyNoteDialog 체크 항목", () => {
+  const CHECKLIST_NOTE: LessonMonthlyNote = {
+    content: "김하늘 학부모님 전화 옴\n- [ ] 교재 주문\n- [x] 보강 안내",
+    unread: false,
+    updatedAt: "2026-08-20T09:00:00+09:00",
+  };
+
+  it("본문의 체크 줄을 체크박스로 보여 주고 누르면 바로 저장한다", async () => {
+    const user = userEvent.setup();
+    const { onSave } = renderNote({ note: CHECKLIST_NOTE });
+    const dialog = await openNote(user);
+
+    expect(within(dialog).getByRole("checkbox", { name: "교재 주문" })).not.toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "보강 안내" })).toBeChecked();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: "교재 주문" }));
+
+    expect(onSave).toHaveBeenCalledWith("김하늘 학부모님 전화 옴\n- [x] 교재 주문\n- [x] 보강 안내");
+  });
+
+  it("저장 중에는 체크박스를 누를 수 없다", async () => {
+    const user = userEvent.setup();
+    renderNote({ note: CHECKLIST_NOTE, isSaving: true });
+    const dialog = await openNote(user);
+
+    expect(within(dialog).getByRole("checkbox", { name: "교재 주문" })).toBeDisabled();
+  });
+
+  it("체크 항목 추가를 누르면 본문 끝에 빈 체크 줄이 생긴다", async () => {
+    const user = userEvent.setup();
+    renderNote({ note: CHECKLIST_NOTE });
+    const dialog = await openNote(user);
+
+    await user.click(within(dialog).getByRole("button", { name: "체크 항목 추가" }));
+
+    expect(within(dialog).getByLabelText("8월 메모 내용")).toHaveValue(
+      "김하늘 학부모님 전화 옴\n- [ ] 교재 주문\n- [x] 보강 안내\n- [ ] ",
+    );
+  });
+
+  it("체크 줄이 없으면 체크 목록을 따로 보여 주지 않는다", async () => {
+    const user = userEvent.setup();
+    renderNote({ note: UNREAD_NOTE });
+    const dialog = await openNote(user);
+
+    expect(within(dialog).queryByRole("group", { name: "체크 항목" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+});
+
 describe("LessonMonthlyNoteDialog", () => {
   it("평소에는 메모지 버튼만 보이고, 누르면 선택한 달과 레슨 종류를 제목으로 한 다이얼로그가 열린다", async () => {
     const user = userEvent.setup();
