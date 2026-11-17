@@ -45,7 +45,7 @@
 
 ## Tickets
 
-- `lesson_ticket_grants`: 구매 한 건당 별도 행으로 부여 수량, 잔여, 유효기간, 등록일을 기록한다. 과거에 합쳐진 권은 한 행의 통합권으로 보존한다.
+- `lesson_ticket_grants`: 구매 한 건당 별도 행으로 부여 수량, 잔여, 유효기간, 등록일을 기록한다. 과거에 합쳐진 권은 한 행의 통합권으로 보존한다. 납입일 `due_on`은 null이면 미정이다(2026-11-17).
 - `lesson_ticket_registrations`: 구매별 결제·서비스·유효기간과 연결 원장 기록
 - `lesson_ticket_adjustments`: 수동 수정과 사유 감사 로그
 - `lesson_ticket_usages`: 출석 확인과 연결된 회차 차감 기록
@@ -62,7 +62,8 @@
 
 - `fixed_income_snapshots`: 월별 원생/악기별 고정 수입 스냅샷
 - `payment_statuses`: 스냅샷별 수납/미납 상태
-- `ledger_entries`: 수입/지출 source of truth
+- `ledger_entries`: 수입/지출 source of truth. 카드 수수료 출금 행은 `fee_for_entry_id`로 수입 행에 붙어(같은 학원, `on delete cascade`) 수입이 지워지면 같이 지워지고 수입 금액이 바뀌면 trigger가 같은 비율로 맞춘다(2026-11-17).
+- `card_fee_rates`: 학원별 카드사 이름·수수료율(`numeric(4,2)`, 0~10)과 보관 여부. 원장·데스크 읽기, 쓰기는 원장 RPC만.
 - `salary_settlements`: 월별 급여 계산과 지급 상태
 
 ## Audit

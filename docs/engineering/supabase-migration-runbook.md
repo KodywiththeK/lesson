@@ -35,6 +35,13 @@
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
+## 2026-11-17 카드 수수료·회차권 납입일 미정 migration — 운영 미적용
+
+- 대상: `20261117000000_card_fee.sql`, `20261117000100_lesson_ticket_due_on_later.sql`. 로컬 DB에 적용하고 역할별 시나리오를 확인했다(evidence `2026-11-17-card-fee-ticket-due-later.md`).
+- 순서: migration 적용 → 새 앱 배포. 새 앱은 6인자 입금 RPC(`mark_fixed_income_snapshot_paid`, `mark_lesson_ticket_paid`), `card_fee_rates`, `set_lesson_ticket_due_on`을 쓰므로 migration이 먼저다. 옛 4인자 입금 RPC와 옛 등록 경로는 그대로 두어 적용 직후 옛 앱도 동작한다(수수료 없이 기록, 납입일은 등록일).
+- 후속: 새 앱 배포가 확인되면 옛 4인자 `mark_fixed_income_snapshot_paid`·`mark_lesson_ticket_paid`를 지우는 migration을 만든다(남아 있으면 직접 호출로 카드사 필수 검사를 건너뛸 수 있다). 6인자는 내부에서 4인자를 부르므로 본문을 옮긴 뒤 지운다.
+- 되돌릴 때: 새 표·칸·함수만 추가하고 기존 RPC 동작은 바꾸지 않는다(10인자 등록 RPC만 `p_due_on = null` 처리를 더함). `lesson_ticket_grants.due_on`의 not null 해제는 미정 회차권이 생긴 뒤에는 되돌릴 수 없으니 미정 행을 먼저 정리한다.
+
 ## 2026-11-14 학원 피드백 migration — 2026-11-14 운영 적용 완료
 
 - 적용 결과(2026-11-14): CLI `db push --remote=<ref> --include-all`로 `20261028073720`(이전부터 미적용)과 `000000`~`000500`을 먼저 적용하고, `main` push로 Vercel 운영 배포(`60f3d49`) 성공과 배포 번들에 `credit_authorized` 참조가 없음을 확인한 뒤 `000600`을 적용했다. 적용 전 운영 외상 일정·기록 0건, 합쳐진 이전 회차권 4건. 적용 후 원격 이력 73건이 로컬과 모두 일치하고 마지막 버전은 `20261114000600`이다. `db push`는 대기 migration을 한 번에 적용하므로 `000600` 파일을 잠시 작업 폴더 밖으로 옮겨 두고 앞의 7건만 적용했다.
