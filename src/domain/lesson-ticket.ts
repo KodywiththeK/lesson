@@ -41,8 +41,8 @@ export type LessonTicketListItem = LessonTicket & {
   paidAt?: string;
   /** 입금 상태. 없으면 상태 도입 전 자료라 입금완료로 본다. */
   paymentStatus?: LessonTicketPaymentStatus;
-  /** 납입일. 없으면 등록일과 같다. */
-  dueOn?: string;
+  /** 납입일. null이면 미정(등록 때 '나중에 입력'), 칸이 없으면 상태 도입 전 자료라 등록일과 같다. */
+  dueOn?: string | null;
   paymentMethod?: TuitionPaymentMethod;
   /** 여러 유료 구매가 합쳐진 이전 회차권(입금 취소 불가). */
   legacyMerged?: boolean;
@@ -429,4 +429,9 @@ function toUtcDayNumber(date: string) {
   }
 
   return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+/** 회차권 납입일. null이면 미정이고, 상태 도입 전 자료(칸 없음)는 등록일과 같다. */
+export function getLessonTicketDueOn(ticket: Pick<LessonTicketListItem, "dueOn" | "registeredAt">) {
+  return ticket.dueOn === undefined ? ticket.registeredAt : ticket.dueOn;
 }

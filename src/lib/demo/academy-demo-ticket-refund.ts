@@ -1,3 +1,4 @@
+import { syncCardFeesWithIncome } from "@/domain/card-fee";
 import { isLessonTicketClosed } from "@/domain/lesson-ticket-payment";
 import {
   allocateLessonTicketRefund,
@@ -109,7 +110,10 @@ export function deleteDemoLessonTicket(
     return {
       state: {
         ...closedTicketState,
-        ledgerEntries: state.ledgerEntries.filter((entry) => !linkedLedgerIds.has(entry.ledgerId)),
+        ledgerEntries: syncCardFeesWithIncome(
+          state.ledgerEntries,
+          state.ledgerEntries.filter((entry) => !linkedLedgerIds.has(entry.ledgerId)),
+        ),
       },
       result: { mode: "mistake", refunded: false, refundAmount: 0, ledgerChanged: linkedLedgerIds.size > 0 },
     };
@@ -136,14 +140,14 @@ export function deleteDemoLessonTicket(
   return {
     state: {
       ...closedTicketState,
-      ledgerEntries: state.ledgerEntries.flatMap((entry) => {
+      ledgerEntries: syncCardFeesWithIncome(state.ledgerEntries, state.ledgerEntries.flatMap((entry) => {
         const remaining = remainingByLedgerId.get(entry.ledgerId);
 
         if (remaining === undefined) return [entry];
         if (remaining === 0) return [];
 
         return [{ ...entry, amount: remaining }];
-      }),
+      })),
     },
     result: { mode: "refund", refunded: refundAmount > 0, refundAmount, ledgerChanged: refundAmount > 0 && remainingByLedgerId.size > 0 },
   };

@@ -1,4 +1,5 @@
 import type { BookSale, LedgerEntry } from "@/domain/book-sale";
+import type { CardFeeChoice } from "@/domain/card-fee";
 import type { PayrollLessonSource, PayrollRecord, PayrollStudentBreakdown } from "@/domain/payroll";
 import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
@@ -16,6 +17,7 @@ import {
   type LessonTicketListSupabaseClient,
 } from "./lesson-tickets";
 import { BOOK_RELEASE_SELECT, toBookSale, type BookReleaseSupabaseRow } from "./books";
+import { toCardFeeRpcParams } from "./card-fee-rates";
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { fetchPayrollTeachers, type TeacherListSupabaseClient } from "./teachers";
 import { queryKeys } from "./query-keys";
@@ -331,6 +333,8 @@ export async function markMonthlyTuitionAsPaid(
     tuitionId: string;
     paidAt: string;
     paymentMethod: TuitionPaymentMethod;
+    /** 카드 입금이면 고른 카드사와 수수료. 수수료 금액을 비우면 서버가 수수료율로 계산한다. */
+    cardFee?: CardFeeChoice;
   },
 ): Promise<TuitionRecord> {
   const { data, error } = await supabase.rpc(
@@ -340,6 +344,7 @@ export async function markMonthlyTuitionAsPaid(
       p_snapshot_id: input.tuitionId,
       p_paid_at: input.paidAt,
       p_payment_method: input.paymentMethod,
+      ...toCardFeeRpcParams(input.cardFee),
     },
   );
 

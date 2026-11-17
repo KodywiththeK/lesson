@@ -4,6 +4,7 @@ import {
   Banknote,
   BookOpen,
   CalendarDays,
+  CreditCard,
   Gauge,
   GraduationCap,
   Handshake,
@@ -200,6 +201,13 @@ export const mainNavigation: NavigationItem[] = [
         href: "/settings/lesson-tickets",
         description: "회차권을 삭제할 때 적용할 환불 규정을 고릅니다.",
         icon: Settings,
+        feature: "settings",
+      },
+      {
+        label: "카드 수수료",
+        href: "/settings/card-fees",
+        description: "카드사별 수수료율을 정해 카드 입금 때 수수료를 함께 기록합니다.",
+        icon: CreditCard,
         feature: "settings",
       },
       {

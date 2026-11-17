@@ -20,6 +20,7 @@ import {
   type RegisterLessonTicketSupabaseClient,
   cancelLessonTicketPayment,
   markLessonTicketPaid,
+  setLessonTicketDueOn,
   startLessonTicketPaymentWait,
   type LessonTicketPaymentSupabaseClient,
 } from "./lesson-tickets";
@@ -599,15 +600,33 @@ describe("회차권 입금 상태 전환 API", () => {
 
     await startLessonTicketPaymentWait(client, { academyId: "academy-1", ticketId: "ticket-1" });
     await markLessonTicketPaid(client, { academyId: "academy-1", ticketId: "ticket-1", paidOn: "2026-11-14", paymentMethod: "cash" });
+    await markLessonTicketPaid(client, {
+      academyId: "academy-1", ticketId: "ticket-1", paidOn: "2026-11-14", paymentMethod: "card", cardFee: { rateId: "rate-1" },
+    });
     await cancelLessonTicketPayment(client, { academyId: "academy-1", ticketId: "ticket-1" });
+    await setLessonTicketDueOn(client, { academyId: "academy-1", ticketId: "ticket-1", dueOn: "2026-11-20" });
 
     expect(calls).toEqual([
       { functionName: "start_lesson_ticket_payment_wait", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1" } },
       {
         functionName: "mark_lesson_ticket_paid",
-        payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_paid_on: "2026-11-14", p_payment_method: "cash" },
+        payload: {
+          p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_paid_on: "2026-11-14", p_payment_method: "cash",
+          p_card_fee_rate_id: null, p_card_fee_amount: null,
+        },
+      },
+      {
+        functionName: "mark_lesson_ticket_paid",
+        payload: {
+          p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_paid_on: "2026-11-14", p_payment_method: "card",
+          p_card_fee_rate_id: "rate-1", p_card_fee_amount: null,
+        },
       },
       { functionName: "cancel_lesson_ticket_payment", payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1" } },
+      {
+        functionName: "set_lesson_ticket_due_on",
+        payload: { p_academy_id: "academy-1", p_ticket_id: "ticket-1", p_due_on: "2026-11-20" },
+      },
     ]);
   });
 

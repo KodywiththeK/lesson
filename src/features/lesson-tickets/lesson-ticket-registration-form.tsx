@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   NativeSelect,
   NativeSelectOption,
@@ -19,7 +20,7 @@ import {
 } from "@/domain/lesson-ticket";
 import { LEDGER_AMOUNT_MAX } from "@/domain/book-stock";
 import { parseWonInput } from "@/domain/money-input";
-import { resolveLessonTicketDueOn } from "@/domain/lesson-ticket-payment";
+import { resolveLessonTicketDueOn, type LessonTicketDueOnMode } from "@/domain/lesson-ticket-payment";
 import type {
   LessonTicketRegistrationStudentOption,
   RegisterLessonTicketInput,
@@ -42,6 +43,12 @@ type LessonTicketRegistrationFormProps = {
   onSubmit: (input: RegisterLessonTicketInput) => void;
 };
 
+const DUE_ON_MODE_OPTIONS: Array<{ value: LessonTicketDueOnMode; label: string }> = [
+  { value: "same", label: "등록일과 동일" },
+  { value: "custom", label: "직접 입력" },
+  { value: "later", label: "나중에 입력" },
+];
+
 export function LessonTicketRegistrationForm({
   academyId,
   today,
@@ -60,9 +67,9 @@ export function LessonTicketRegistrationForm({
   const [registeredAt, setRegisteredAt] = useState(today);
   const [paidAmountText, setPaidAmountText] = useState("");
   const [isService, setIsService] = useState(false);
-  const [dueOnSameAsRegistered, setDueOnSameAsRegistered] = useState(true);
+  const [dueOnMode, setDueOnMode] = useState<LessonTicketDueOnMode>("same");
   const [chosenDueOn, setChosenDueOn] = useState(today);
-  const dueOn = resolveLessonTicketDueOn({ registeredAt, dueOn: chosenDueOn, sameAsRegistered: dueOnSameAsRegistered });
+  const dueOn = resolveLessonTicketDueOn({ registeredAt, dueOn: chosenDueOn, mode: dueOnMode });
   const eligibleOptions = options.filter((option) => option.instruments.length > 0);
   const instruments = [...new Map(eligibleOptions.flatMap((option) =>
     option.instruments.map((instrument) => [instrument.instrumentId, instrument.instrumentName] as const),
@@ -212,24 +219,34 @@ export function LessonTicketRegistrationForm({
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <Label className="flex items-center gap-2 text-sm font-normal">
-          <Checkbox
-            checked={dueOnSameAsRegistered}
-            onCheckedChange={(checked) => {
-              setDueOnSameAsRegistered(checked === true);
-              setChosenDueOn(registeredAt);
-            }}
-          />
-          납입일을 등록일과 동일하게
-        </Label>
-        {dueOnSameAsRegistered ? null : (
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-medium">납입일</legend>
+        <RadioGroup
+          aria-label="납입일 정하기"
+          className="flex flex-wrap gap-x-4 gap-y-2"
+          value={dueOnMode}
+          onValueChange={(value) => {
+            setDueOnMode(value as LessonTicketDueOnMode);
+            setChosenDueOn(registeredAt);
+          }}
+        >
+          {DUE_ON_MODE_OPTIONS.map((option) => (
+            <Label key={option.value} className="flex items-center gap-2 text-sm font-normal">
+              <RadioGroupItem value={option.value} />
+              {option.label}
+            </Label>
+          ))}
+        </RadioGroup>
+        {dueOnMode === "custom" ? (
           <Label className="grid gap-1 sm:max-w-xs">
             <span>납입일</span>
             <DateField aria-label="납입일" required value={chosenDueOn} onValueChange={setChosenDueOn} />
           </Label>
-        )}
-      </div>
+        ) : null}
+        {dueOnMode === "later" ? (
+          <p className="text-sm text-muted-foreground">납입일은 회차권 목록에서 나중에 입력할 수 있습니다.</p>
+        ) : null}
+      </fieldset>
 
       <Label className="flex items-center gap-2 text-sm font-normal">
         <Checkbox checked={isService} onCheckedChange={(checked) => setIsService(checked === true)} />

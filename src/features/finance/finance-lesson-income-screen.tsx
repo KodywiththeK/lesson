@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { CardFeeChoice, CardFeeRate } from "@/domain/card-fee";
 import { buildListView, compareKoreanNames } from "@/domain/common-list";
 import { getFinanceCurrentMonth, getFinanceToday } from "@/domain/finance-date";
 import { buildPrivateLessonIncomeRows, type PrivateLessonIncomeRow } from "@/domain/lesson-ticket-income";
@@ -32,7 +33,10 @@ import { invalidateAfterLessonTicketChange } from "@/lib/api/query-invalidation"
 import { queryKeys } from "@/lib/api/query-keys";
 import { FinanceDataScreenProps, FinanceManagementData } from "./finance-types";
 import { FinanceConfirmDialog, PaymentDialog } from "@/components/management/payment-dialog";
-import type { LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import {
+  LESSON_TICKET_PAYMENT_CHANGE_MESSAGES,
+  type LessonTicketPaymentChangeAction,
+} from "@/domain/lesson-ticket-payment";
 import {
   LessonTicketPaymentControl,
   type LessonTicketPaymentActionInput,
@@ -62,23 +66,18 @@ export type LessonIncomeRow = {
   | { source: "tuition"; lessonKindLabel: "학원레슨 월수강료"; record: TuitionRecord }
   | ({ source: "lesson-ticket"; lessonKindLabel: "개인레슨 회차권" } & Pick<
       PrivateLessonIncomeRow,
-      "status" | "ticketId" | "paymentStatus" | "dueOn" | "paymentMethod" | "legacyMerged"
+      "status" | "ticketId" | "paymentStatus" | "dueOn" | "billedOn" | "paymentMethod" | "legacyMerged"
     >)
 );
 
 type TuitionRow = Extract<LessonIncomeRow, { source: "tuition" }>;
 type TuitionActionKind = TuitionAction["action"];
 type TuitionCommand =
-  | { kind: "pay"; row: TuitionRow; paidAt: string; paymentMethod: TuitionPaymentMethod }
+  | { kind: "pay"; row: TuitionRow; paidAt: string; paymentMethod: TuitionPaymentMethod; cardFee?: CardFeeChoice }
   | { kind: "overdue" | "cancel-payment"; row: TuitionRow };
 
 const UNSUPPORTED_MESSAGE = "이 화면에서는 처리할 수 없습니다.";
 
-const TICKET_PAYMENT_MESSAGES: Record<LessonTicketPaymentAction, string> = {
-  "start-payment-wait": "회차권을 입금대기로 바꿨습니다.",
-  "mark-paid": "회차권 입금 처리했습니다.",
-  "cancel-payment": "회차권 입금을 취소했습니다.",
-};
 const LEDGER_MISSING_LABEL = "원장 기록 없음";
 
 const COMMAND_MESSAGES: Record<TuitionCommand["kind"], { success: string; failure: string }> = {
@@ -111,6 +110,7 @@ export function FinanceLessonIncomeScreen({
   markTuitionUnpaid,
   changeLessonTicketPayment,
   tuitionSnapshotsQueryOptionsFactory,
+  cardFeeRatesQueryOptions,
 }: FinanceDataScreenProps) {
   const queryClient = useQueryClient();
   const headingId = useId();
@@ -119,6 +119,13 @@ export function FinanceLessonIncomeScreen({
   const today = getFinanceToday();
   const [payTarget, setPayTarget] = useState<TuitionRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<TuitionRow | null>(null);
+  const cardFeeRatesQuery = useQuery({
+    queryKey: cardFeeRatesQueryOptions?.queryKey ?? ["card-fee-rates", "none"],
+    queryFn: cardFeeRatesQueryOptions?.queryFn ?? (async () => []),
+    enabled: Boolean(cardFeeRatesQueryOptions),
+  });
+  const cardFeeRates = cardFeeRatesQuery.data;
+  const cardFeeRatesUnavailable = cardFeeRatesQuery.isLoading || cardFeeRatesQuery.isError;
   const tuitionSnapshotsQuery = useQuery(
     tuitionSnapshotsQueryOptionsFactory?.(month) ??
       createFallbackTuitionSnapshotsQueryOptions(financeData, academyId, month),
@@ -153,7 +160,9 @@ export function FinanceLessonIncomeScreen({
       const target = { academyId, tuitionId: command.row.id };
 
       if (command.kind === "pay" && markTuitionPaid) {
-        await markTuitionPaid({ ...target, paidAt: command.paidAt, paymentMethod: command.paymentMethod });
+        await markTuitionPaid({
+          ...target, paidAt: command.paidAt, paymentMethod: command.paymentMethod, cardFee: command.cardFee,
+        });
       } else if (command.kind === "overdue" && markTuitionOverdue) {
         await markTuitionOverdue(target);
       } else if (command.kind === "cancel-payment" && markTuitionUnpaid) {
@@ -184,7 +193,7 @@ export function FinanceLessonIncomeScreen({
       await changeLessonTicketPayment(input);
     },
     onSuccess: (_result, input) => {
-      toast.success(TICKET_PAYMENT_MESSAGES[input.action]);
+      toast.success(LESSON_TICKET_PAYMENT_CHANGE_MESSAGES[input.action]);
       invalidateAfterLessonTicketChange(queryClient, academyId);
     },
     onError: (error) => {
@@ -261,7 +270,7 @@ export function FinanceLessonIncomeScreen({
               <TableRow key={row.id}>
                 <TableCell label="이름" className="font-medium">{row.studentName}</TableCell>
                 <TableCell label="최초 등록일" className="tabular-nums">{row.registeredOn || "확인 필요"}</TableCell>
-                <TableCell label="납입일" className="tabular-nums">{getLessonIncomeDueOn(row) || "-"}</TableCell>
+                <TableCell label="납입일" className="tabular-nums">{formatLessonIncomeDueOn(row)}</TableCell>
                 <TableCell label="레슨종류">{row.lessonKindLabel}</TableCell>
                 <TableCell label="악기">{row.instrumentName}</TableCell>
                 <TableCell label="진도">{row.progress}</TableCell>
@@ -275,6 +284,8 @@ export function FinanceLessonIncomeScreen({
                     row={row}
                     today={today}
                     disabled={tuitionCommand.isPending || ticketPaymentMutation.isPending}
+                    cardFeeRates={cardFeeRates}
+                    cardFeeRatesUnavailable={cardFeeRatesUnavailable}
                     onAction={requestTuitionAction}
                     onTicketAction={async (ticketId, action, input) => {
                       await ticketPaymentMutation.mutateAsync({ academyId, ticketId, action, ...input });
@@ -303,14 +314,17 @@ export function FinanceLessonIncomeScreen({
         open={Boolean(payTarget)}
         title={payTarget?.record.status === "overdue" ? "미납 수강료 입금 확인" : "입금 처리"}
         description={payTarget
-          ? `${payTarget.studentName} · ${payTarget.instrumentName} · ${formatWon(payTarget.finalAmount)}. 확인하면 입출입내역에 수입이 기록됩니다.`
+          ? `${payTarget.studentName} · ${payTarget.instrumentName} · ${formatWon(payTarget.finalAmount)}. 확인하면 입출입내역에 수입이 기록됩니다. 카드는 카드 수수료도 출금으로 함께 기록됩니다.`
           : "확인하면 입출입내역에 수입이 기록됩니다."}
         dateLabel="입금일"
         contextMonth={month}
+        amount={payTarget?.finalAmount}
+        cardFeeRates={cardFeeRates}
+        cardFeeRatesUnavailable={cardFeeRatesUnavailable}
         pending={tuitionCommand.isPending}
-        onConfirm={(paidAt, paymentMethod) => {
+        onConfirm={(paidAt, paymentMethod, cardFee) => {
           if (payTarget && paymentMethod) {
-            tuitionCommand.mutate({ kind: "pay", row: payTarget, paidAt, paymentMethod });
+            tuitionCommand.mutate({ kind: "pay", row: payTarget, paidAt, paymentMethod, cardFee });
           }
         }}
         onOpenChange={(open) => !open && setPayTarget(null)}
@@ -318,7 +332,7 @@ export function FinanceLessonIncomeScreen({
       <FinanceConfirmDialog
         open={Boolean(cancelTarget)}
         title="입금을 취소할까요?"
-        description="연결된 입출입내역 1건이 삭제되고 미입금 상태로 돌아갑니다."
+        description="연결된 입출입내역(카드 수수료 포함)이 삭제되고 미입금 상태로 돌아갑니다."
         confirmLabel="입금 취소"
         pending={tuitionCommand.isPending}
         onConfirm={() => {
@@ -392,6 +406,8 @@ function LessonIncomePaymentStatus({
   row,
   today,
   disabled,
+  cardFeeRates,
+  cardFeeRatesUnavailable,
   onAction,
   onTicketAction,
 }: {
@@ -399,10 +415,12 @@ function LessonIncomePaymentStatus({
   /** YYYY-MM-DD. 납입일 경과 판정 기준. */
   today: string;
   disabled: boolean;
+  cardFeeRates?: CardFeeRate[];
+  cardFeeRatesUnavailable: boolean;
   onAction: (action: TuitionActionKind, row: TuitionRow) => void;
   onTicketAction: (
     ticketId: string,
-    action: LessonTicketPaymentAction,
+    action: LessonTicketPaymentChangeAction,
     input: LessonTicketPaymentActionInput,
   ) => Promise<void>;
 }) {
@@ -430,6 +448,8 @@ function LessonIncomePaymentStatus({
           }}
           today={today}
           canManage
+          cardFeeRates={cardFeeRates}
+          cardFeeRatesUnavailable={cardFeeRatesUnavailable}
           pending={disabled}
           onAction={(action, input) => onTicketAction(row.ticketId, action, input)}
         />
@@ -540,8 +560,15 @@ export function buildLessonIncomeRows(
 }
 
 /** 납입일 순 정렬 기준. 학원 월수강료와 개인레슨 회차권이 같은 납입일 순으로 섞인다. */
+/** 정렬 기준 납입일. 회차권 납입일이 미정이면 등록일로 정렬한다. */
 export function getLessonIncomeDueOn(row: LessonIncomeRow) {
-  return row.source === "tuition" ? row.record.dueOn : row.dueOn;
+  return row.source === "tuition" ? row.record.dueOn : row.billedOn;
+}
+
+function formatLessonIncomeDueOn(row: LessonIncomeRow) {
+  if (row.source === "tuition") return row.record.dueOn || "-";
+
+  return row.dueOn ?? "미정";
 }
 
 /** 이름이 같은 원생은 악기 순서, 그다음 id로 순서를 고정한다. */

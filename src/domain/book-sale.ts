@@ -46,6 +46,7 @@ export type LedgerCategory =
   | "tuning-repair"
   | "supplies"
   | "tax"
+  | "card-fee"
   | "other";
 
 export type LedgerEntry = {
@@ -58,6 +59,8 @@ export type LedgerEntry = {
   amount: number;
   description: string;
   refId: string;
+  /** 카드 수수료 출금이면 붙어 있는 수입 행. 수입이 지워지거나 줄면 같이 따라간다(서버 트리거와 같다). */
+  feeForEntryId?: string;
 };
 
 type BookSaleListOptions = {

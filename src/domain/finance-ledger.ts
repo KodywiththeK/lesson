@@ -108,6 +108,7 @@ export const ledgerCategoryOptions: LedgerCategoryOption[] = [
   { value: "tuning-repair", label: "조율/수리" },
   { value: "supplies", label: "소모품" },
   { value: "tax", label: "세금" },
+  { value: "card-fee", label: "카드 수수료" },
   { value: "other", label: "기타" },
 ];
 

@@ -288,6 +288,32 @@ describe("학원 고정 수입 입금 상태", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["academy", "academy-1", "finance"] });
   });
 
+  it("카드사를 설정했으면 카드 입금 때 카드사와 계산된 수수료를 함께 보낸다", async () => {
+    const user = userEvent.setup();
+    const markTuitionPaid = vi.fn().mockResolvedValue(buildTuition({ status: "paid" }));
+    renderScreen([buildTuition()], {
+      markTuitionPaid,
+      cardFeeRatesQueryOptions: {
+        queryKey: ["card-fee-rates"],
+        queryFn: async () => [{ id: "rate-1", name: "신한카드", ratePercent: 1.45 }],
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "김민지 피아노 입금 처리" }));
+    const dialog = await screen.findByRole("dialog", { name: "입금 처리" });
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    await user.selectOptions(within(dialog).getByLabelText("카드사"), "rate-1");
+    expect(within(dialog).getByText("수입 150,000원과 카드 수수료 2,175원이 입출입내역에 기록됩니다.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    await waitFor(() =>
+      expect(markTuitionPaid).toHaveBeenCalledWith(expect.objectContaining({
+        paymentMethod: "card",
+        cardFee: { rateId: "rate-1", amount: 2175 },
+      })),
+    );
+  });
+
   it("미납 처리는 확인 없이 바로 기록하고 미납으로 기록했다고 알린다", async () => {
     const user = userEvent.setup();
     const markTuitionOverdue = vi.fn().mockResolvedValue(buildTuition({ status: "overdue" }));
@@ -332,7 +358,7 @@ describe("학원 고정 수입 입금 상태", () => {
 
     await user.click(await screen.findByRole("button", { name: "김민지 피아노 입금 취소" }));
     const dialog = await screen.findByRole("alertdialog", { name: "입금을 취소할까요?" });
-    expect(dialog).toHaveTextContent("연결된 입출입내역 1건이 삭제되고 미입금 상태로 돌아갑니다.");
+    expect(dialog).toHaveTextContent("연결된 입출입내역(카드 수수료 포함)이 삭제되고 미입금 상태로 돌아갑니다.");
     expect(markTuitionUnpaid).not.toHaveBeenCalled();
 
     await user.click(within(dialog).getByRole("button", { name: "취소" }));
@@ -552,6 +578,6 @@ describe("개인레슨 회차권 입금 상태", () => {
         paymentMethod: "card",
       }),
     );
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("회차권 입금 처리했습니다."));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("입금 처리했습니다. 수입 내역에 기록했습니다."));
   });
 });

@@ -43,11 +43,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { CardFeeRate } from "@/domain/card-fee";
 import type { ListView } from "@/domain/common-list";
 import {
   DEFAULT_LESSON_TICKET_STATUS_THRESHOLDS,
   describeLessonTicketRemainingDays,
   formatLessonTicketStatus,
+  getLessonTicketDueOn,
   type BuildLessonTicketListOptions,
   type LessonTicketListRow,
   type LessonTicketStatus,
@@ -83,13 +85,21 @@ import {
 import { invalidateAfterLessonTicketChange } from "@/lib/api/query-invalidation";
 import { queryKeys } from "@/lib/api/query-keys";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  createCardFeeRatesQueryOptions,
+  type CardFeeRateClient,
+  type CardFeeRatesQueryOptions,
+} from "@/lib/api/card-fee-rates";
 
 import { LessonTicketAdjustDialog } from "./lesson-ticket-adjust-dialog";
 import {
   LessonTicketPaymentControl,
   type LessonTicketPaymentActionInput,
 } from "./lesson-ticket-payment-control";
-import type { LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import {
+  LESSON_TICKET_PAYMENT_CHANGE_MESSAGES,
+  type LessonTicketPaymentChangeAction,
+} from "@/domain/lesson-ticket-payment";
 import {
   applyLessonTicketPaymentChange,
   type LessonTicketPaymentSupabaseClient,
@@ -138,18 +148,15 @@ type LessonTicketListScreenProps = {
   cancellationHistory?: LessonTicketCancellationHistoryRow[];
   /** 입금 상태 전환(데모·테스트 주입용). 없으면 Supabase RPC를 부른다. */
   changeLessonTicketPayment?: (input: LessonTicketPaymentChange) => Promise<void>;
+  /** 카드 입금 때 고를 카드사(데모·테스트 주입용). 없으면 Supabase에서 읽는다. */
+  cardFeeRatesQueryOptions?: CardFeeRatesQueryOptions;
 };
 
 export type LessonTicketPaymentChange = {
   ticketId: string;
-  action: LessonTicketPaymentAction;
+  action: LessonTicketPaymentChangeAction;
 } & LessonTicketPaymentActionInput;
 
-const PAYMENT_CHANGE_MESSAGES: Record<LessonTicketPaymentAction, string> = {
-  "start-payment-wait": "입금대기로 바꿨습니다. 이제 레슨에 쓸 수 있습니다.",
-  "mark-paid": "입금 처리했습니다. 수입 내역에 기록했습니다.",
-  "cancel-payment": "입금을 취소했습니다. 입금대기로 돌아갔습니다.",
-};
 
 type LessonTicketSupabaseClient = LessonTicketListSupabaseClient &
   LessonTicketRegistrationOptionsSupabaseClient &
@@ -180,6 +187,7 @@ export function LessonTicketListScreen({
   deleteLessonTicket,
   cancellationHistory,
   changeLessonTicketPayment,
+  cardFeeRatesQueryOptions,
 }: LessonTicketListScreenProps) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -260,6 +268,14 @@ export function LessonTicketListScreen({
       isRegistrationOpen &&
       (hasInjectedRegistrationOptions || !supabaseClientState?.error),
   });
+  const cardFeeRatesQuery = useQuery({
+    ...(cardFeeRatesQueryOptions ??
+      createCardFeeRatesQueryOptions(
+        supabaseClientState?.client as unknown as CardFeeRateClient,
+        academyId,
+      )),
+    enabled: Boolean(cardFeeRatesQueryOptions) || Boolean(supabaseClientState?.client),
+  });
   function invalidateTicketRelatedQueries() {
     invalidateAfterLessonTicketChange(queryClient, academyId);
   }
@@ -332,7 +348,7 @@ export function LessonTicketListScreen({
       (changeLessonTicketPayment ??
         createDefaultChangeLessonTicketPayment(academyId, supabaseClientState ?? createMissingSupabaseClientState()))(input),
     onSuccess: (_result, input) => {
-      toast.success(PAYMENT_CHANGE_MESSAGES[input.action]);
+      toast.success(LESSON_TICKET_PAYMENT_CHANGE_MESSAGES[input.action]);
       invalidateTicketRelatedQueries();
     },
     onError: (error) => {
@@ -529,6 +545,8 @@ export function LessonTicketListScreen({
               <>
                 <LessonTicketTable
                   isChangingPayment={paymentMutation.isPending}
+                  cardFeeRates={cardFeeRatesQuery.data}
+                  cardFeeRatesUnavailable={cardFeeRatesQuery.isLoading || cardFeeRatesQuery.isError}
                   onChangePayment={(input) => paymentMutation.mutateAsync(input)}
                   tickets={ticketListView.items}
                   today={today}
@@ -717,6 +735,8 @@ function createMissingSupabaseClientState(): SupabaseClientState {
 function LessonTicketTable({
   tickets,
   today,
+  cardFeeRates,
+  cardFeeRatesUnavailable,
   isChangingPayment,
   onChangePayment,
   isAdjusting,
@@ -727,6 +747,8 @@ function LessonTicketTable({
 }: {
   tickets: LessonTicketListRow[];
   today: string;
+  cardFeeRates?: CardFeeRate[];
+  cardFeeRatesUnavailable: boolean;
   isChangingPayment: boolean;
   onChangePayment: (input: LessonTicketPaymentChange) => Promise<unknown>;
   isAdjusting: boolean;
@@ -827,13 +849,15 @@ function LessonTicketTable({
                     studentName: ticket.studentName,
                     instrumentName: ticket.instrumentName,
                     paymentStatus: ticket.paymentStatus ?? "paid",
-                    dueOn: ticket.dueOn ?? ticket.registeredAt,
+                    dueOn: getLessonTicketDueOn(ticket),
                     isService: ticket.totalGrantedCount === (ticket.serviceTotalCount ?? 0),
                     legacyMerged: ticket.legacyMerged,
                     paymentMethod: ticket.paymentMethod,
                   }}
                   today={today}
                   canManage
+                  cardFeeRates={cardFeeRates}
+                  cardFeeRatesUnavailable={cardFeeRatesUnavailable}
                   pending={isChangingPayment}
                   onAction={async (action, input) => {
                     await onChangePayment({ ticketId: ticket.ticketId, action, ...input });

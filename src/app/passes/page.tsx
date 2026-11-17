@@ -70,6 +70,9 @@ export default function PassesPage() {
             changeLessonTicketPayment={
               useTestDemo ? demo.changeLessonTicketPayment : undefined
             }
+            cardFeeRatesQueryOptions={
+              useTestDemo ? demo.createCardFeeRatesQueryOptions(academy.academyId) : undefined
+            }
           />}
         </AppShell>
       )}

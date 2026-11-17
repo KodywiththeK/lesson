@@ -1,4 +1,17 @@
-import { isLessonTicketUsable, type LessonTicketPaymentAction } from "@/domain/lesson-ticket-payment";
+import {
+  canChangeLessonTicketDueOn,
+  isLessonTicketUsable,
+  type LessonTicketPaymentChangeAction,
+} from "@/domain/lesson-ticket-payment";
+import {
+  calculateCardFee,
+  formatCardFeeRate,
+  getCardFeeAmountRangeError,
+  needsCardFeeChoice,
+  syncCardFeesWithIncome,
+  type CardFeeChoice,
+  type CardFeeRate,
+} from "@/domain/card-fee";
 import type { TuitionPaymentMethod } from "@/domain/tuition-income";
 import {
   buildDailyAcademyAttendance,
@@ -92,6 +105,8 @@ export type DemoAcademyState = {
   bookSales: typeof demoBookSales;
   /** 학원 설정. 회차권을 삭제(환불 처리)할 때 적용하는 규정이다. */
   lessonTicketRefundPolicy: LessonTicketRefundPolicy;
+  /** 카드사 수수료율. 비어 있으면 카드 입금도 수입만 기록한다. */
+  cardFeeRates: CardFeeRate[];
 };
 
 export type DemoStudentRegistrationInput = {
@@ -365,6 +380,7 @@ export function createInitialDemoAcademyState(): DemoAcademyState {
     books: demoBooks.map((book) => ({ ...book })),
     bookSales: [...demoBookSales],
     lessonTicketRefundPolicy: DEFAULT_LESSON_TICKET_REFUND_POLICY,
+    cardFeeRates: [],
   };
 }
 
@@ -646,7 +662,8 @@ export function registerDemoLessonTicket(
     serviceTotalCount: input.isService ? input.grantedCount : 0,
     serviceRemainingCount: input.isService ? input.grantedCount : 0,
     paymentStatus: paidAmount > 0 ? "registered" : "paid",
-    dueOn: input.dueOn ?? input.registeredAt,
+    // 납입일 미정(null)은 입금할 돈이 있는 '등록' 회차권에만 남긴다(서버와 같다).
+    dueOn: paidAmount > 0 && input.dueOn === null ? null : (input.dueOn ?? input.registeredAt),
   };
   const tickets = [...state.tickets, ticket];
   const ledgerEntries = state.ledgerEntries;
@@ -963,10 +980,11 @@ export function updateDemoLedgerEntry(
   state: DemoAcademyState,
   input: LedgerEntry,
 ): DemoAcademyState {
+  // 카드 수수료는 붙어 있는 수입을 따라간다(서버 trigger·cascade와 같다).
   return {
     ...state,
     ledgerEntries: buildFinanceLedgerList(
-      state.ledgerEntries.map((entry) =>
+      syncCardFeesWithIncome(state.ledgerEntries, state.ledgerEntries.map((entry) =>
         entry.ledgerId === input.ledgerId &&
         entry.academyId === input.academyId
           ? {
@@ -979,7 +997,7 @@ export function updateDemoLedgerEntry(
               description: input.description,
             }
           : entry,
-      ),
+      )),
       { academyId: state.academyId },
     ),
   };
@@ -991,8 +1009,9 @@ export function deleteDemoLedgerEntry(
 ): DemoAcademyState {
   return {
     ...state,
-    ledgerEntries: state.ledgerEntries.filter(
-      (entry) => entry.ledgerId !== input.ledgerId,
+    ledgerEntries: syncCardFeesWithIncome(
+      state.ledgerEntries,
+      state.ledgerEntries.filter((entry) => entry.ledgerId !== input.ledgerId),
     ),
   };
 }
@@ -1139,10 +1158,40 @@ function getPhoneLast4(phone: string) {
 
 export type DemoLessonTicketPaymentChange = {
   ticketId: string;
-  action: LessonTicketPaymentAction;
+  action: LessonTicketPaymentChangeAction;
   paidOn?: string;
   paymentMethod?: TuitionPaymentMethod;
+  cardFee?: CardFeeChoice;
+  dueOn?: string;
 };
+
+/** 카드 입금이면 고른 카드사의 수수료 출금 행. 서버 `private.record_card_fee`와 같은 규칙이다. */
+function buildDemoCardFeeEntry(state: DemoAcademyState, income: LedgerEntry, input: DemoLessonTicketPaymentChange) {
+  if (input.paymentMethod !== "card") {
+    if (input.cardFee) throw new Error("카드 결제에만 카드 수수료를 기록할 수 있습니다.");
+    return [];
+  }
+  if (!input.cardFee) {
+    if (needsCardFeeChoice(input.paymentMethod, state.cardFeeRates.length)) throw new Error("카드사를 선택해 주세요.");
+    return [];
+  }
+  const rate = state.cardFeeRates.find((candidate) => candidate.id === input.cardFee?.rateId);
+  if (!rate) throw new Error("카드사를 찾을 수 없습니다. 카드 수수료 설정을 확인해 주세요.");
+  const amount = input.cardFee.amount ?? calculateCardFee(income.amount, rate.ratePercent);
+  const amountError = getCardFeeAmountRangeError(amount, income.amount);
+  if (amountError) throw new Error(amountError);
+  if (amount === 0) return [];
+
+  return [{
+    ...income,
+    ledgerId: `${income.ledgerId}-card-fee`,
+    type: "expense" as const,
+    category: "card-fee" as const,
+    amount,
+    description: `카드 수수료(${rate.name} ${formatCardFeeRate(rate.ratePercent)}): ${income.description}`,
+    feeForEntryId: income.ledgerId,
+  }];
+}
 
 /** 회차권 입금 상태 전환. 서버 RPC(start_lesson_ticket_payment_wait 등)와 같은 규칙이다. */
 export function changeDemoLessonTicketPayment(
@@ -1168,6 +1217,13 @@ export function changeDemoLessonTicketPayment(
     return { ...state, tickets: replaceTicket({ ...ticket, paymentStatus: "payment-pending" }) };
   }
 
+  if (input.action === "set-due-on") {
+    if (!canChangeLessonTicketDueOn(status)) throw new Error("입금 전(등록·입금대기) 회차권만 납입일을 바꿀 수 있습니다.");
+    if (!input.dueOn) throw new Error("납입일을 입력해 주세요.");
+
+    return { ...state, tickets: replaceTicket({ ...ticket, dueOn: input.dueOn }) };
+  }
+
   if (input.action === "mark-paid") {
     if (status !== "payment-pending") throw new Error("입금대기 상태인 회차권만 입금 처리할 수 있습니다.");
     if (!input.paidOn) throw new Error("입금일을 입력해 주세요.");
@@ -1175,25 +1231,23 @@ export function changeDemoLessonTicketPayment(
     if (!registration) throw new Error("입금할 결제 금액이 없습니다.");
 
     const ledgerId = `ledger-ticket-${ticket.ticketId}-${state.ledgerEntries.length + 1}`;
+    const income: LedgerEntry = {
+      academyId: state.academyId,
+      ledgerId,
+      occurredOn: input.paidOn,
+      type: "income",
+      source: "lesson-ticket",
+      category: "lesson-ticket",
+      amount: registration.originalPaidAmount,
+      description: `${ticket.studentName} ${ticket.instrumentName} 회차권 ${registration.grantedCount}회 구매`,
+      refId: ticket.ticketId,
+    };
 
     return {
       ...state,
       tickets: replaceTicket({ ...ticket, paymentStatus: "paid", paidAt: input.paidOn, paymentMethod: input.paymentMethod }),
       ledgerEntries: buildFinanceLedgerList(
-        [
-          ...state.ledgerEntries,
-          {
-            academyId: state.academyId,
-            ledgerId,
-            occurredOn: input.paidOn,
-            type: "income",
-            source: "lesson-ticket",
-            category: "lesson-ticket",
-            amount: registration.originalPaidAmount,
-            description: `${ticket.studentName} ${ticket.instrumentName} 회차권 ${registration.grantedCount}회 구매`,
-            refId: ticket.ticketId,
-          },
-        ],
+        [...state.ledgerEntries, income, ...buildDemoCardFeeEntry(state, income, input)],
         { academyId: state.academyId },
       ),
       ticketRegistrations: state.ticketRegistrations.map((candidate) =>
@@ -1208,7 +1262,10 @@ export function changeDemoLessonTicketPayment(
   return {
     ...state,
     tickets: replaceTicket({ ...ticket, paymentStatus: "payment-pending", paidAt: undefined, paymentMethod: undefined }),
-    ledgerEntries: state.ledgerEntries.filter((entry) => entry.ledgerId !== registration.ledgerEntryId),
+    ledgerEntries: syncCardFeesWithIncome(
+      state.ledgerEntries,
+      state.ledgerEntries.filter((entry) => entry.ledgerId !== registration.ledgerEntryId),
+    ),
     ticketRegistrations: state.ticketRegistrations.map((candidate) =>
       candidate === registration ? { ...candidate, ledgerEntryId: null } : candidate,
     ),

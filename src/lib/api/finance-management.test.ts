@@ -469,6 +469,7 @@ describe("finance management payment API", () => {
         tuitionId: "snapshot-1",
         paidAt: "2026-08-25",
         paymentMethod: "card",
+        cardFee: { rateId: "rate-1", amount: 2175 },
       }),
     ).resolves.toMatchObject({
       tuitionId: "snapshot-1",
@@ -493,6 +494,8 @@ describe("finance management payment API", () => {
           p_snapshot_id: "snapshot-1",
           p_paid_at: "2026-08-25",
           p_payment_method: "card",
+          p_card_fee_rate_id: "rate-1",
+          p_card_fee_amount: 2175,
         },
       },
       {

@@ -24,12 +24,34 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  calculateCardFee,
+  getCardFeeAmountError,
+  needsCardFeeChoice,
+  parseCardFeeDraft,
+  type CardFeeChoice,
+  type CardFeeRate,
+} from "@/domain/card-fee";
 import { getFinanceToday } from "@/domain/finance-date";
 import { TUITION_PAYMENT_METHODS, type TuitionPaymentMethod } from "@/domain/tuition-income";
+
+import { CardFeeFields } from "./card-fee-fields";
 
 const DEFAULT_PAYMENT_DESCRIPTION = "확인하면 연결된 입출입내역이 자동으로 기록됩니다.";
 
 /** 고른 날짜에 맞춰 호출하는 쪽이 정하는 안내. `emphasized`면 눈에 띄게 보여 준다. */
+/** 카드 입금이면 고른 카드사와 수수료도 넘긴다. 카드가 아니거나 카드사가 없으면 cardFee는 비어 있다. */
+export type PaymentConfirmHandler = (paidAt: string, paymentMethod?: TuitionPaymentMethod, cardFee?: CardFeeChoice) => void;
+
+type CardFeeProps = {
+  /** 결제 금액. 알면 카드 수수료를 미리 계산해 보여 주고 고칠 수 있다. */
+  amount?: number;
+  /** 고를 수 있는 카드사. 비어 있으면 카드 입금도 수입만 기록한다. */
+  cardFeeRates?: CardFeeRate[];
+  /** 카드사 목록을 읽는 중이거나 읽지 못했다. 카드사 없음과 구분해 카드 입금을 막는다. */
+  cardFeeRatesUnavailable?: boolean;
+};
+
 export type PaymentDateNotice = { message: string; emphasized?: boolean };
 
 type PaymentDateRules = {
@@ -39,11 +61,15 @@ type PaymentDateRules = {
 };
 
 export function PaymentDialog({
+  amount,
+  cardFeeRates,
+  cardFeeRatesUnavailable,
   confirmLabel = "확인",
   contextMonth,
   dateLabel,
   description = DEFAULT_PAYMENT_DESCRIPTION,
   describeDate,
+  initialDate,
   onConfirm,
   open,
   pending = false,
@@ -51,13 +77,15 @@ export function PaymentDialog({
   title,
   validateDate,
   onOpenChange,
-}: PaymentDateRules & {
+}: PaymentDateRules & CardFeeProps & {
   confirmLabel?: string;
   /** 지금 보고 있는 월(`YYYY-MM`). 고른 날짜가 이 월 밖이면 어느 월 내역으로 기록되는지 안내한다. */
   contextMonth?: string;
   dateLabel: string;
   description?: string;
-  onConfirm: (paidAt: string, paymentMethod?: TuitionPaymentMethod) => void;
+  /** 처음 보일 날짜. 없으면 오늘이다. */
+  initialDate?: string;
+  onConfirm: PaymentConfirmHandler;
   open: boolean;
   pending?: boolean;
   requirePaymentMethod?: boolean;
@@ -72,10 +100,14 @@ export function PaymentDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <PaymentDateForm
+          amount={amount}
+          cardFeeRates={cardFeeRates}
+          cardFeeRatesUnavailable={cardFeeRatesUnavailable}
           confirmLabel={confirmLabel}
           contextMonth={contextMonth}
           dateLabel={dateLabel}
           describeDate={describeDate}
+          initialDate={initialDate}
           pending={pending}
           requirePaymentMethod={requirePaymentMethod}
           validateDate={validateDate}
@@ -87,29 +119,50 @@ export function PaymentDialog({
   );
 }
 
-/** 다이얼로그가 열릴 때마다 새로 마운트되어 날짜가 항상 오늘로 시작한다. */
+/** 다이얼로그가 열릴 때마다 새로 마운트되어 날짜가 항상 오늘(또는 initialDate)로 시작한다. */
 export function PaymentDateForm({
+  amount,
+  cardFeeRates = [],
+  cardFeeRatesUnavailable = false,
   confirmLabel,
   contextMonth,
   dateLabel,
   describeDate,
+  initialDate,
   pending,
   requirePaymentMethod = false,
   validateDate,
   onConfirm,
   onCancel,
-}: PaymentDateRules & {
+}: PaymentDateRules & CardFeeProps & {
   confirmLabel: string;
   contextMonth?: string;
   dateLabel: string;
+  initialDate?: string;
   pending: boolean;
   requirePaymentMethod?: boolean;
-  onConfirm: (paidAt: string, paymentMethod?: TuitionPaymentMethod) => void;
+  onConfirm: PaymentConfirmHandler;
   onCancel: () => void;
 }) {
-  const [paidAt, setPaidAt] = useState(getFinanceToday);
+  const [paidAt, setPaidAt] = useState(() => initialDate ?? getFinanceToday());
   const [paymentMethod, setPaymentMethod] = useState<TuitionPaymentMethod | "">("");
   const [isDateDraftValid, setIsDateDraftValid] = useState(true);
+  const [cardFeeRateId, setCardFeeRateId] = useState("");
+  const [cardFeeDraft, setCardFeeDraft] = useState("");
+  const showsCardFee = needsCardFeeChoice(paymentMethod || undefined, cardFeeRates.length);
+  const cardFeeRate = showsCardFee ? cardFeeRates.find((rate) => rate.id === cardFeeRateId) : undefined;
+  const cardFeeError = cardFeeRate && amount !== undefined ? getCardFeeAmountError(cardFeeDraft, amount) : null;
+  const isCardFeeUnknown = paymentMethod === "card" && cardFeeRatesUnavailable;
+  const isCardFeeIncomplete = isCardFeeUnknown || (showsCardFee && (!cardFeeRate || cardFeeError !== null));
+  const cardFee: CardFeeChoice | undefined = cardFeeRate
+    ? { rateId: cardFeeRate.id, ...(amount !== undefined ? { amount: parseCardFeeDraft(cardFeeDraft) ?? 0 } : {}) }
+    : undefined;
+
+  function changeCardFeeRate(rateId: string) {
+    setCardFeeRateId(rateId);
+    const rate = cardFeeRates.find((candidate) => candidate.id === rateId);
+    setCardFeeDraft(rate && amount !== undefined ? String(calculateCardFee(amount, rate.ratePercent)) : "");
+  }
   const isMissing = paidAt === "";
   const recordedMonth = paidAt.slice(0, 7);
   const showsOtherMonth = !isMissing && contextMonth !== undefined && recordedMonth !== contextMonth;
@@ -134,6 +187,22 @@ export function PaymentDateForm({
           {TUITION_PAYMENT_METHODS.map((method) => <NativeSelectOption key={method.value} value={method.value}>{method.label}</NativeSelectOption>)}
         </NativeSelect>
       </Label> : null}
+      {isCardFeeUnknown ? (
+        <p role="alert" className="text-sm text-destructive">
+          카드사 목록을 확인하지 못했습니다. 잠시 후 다시 열어 주세요.
+        </p>
+      ) : null}
+      {showsCardFee && !isCardFeeUnknown ? (
+        <CardFeeFields
+          rates={cardFeeRates}
+          amount={amount}
+          rateId={cardFeeRateId}
+          feeDraft={cardFeeDraft}
+          feeError={cardFeeError}
+          onRateChange={changeCardFeeRate}
+          onFeeChange={setCardFeeDraft}
+        />
+      ) : null}
       {dateError ? (
         <p role="alert" className="text-sm text-destructive">
           {dateError}
@@ -153,8 +222,8 @@ export function PaymentDateForm({
         <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
           취소
         </Button>
-        <Button type="button" disabled={pending || dateError !== null || !isDateDraftValid || (requirePaymentMethod && !paymentMethod)}
-          onClick={() => requirePaymentMethod ? onConfirm(paidAt, paymentMethod || undefined) : onConfirm(paidAt)}>
+        <Button type="button" disabled={pending || dateError !== null || !isDateDraftValid || (requirePaymentMethod && !paymentMethod) || isCardFeeIncomplete}
+          onClick={() => requirePaymentMethod ? onConfirm(paidAt, paymentMethod || undefined, cardFee) : onConfirm(paidAt)}>
           {pending ? "처리 중" : confirmLabel}
         </Button>
       </DialogFooter>

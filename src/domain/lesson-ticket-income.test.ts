@@ -191,6 +191,17 @@ describe("회차권 입금 상태가 있는 수입 행", () => {
     expect(build("2026-12")).toEqual([]);
   });
 
+  it("납입일 미정인 입금 전 회차권은 등록일 달부터 이번 달까지 이월해 보이고 정렬 기준일은 등록일이다", () => {
+    const unsetTicket = { ...newTicket("registered"), registeredAt: "2026-10-05", dueOn: null };
+    const build = (month: string) =>
+      buildPrivateLessonIncomeRows([pendingRegistration], [unsetTicket], [], "academy-1", month, "2026-11");
+
+    expect(build("2026-09")).toEqual([]);
+    for (const month of ["2026-10", "2026-11"]) {
+      expect(build(month)).toEqual([expect.objectContaining({ ticketId: "ticket-new", dueOn: null, billedOn: "2026-10-05" })]);
+    }
+  });
+
   it("입금완료된 회차권은 이월하지 않고 입금한 달에만 보인다", () => {
     const paidLedger = [{
       academyId: "academy-1", ledgerId: "ledger-new", occurredOn: "2026-10-02", type: "income" as const,

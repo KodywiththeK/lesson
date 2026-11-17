@@ -245,5 +245,7 @@ export const queryKeys = {
   settings: {
     lessonTicketRefundPolicy: (academyId: string) =>
       [...queryKeys.academy(academyId), "settings", "lesson-ticket-refund-policy"] as const,
+    cardFeeRates: (academyId: string) =>
+      [...queryKeys.academy(academyId), "settings", "card-fee-rates"] as const,
   },
 };

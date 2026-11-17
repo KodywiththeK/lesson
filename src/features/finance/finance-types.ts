@@ -1,5 +1,6 @@
 import { type QueryKey } from "@tanstack/react-query";
 import type { BookSale, LedgerEntry } from "@/domain/book-sale";
+import type { CardFeeChoice } from "@/domain/card-fee";
 import { type BuildFinanceLedgerListOptions } from "@/domain/finance-ledger";
 import type { LessonTicketListItem } from "@/domain/lesson-ticket";
 import { type LessonTicketIncomeRegistration } from "@/domain/lesson-ticket-income";
@@ -7,6 +8,7 @@ import { type PayrollLessonSource, type PayrollRecord } from "@/domain/payroll";
 import type { StudentEnrollment } from "@/domain/student-registration";
 import type { TeacherListRow } from "@/domain/teacher-list";
 import { type TuitionPaymentMethod, type TuitionRecord } from "@/domain/tuition-income";
+import type { CardFeeRatesQueryOptions } from "@/lib/api/card-fee-rates";
 import type { LessonTicketPaymentChangeInput } from "@/lib/api/lesson-tickets";
 import { type FinanceLedgerListSupabaseClient, type FinanceLedgerMutationSupabaseClient } from "@/lib/api/finance";
 
@@ -70,6 +72,7 @@ export type FinanceDataScreenProps = {
     tuitionId: string;
     paidAt: string;
     paymentMethod: TuitionPaymentMethod;
+    cardFee?: CardFeeChoice;
   }) => Promise<TuitionRecord>;
   markTuitionUnpaid?: (input: {
     academyId: string;
@@ -104,6 +107,8 @@ export type FinanceDataScreenProps = {
     queryKey: QueryKey;
     queryFn: () => Promise<TuitionRecord[]>;
   };
+  /** 카드 입금 때 고를 카드사. 없으면 카드 입금도 수입만 기록한다. */
+  cardFeeRatesQueryOptions?: CardFeeRatesQueryOptions;
 };
 
 export type FinanceLedgerSupabaseClient = FinanceLedgerListSupabaseClient &

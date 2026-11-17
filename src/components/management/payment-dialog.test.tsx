@@ -144,6 +144,117 @@ describe("PaymentDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
+  it("카드 결제이고 카드사가 있으면 카드사를 골라야 하고, 수수료를 미리 계산해 보여 주며 고칠 수 있다", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <PaymentDialog
+        open
+        requirePaymentMethod
+        title="입금 처리"
+        dateLabel="입금일"
+        amount={150000}
+        cardFeeRates={[{ id: "r1", name: "신한카드", ratePercent: 1.45 }, { id: "r2", name: "지역화폐", ratePercent: 0 }]}
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+    const confirm = within(dialog).getByRole("button", { name: "확인" });
+
+    expect(within(dialog).queryByLabelText("카드사")).not.toBeInTheDocument();
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    expect(confirm).toBeDisabled();
+
+    await user.selectOptions(within(dialog).getByLabelText("카드사"), "r1");
+    expect(within(dialog).getByLabelText("카드 수수료(원)")).toHaveValue("2175");
+    expect(within(dialog).getByText("수입 150,000원과 카드 수수료 2,175원이 입출입내역에 기록됩니다.")).toBeInTheDocument();
+
+    await user.clear(within(dialog).getByLabelText("카드 수수료(원)"));
+    await user.type(within(dialog).getByLabelText("카드 수수료(원)"), "2000");
+    await user.click(confirm);
+
+    expect(onConfirm).toHaveBeenCalledWith("2026-10-15", "card", { rateId: "r1", amount: 2000 });
+  });
+
+  it("카드사를 바꾸면 수수료를 다시 계산하고, 카드가 아니면 카드사를 넘기지 않는다", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <PaymentDialog
+        open
+        requirePaymentMethod
+        title="입금 처리"
+        dateLabel="입금일"
+        amount={150000}
+        cardFeeRates={[{ id: "r1", name: "신한카드", ratePercent: 1.45 }, { id: "r2", name: "지역화폐", ratePercent: 0 }]}
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    await user.selectOptions(within(dialog).getByLabelText("카드사"), "r1");
+    await user.clear(within(dialog).getByLabelText("카드 수수료(원)"));
+    await user.type(within(dialog).getByLabelText("카드 수수료(원)"), "9");
+    await user.selectOptions(within(dialog).getByLabelText("카드사"), "r2");
+    expect(within(dialog).getByLabelText("카드 수수료(원)")).toHaveValue("0");
+
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "cash");
+    expect(within(dialog).queryByLabelText("카드사")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    expect(onConfirm).toHaveBeenCalledWith("2026-10-15", "cash", undefined);
+  });
+
+  it("카드사 목록을 아직 못 읽었으면 카드 입금 확인을 막는다(카드사 없음으로 보지 않는다)", async () => {
+    const user = userEvent.setup();
+    render(
+      <PaymentDialog
+        open
+        requirePaymentMethod
+        title="입금 처리"
+        dateLabel="입금일"
+        cardFeeRatesUnavailable
+        onConfirm={vi.fn()}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    expect(within(dialog).getByText("카드사 목록을 확인하지 못했습니다. 잠시 후 다시 열어 주세요.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeDisabled();
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "cash");
+    expect(within(dialog).getByRole("button", { name: "확인" })).toBeEnabled();
+  });
+
+  it("결제 금액을 모르면(데스크) 수수료 칸 없이 수수료율로 자동 계산된다고 알린다", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <PaymentDialog
+        open
+        requirePaymentMethod
+        title="입금 처리"
+        dateLabel="입금일"
+        cardFeeRates={[{ id: "r1", name: "신한카드", ratePercent: 1.45 }]}
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: "입금 처리" });
+
+    await user.selectOptions(within(dialog).getByLabelText("결제 방식"), "card");
+    await user.selectOptions(within(dialog).getByLabelText("카드사"), "r1");
+    expect(within(dialog).queryByLabelText("카드 수수료(원)")).not.toBeInTheDocument();
+    expect(within(dialog).getByText("카드 수수료(1.45%)가 입출입내역에 출금으로 함께 기록됩니다.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "확인" }));
+
+    expect(onConfirm).toHaveBeenCalledWith("2026-10-15", "card", { rateId: "r1" });
+  });
+
   it("입금일을 잘못 입력하면 이전 날짜로 확인하지 않는다", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

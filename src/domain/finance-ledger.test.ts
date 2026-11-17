@@ -137,6 +137,7 @@ describe("finance ledger filters and export", () => {
       "조율/수리",
       "소모품",
       "세금",
+      "카드 수수료",
       "기타",
     ]);
 
@@ -413,6 +414,7 @@ describe("입출금 분류 후보", () => {
       "tuning-repair",
       "supplies",
       "tax",
+      "card-fee",
       "other",
     ]);
   });

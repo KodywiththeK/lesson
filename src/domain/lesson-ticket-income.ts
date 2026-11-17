@@ -1,5 +1,5 @@
 import type { LedgerEntry } from "./book-sale";
-import type { LessonTicketListItem } from "./lesson-ticket";
+import { getLessonTicketDueOn, type LessonTicketListItem } from "./lesson-ticket";
 import { isLessonTicketClosed, type LessonTicketPaymentStatus } from "./lesson-ticket-payment";
 import type { TuitionPaymentMethod } from "./tuition-income";
 
@@ -29,7 +29,10 @@ export type PrivateLessonIncomeRow = {
   /** 입금 전(등록·입금대기)이면 그 상태, 입금완료면 원장 확인 결과(입금 완료·0원·원장 기록 없음). */
   status: "registered" | "payment-pending" | "paid" | "zero-amount" | "missing-ledger";
   paymentStatus: LessonTicketPaymentStatus;
-  dueOn: string;
+  /** 납입일. null이면 미정이다. */
+  dueOn: string | null;
+  /** 청구·정렬 기준일. 납입일, 미정이면 등록일이다. */
+  billedOn: string;
   paymentMethod?: TuitionPaymentMethod;
   legacyMerged?: boolean;
 };
@@ -61,7 +64,8 @@ export function buildPrivateLessonIncomeRows(
     const paymentStatus = ticket.paymentStatus ?? "paid";
     // 환불·취소된 회차권은 행을 만들지 않는다. 환불 후 남은 수입은 입출입내역에서 본다.
     if (isLessonTicketClosed(paymentStatus)) return [];
-    const dueOn = ticket.dueOn ?? ticket.registeredAt;
+    const dueOn = getLessonTicketDueOn(ticket);
+    const billedOn = dueOn ?? ticket.registeredAt;
     const base = {
       id: `ticket:${registration.registrationId}`,
       ticketId: registration.ticketId,
@@ -74,14 +78,15 @@ export function buildPrivateLessonIncomeRows(
       discountTotal: 0 as const,
       paymentStatus,
       dueOn,
+      billedOn,
       ...(ticket.paymentMethod ? { paymentMethod: ticket.paymentMethod } : {}),
       ...(ticket.legacyMerged ? { legacyMerged: true } : {}),
     };
 
-    // 입금 전 회차권은 아직 원장이 없어 납입일이 속한 달에 청구 금액으로 보여 주고,
+    // 입금 전 회차권은 아직 원장이 없어 납입일(미정이면 등록일)이 속한 달에 청구 금액으로 보여 주고,
     // 입금될 때까지 이번 달까지 매달 이월해 보여 준다.
     if (paymentStatus === "registered" || paymentStatus === "payment-pending") {
-      const dueMonth = dueOn.slice(0, 7);
+      const dueMonth = billedOn.slice(0, 7);
       const isDueMonth = dueMonth === month;
       const isCarriedOver = dueMonth < month && month <= currentMonth;
       if (!isDueMonth && !isCarriedOver) return [];

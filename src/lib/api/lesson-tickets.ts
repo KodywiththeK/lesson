@@ -9,8 +9,10 @@ import {
 
 import type { LessonTicketRefundPolicy, LessonTicketRefundQuote } from "@/domain/lesson-ticket-refund";
 
-import type { LessonTicketPaymentAction, LessonTicketPaymentStatus } from "@/domain/lesson-ticket-payment";
+import type { LessonTicketPaymentChangeAction, LessonTicketPaymentStatus } from "@/domain/lesson-ticket-payment";
 import type { TuitionPaymentMethod } from "@/domain/tuition-income";
+import type { CardFeeChoice } from "@/domain/card-fee";
+import { toCardFeeRpcParams } from "./card-fee-rates";
 import { fetchAllRows, type PagedSelectQuery } from "./paged-query";
 import { queryKeys } from "./query-keys";
 
@@ -33,7 +35,7 @@ export type LessonTicketGrantSupabaseRow = {
   valid_until: string;
   registered_at: string;
   payment_status?: LessonTicketPaymentStatus;
-  due_on?: string;
+  due_on?: string | null;
   payment_method?: TuitionPaymentMethod | null;
   legacy_merged?: boolean;
   students: {
@@ -123,8 +125,8 @@ export type RegisterLessonTicketInput = {
   /** 일반 등록은 양수, 서비스 지급은 0원이다. */
   paidAmount?: number;
   isService?: boolean;
-  /** 납입일. 비우면 등록일과 같다. */
-  dueOn?: string;
+  /** 납입일. 생략하면 등록일, null이면 미정으로 등록한다(회차권 목록에서 나중에 입력). */
+  dueOn?: string | null;
 };
 
 export type RevokeServiceLessonTicketInput = {
@@ -209,7 +211,7 @@ export type RegisterLessonTicketSupabaseClient = {
       p_registered_at: string;
       p_paid_amount: number;
       p_is_service: boolean;
-      p_due_on: string;
+      p_due_on: string | null;
     },
   ): PromiseLike<SupabaseQueryResult<RegisterLessonTicketRpcRow>>;
 };
@@ -396,7 +398,8 @@ export async function registerLessonTicket(
     p_registered_at: input.registeredAt,
     p_paid_amount: input.paidAmount ?? 0,
     p_is_service: Boolean(input.isService),
-    p_due_on: input.dueOn ?? input.registeredAt,
+    // 넘기지 않으면 등록일, null이면 납입일 미정으로 등록한다(목록에서 나중에 입력).
+    p_due_on: input.dueOn === undefined ? input.registeredAt : input.dueOn,
   });
 
   if (error) {
@@ -543,7 +546,8 @@ function toLessonTicketListItem(
     validUntil: row.valid_until,
     registeredAt: row.registered_at,
     paymentStatus: row.payment_status ?? "paid",
-    dueOn: row.due_on ?? row.registered_at,
+    // null은 미정, 칸이 없으면(상태 도입 전 자료) 화면에서 등록일로 본다(getLessonTicketDueOn).
+    dueOn: row.due_on,
     ...(row.payment_method ? { paymentMethod: row.payment_method } : {}),
     ...(row.legacy_merged ? { legacyMerged: true } : {}),
   };
@@ -577,8 +581,12 @@ function toLessonTicketRegistrationStudentOption(
 
 type LessonTicketPaymentRpcArgs = {
   start_lesson_ticket_payment_wait: { p_academy_id: string; p_ticket_id: string };
-  mark_lesson_ticket_paid: { p_academy_id: string; p_ticket_id: string; p_paid_on: string; p_payment_method: TuitionPaymentMethod };
+  mark_lesson_ticket_paid: {
+    p_academy_id: string; p_ticket_id: string; p_paid_on: string; p_payment_method: TuitionPaymentMethod;
+    p_card_fee_rate_id: string | null; p_card_fee_amount: number | null;
+  };
   cancel_lesson_ticket_payment: { p_academy_id: string; p_ticket_id: string };
+  set_lesson_ticket_due_on: { p_academy_id: string; p_ticket_id: string; p_due_on: string };
 };
 
 export type LessonTicketPaymentSupabaseClient = {
@@ -614,10 +622,13 @@ export function startLessonTicketPaymentWait(
   );
 }
 
-/** 입금대기 → 입금완료. 입금일·결제 방식과 함께 수입 내역이 같은 트랜잭션으로 기록된다. */
+/**
+ * 입금대기 → 입금완료. 입금일·결제 방식과 함께 수입 내역이 같은 트랜잭션으로 기록된다.
+ * 카드 입금이면 고른 카드사의 수수료가 출금으로 함께 기록된다(금액을 비우면 서버가 수수료율로 계산).
+ */
 export function markLessonTicketPaid(
   supabase: LessonTicketPaymentSupabaseClient,
-  input: { academyId: string; ticketId: string; paidOn: string; paymentMethod: TuitionPaymentMethod },
+  input: { academyId: string; ticketId: string; paidOn: string; paymentMethod: TuitionPaymentMethod; cardFee?: CardFeeChoice },
 ) {
   return callLessonTicketPaymentRpc(
     supabase,
@@ -627,6 +638,7 @@ export function markLessonTicketPaid(
       p_ticket_id: input.ticketId,
       p_paid_on: input.paidOn,
       p_payment_method: input.paymentMethod,
+      ...toCardFeeRpcParams(input.cardFee),
     },
     "입금 처리하지 못했습니다",
   );
@@ -645,12 +657,27 @@ export function cancelLessonTicketPayment(
   );
 }
 
+/** 입금 전(등록·입금대기) 회차권의 납입일을 입력하거나 바꾼다. */
+export function setLessonTicketDueOn(
+  supabase: LessonTicketPaymentSupabaseClient,
+  input: { academyId: string; ticketId: string; dueOn: string },
+) {
+  return callLessonTicketPaymentRpc(
+    supabase,
+    "set_lesson_ticket_due_on",
+    { p_academy_id: input.academyId, p_ticket_id: input.ticketId, p_due_on: input.dueOn },
+    "납입일을 저장하지 못했습니다",
+  );
+}
+
 export type LessonTicketPaymentChangeInput = {
   academyId: string;
   ticketId: string;
-  action: LessonTicketPaymentAction;
+  action: LessonTicketPaymentChangeAction;
   paidOn?: string;
   paymentMethod?: TuitionPaymentMethod;
+  cardFee?: CardFeeChoice;
+  dueOn?: string;
 };
 
 /** 화면의 입금 상태 버튼 하나를 알맞은 RPC로 보낸다. 회차권 목록과 수입 관리가 같이 쓴다. */
@@ -666,7 +693,12 @@ export async function applyLessonTicketPaymentChange(
     if (!input.paidOn || !input.paymentMethod) {
       throw new Error("입금일과 결제 방식을 입력해 주세요.");
     }
-    await markLessonTicketPaid(supabase, { ...target, paidOn: input.paidOn, paymentMethod: input.paymentMethod });
+    await markLessonTicketPaid(supabase, {
+      ...target, paidOn: input.paidOn, paymentMethod: input.paymentMethod, cardFee: input.cardFee,
+    });
+  } else if (input.action === "set-due-on") {
+    if (!input.dueOn) throw new Error("납입일을 입력해 주세요.");
+    await setLessonTicketDueOn(supabase, { ...target, dueOn: input.dueOn });
   } else {
     await cancelLessonTicketPayment(supabase, target);
   }

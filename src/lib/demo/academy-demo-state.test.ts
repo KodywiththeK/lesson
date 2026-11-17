@@ -135,6 +135,35 @@ describe("academy demo state", () => {
     expect(cancelled.ticketRegistrations.at(-1)?.ledgerEntryId).toBeNull();
   });
 
+  it("납입일 미정으로 등록한 뒤 입금 전에 납입일을 입력하고, 카드 입금은 수수료를 함께 기록했다가 입금 취소 때 같이 지운다", () => {
+    const base = { ...createInitialDemoAcademyState(), cardFeeRates: [{ id: "rate-1", name: "신한카드", ratePercent: 1.45 }] };
+    const { state: registered, result } = registerDemoLessonTicket(base, {
+      academyId: base.academyId, studentId: "student-4", instrumentId: "violin", instrumentName: "바이올린",
+      grantedCount: 4, validDays: 30, registeredAt: "2026-08-21", paidAmount: 160000, dueOn: null,
+    });
+    const ticketOf = (target: typeof base) => target.tickets.find((ticket) => ticket.ticketId === result.ticketId)!;
+    const change = (target: typeof base, input: Omit<Parameters<typeof changeDemoLessonTicketPayment>[1], "ticketId">) =>
+      changeDemoLessonTicketPayment(target, { ticketId: result.ticketId, ...input });
+
+    expect(ticketOf(registered).dueOn).toBeNull();
+    const dated = change(registered, { action: "set-due-on", dueOn: "2026-08-31" });
+    expect(ticketOf(dated).dueOn).toBe("2026-08-31");
+
+    const waiting = change(dated, { action: "start-payment-wait" });
+    expect(() => change(waiting, { action: "mark-paid", paidOn: "2026-08-22", paymentMethod: "card" })).toThrow("카드사를 선택해 주세요.");
+    const paid = change(waiting, { action: "mark-paid", paidOn: "2026-08-22", paymentMethod: "card", cardFee: { rateId: "rate-1" } });
+    const ticketEntries = paid.ledgerEntries.filter((entry) => entry.refId === result.ticketId);
+    expect(ticketEntries).toHaveLength(2);
+    expect(ticketEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "income", amount: 160000 }),
+      expect.objectContaining({ type: "expense", category: "card-fee", amount: 2320 }),
+    ]));
+    expect(() => change(paid, { action: "set-due-on", dueOn: "2026-09-01" })).toThrow("입금 전(등록·입금대기) 회차권만 납입일을 바꿀 수 있습니다.");
+
+    const cancelled = change(paid, { action: "cancel-payment" });
+    expect(cancelled.ledgerEntries.some((entry) => entry.refId === result.ticketId)).toBe(false);
+  });
+
   it("권을 삭제한 뒤 다시 구매해도 남은 권과 ID가 겹치지 않는다", () => {
     const state = createInitialDemoAcademyState();
     const first = registerDemoLessonTicket(state, {

@@ -34,6 +34,7 @@ import {
 import { useDemoAcademy } from "@/lib/demo/academy-demo-provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { applyLessonTicketPaymentChange, type LessonTicketPaymentSupabaseClient } from "@/lib/api/lesson-tickets";
+import { createCardFeeRatesQueryOptions, type CardFeeRateClient } from "@/lib/api/card-fee-rates";
 
 import { AppShell } from "../app-shell";
 
@@ -139,6 +140,13 @@ function renderFinanceScreen(
                 ? context.demo.changeLessonTicketPayment
                 : client
                 ? (input) => applyLessonTicketPaymentChange(client as unknown as LessonTicketPaymentSupabaseClient, input)
+                : undefined
+            }
+            cardFeeRatesQueryOptions={
+              context.useTestDemo
+                ? context.demo.createCardFeeRatesQueryOptions(context.academyId)
+                : client
+                ? createCardFeeRatesQueryOptions(client as unknown as CardFeeRateClient, context.academyId)
                 : undefined
             }
             tuitionSnapshotsQueryOptionsFactory={

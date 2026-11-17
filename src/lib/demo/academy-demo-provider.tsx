@@ -103,6 +103,9 @@ import {
   updateDemoBook,
   updateDemoBookRelease,
 } from "./academy-demo-books";
+import type { CardFeeRate } from "@/domain/card-fee";
+
+import { archiveDemoCardFeeRate, saveDemoCardFeeRate } from "./academy-demo-card-fee";
 import { queryKeys } from "../api/query-keys";
 import { createVendorListQueryKey } from "../api/vendors";
 
@@ -122,6 +125,12 @@ type DemoAcademyContextValue = {
   deleteLessonTicket: (input: DeleteLessonTicketInput) => Promise<DeleteLessonTicketResult>;
   saveInstrumentColor: (instrumentId: string, colorHex: string) => void;
   setLessonTicketRefundPolicy: (policy: LessonTicketRefundPolicy) => Promise<void>;
+  createCardFeeRatesQueryOptions: (academyId: string) => {
+    queryKey: readonly unknown[];
+    queryFn: () => Promise<CardFeeRate[]>;
+  };
+  saveCardFeeRate: (input: { id?: string; name: string; ratePercent: number }) => Promise<CardFeeRate>;
+  archiveCardFeeRate: (id: string) => Promise<void>;
   createLessonTicketRefundPolicyQueryOptions: (academyId: string) => {
     queryKey: readonly unknown[];
     queryFn: () => Promise<LessonTicketRefundPolicy>;
@@ -315,6 +324,23 @@ export function DemoAcademyProvider({ children }: { children: ReactNode }) {
       },
       async setLessonTicketRefundPolicy(policy) {
         commitState((current) => setDemoLessonTicketRefundPolicy(current, policy));
+      },
+      createCardFeeRatesQueryOptions(academyId) {
+        return {
+          queryKey: [...queryKeys.settings.cardFeeRates(academyId), "demo", revision],
+          queryFn: async () => state.cardFeeRates,
+        };
+      },
+      async saveCardFeeRate(input) {
+        const newId = `card-fee-demo-${crypto.randomUUID()}`;
+        const { rate } = saveDemoCardFeeRate(state, input, newId);
+        commitState((current) => saveDemoCardFeeRate(current, input, newId).state);
+
+        return rate;
+      },
+      async archiveCardFeeRate(id) {
+        archiveDemoCardFeeRate(state, id);
+        commitState((current) => archiveDemoCardFeeRate(current, id));
       },
       createLessonTicketRefundPolicyQueryOptions(academyId) {
         return {

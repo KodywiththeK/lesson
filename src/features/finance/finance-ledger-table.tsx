@@ -141,7 +141,8 @@ export function LedgerDeleteDialog({
             삭제하면 되돌릴 수 없습니다. 수강료·교재·급여로 자동 기록된 내역은 원래
             기록과의 연결이 끊어질 수 있습니다. 수강료 입금은 &apos;학원 고정 수입&apos;에서
             입금 취소, 급여는 &apos;선생님 월급&apos;에서 지급 취소로 되돌릴 수 있습니다. 교재 수입을 지우면
-            &apos;교재 내역&apos;에는 결제 완료로 남고 &apos;원장 기록 없음&apos;으로 표시됩니다.
+            &apos;교재 내역&apos;에는 결제 완료로 남고 &apos;원장 기록 없음&apos;으로 표시됩니다. 카드 입금 수입을 지우면 붙어 있는
+            카드 수수료 출금도 함께 지워집니다.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {entry ? (
