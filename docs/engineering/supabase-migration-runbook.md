@@ -41,7 +41,7 @@
 
 - 대상: `20261117000000_card_fee.sql`, `20261117000100_lesson_ticket_due_on_later.sql`. 로컬 DB에 적용하고 역할별 시나리오를 확인했다(evidence `2026-11-17-card-fee-ticket-due-later.md`).
 - 순서: migration 적용 → 새 앱 배포. 새 앱은 6인자 입금 RPC(`mark_fixed_income_snapshot_paid`, `mark_lesson_ticket_paid`), `card_fee_rates`, `set_lesson_ticket_due_on`을 쓰므로 migration이 먼저다. 옛 4인자 입금 RPC와 옛 등록 경로는 그대로 두어 적용 직후 옛 앱도 동작한다(수수료 없이 기록, 납입일은 등록일).
-- 후속 `20261117000200_drop_legacy_paid_rpcs.sql`(운영 미적용): 새 앱 배포(`837ea11`) 확인 뒤 적용한다. 옛 4인자 `mark_fixed_income_snapshot_paid`·`mark_lesson_ticket_paid`를 본문 그대로 private(`*_without_card_fee`)으로 옮겨 앱 사용자 실행 권한을 회수하고, 6인자가 옮긴 함수를 부르게 다시 만든다. 남아 있으면 직접 호출로 카드사 필수 검사를 건너뛸 수 있기 때문이다. 앱은 6인자에 수수료 인자를 항상 `null`로라도 보내므로 영향이 없다. 적용 뒤 확인: 두 private 함수의 `has_function_privilege('authenticated', ..., 'execute')`가 false이고 public에는 6인자만 남는다.
+- 후속 `20261117000200_drop_legacy_paid_rpcs.sql`(2026-11-17 운영 적용 완료: dry-run으로 이 1건만 확인 후 적용, 원격 이력 76건·마지막 `20261117000200`, public에는 6인자만 실행 가능하고 private 두 함수는 `authenticated` 실행 권한 없음을 확인): 새 앱 배포(`837ea11`) 확인 뒤 적용한다. 옛 4인자 `mark_fixed_income_snapshot_paid`·`mark_lesson_ticket_paid`를 본문 그대로 private(`*_without_card_fee`)으로 옮겨 앱 사용자 실행 권한을 회수하고, 6인자가 옮긴 함수를 부르게 다시 만든다. 남아 있으면 직접 호출로 카드사 필수 검사를 건너뛸 수 있기 때문이다. 앱은 6인자에 수수료 인자를 항상 `null`로라도 보내므로 영향이 없다. 적용 뒤 확인: 두 private 함수의 `has_function_privilege('authenticated', ..., 'execute')`가 false이고 public에는 6인자만 남는다.
 - 되돌릴 때: 새 표·칸·함수만 추가하고 기존 RPC 동작은 바꾸지 않는다(10인자 등록 RPC만 `p_due_on = null` 처리를 더함). `lesson_ticket_grants.due_on`의 not null 해제는 미정 회차권이 생긴 뒤에는 되돌릴 수 없으니 미정 행을 먼저 정리한다.
 
 ## 2026-11-14 학원 피드백 migration — 2026-11-14 운영 적용 완료
