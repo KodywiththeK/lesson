@@ -74,7 +74,7 @@
 - Migration: `20261117000000_card_fee.sql`, `20261117000100_lesson_ticket_due_on_later.sql`
   - 로컬 DB에는 psql로 직접 적용했다.
   - 로컬 DB에는 `feat/platform-admin` 브랜치의 `20261115*` migration이 이미 있었다. 그 위에서도 문제없이 적용됐다.
-  - **운영 DB에는 적용하지 않았다.**
+  - 운영 DB(2026-11-17): CLI `db push --remote=<ref> --dry-run`으로 대상이 이 2건뿐임을 확인한 뒤 적용했다. 적용 후 원격 이력 75건으로 로컬 파일 수와 같고 마지막 버전은 `20261117000100`이다. 읽기 전용 조회로 `card_fee_rates` RLS 켜짐, `ledger_entries.fee_for_entry_id` 칸, 분류 check의 `card-fee`, 수수료 비례 트리거, `lesson_ticket_grants.due_on` null 허용, RPC(`save_card_fee_rate`/4, `archive_card_fee_rate`/2, 입금 RPC 4·6인자, `set_lesson_ticket_due_on`/3)를 확인했다.
 - 역할별 시나리오(원장·데스크 JWT로 확인)
   1. 카드사가 없으면 카드 입금에 수입 행 1건만 생긴다.
   2. 같은 이름의 카드사(공백·대소문자 무시)와 소수 셋째 자리 수수료율은 거부한다.
@@ -147,5 +147,5 @@
 
 ## Git
 
-- 커밋: 사용자 요청 전이라 하지 않았다.
-- push 여부: 하지 않았다.
+- 커밋: `2f66e63`(migration), `c9920f3`(앱), `837ea11`(문서) 후 이 기록 갱신 커밋.
+- push: 운영 migration 적용 뒤 `main` push로 Vercel 운영 배포.

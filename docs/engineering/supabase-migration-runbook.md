@@ -35,7 +35,9 @@
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
-## 2026-11-17 카드 수수료·회차권 납입일 미정 migration — 운영 미적용
+## 2026-11-17 카드 수수료·회차권 납입일 미정 migration — 2026-11-17 운영 적용 완료
+
+- 적용 결과(2026-11-17): CLI `db push --remote=<ref> --dry-run`으로 대상 2건만 확인 후 적용. 원격 이력 75건이 로컬과 일치하고 마지막 버전은 `20261117000100`이다. 이어서 `main` push(`837ea11`)로 Vercel 운영 배포했다. 옛 4인자 입금 RPC 정리 migration은 아직 남아 있다.
 
 - 대상: `20261117000000_card_fee.sql`, `20261117000100_lesson_ticket_due_on_later.sql`. 로컬 DB에 적용하고 역할별 시나리오를 확인했다(evidence `2026-11-17-card-fee-ticket-due-later.md`).
 - 순서: migration 적용 → 새 앱 배포. 새 앱은 6인자 입금 RPC(`mark_fixed_income_snapshot_paid`, `mark_lesson_ticket_paid`), `card_fee_rates`, `set_lesson_ticket_due_on`을 쓰므로 migration이 먼저다. 옛 4인자 입금 RPC와 옛 등록 경로는 그대로 두어 적용 직후 옛 앱도 동작한다(수수료 없이 기록, 납입일은 등록일).
