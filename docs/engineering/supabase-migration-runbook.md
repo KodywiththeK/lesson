@@ -37,11 +37,11 @@
 
 ## 2026-11-17 카드 수수료·회차권 납입일 미정 migration — 2026-11-17 운영 적용 완료
 
-- 적용 결과(2026-11-17): CLI `db push --remote=<ref> --dry-run`으로 대상 2건만 확인 후 적용. 원격 이력 75건이 로컬과 일치하고 마지막 버전은 `20261117000100`이다. 이어서 `main` push(`837ea11`)로 Vercel 운영 배포했다. 옛 4인자 입금 RPC 정리 migration은 아직 남아 있다.
+- 적용 결과(2026-11-17): CLI `db push --remote=<ref> --dry-run`으로 대상 2건만 확인 후 적용. 원격 이력 75건이 로컬과 일치하고 마지막 버전은 `20261117000100`이다. 이어서 `main` push(`837ea11`)로 Vercel 운영 배포했다. 옛 4인자 입금 RPC 정리는 아래 `20261117000200`으로 한다.
 
 - 대상: `20261117000000_card_fee.sql`, `20261117000100_lesson_ticket_due_on_later.sql`. 로컬 DB에 적용하고 역할별 시나리오를 확인했다(evidence `2026-11-17-card-fee-ticket-due-later.md`).
 - 순서: migration 적용 → 새 앱 배포. 새 앱은 6인자 입금 RPC(`mark_fixed_income_snapshot_paid`, `mark_lesson_ticket_paid`), `card_fee_rates`, `set_lesson_ticket_due_on`을 쓰므로 migration이 먼저다. 옛 4인자 입금 RPC와 옛 등록 경로는 그대로 두어 적용 직후 옛 앱도 동작한다(수수료 없이 기록, 납입일은 등록일).
-- 후속: 새 앱 배포가 확인되면 옛 4인자 `mark_fixed_income_snapshot_paid`·`mark_lesson_ticket_paid`를 지우는 migration을 만든다(남아 있으면 직접 호출로 카드사 필수 검사를 건너뛸 수 있다). 6인자는 내부에서 4인자를 부르므로 본문을 옮긴 뒤 지운다.
+- 후속 `20261117000200_drop_legacy_paid_rpcs.sql`(운영 미적용): 새 앱 배포(`837ea11`) 확인 뒤 적용한다. 옛 4인자 `mark_fixed_income_snapshot_paid`·`mark_lesson_ticket_paid`를 본문 그대로 private(`*_without_card_fee`)으로 옮겨 앱 사용자 실행 권한을 회수하고, 6인자가 옮긴 함수를 부르게 다시 만든다. 남아 있으면 직접 호출로 카드사 필수 검사를 건너뛸 수 있기 때문이다. 앱은 6인자에 수수료 인자를 항상 `null`로라도 보내므로 영향이 없다. 적용 뒤 확인: 두 private 함수의 `has_function_privilege('authenticated', ..., 'execute')`가 false이고 public에는 6인자만 남는다.
 - 되돌릴 때: 새 표·칸·함수만 추가하고 기존 RPC 동작은 바꾸지 않는다(10인자 등록 RPC만 `p_due_on = null` 처리를 더함). `lesson_ticket_grants.due_on`의 not null 해제는 미정 회차권이 생긴 뒤에는 되돌릴 수 없으니 미정 행을 먼저 정리한다.
 
 ## 2026-11-14 학원 피드백 migration — 2026-11-14 운영 적용 완료
