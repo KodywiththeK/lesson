@@ -16,8 +16,9 @@ import { MobileNavigationDrawer } from "@/components/layout/mobile-navigation-dr
 import type { VisibleNavigationItem } from "@/components/layout/navigation-types";
 import { PageHeaderActionsContext } from "@/components/layout/page-actions";
 import { Button } from "@/components/ui/button";
+import { getVisibleNavigation, isNavigationItemVisible } from "@/components/layout/visible-navigation";
 import { mainNavigation, type NavigationItem } from "@/domain/navigation";
-import { type PermissionContext, canAccessFeature } from "@/domain/permissions";
+import type { PermissionContext } from "@/domain/permissions";
 
 type AppShellProps = {
   academyName: string;
@@ -79,7 +80,7 @@ export function AppShell({
               {isAccessDenied ? (
                 <AccessDeniedNotice />
               ) : (
-                (children ?? <DashboardContent visibleNavigation={visibleNavigation} />)
+                children
               )}
             </div>
           </section>
@@ -117,43 +118,6 @@ function matchesCompactHeader() {
   }
 
   return window.matchMedia(compactHeaderMediaQuery).matches;
-}
-
-function getVisibleNavigation(
-  permissionContext: PermissionContext,
-): VisibleNavigationItem[] {
-  return mainNavigation.flatMap((item) => {
-    const visibleChildren = item.children?.filter((child) =>
-      isNavigationItemVisible(child, permissionContext),
-    );
-    const visibleItem = {
-      ...item,
-      children: visibleChildren,
-    };
-
-    if (isNavigationItemVisible(visibleItem, permissionContext)) {
-      return [visibleItem];
-    }
-
-    return [];
-  });
-}
-
-function isNavigationItemVisible(
-  item: NavigationItem,
-  permissionContext: PermissionContext,
-): boolean {
-  if (item.href === "/") {
-    return true;
-  }
-
-  if (item.feature) {
-    return canAccessFeature(permissionContext, item.feature);
-  }
-
-  return item.children?.some((child) =>
-    isNavigationItemVisible(child, permissionContext),
-  ) === true;
 }
 
 /**
@@ -243,39 +207,5 @@ function AccessDeniedNotice() {
         <Link href="/">홈으로 돌아가기</Link>
       </Button>
     </div>
-  );
-}
-
-function DashboardContent({
-  visibleNavigation,
-}: {
-  visibleNavigation: VisibleNavigationItem[];
-}) {
-  const shortcuts = visibleNavigation.filter((item) => item.href !== "/");
-
-  return (
-    <section aria-label="바로가기" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {shortcuts.map((item) => {
-        const Icon = item.icon;
-
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-md"
-          >
-            <span className="flex size-10 flex-none items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              <Icon aria-hidden="true" className="size-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold">{item.label}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">
-                {item.description}
-              </span>
-            </span>
-          </Link>
-        );
-      })}
-    </section>
   );
 }

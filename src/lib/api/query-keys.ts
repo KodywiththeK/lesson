@@ -248,4 +248,16 @@ export const queryKeys = {
     cardFeeRates: (academyId: string) =>
       [...queryKeys.academy(academyId), "settings", "card-fee-rates"] as const,
   },
+  notifications: {
+    /** 내 알림 설정(사람별). */
+    mySettings: (academyId: string) => [...queryKeys.academy(academyId), "notifications", "my-settings"] as const,
+    /** 이 브라우저(기기)의 푸시 지원·구독 상태. 서버 데이터가 아니라 기기 상태다. */
+    device: () => ["notification-device"] as const,
+  },
+  dailyTasks: {
+    all: (academyId: string) => [...queryKeys.academy(academyId), "daily-tasks"] as const,
+    source: (academyId: string, date: string) =>
+      [...queryKeys.dailyTasks.all(academyId), "source", date] as const,
+    states: (academyId: string) => [...queryKeys.dailyTasks.all(academyId), "states"] as const,
+  },
 };
