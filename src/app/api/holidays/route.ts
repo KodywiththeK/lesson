@@ -1,6 +1,6 @@
 import { parseKoreanHolidayResponse } from "@/domain/korean-holiday";
-import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceRoleClient } from "@/lib/supabase/service-role";
 
 const HOLIDAY_ERROR = "공휴일 자료를 불러오지 못했습니다. 다시 시도해 주세요.";
 const KASI_ENDPOINT = "https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo";
@@ -38,11 +38,9 @@ export async function POST(request: Request) {
     if (error || !data.user) return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
     const officialResponse = await GET(request);
     if (!officialResponse.ok) return officialResponse;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !secret) return Response.json({ error: HOLIDAY_ERROR }, { status: 503 });
+    const client = createSupabaseServiceRoleClient();
+    if (!client) return Response.json({ error: HOLIDAY_ERROR }, { status: 503 });
     const { holidays } = await officialResponse.json();
-    const client = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const result = await client.rpc("store_verified_korean_holidays", {
       p_month: new URL(request.url).searchParams.get("month"), p_holidays: holidays,
     });

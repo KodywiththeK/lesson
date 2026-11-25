@@ -9,6 +9,7 @@ import { useListPaging } from "@/components/management/use-list-paging";
 import { MonthField } from "@/components/operations/date-time-fields";
 import { Label } from "@/components/ui/label";
 import { getFinanceCurrentMonth } from "@/domain/finance-date";
+import { formatWon } from "@/domain/money-input";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/api/query-keys";
 import { SupabaseClientState } from "./finance-types";
@@ -108,9 +109,7 @@ export function invalidateFinanceQueries(
   });
 }
 
-export function formatWon(amount: number) {
-  return `${amount.toLocaleString("ko-KR")}원`;
-}
+export { formatWon };
 
 export type FinanceAmountTone = "total" | "income" | "expense" | "neutral";
 

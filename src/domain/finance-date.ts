@@ -43,3 +43,39 @@ export function toMonthDateRange(month: string): { from: string; to: string } {
     to: `${month}-${String(lastDay).padStart(2, "0")}`,
   };
 }
+
+const seoulTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: FINANCE_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 시각 문자열 → 학원 기준(Asia/Seoul) `HH:mm`. */
+export function formatSeoulTime(value: string) {
+  return seoulTimeFormatter.format(new Date(value));
+}
+
+/** `YYYY-MM-DD`에 날짜를 더한다(달·해 경계 포함). */
+export function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+
+  return value.toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-DD` → `M/D`. */
+export function formatMonthDay(date: string) {
+  const [, month, day] = date.slice(0, 10).split("-");
+
+  return `${Number(month)}/${Number(day)}`;
+}
+
+/** `YYYY-MM-DD` → `M월 D일(요)`. */
+export function formatKoreanDateLabel(date: string) {
+  const [, month, day] = date.split("-").map(Number);
+
+  return `${month}월 ${day}일(${WEEKDAY_LABELS[new Date(`${date}T00:00:00Z`).getUTCDay()]})`;
+}

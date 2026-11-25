@@ -8,3 +8,8 @@ export function parseWonInput(text: string): number | null {
   const amount = Number(trimmed.replaceAll(",", ""));
   return Number.isSafeInteger(amount) ? amount : null;
 }
+
+/** `150000` → `150,000원`. 화면·메일 공용 표시 형식. */
+export function formatWon(amount: number) {
+  return `${amount.toLocaleString("ko-KR")}원`;
+}

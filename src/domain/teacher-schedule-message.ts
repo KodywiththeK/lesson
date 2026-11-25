@@ -1,15 +1,9 @@
-import { toFinanceDate } from "./finance-date";
+import { formatSeoulTime, toFinanceDate } from "./finance-date";
 import { comparePrivateLessonStartAt, type PrivateLesson } from "./private-lesson";
 
 const ACADEMY_MESSAGE_NAME = "더 클래식 음악학원";
 const EMPTY_SCHEDULE_MESSAGE = "해당 월에 등록된 레슨이 없습니다.";
 
-const seoulTimeFormatter = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Asia/Seoul",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
 
 /**
  * 선생님께 보낼 월 스케줄표 문자. 선택한 선생님의 해당 월(한국 시간 기준) 일정을 날짜별로 묶는다.
@@ -56,7 +50,7 @@ export function formatTeacherMonthScheduleMessage(input: {
 
 function formatLessonLine(lesson: PrivateLesson, date: string) {
   const day = `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
-  const time = seoulTimeFormatter.format(new Date(lesson.startAt));
+  const time = formatSeoulTime(lesson.startAt);
 
   return `${day} ${lesson.studentName} ${time} ${lesson.instrumentName}`;
 }
