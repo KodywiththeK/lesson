@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { Bell, MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -92,6 +92,13 @@ function HeaderUser({
       <p className="hidden max-w-48 truncate text-sm font-medium sm:block">
         {description}
       </p>
+      {role === "anonymous" ? null : (
+        <Button asChild variant="outline" size="icon-sm">
+          <Link href="/me/notifications" aria-label="내 알림 설정" title="내 알림 설정">
+            <Bell aria-hidden="true" />
+          </Link>
+        </Button>
+      )}
       {session ? <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" aria-label="계정과 학원 메뉴">학원 전환</Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
