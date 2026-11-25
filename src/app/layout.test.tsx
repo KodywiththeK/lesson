@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/font/local", () => ({ default: () => ({ variable: "test-font" }) }));
 
-import { metadata } from "./layout";
+import { metadata, viewport } from "./layout";
 
 describe("마디마디 메타데이터", () => {
   it("마디마디 브랜드와 핵심 문구를 검색 및 공유 정보에 사용한다", () => {
@@ -33,5 +33,10 @@ describe("마디마디 메타데이터", () => {
       description: metadata.description,
       images: ["/brand/madimadi-thumbnail.webp"],
     });
+  });
+
+  it("iOS 홈 화면에 추가하면 앱처럼 열리고 상단 표시줄은 아이콘 색을 쓴다", () => {
+    expect(metadata.appleWebApp).toMatchObject({ capable: true, title: "마디마디", statusBarStyle: "default" });
+    expect(viewport.themeColor).toBe("#0572fc");
   });
 });

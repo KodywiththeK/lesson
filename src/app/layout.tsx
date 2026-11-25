@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
 import { Toaster } from "@/components/ui/sonner";
 
+import { APP_THEME_COLOR } from "./manifest";
 import { AppProviders } from "./providers";
 import { siteDescription, siteName, siteTitle, siteUrl, socialImage } from "./seo";
 import "./globals.css";
@@ -17,6 +18,7 @@ const pretendard = localFont({
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   applicationName: siteName,
+  appleWebApp: { capable: true, title: siteName, statusBarStyle: "default" },
   title: siteTitle,
   description: siteDescription,
   alternates: { canonical: "/" },
@@ -43,6 +45,10 @@ export const metadata: Metadata = {
     description: siteDescription,
     images: [socialImage],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: APP_THEME_COLOR,
 };
 
 export default function RootLayout({

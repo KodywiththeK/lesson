@@ -40,7 +40,10 @@ test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다",
   expect(faviconResponse.ok()).toBe(true);
   const manifestResponse = await request.get("/manifest.webmanifest");
   expect(manifestResponse.ok()).toBe(true);
-  expect((await manifestResponse.json()).icons).toHaveLength(2);
+  const manifestJson = await manifestResponse.json();
+  expect(manifestJson.display).toBe("standalone");
+  expect(manifestJson.icons).toHaveLength(3);
+  expect((await request.get("/maskable-icon-512x512.png")).ok()).toBe(true);
 
   const desktopLogo = page.getByRole("complementary").getByRole("img", { name: "마디마디" });
   await expect(desktopLogo).toBeVisible();
