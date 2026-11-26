@@ -41,10 +41,11 @@
 
 ## Supabase 증거
 
-- Migration: 4개 작성, 원격 미적용(사용자 요청 시 runbook 절차로 적용).
+- Migration: 4개를 2026-11-26 사용자 요청으로 운영 적용(dry-run으로 대상 4건 확인 → `db push --remote`). 원격 이력 80건 일치, 마지막 `20261119000300`. Docker가 없어 로컬 실행 검증은 못 했고 각 파일을 트랜잭션으로 감싸 적용했다.
 - RLS 확인: 새 테이블 5개(`daily_task_states`, `notification_preferences`, `push_subscriptions`, `notification_outbox`, `morning_brief_deliveries`) 모두 RLS on + anon/authenticated revoke, RPC로만 접근(계약 테스트).
 - 역할별 확인: 원천 RPC의 owner/desk/teacher 범위·금액 null 처리, service_role 전용 RPC grant를 계약 테스트로 고정. 실제 역할 계정 호출은 미검증.
-- 비고: 로컬 Postgres가 없어 SQL 실행 검증을 못 했다.
+- 적용 후 읽기 전용 확인: RLS 5개, pg_net, 트리거 3개, cron 2개, authenticated/service_role 실행 권한(화면용만 열림), Vault 비밀값 0개(설정 전이라 크론은 호출 생략).
+- 비고: 읽기 전용 계정은 private 함수를 실행할 수 없어 원천 함수 실행은 배포 후 원장 계정 대시보드로 확인해야 한다.
 
 ## 품질 정리
 

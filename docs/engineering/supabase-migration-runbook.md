@@ -35,6 +35,15 @@
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
+## 2026-11-19 오늘 할 일·알림 migration — 2026-11-26 운영 적용 완료
+
+- 대상: `20261119000000_daily_tasks.sql`, `20261119000100_notification_settings.sql`, `20261119000200_notification_outbox.sql`(pg_net 확장 포함), `20261119000300_morning_brief.sql`. 이 기기에 Docker가 없어 로컬 DB 실행 검증은 하지 못했고, 대신 각 파일을 `begin;`…`commit;`으로 감싸 중간 실패 시 파일 전체가 되돌아가게 했다.
+- 적용 결과(2026-11-26): CLI `db push --remote=<ref> --dry-run`으로 대상 4건만 확인 후 적용. 원격 이력 80건이 로컬과 일치하고 마지막 버전은 `20261119000300`이다.
+- 적용 후 읽기 전용 확인: 새 테이블 5개 RLS on, `pg_net` 설치, 트리거 3개, cron `notification-dispatch`(매분)·`morning-brief`(`0 23 * * *`) 등록, `authenticated`는 `get_daily_task_source`만 실행 가능하고 서버 전용 RPC·`push_subscriptions` 직접 조회 불가, `service_role`은 `claim_notification_outbox` 실행 가능. Vault 비밀값(`app_base_url`, `cron_secret`)은 아직 없어 크론은 호출을 건너뛴다.
+- 읽기 전용 계정은 private 함수 실행 권한이 없어 원천 함수의 실제 실행은 확인하지 못했다. 배포 후 원장 계정으로 대시보드 '오늘 할 일'이 오류 없이 뜨는지 확인한다.
+- 순서: migration 적용 → `main` push(Vercel 배포). 새 앱은 `get_daily_task_source`를 부르므로 migration이 먼저다. 옛 앱은 새 함수를 쓰지 않아 영향이 없다.
+- 운영 설정: `docs/engineering/notifications-operations.md`.
+
 ## 2026-11-17 카드 수수료·회차권 납입일 미정 migration — 2026-11-17 운영 적용 완료
 
 - 적용 결과(2026-11-17): CLI `db push --remote=<ref> --dry-run`으로 대상 2건만 확인 후 적용. 원격 이력 75건이 로컬과 일치하고 마지막 버전은 `20261117000100`이다. 이어서 `main` push(`837ea11`)로 Vercel 운영 배포했다. 옛 4인자 입금 RPC 정리는 아래 `20261117000200`으로 한다.
