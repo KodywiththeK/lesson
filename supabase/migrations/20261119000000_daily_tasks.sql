@@ -4,6 +4,9 @@
 --    금액은 원장에게만 채우고 데스크·선생님에게는 null로 보낸다(브라우저에 금액이 가지 않게).
 --    선생님은 담당 학생의 결석·레슨 변경만 받고 수납·상담·교재는 빈 목록이다.
 -- 2) 공유 상태: '답변 대기'·'완료'를 학원 단위로 저장한다. 테이블은 RPC로만 읽고 쓰며, 바꾸는 것은 원장·데스크만 한다.
+-- CLI v3는 파일을 트랜잭션으로 감싸지 않아, 중간에 실패하면 이 파일 전체가 되돌아가도록 직접 감싼다.
+
+begin;
 
 create table public.daily_task_states (
   academy_id uuid not null references public.academies (id) on delete cascade,
@@ -382,3 +385,5 @@ revoke all on function public.set_daily_task_state(uuid, text, text) from public
 grant execute on function public.set_daily_task_state(uuid, text, text) to authenticated;
 
 notify pgrst, 'reload schema';
+
+commit;

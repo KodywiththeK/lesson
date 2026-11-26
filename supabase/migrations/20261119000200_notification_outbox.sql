@@ -2,6 +2,9 @@
 -- 사건이 일어나면 트리거가 notification_outbox에 적재하고, pg_cron이 1분마다(대기열이 있을 때만)
 -- 앱의 발송 주소(/api/notifications/dispatch)를 부른다. 받을 사람·문구는 앱 도메인(`src/domain/notification-dispatch.ts`)이 정한다.
 -- 앱 주소와 비밀값은 Supabase Vault의 `app_base_url`, `cron_secret`에서 읽는다(없으면 호출하지 않는다).
+-- CLI v3는 파일을 트랜잭션으로 감싸지 않아, 중간에 실패하면 이 파일 전체가 되돌아가도록 직접 감싼다.
+
+begin;
 
 create extension if not exists pg_net;
 
@@ -272,3 +275,5 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+commit;

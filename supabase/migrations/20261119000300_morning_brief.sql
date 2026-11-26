@@ -3,6 +3,9 @@
 -- 앱은 학원마다 브리핑 원천과 할 일 원천(`get_daily_task_source_for_service`)을 읽어
 -- 원장·데스크에게 메일을, 아침 브리핑 푸시를 켠 사람에게 한 줄 푸시를 보낸다.
 -- morning_brief_deliveries가 사람·채널별로 하루 한 번만 보내게 막는다.
+-- CLI v3는 파일을 트랜잭션으로 감싸지 않아, 중간에 실패하면 이 파일 전체가 되돌아가도록 직접 감싼다.
+
+begin;
 
 create table public.morning_brief_deliveries (
   id uuid primary key default gen_random_uuid(),
@@ -200,3 +203,5 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+commit;

@@ -2,6 +2,9 @@
 -- - notification_preferences: 사람마다 아침 메일·푸시 항목을 켜고 끈다. 행이 없으면 모두 켜진 것으로 본다.
 -- - push_subscriptions: 기기(브라우저)마다 하나. 발송은 서버(service_role)만 읽는다.
 -- 두 테이블 모두 브라우저 직접 접근을 막고 본인 것만 다루는 RPC로 읽고 쓴다.
+-- CLI v3는 파일을 트랜잭션으로 감싸지 않아, 중간에 실패하면 이 파일 전체가 되돌아가도록 직접 감싼다.
+
+begin;
 
 create table public.notification_preferences (
   academy_id uuid not null references public.academies (id) on delete cascade,
@@ -168,3 +171,5 @@ revoke all on function public.delete_push_subscription(text) from public, anon;
 grant execute on function public.delete_push_subscription(text) to authenticated;
 
 notify pgrst, 'reload schema';
+
+commit;
