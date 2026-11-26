@@ -6,7 +6,7 @@ import { metadata, viewport } from "./layout";
 
 describe("마디마디 메타데이터", () => {
   it("마디마디 브랜드와 핵심 문구를 검색 및 공유 정보에 사용한다", () => {
-    expect(metadata.metadataBase?.toString()).toBe("https://lesson-pi-ten.vercel.app/");
+    expect(metadata.metadataBase?.toString()).toBe("https://madimadi.site/");
     expect(metadata.title).toBe("마디마디 | 모든 수업의 마디마다, 더 편리한 음악학원 관리");
     expect(metadata.description).toContain("모든 수업의 마디마다, 더 편리한 음악학원 관리");
     expect(metadata.alternates).toMatchObject({ canonical: "/" });

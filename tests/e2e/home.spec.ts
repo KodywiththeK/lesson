@@ -24,9 +24,9 @@ test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다",
 
   await expect(page).toHaveTitle("마디마디 | 모든 수업의 마디마다, 더 편리한 음악학원 관리");
   await expect(page.locator('link[rel="canonical"]'))
-    .toHaveAttribute("href", "https://lesson-pi-ten.vercel.app");
+    .toHaveAttribute("href", "https://madimadi.site");
   await expect(page.locator('meta[property="og:image"]'))
-    .toHaveAttribute("content", "https://lesson-pi-ten.vercel.app/brand/madimadi-thumbnail.webp");
+    .toHaveAttribute("content", "https://madimadi.site/brand/madimadi-thumbnail.webp");
   await expect(page.locator('link[rel="icon"][sizes="32x32"]'))
     .toHaveAttribute("href", "/favicon-32x32.png");
   await expect(page.locator('link[rel="apple-touch-icon"]'))
@@ -53,7 +53,7 @@ test("브랜드 메타·공유 썸네일·검색 제외 경계를 제공한다",
   const managementResponse = await request.get("/finance/ledger");
   expect(managementResponse.headers()["x-robots-tag"]).toBe("noindex, nofollow");
   expect((await (await request.get("/sitemap.xml")).text()))
-    .toContain("https://lesson-pi-ten.vercel.app/");
+    .toContain("https://madimadi.site/");
 
   await page.setViewportSize({ width: 320, height: 720 });
   await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();

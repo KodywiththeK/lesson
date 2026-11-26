@@ -3,7 +3,7 @@
 ## 기준
 
 - 서비스명은 `마디마디`, 대표 문구는 “모든 수업의 마디마다, 더 편리한 음악학원 관리”다.
-- 공식 주소는 `https://lesson-pi-ten.vercel.app/`다. 도메인이 바뀌면 `src/app/seo.ts`의 `siteUrl`과 검색 콘솔 등록 주소를 함께 바꾼다.
+- 공식 주소는 `https://madimadi.site/`다(2026-11-27 변경). 옛 주소 `https://lesson-pi-ten.vercel.app/`도 그대로 열려 있고 자동으로 넘기지 않는다. 도메인이 바뀌면 `src/app/seo.ts`의 `siteUrl`과 검색 콘솔 등록 주소를 함께 바꾼다.
 - 원본 로고는 `public/brand/madimadi-logo.webp`, 공유 썸네일은 `public/brand/madimadi-thumbnail.webp`다. 공유 이미지는 원본 비율 1672×941과 대체 텍스트를 메타데이터에 명시한다.
 - `public/favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`는 `src/app/layout.tsx`의 `icons`에 연결한다. Android 192·512px 아이콘은 `src/app/manifest.ts`에서 참조한다. `public`에 파일을 넣는 것만으로 메타데이터 링크가 자동 생성되지는 않는다.
 - manifest는 현재 브라우저 표시(`display: browser`)만 선언한다. 별도 설치형 앱 동작은 제품 결정 전까지 약속하지 않는다.

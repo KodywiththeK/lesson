@@ -32,7 +32,7 @@ pnpm exec web-push generate-vapid-keys
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | VAPID 공개 키 | 브라우저에 노출돼도 됨 |
 | `VAPID_PRIVATE_KEY` | VAPID 비공개 키 | 서버 전용 |
 | `CRON_SECRET` | 32자 이상 임의 문자열 | Vault의 `cron_secret`과 같아야 함 |
-| `APP_BASE_URL` | `https://lesson-pi-ten.vercel.app` | 메일 링크·VAPID 발신자 |
+| `APP_BASE_URL` | `https://madimadi.site` | 메일 링크·VAPID 발신자 |
 | `SUPABASE_SERVICE_ROLE_KEY` | (기존) | 서버 전용 |
 
 설정 후 재배포한다.
@@ -43,11 +43,17 @@ pnpm exec web-push generate-vapid-keys
 2. Vault에 비밀값 두 개를 넣는다(SQL Editor):
 
 ```sql
-select vault.create_secret('https://lesson-pi-ten.vercel.app', 'app_base_url');
+select vault.create_secret('https://madimadi.site', 'app_base_url');
 select vault.create_secret('<CRON_SECRET과 같은 값>', 'cron_secret');
 ```
 
 3. 확인: `select jobname, schedule from cron.job where jobname in ('notification-dispatch', 'morning-brief');`
+
+이미 넣은 값을 바꿀 때(예: 앱 주소 변경):
+
+```sql
+select vault.update_secret((select id from vault.secrets where name = 'app_base_url'), 'https://madimadi.site');
+```
 
 ## 5. 동작 확인
 
@@ -56,5 +62,5 @@ select vault.create_secret('<CRON_SECRET과 같은 값>', 'cron_secret');
 - 아침 브리핑은 수동으로 한 번 실행해 볼 수 있다(같은 날 두 번 보내지 않는다):
 
 ```bash
-curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://lesson-pi-ten.vercel.app/api/cron/morning-brief
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://madimadi.site/api/cron/morning-brief
 ```

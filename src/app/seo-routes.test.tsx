@@ -7,9 +7,9 @@ import sitemap from "./sitemap";
 
 describe("검색 노출 경계", () => {
   it("홈만 사이트맵에 넣는다", () => {
-    expect(sitemap()).toEqual([{ url: "https://lesson-pi-ten.vercel.app/" }]);
+    expect(sitemap()).toEqual([{ url: "https://madimadi.site/" }]);
     expect(robots()).toMatchObject({
-      sitemap: "https://lesson-pi-ten.vercel.app/sitemap.xml",
+      sitemap: "https://madimadi.site/sitemap.xml",
     });
   });
 
