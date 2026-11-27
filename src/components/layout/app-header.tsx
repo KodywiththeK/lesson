@@ -18,11 +18,15 @@ import {
 } from "@/components/ui/sheet";
 import type { SessionRole } from "@/domain/permissions";
 import { academyRoleLabels } from "@/domain/auth-onboarding";
+import { cn } from "@/lib/utils";
 import { useAcademySessionControls } from "@/features/auth/academy-session-gate";
 
 import { navigationLinkClassName } from "./navigation-link-styles";
 import { NotificationBell } from "./notification-bell";
 import type { VisibleNavigationItem } from "./navigation-types";
+
+const avatarClassName =
+  "size-10 flex-none items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground";
 
 const roleLabels: Record<SessionRole, string> = {
   ...academyRoleLabels,
@@ -50,12 +54,12 @@ export function AppHeader({
 }) {
   return (
     <header className="sticky top-3 z-40 rounded-2xl border border-border bg-card/95 px-4 py-4 shadow-card backdrop-blur supports-[backdrop-filter]:bg-card/85 md:px-6 lg:top-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {leading}
-          <h1 className="min-w-0 text-xl font-semibold md:text-2xl">{title}</h1>
+          <h1 className="min-w-0 truncate text-lg font-semibold sm:text-xl md:text-2xl">{title}</h1>
         </div>
-        <div className="flex flex-none items-center gap-3">
+        <div className="flex flex-none items-center gap-2 sm:gap-3">
           <HeaderActions actions={actions} isCompact={isCompact} />
           <HeaderUser academyName={academyName} role={role} />
         </div>
@@ -79,16 +83,18 @@ function HeaderUser({
   role: SessionRole;
 }) {
   const description = `${academyName} · ${roleLabels[role]}`;
+  const initial = academyName.trim().charAt(0);
   const session = useAcademySessionControls();
 
   return (
-    <div className="flex items-center gap-3 sm:border-l sm:border-border sm:pl-3">
+    <div className="flex items-center gap-2 sm:gap-3 sm:border-l sm:border-border sm:pl-3">
+      {/* 모바일에서는 이니셜이 학원 메뉴 버튼 자체가 되어 헤더 버튼 수를 줄인다. */}
       <span
         aria-hidden="true"
         title={description}
-        className="flex size-10 flex-none items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground"
+        className={cn(avatarClassName, session ? "hidden sm:flex" : "flex")}
       >
-        {academyName.trim().charAt(0)}
+        {initial}
       </span>
       <p className="hidden max-w-48 truncate text-sm font-medium sm:block">
         {description}
@@ -97,7 +103,12 @@ function HeaderUser({
         <NotificationBell hasUnread={(session?.unreadNotificationCount ?? 0) > 0} />
       )}
       {session ? <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" aria-label="계정과 학원 메뉴">학원 전환</Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm" aria-label="계정과 학원 메뉴" title={description} className="max-sm:size-10 max-sm:rounded-full max-sm:border-0 max-sm:bg-accent max-sm:p-0 max-sm:text-sm max-sm:font-semibold max-sm:text-accent-foreground">
+            <span aria-hidden="true" className="sm:hidden">{initial}</span>
+            <span className="hidden sm:inline">학원 전환</span>
+          </Button>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {session.academies.map((academy) => <DropdownMenuItem key={academy.academyId} onSelect={() => session.selectAcademy(academy.academyId)}>{academy.academyName} · {roleLabels[academy.role]}</DropdownMenuItem>)}
           <DropdownMenuSeparator />
