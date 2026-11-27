@@ -6,14 +6,14 @@ import { getFinanceToday } from "@/domain/finance-date";
 import { AcademySessionGate } from "@/features/auth/academy-session-gate";
 import { DashboardShortcuts } from "@/features/dashboard/dashboard-shortcuts";
 import { TodayTasks } from "@/features/dashboard/today-tasks";
-import { createDemoDailyTasksAccess } from "@/lib/demo/daily-tasks-demo";
+import { createDemoDailyTasks } from "@/lib/demo/daily-tasks-demo";
 
 import { AppShell } from "./app-shell";
 
 const useTestDemo = process.env.NODE_ENV === "test" || process.env.NEXT_PUBLIC_E2E_DEMO === "1";
 
 export default function Home() {
-  const [demoDailyTasks] = useState(() => (useTestDemo ? createDemoDailyTasksAccess(getFinanceToday()) : undefined));
+  const [demoDailyTasks] = useState(() => (useTestDemo ? createDemoDailyTasks(getFinanceToday()) : undefined));
 
   return (
     <AcademySessionGate>
@@ -25,7 +25,8 @@ export default function Home() {
           <TodayTasks
             academyId={academy.academyId}
             permissionContext={academy.permissionContext}
-            dataAccess={demoDailyTasks}
+            dataAccess={demoDailyTasks?.dataAccess}
+            processing={demoDailyTasks?.processing}
           />
           <DashboardShortcuts permissionContext={academy.permissionContext} />
         </AppShell>

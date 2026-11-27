@@ -40,6 +40,9 @@ type LessonTicketRegistrationFormProps = {
   error: Error | null;
   isSaving: boolean;
   canRecordPayment: boolean;
+  /** 재등록처럼 학생·악기를 미리 골라 둘 때. 선택지에 없으면 빈 선택으로 시작한다. */
+  initialStudentId?: string;
+  initialInstrumentId?: string;
   onSubmit: (input: RegisterLessonTicketInput) => void;
 };
 
@@ -57,11 +60,13 @@ export function LessonTicketRegistrationForm({
   error,
   isSaving,
   canRecordPayment,
+  initialStudentId = "",
+  initialInstrumentId = "",
   onSubmit,
 }: LessonTicketRegistrationFormProps) {
   const paidAmountHintId = useId();
-  const [studentId, setStudentId] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId);
+  const [instrumentId, setInstrumentId] = useState(initialInstrumentId);
   const [grantedCountText, setGrantedCountText] = useState(DEFAULT_GRANTED_COUNT);
   const [validDaysText, setValidDaysText] = useState(DEFAULT_VALID_DAYS);
   const [registeredAt, setRegisteredAt] = useState(today);

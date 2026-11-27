@@ -17,10 +17,10 @@ describe("Home", () => {
   it("대시보드 맨 위에 오늘 할 일을 보여 주고 바로가기는 그 아래에 둔다", async () => {
     renderHome();
 
-    const tasks = await screen.findByRole("list", { name: "할 일 목록" });
+    const cells = await screen.findByRole("list", { name: "오늘 할 일 칸" });
     expect(screen.getByRole("heading", { level: 2, name: "오늘 할 일" })).toBeInTheDocument();
-    expect(within(tasks).getByText("김민지 피아노 보강 날짜 잡기")).toBeInTheDocument();
-    expect(within(tasks).getByText("한서아 학부모님께 변경 시간 안내")).toBeInTheDocument();
+    expect(within(cells).getByRole("button", { name: "보강 잡기 1건" })).toBeInTheDocument();
+    expect(within(cells).getByRole("button", { name: "학부모 연락 2건" })).toBeInTheDocument();
 
     const heading = screen.getByRole("heading", { level: 2, name: "오늘 할 일" });
     const shortcuts = screen.getByRole("region", { name: "바로가기" });

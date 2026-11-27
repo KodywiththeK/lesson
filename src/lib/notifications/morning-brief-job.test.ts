@@ -16,6 +16,7 @@ const emptyTasks: DailyTaskSource = {
       dueOn: "2026-11-10",
       status: "unpaid",
       amount: 150000,
+      contact: null,
     },
   ],
   lessonTickets: [],

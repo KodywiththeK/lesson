@@ -28,6 +28,24 @@ for (const key of ["localStorage", "sessionStorage"] as const) {
   }
 }
 
+// jsdom에는 matchMedia가 없다. 반응형 부품(`useIsMobile`)이 데스크톱 폭으로 그려지도록 기본값을 둔다.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false;
 }

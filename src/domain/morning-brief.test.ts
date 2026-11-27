@@ -63,6 +63,7 @@ const taskSource: DailyTaskSource = {
       dueOn: "2026-11-10",
       status: "unpaid",
       amount: 150000,
+      contact: null,
     },
   ],
   lessonTickets: [],
@@ -78,9 +79,10 @@ const taskSource: DailyTaskSource = {
       nextStartsAt: null,
       previousTeacherName: null,
       nextTeacherName: null,
+      contact: null,
     },
   ],
-  consultations: [{ consultationId: "con-1", name: "새봄", createdAt: "2026-11-18T03:00:00.000Z" }],
+  consultations: [{ consultationId: "con-1", name: "새봄", createdAt: "2026-11-18T03:00:00.000Z", phone: null, instrumentNames: [] }],
   pendingBookOrders: [],
 };
 

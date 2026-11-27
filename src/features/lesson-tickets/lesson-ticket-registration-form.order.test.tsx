@@ -39,4 +39,18 @@ describe("회차권 등록 선택 순서", () => {
     await user.click(screen.getByRole("button", { name: "저장" }));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ isService: true, paidAmount: 0 }));
   });
+
+  it("재등록은 학생·악기를 미리 골라 둔 채로 시작한다", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<LessonTicketRegistrationForm academyId="a1" today="2026-10-20"
+      isLoading={false} error={null} isSaving={false} canRecordPayment onSubmit={onSubmit}
+      initialStudentId="s1" initialInstrumentId="piano"
+      options={[{ studentId: "s1", studentName: "김민지", instruments: [{ instrumentId: "piano", instrumentName: "피아노" }] }]} />);
+    expect(screen.getByLabelText("악기")).toHaveValue("piano");
+    expect(screen.getByLabelText("원생")).toHaveValue("s1");
+    await user.type(screen.getByRole("textbox", { name: "결제 금액" }), "100000");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ studentId: "s1", instrumentId: "piano" }));
+  });
 });

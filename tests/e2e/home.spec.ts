@@ -87,6 +87,36 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
   );
 });
 
+test("오늘 할 일은 업무별 칸에 건수만 보이고, 칸을 누르면 모달에서 처리한다", async ({ page }) => {
+  await page.goto("/");
+
+  const tasks = page.getByRole("region", { name: "오늘 할 일" });
+  await expect(tasks.getByRole("button", { name: "교재 입고 1건" })).toBeVisible();
+  await expect(tasks.getByRole("button", { name: "답변 대기 0건" })).toBeDisabled();
+
+  await tasks.getByRole("button", { name: "교재 입고 1건" }).click();
+  const groupDialog = page.getByRole("dialog", { name: "교재 입고" });
+  await expect(groupDialog.getByText("세광음악 교재 입고 확인")).toBeVisible();
+  await groupDialog.getByRole("button", { name: "입고 확인" }).click();
+
+  const receiveDialog = page.getByRole("dialog", { name: "전량 입고 확인" });
+  await receiveDialog.getByRole("button", { name: "확인" }).click();
+  await expect(groupDialog.getByText("입고를 기다리는 교재가 없습니다.")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(tasks.getByRole("button", { name: "교재 입고 0건" })).toBeDisabled();
+});
+
+test("휴대폰 폭에서는 오늘 할 일 모달을 아래 시트로 열고 연락 버튼을 둔다", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+
+  await page.getByRole("region", { name: "오늘 할 일" }).getByRole("button", { name: /학부모 연락/ }).click();
+  const sheet = page.getByRole("dialog", { name: "학부모 연락" });
+  await expect(sheet).toHaveAttribute("data-vaul-drawer-direction", "bottom");
+  await expect(sheet.getByRole("link", { name: /변경 시간 안내 전화/ })).toHaveAttribute("href", "tel:01077778888");
+});
+
 test("데스크톱 하위 메뉴는 클릭할 때 펼치고 현재 페이지 메뉴는 기본으로 열린다", async ({ page }) => {
   await page.goto("/");
   const navigation = mainNavigation(page);
