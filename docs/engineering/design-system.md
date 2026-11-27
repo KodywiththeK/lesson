@@ -45,6 +45,7 @@ shadcn 부품을 얇게 조합한 화면 공용 부품은 `src/components/shared
 | `SectionHeader` | 구획 제목(`h2`) + 설명 + 작업 버튼 | 카드 안쪽 소제목은 `as="h3"` |
 | `StatFigure`, `StatTile` | 작은 라벨 아래 큰 숫자 | 금액 색은 `FinanceAmount`를 값으로 넘겨 의미 색을 입힌다 |
 | `EmptyState` | 빈 목록·불러오는 중 같은 목록 안 안내 문구 | shadcn `Empty` 기반. `role` 등 접근성 속성은 그대로 전달 |
+| `ResponsiveDialog` | 목록을 훑으며 처리하는 모달 | 태블릿·PC는 `Dialog`, 휴대폰(768px 미만)은 아래에서 올라오는 `Drawer`. 제목은 고정하고 본문만 스크롤한다. 입력 흐름은 기존처럼 `Dialog`를 쓰고, 처리 창은 이 모달 위에 한 겹 더 연다 |
 
 - 표의 헤더·셀 기본 모양은 `src/components/ui/table.tsx`가 정한다. 화면에서 `px-4 py-3`, `bg-muted text-muted-foreground`를 다시 쓰지 않는다.
 - 배지 상태 매핑(출석·수납·회차권)은 도메인 판단이 섞여 있어 공용으로 합치지 않고, 화면에서 `Badge`의 `variant` 이름만 고른다.

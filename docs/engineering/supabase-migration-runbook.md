@@ -35,6 +35,12 @@
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
+## 2026-11-27 오늘 할 일 모달 처리·연락처 migration — 2026-11-27 운영 적용 완료
+
+- 파일: `20261127000000_daily_task_actions.sql`. `private.daily_task_source`에 처리용 id·시간·정규 요일과 학생 대표 연락처·상담 전화번호를 더한다. 연락처는 원장·데스크 범위만 채운다.
+- 로컬 검증: Docker 로컬 Supabase에서 `db reset --local`로 전체 적용 후, 롤백 트랜잭션에서 범위별로 실행해 필드를 확인했다.
+- 적용 결과(2026-11-27): CLI `db push --remote=<ref> --dry-run`으로 대상 1건만 확인 후 적용. 원격 이력 81건이 로컬과 일치하고 마지막 버전은 `20261127000000`이다. 앱 배포 전에 적용했다(새 필드가 없으면 보강·재등록 처리 창이 열리지 않기 때문).
+
 ## 2026-11-19 오늘 할 일·알림 migration — 2026-11-26 운영 적용 완료
 
 - 대상: `20261119000000_daily_tasks.sql`, `20261119000100_notification_settings.sql`, `20261119000200_notification_outbox.sql`(pg_net 확장 포함), `20261119000300_morning_brief.sql`. 이 기기에 Docker가 없어 로컬 DB 실행 검증은 하지 못했고, 대신 각 파일을 `begin;`…`commit;`으로 감싸 중간 실패 시 파일 전체가 되돌아가게 했다.
