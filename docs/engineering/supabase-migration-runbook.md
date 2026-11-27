@@ -35,6 +35,30 @@
 - `supabase/config.toml`은 CLI v3 형식이다(`[inbucket]` → `[local_smtp]`, `auth.sms.enable_signup` → `auth.sms.enabled`).
 - `seed.sql`은 원장 권한이 필요한 trigger(선생님 계정 연결 등) 때문에 데모 원장으로 `request.jwt.claims`를 지정해 실행하고 끝에서 해제한다. 개인레슨 일정은 회차권(입금완료)과 등록 이력보다 뒤에 넣는다.
 
+## 2026-11-28 알림 보완 migration — 2026-11-28 운영 적용 완료
+
+- 파일: `20261128000000_notification_improvements.sql`
+  - 방해 금지 설정 열 추가
+  - 설정·받는 사람 RPC: 반환 열 추가. drop 후 다시 만든다.
+  - 트리거: 오늘·내일 범위와 `actorId`
+  - `notification_receipts` 표와 알림함 RPC
+  - 미룬 알림 조회, 발송 호출 조건, 정리 작업
+- 적용 결과(2026-11-28)
+  - CLI `db push --remote=<ref> --dry-run`으로 대상 1건만 확인하고 적용했다.
+  - 원격 이력 82건, 마지막 버전 `20261128000000`
+  - `notification_receipts`와 방해 금지 열 3개가 있다.
+  - 레슨 변경 트리거에 내일 범위가 반영됐다.
+  - `claim_due_deferred_receipts`는 `authenticated` 실행 권한이 없다.
+  - 앱 배포 전에 적용했다.
+- 적용 순서: **DB를 먼저 적용하고 앱을 배포한다.** 설정 저장 RPC의 새 인자는 기본값이 있어서, 이전 앱이 6인자로 불러도 그대로 동작한다(로컬에서 확인).
+- 로컬 검증: `db reset --local`로 전체 적용한 뒤, 롤백 트랜잭션에서 아래를 확인했다.
+  - 알림함 RPC가 본인 것만 보이고, 표를 직접 읽으면 거부된다.
+  - 학원별 안 읽은 수와 읽음 처리
+  - 6인자 저장 후에도 방해 금지 값이 유지된다.
+  - 미룬 알림을 한 번만 가져간다.
+  - 같은 `source_key`는 한 번만 기록된다.
+  - 내일 레슨 삭제 트리거에 `actorId`가 담기고, 3일 뒤 레슨은 제외된다.
+
 ## 2026-11-27 오늘 할 일 모달 처리·연락처 migration — 2026-11-27 운영 적용 완료
 
 - 파일: `20261127000000_daily_task_actions.sql`. `private.daily_task_source`에 처리용 id·시간·정규 요일과 학생 대표 연락처·상담 전화번호를 더한다. 연락처는 원장·데스크 범위만 채운다.

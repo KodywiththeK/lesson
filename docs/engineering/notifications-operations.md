@@ -7,6 +7,11 @@
 - 즉시 푸시: DB 트리거 → `notification_outbox` → pg_cron 1분마다(대기열이 있을 때만) pg_net으로 `POST /api/notifications/dispatch` → web-push.
 - 아침 브리핑: pg_cron `0 23 * * *`(한국 08:00) → `POST /api/cron/morning-brief` → Resend 메일 + web-push 한 줄. `morning_brief_deliveries`가 사람·채널별 하루 한 번만 보내게 막는다.
 - 두 주소 모두 `Authorization: Bearer <CRON_SECRET>`이 맞아야 실행된다.
+- 받은 알림 기록(2026-11-28): 모든 푸시는 `notify`(`src/lib/notifications/notify.ts`)를 거친다.
+  - 받는 사람마다 `notification_receipts`에 한 줄을 남긴다. 같은 사건은 푸시 tag(`source_key`)로 한 번만 남는다.
+  - 방해 금지 중인 사람은 `deliver_after`에 끝나는 시각을 넣고 지금 보내지 않는다.
+  - 1분마다 도는 발송이 때가 된 미룬 알림을 사람별로 묶어 보낸다. pg_cron은 대기열이나 때가 된 미룬 알림이 있을 때만 앱을 부른다.
+  - 30일 지난 기록은 아침 브리핑 정리 작업이 지운다.
 
 ## 1. 메일 도메인(Resend)
 
@@ -58,6 +63,8 @@ select vault.update_secret((select id from vault.secrets where name = 'app_base_
 ## 5. 동작 확인
 
 - 내 알림 설정 → 이 기기에서 알림 켜기 → 테스트 알림 보내기(아이폰은 홈 화면에 추가한 앱에서).
+- 내 알림 설정 → `테스트 메일 보내기`로 로그인 메일 수신(스팸함 포함)을 확인한다. 마지막 아침 메일 발송 시각도 같은 곳에 보인다.
+- 미룬 알림이 안 오면 `select kind, deliver_after, pushed_at from notification_receipts where pushed_at is null order by deliver_after limit 20;`을 본다.
 - 상담을 하나 등록해 1분 안에 원장·데스크 기기에 푸시가 오는지 확인한다. 실패하면 `select kind, attempts, last_error from notification_outbox order by created_at desc limit 10;`과 `select * from net._http_response order by created desc limit 5;`를 본다.
 - 아침 브리핑은 수동으로 한 번 실행해 볼 수 있다(같은 날 두 번 보내지 않는다):
 
