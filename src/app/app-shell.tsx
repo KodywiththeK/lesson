@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ShieldAlert } from "lucide-react";
 
+import { AppFooter } from "@/components/layout/app-footer";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileNavigationDrawer } from "@/components/layout/mobile-navigation-drawer";
@@ -83,6 +84,7 @@ export function AppShell({
                 children
               )}
             </div>
+            <AppFooter className="mt-auto" />
           </section>
         </div>
       </main>

@@ -22,6 +22,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { siteTagline } from "@/app/seo";
 
 import { OnboardingScreen } from "./onboarding-screen";
+import { AppFooter } from "@/components/layout/app-footer";
 import { EmailSignInForm } from "./email-sign-in-form";
 
 const currentAcademyQueryKey = ["current-academy"] as const;
@@ -158,5 +159,8 @@ function AcademySelection({ academies, onSelect }: { academies: ActiveAcademy[];
 }
 
 function SessionShell({ children }: { children: ReactNode }) {
-  return <main className="grid min-h-screen place-items-center bg-background px-5"><div className="w-full max-w-md"><div className="mb-6 grid justify-items-center gap-3 text-center"><BrandLogo className="w-48 max-w-full" /><p className="text-sm text-muted-foreground">{siteTagline}</p></div>{children}</div></main>;
+  return <main className="grid min-h-screen grid-rows-[1fr_auto] bg-background px-5">
+    <div className="grid place-items-center py-8"><div className="w-full max-w-md"><div className="mb-6 grid justify-items-center gap-3 text-center"><BrandLogo className="w-48 max-w-full" /><p className="text-sm text-muted-foreground">{siteTagline}</p></div>{children}</div></div>
+    <AppFooter className="mx-auto w-full max-w-md text-center [&>*]:justify-center" />
+  </main>;
 }

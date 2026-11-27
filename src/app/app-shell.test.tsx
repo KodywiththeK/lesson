@@ -28,6 +28,8 @@ describe("AppShell", () => {
       .toBeInTheDocument();
     // "현재 학원: …" 안내는 사이드바에만 둔다.
     expect(within(header).queryByText("현재 학원: 더 클래식")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("contentinfo")).getByRole("link", { name: "개인정보처리방침" }))
+      .toHaveAttribute("href", "/privacy");
   });
 
   it("owner에게 상위 메뉴를 기본 표시하고 클릭 시 하위 메뉴를 보여준다", async () => {

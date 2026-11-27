@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,6 +63,8 @@ describe("AcademySessionGate", () => {
     expect(screen.getByRole("textbox", { name: "이메일" })).toBeInTheDocument();
     expect(screen.getByLabelText("비밀번호")).toBeInTheDocument();
     expect(screen.queryByText("Service Console")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("contentinfo")).getByRole("link", { name: "개인정보처리방침" }))
+      .toHaveAttribute("href", "/privacy");
   });
 
   it("기존 이메일 계정으로 로그인하면 활성 학원을 다시 조회한다", async () => {

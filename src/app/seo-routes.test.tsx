@@ -6,8 +6,12 @@ import robots from "./robots";
 import sitemap from "./sitemap";
 
 describe("검색 노출 경계", () => {
-  it("홈만 사이트맵에 넣는다", () => {
-    expect(sitemap()).toEqual([{ url: "https://madimadi.site/" }]);
+  it("홈과 약관·개인정보처리방침만 사이트맵에 넣는다", () => {
+    expect(sitemap()).toEqual([
+      { url: "https://madimadi.site/" },
+      { url: "https://madimadi.site/terms" },
+      { url: "https://madimadi.site/privacy" },
+    ]);
     expect(robots()).toMatchObject({
       sitemap: "https://madimadi.site/sitemap.xml",
     });

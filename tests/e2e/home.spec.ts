@@ -87,6 +87,32 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
   );
 });
 
+test("푸터에서 약관·개인정보처리방침을 로그인 없이 열고 문의처를 확인한다", async ({ page, request }) => {
+  await page.goto("/");
+  const footer = page.getByRole("contentinfo");
+  await expect(footer.getByRole("link", { name: "kody.withe.k@gmail.com" })).toHaveAttribute(
+    "href",
+    "mailto:kody.withe.k@gmail.com",
+  );
+
+  await footer.getByRole("link", { name: "개인정보처리방침" }).click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole("heading", { level: 1, name: "개인정보처리방침" })).toBeVisible();
+  await expect(page.getByText("성명: 김동성")).toBeVisible();
+
+  const terms = await request.get("/terms");
+  expect(terms.ok()).toBe(true);
+  expect(terms.headers()["x-robots-tag"]).toBeUndefined();
+  expect(await (await request.get("/sitemap.xml")).text()).toContain("https://madimadi.site/privacy");
+});
+
+test("320px에서도 개인정보처리방침이 가로로 넘치지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { level: 1, name: "개인정보처리방침" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+});
+
 test("오늘 할 일은 업무별 칸에 건수만 보이고, 칸을 누르면 모달에서 처리한다", async ({ page }) => {
   await page.goto("/");
 
