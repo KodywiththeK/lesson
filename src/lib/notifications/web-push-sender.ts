@@ -2,8 +2,6 @@ import type { PushMessage } from "@/domain/notification-dispatch";
 import webPush from "web-push";
 
 /** 기기 알림 한 건. 같은 tag의 알림은 기기에서 하나로 겹친다. */
-export type PushPayload = PushMessage;
-
 export type StoredPushSubscription = {
   id: string;
   endpoint: string;
@@ -39,7 +37,7 @@ export function createWebPushSender(env: ServerEnv = process.env, module: WebPus
   module.setVapidDetails(subject, publicKey, privateKey);
 
   return {
-    async send(subscriptions: StoredPushSubscription[], payload: PushPayload): Promise<PushSendResult[]> {
+    async send(subscriptions: StoredPushSubscription[], payload: PushMessage): Promise<PushSendResult[]> {
       const body = JSON.stringify(payload);
 
       return Promise.all(

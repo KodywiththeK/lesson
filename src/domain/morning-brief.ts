@@ -102,6 +102,8 @@ export function buildMorningBriefPush(input: MorningBriefInput) {
     body: `${lessonLabel} ${lessonCount}건 · 할 일 ${open.length}건`,
     url: "/",
     tag: `morning-brief:${input.today}`,
+    // 설치한 앱 아이콘 배지를 오늘 할 일 수로 맞춘다(서비스 워커가 처리).
+    badgeCount: open.length,
   };
 }
 

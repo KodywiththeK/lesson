@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import { Bell, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import { academyRoleLabels } from "@/domain/auth-onboarding";
 import { useAcademySessionControls } from "@/features/auth/academy-session-gate";
 
 import { navigationLinkClassName } from "./navigation-link-styles";
+import { NotificationBell } from "./notification-bell";
 import type { VisibleNavigationItem } from "./navigation-types";
 
 const roleLabels: Record<SessionRole, string> = {
@@ -93,11 +94,7 @@ function HeaderUser({
         {description}
       </p>
       {role === "anonymous" ? null : (
-        <Button asChild variant="outline" size="icon-sm">
-          <Link href="/me/notifications" aria-label="내 알림 설정" title="내 알림 설정">
-            <Bell aria-hidden="true" />
-          </Link>
-        </Button>
+        <NotificationBell hasUnread={(session?.unreadNotificationCount ?? 0) > 0} />
       )}
       {session ? <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="sm" aria-label="계정과 학원 메뉴">학원 전환</Button></DropdownMenuTrigger>

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { DailyTaskSource } from "@/domain/daily-tasks";
+import { DEFAULT_QUIET_HOURS } from "@/domain/notification-quiet-hours";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/domain/notification-settings";
 
 import { runMorningBrief, type MorningBriefJobDependencies } from "./morning-brief-job";
@@ -40,16 +41,16 @@ function dependencies(overrides: Partial<MorningBriefJobDependencies> = {}): Mor
         : { ...emptyTasks, tuitions: emptyTasks.tuitions.map((tuition) => ({ ...tuition, amount: null })) },
     ),
     listRecipients: vi.fn(async () => [
-      { userId: "owner", role: "owner" as const, teacherId: null, email: "o@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES },
-      { userId: "desk", role: "desk" as const, teacherId: null, email: "d@example.com", preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, pushMorningBrief: false } },
-      { userId: "kim", role: "teacher" as const, teacherId: "teacher-kim", email: "k@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES },
-      { userId: "noemail", role: "desk" as const, teacherId: null, email: null, preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, pushMorningBrief: false } },
+      { userId: "owner", role: "owner" as const, teacherId: null, email: "o@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES, quietHours: DEFAULT_QUIET_HOURS },
+      { userId: "desk", role: "desk" as const, teacherId: null, email: "d@example.com", preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, pushMorningBrief: false }, quietHours: DEFAULT_QUIET_HOURS },
+      { userId: "kim", role: "teacher" as const, teacherId: "teacher-kim", email: "k@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES, quietHours: DEFAULT_QUIET_HOURS },
+      { userId: "noemail", role: "desk" as const, teacherId: null, email: null, preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, pushMorningBrief: false }, quietHours: DEFAULT_QUIET_HOURS },
     ]),
     claim: vi.fn(async () => true),
     finish: vi.fn(async () => undefined),
     renderEmail: vi.fn(async (brief) => ({ html: `<p>${brief.subject}</p>`, text: brief.subject })),
     sendEmail: vi.fn(async () => ({ id: "email-id" })),
-    deliverPush: vi.fn(async () => ({ devices: 1, sent: 1, expired: 0, failed: 0 })),
+    notify: vi.fn(async () => ({ devices: 1, sent: 1, expired: 0, failed: 0 })),
     ...overrides,
   };
 }
@@ -70,10 +71,12 @@ describe("runMorningBrief", () => {
     const deskBrief = vi.mocked(deps.renderEmail).mock.calls[1]?.[0];
     expect(ownerBrief?.taskSections[0]?.items[0]?.detail).toContain("150,000원");
     expect(deskBrief?.taskSections[0]?.items[0]?.detail).not.toContain("150,000원");
-    expect(deps.deliverPush).toHaveBeenCalledWith({
+    expect(deps.notify).toHaveBeenCalledWith({
       academyId: "academy-1",
-      userIds: ["kim"],
-      payload: expect.objectContaining({ body: "오늘 내 레슨 0건 · 할 일 0건" }),
+      kind: "morning_brief",
+      sourceKey: "morning-brief:2026-11-19",
+      recipients: [expect.objectContaining({ userId: "kim", quietHours: DEFAULT_QUIET_HOURS })],
+      message: expect.objectContaining({ body: "오늘 내 레슨 0건 · 할 일 0건" }),
     });
     expect(deps.finish).toHaveBeenCalledWith("academy-1", "2026-11-19", "owner", "email", "email-id", null);
   });

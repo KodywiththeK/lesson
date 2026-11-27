@@ -5,6 +5,7 @@ import { renderMorningBriefEmail } from "@/emails/morning-brief-email";
 import { createPushSubscriptionStore, deliverPush, skipPush } from "@/lib/notifications/deliver-push";
 import { isAuthorizedCronRequest } from "@/lib/notifications/cron-auth";
 import { runMorningBrief } from "@/lib/notifications/morning-brief-job";
+import { createNotify, createReceiptStore } from "@/lib/notifications/notify";
 import { fetchNotificationRecipients } from "@/lib/notifications/recipients";
 import { createResendMailer } from "@/lib/notifications/resend-mailer";
 import { createWebPushSender } from "@/lib/notifications/web-push-sender";
@@ -78,7 +79,11 @@ export async function POST(request: Request) {
       },
       renderEmail: (brief) => renderMorningBriefEmail(brief, appBaseUrl),
       sendEmail: createResendMailer(),
-      deliverPush: sender ? (input) => deliverPush({ ...input, store, sender }) : skipPush,
+      // 발송 설정(VAPID)이 없어도 알림함에는 남긴다.
+      notify: createNotify({
+        store: createReceiptStore(client),
+        deliver: sender ? (input) => deliverPush({ ...input, store, sender }) : skipPush,
+      }),
     },
     getFinanceToday(),
   );

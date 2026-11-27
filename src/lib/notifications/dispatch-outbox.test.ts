@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_QUIET_HOURS } from "@/domain/notification-quiet-hours";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/domain/notification-settings";
 
 import { isAuthorizedCronRequest } from "./cron-auth";
@@ -20,10 +21,11 @@ function dependencies(overrides: Partial<DispatchDependencies> = {}): DispatchDe
   return {
     claim: vi.fn(async () => [consultationRow, joinRow]),
     listRecipients: vi.fn(async () => [
-      { userId: "owner", role: "owner" as const, teacherId: null, email: "o@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES },
-      { userId: "desk", role: "desk" as const, teacherId: null, email: "d@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES },
+      { userId: "owner", role: "owner" as const, teacherId: null, email: "o@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES, quietHours: DEFAULT_QUIET_HOURS },
+      { userId: "desk", role: "desk" as const, teacherId: null, email: "d@example.com", preferences: DEFAULT_NOTIFICATION_PREFERENCES, quietHours: DEFAULT_QUIET_HOURS },
     ]),
-    deliver: vi.fn(async () => ({ devices: 1, sent: 1, expired: 0, failed: 0 })),
+    notify: vi.fn(async () => ({ devices: 1, sent: 1, expired: 0, failed: 0 })),
+    today: () => "2026-11-19",
     complete: vi.fn(async () => undefined),
     ...overrides,
   };
@@ -36,15 +38,22 @@ describe("dispatchNotificationOutbox", () => {
     await expect(dispatchNotificationOutbox(deps)).resolves.toEqual({ processed: 2, failed: 0 });
 
     expect(deps.listRecipients).toHaveBeenCalledTimes(1);
-    expect(deps.deliver).toHaveBeenNthCalledWith(1, {
+    expect(deps.notify).toHaveBeenNthCalledWith(1, {
       academyId: "academy-1",
-      userIds: ["owner", "desk"],
-      payload: expect.objectContaining({ title: "신규 상담 접수" }),
+      kind: "consultation",
+      sourceKey: "outbox:outbox-1",
+      recipients: [
+        expect.objectContaining({ userId: "owner", quietHours: DEFAULT_QUIET_HOURS }),
+        expect.objectContaining({ userId: "desk", quietHours: DEFAULT_QUIET_HOURS }),
+      ],
+      message: expect.objectContaining({ title: "신규 상담 접수" }),
     });
-    expect(deps.deliver).toHaveBeenNthCalledWith(2, {
+    expect(deps.notify).toHaveBeenNthCalledWith(2, {
       academyId: "academy-1",
-      userIds: ["owner"],
-      payload: expect.objectContaining({ title: "직원 가입 요청" }),
+      kind: "join_request",
+      sourceKey: "outbox:outbox-2",
+      recipients: [expect.objectContaining({ userId: "owner", quietHours: DEFAULT_QUIET_HOURS })],
+      message: expect.objectContaining({ title: "직원 가입 요청" }),
     });
     expect(deps.complete).toHaveBeenCalledWith("outbox-1", null);
     expect(deps.complete).toHaveBeenCalledWith("outbox-2", null);
@@ -52,7 +61,7 @@ describe("dispatchNotificationOutbox", () => {
 
   it("보내다 실패한 사건은 오류를 남겨 다음 호출에서 다시 시도하고, 나머지는 계속 보낸다", async () => {
     const deps = dependencies({
-      deliver: vi
+      notify: vi
         .fn()
         .mockRejectedValueOnce(new Error("push service down"))
         .mockResolvedValueOnce({ devices: 1, sent: 1, expired: 0, failed: 0 }),

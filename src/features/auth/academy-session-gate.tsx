@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
+import { AppFooter } from "@/components/layout/app-footer";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { Button } from "@/components/ui/button";
 import { ListStatusAlert } from "@/components/management/list-controls";
@@ -17,12 +18,13 @@ import {
   type CurrentAcademyContext,
   type CurrentAcademySupabaseClient,
 } from "@/lib/api/current-academy";
+import { countMyUnreadNotifications, type NotificationInboxSupabaseClient } from "@/lib/api/notification-inbox";
+import { queryKeys } from "@/lib/api/query-keys";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { siteTagline } from "@/app/seo";
 
 import { OnboardingScreen } from "./onboarding-screen";
-import { AppFooter } from "@/components/layout/app-footer";
 import { EmailSignInForm } from "./email-sign-in-form";
 
 const currentAcademyQueryKey = ["current-academy"] as const;
@@ -37,6 +39,8 @@ const testAcademyContext: CurrentAcademyContext = {
 
 type SessionControls = {
   academies: ActiveAcademy[];
+  /** 헤더 종 점 표시용 안 읽은 알림 수. 읽지 못하면 0. */
+  unreadNotificationCount: number;
   selectAcademy: (academyId: string) => void;
   signOut: () => Promise<void>;
 };
@@ -75,6 +79,17 @@ function AcademySessionGateInner({ children }: { children: (context: CurrentAcad
     },
     enabled: Boolean(clientState.client),
     retry: false,
+  });
+  // 헤더 종 점 표시용. 실제 로그인 세션이 있는 이 경로에서만 읽는다(데모·테스트는 점 없음).
+  const unreadAcademyId = currentAcademyQuery.data?.academyId ?? "";
+  const unreadQuery = useQuery({
+    queryKey: queryKeys.notifications.unreadCount(unreadAcademyId),
+    queryFn: () =>
+      countMyUnreadNotifications(clientState.client as unknown as NotificationInboxSupabaseClient, {
+        academyId: unreadAcademyId,
+      }),
+    enabled: Boolean(clientState.client && unreadAcademyId),
+    refetchInterval: 60_000,
   });
 
   function selectAcademy(academyId: string) {
@@ -122,7 +137,14 @@ function AcademySessionGateInner({ children }: { children: (context: CurrentAcad
   if (!currentAcademyQuery.data) return null;
 
   return (
-    <AcademySessionContext.Provider value={{ academies: currentAcademyQuery.data.availableAcademies, selectAcademy, signOut }}>
+    <AcademySessionContext.Provider
+      value={{
+        academies: currentAcademyQuery.data.availableAcademies,
+        unreadNotificationCount: unreadQuery.data ?? 0,
+        selectAcademy,
+        signOut,
+      }}
+    >
       {children(currentAcademyQuery.data)}
     </AcademySessionContext.Provider>
   );

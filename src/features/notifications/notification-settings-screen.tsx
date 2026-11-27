@@ -8,12 +8,14 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { SectionCard, SectionHeader } from "@/components/shared/section-card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { TimeField } from "@/components/operations/date-time-fields";
+import { formatSeoulDateTime } from "@/domain/finance-date";
+import type { QuietHours } from "@/domain/notification-quiet-hours";
 import {
   detectInstallGuide,
   detectPushSupport,
   getNotificationSettingItems,
   type InstallGuide,
-  type NotificationPreferences,
   type PushEnvironment,
   type PushSupport,
 } from "@/domain/notification-settings";
@@ -22,12 +24,15 @@ import type { MyNotificationSettings, PushSubscriptionKeys } from "@/lib/api/not
 import { queryKeys } from "@/lib/api/query-keys";
 import { toUserMessage } from "@/lib/errors/user-message";
 
+export type SavedNotificationSettings = Pick<MyNotificationSettings, "preferences" | "quietHours">;
+
 export type NotificationSettingsDataAccess = {
   loadSettings: () => Promise<MyNotificationSettings>;
-  savePreferences: (preferences: NotificationPreferences) => Promise<void>;
+  saveSettings: (settings: SavedNotificationSettings) => Promise<void>;
   saveSubscription: (subscription: PushSubscriptionKeys) => Promise<void>;
   deleteSubscription: (endpoint: string) => Promise<void>;
   sendTest: () => Promise<void>;
+  sendTestEmail: () => Promise<void>;
 };
 
 /** 이 브라우저(기기)의 푸시 기능. 화면 테스트에서는 가짜로 바꾼다. */
@@ -62,10 +67,13 @@ export function NotificationSettingsScreen({ academyId, role, dataAccess, device
     },
   });
 
+  const mySettings = useMySettings(academyId, dataAccess);
+
   return (
     <div className="grid gap-4">
       <DevicePushSection dataAccess={dataAccess} device={device} state={deviceQuery.data} />
-      <PreferenceSection academyId={academyId} role={role} dataAccess={dataAccess} />
+      <PreferenceSection role={role} dataAccess={dataAccess} mySettings={mySettings} />
+      {mySettings.settings ? <QuietHoursSection quietHours={mySettings.settings.quietHours} save={mySettings.save} /> : null}
       <InstallSection environment={deviceQuery.data?.environment} />
     </div>
   );
@@ -146,36 +154,54 @@ function DevicePushSection({
   );
 }
 
-function PreferenceSection({
-  academyId,
-  role,
-  dataAccess,
-}: {
-  academyId: string;
-  role: AcademyRole;
-  dataAccess: NotificationSettingsDataAccess;
-}) {
+/** 내 설정 읽기와 즉시 저장(누르면 바로 반영, 실패하면 되돌림). 받을 알림·방해 금지 구획이 같이 쓴다. */
+function useMySettings(academyId: string, dataAccess: NotificationSettingsDataAccess) {
   const queryClient = useQueryClient();
   const settingsQueryKey = queryKeys.notifications.mySettings(academyId);
   const settingsQuery = useQuery({ queryKey: settingsQueryKey, queryFn: dataAccess.loadSettings });
   const saveMutation = useMutation({
-    mutationFn: (preferences: NotificationPreferences) => dataAccess.savePreferences(preferences),
-    onMutate: (preferences) => {
+    mutationFn: (next: SavedNotificationSettings) => dataAccess.saveSettings(next),
+    onMutate: (next) => {
       const previous = queryClient.getQueryData<MyNotificationSettings>(settingsQueryKey);
       if (previous) {
-        queryClient.setQueryData(settingsQueryKey, { ...previous, preferences });
+        queryClient.setQueryData(settingsQueryKey, { ...previous, ...next });
       }
       return { previous };
     },
-    onError: (error, _preferences, context) => {
+    onError: (error, _next, context) => {
       if (context?.previous) {
         queryClient.setQueryData(settingsQueryKey, context.previous);
       }
       toast.error(toUserMessage(error));
     },
   });
-  const items = getNotificationSettingItems(role);
   const settings = settingsQuery.data;
+  const save = (change: Partial<SavedNotificationSettings>) => {
+    if (settings) {
+      saveMutation.mutate({ preferences: settings.preferences, quietHours: settings.quietHours, ...change });
+    }
+  };
+
+  return { settingsQuery, settings, save };
+}
+
+type MySettings = ReturnType<typeof useMySettings>;
+
+function PreferenceSection({
+  role,
+  dataAccess,
+  mySettings: { settingsQuery, settings, save },
+}: {
+  role: AcademyRole;
+  dataAccess: NotificationSettingsDataAccess;
+  mySettings: MySettings;
+}) {
+  const testEmailMutation = useMutation({
+    mutationFn: () => dataAccess.sendTestEmail(),
+    onSuccess: () => toast.success("테스트 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요."),
+    onError: (error) => toast.error(toUserMessage(error)),
+  });
+  const items = getNotificationSettingItems(role);
 
   return (
     <SectionCard role="region" aria-labelledby="preference-heading" className="gap-3">
@@ -195,20 +221,87 @@ function PreferenceSection({
                 </p>
                 <p className="mt-0.5 text-sm text-muted-foreground">{item.description}</p>
                 {item.channel === "email" ? (
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    받는 주소: {settings.email ?? "로그인 계정에 이메일이 없습니다"}
-                  </p>
+                  <>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      받는 주소: {settings.email ?? "로그인 계정에 이메일이 없습니다"}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      마지막 아침 메일:{" "}
+                      {settings.lastMorningEmailAt ? formatSeoulDateTime(settings.lastMorningEmailAt) : "아직 없음"}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      disabled={!settings.email || testEmailMutation.isPending}
+                      onClick={() => testEmailMutation.mutate()}
+                    >
+                      테스트 메일 보내기
+                    </Button>
+                  </>
                 ) : null}
               </div>
               <Switch
                 aria-label={item.label}
                 checked={settings.preferences[item.key]}
-                onCheckedChange={(checked) => saveMutation.mutate({ ...settings.preferences, [item.key]: checked })}
+                onCheckedChange={(checked) => save({ preferences: { ...settings.preferences, [item.key]: checked } })}
               />
             </li>
           ))}
         </ul>
       )}
+    </SectionCard>
+  );
+}
+
+function QuietHoursSection({ quietHours, save }: { quietHours: QuietHours; save: MySettings["save"] }) {
+  const [sameTimeError, setSameTimeError] = useState(false);
+  const changeTime = (change: Partial<Pick<QuietHours, "start" | "end">>) => {
+    const next = { ...quietHours, ...change };
+    setSameTimeError(next.start === next.end);
+    if (next.start !== next.end) {
+      save({ quietHours: next });
+    }
+  };
+
+  return (
+    <SectionCard role="region" aria-labelledby="quiet-hours-heading" className="gap-3">
+      <SectionHeader
+        headingId="quiet-hours-heading"
+        title="방해 금지 시간"
+        description="이 시간에 생긴 푸시는 바로 울리지 않고, 끝나는 시각에 한 번에 묶어 알려 드립니다. 알림함에는 바로 남습니다."
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Switch
+          aria-label="방해 금지 시간"
+          checked={quietHours.enabled}
+          onCheckedChange={(checked) => save({ quietHours: { ...quietHours, enabled: checked } })}
+        />
+        {/* 좁은 화면에서는 '시각 + 부터/까지'가 한 묶음으로 줄을 바꾼다. */}
+        <span className="flex items-center gap-2">
+          <TimeField
+            aria-label="방해 금지 시작"
+            value={quietHours.start}
+            disabled={!quietHours.enabled}
+            onValueChange={(start) => changeTime({ start })}
+          />
+          <span className="text-sm text-muted-foreground">부터</span>
+        </span>
+        <span className="flex items-center gap-2">
+          <TimeField
+            aria-label="방해 금지 끝"
+            value={quietHours.end}
+            disabled={!quietHours.enabled}
+            onValueChange={(end) => changeTime({ end })}
+          />
+          <span className="text-sm text-muted-foreground">까지</span>
+        </span>
+      </div>
+      {sameTimeError ? (
+        <p role="alert" className="text-sm text-destructive">
+          시작과 끝 시각을 다르게 정해 주세요.
+        </p>
+      ) : null}
     </SectionCard>
   );
 }

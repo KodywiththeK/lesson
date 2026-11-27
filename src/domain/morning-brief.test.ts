@@ -184,9 +184,21 @@ describe("buildMorningBriefPush", () => {
   it("원장·데스크는 오늘 레슨과 할 일 수, 선생님은 오늘 내 레슨 수를 받는다", () => {
     expect(
       buildMorningBriefPush({ briefSource, taskSource, taskStates: [], role: "owner", today }),
-    ).toEqual({ title: "오늘 브리핑", body: "오늘 레슨 4건 · 할 일 3건", url: "/", tag: "morning-brief:2026-11-19" });
+    ).toEqual({
+      title: "오늘 브리핑",
+      body: "오늘 레슨 4건 · 할 일 3건",
+      url: "/",
+      tag: "morning-brief:2026-11-19",
+      badgeCount: 3,
+    });
     expect(
       buildMorningBriefPush({ briefSource, taskSource, taskStates: [], role: "teacher", today, teacherId: "teacher-kim" }),
-    ).toEqual({ title: "오늘 브리핑", body: "오늘 내 레슨 2건 · 할 일 1건", url: "/", tag: "morning-brief:2026-11-19" });
+    ).toEqual({
+      title: "오늘 브리핑",
+      body: "오늘 내 레슨 2건 · 할 일 1건",
+      url: "/",
+      tag: "morning-brief:2026-11-19",
+      badgeCount: 1,
+    });
   });
 });

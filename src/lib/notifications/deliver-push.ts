@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { PushPayload, StoredPushSubscription, WebPushSender } from "./web-push-sender";
+import type { PushMessage } from "@/domain/notification-dispatch";
+
+import type { StoredPushSubscription, WebPushSender } from "./web-push-sender";
 
 export type PushSubscriptionStore = {
   listForUsers: (academyId: string, userIds: string[]) => Promise<Array<StoredPushSubscription & { userId: string }>>;
@@ -15,13 +17,13 @@ export type PushDeliverySummary = {
   failed: number;
 };
 
-const EMPTY_SUMMARY: PushDeliverySummary = { devices: 0, sent: 0, expired: 0, failed: 0 };
+export const EMPTY_SUMMARY: PushDeliverySummary = { devices: 0, sent: 0, expired: 0, failed: 0 };
 
 /** 받는 사람들에게 푸시를 보내는 함수. route가 저장소·발송기를 묶어 넘긴다. */
 export type DeliverPush = (input: {
   academyId: string;
   userIds: string[];
-  payload: PushPayload;
+  payload: PushMessage;
 }) => Promise<PushDeliverySummary>;
 
 /** 발송 설정(VAPID)이 없을 때 쓰는 아무것도 보내지 않는 발송. */
@@ -33,7 +35,7 @@ export async function deliverPush(input: {
   sender: WebPushSender;
   academyId: string;
   userIds: string[];
-  payload: PushPayload;
+  payload: PushMessage;
 }): Promise<PushDeliverySummary> {
   if (input.userIds.length === 0) {
     return EMPTY_SUMMARY;

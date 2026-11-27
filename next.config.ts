@@ -6,6 +6,7 @@ const privateRouteSources = [
   "/finance/:path*",
   "/lessons/:path*",
   "/management/:path*",
+  "/me/:path*",
   "/join",
   "/onboarding",
   "/passes",

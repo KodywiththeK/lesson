@@ -1,3 +1,4 @@
+import { isActiveAcademyMember } from "@/lib/notifications/academy-member-request";
 import { createPushSubscriptionStore, deliverPush } from "@/lib/notifications/deliver-push";
 import { handleTestPush } from "@/lib/notifications/test-push-handler";
 import { createWebPushSender } from "@/lib/notifications/web-push-sender";
@@ -14,17 +15,7 @@ export async function POST(request: Request) {
 
   return handleTestPush(request, {
     getUserId: async () => userId,
-    isActiveMember: async (academyId) => {
-      const { data: membership } = await session
-        .from("academy_members")
-        .select("academy_id")
-        .eq("academy_id", academyId)
-        .eq("user_id", userId ?? "")
-        .eq("status", "active")
-        .maybeSingle();
-
-      return membership !== null;
-    },
+    isActiveMember: (academyId) => isActiveAcademyMember(session, userId ?? "", academyId),
     deliver:
       serviceClient && sender
         ? (input) => deliverPush({ ...input, store: createPushSubscriptionStore(serviceClient), sender })

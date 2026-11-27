@@ -38,8 +38,8 @@ export const NOTIFICATION_SETTING_ITEMS: NotificationSettingItem[] = [
   {
     key: "pushLessonChange",
     channel: "push",
-    label: "오늘 레슨 변경",
-    description: "오늘 레슨이 옮겨지거나 취소되거나 선생님이 바뀌면 바로 알려 드립니다.",
+    label: "레슨 변경(오늘·내일)",
+    description: "오늘·내일 레슨이 옮겨지거나 취소되거나 선생님이 바뀌면 바로 알려 드립니다. 내가 바꾼 것은 알리지 않습니다.",
     roles: ["owner", "desk", "teacher"],
   },
   {

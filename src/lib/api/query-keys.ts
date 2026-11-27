@@ -253,6 +253,10 @@ export const queryKeys = {
     mySettings: (academyId: string) => [...queryKeys.academy(academyId), "notifications", "my-settings"] as const,
     /** 이 브라우저(기기)의 푸시 지원·구독 상태. 서버 데이터가 아니라 기기 상태다. */
     device: () => ["notification-device"] as const,
+    /** 알림함(최근 30일). */
+    inbox: (academyId: string) => [...queryKeys.academy(academyId), "notifications", "inbox"] as const,
+    /** 헤더 종 점 표시용 안 읽은 알림 수(지금 학원). */
+    unreadCount: (academyId: string) => [...queryKeys.academy(academyId), "notifications", "unread-count"] as const,
   },
   dailyTasks: {
     all: (academyId: string) => [...queryKeys.academy(academyId), "daily-tasks"] as const,

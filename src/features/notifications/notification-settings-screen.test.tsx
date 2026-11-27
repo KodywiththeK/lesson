@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_QUIET_HOURS } from "@/domain/notification-quiet-hours";
 import { DEFAULT_NOTIFICATION_PREFERENCES, type PushEnvironment } from "@/domain/notification-settings";
 import type { AcademyRole } from "@/domain/permissions";
 
@@ -33,15 +34,23 @@ function renderScreen({
   environment?: PushEnvironment;
   endpoint?: string | null;
 } = {}) {
-  let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  let settings = {
+    preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES },
+    quietHours: { ...DEFAULT_QUIET_HOURS },
+  };
   const dataAccess: NotificationSettingsDataAccess = {
-    loadSettings: vi.fn(async () => ({ email: "owner@example.com", preferences })),
-    savePreferences: vi.fn(async (next) => {
-      preferences = next;
+    loadSettings: vi.fn(async () => ({
+      email: "owner@example.com",
+      lastMorningEmailAt: "2026-11-26T23:00:05.000Z",
+      ...settings,
+    })),
+    saveSettings: vi.fn(async (next) => {
+      settings = next;
     }),
     saveSubscription: vi.fn(async () => undefined),
     deleteSubscription: vi.fn(async () => undefined),
     sendTest: vi.fn(async () => undefined),
+    sendTestEmail: vi.fn(async () => undefined),
   };
   let currentEndpoint = endpoint;
   const device: NotificationDevice = {
@@ -75,7 +84,7 @@ describe("NotificationSettingsScreen", () => {
     const items = await screen.findByRole("region", { name: "받을 알림" });
     expect((await within(items).findAllByRole("switch")).map((item) => item.getAttribute("aria-label"))).toEqual([
       "아침 브리핑 메일",
-      "오늘 레슨 변경",
+      "레슨 변경(오늘·내일)",
       "신규 상담 접수",
       "직원 가입 요청",
       "아침 브리핑 한 줄",
@@ -88,7 +97,7 @@ describe("NotificationSettingsScreen", () => {
 
     const items = await screen.findByRole("region", { name: "받을 알림" });
     expect((await within(items).findAllByRole("switch")).map((item) => item.getAttribute("aria-label"))).toEqual([
-      "오늘 레슨 변경",
+      "레슨 변경(오늘·내일)",
       "아침 브리핑 한 줄",
     ]);
   });
@@ -100,11 +109,42 @@ describe("NotificationSettingsScreen", () => {
     await user.click(await screen.findByRole("switch", { name: "신규 상담 접수" }));
 
     await waitFor(() =>
-      expect(dataAccess.savePreferences).toHaveBeenCalledWith({
-        ...DEFAULT_NOTIFICATION_PREFERENCES,
-        pushConsultation: false,
+      expect(dataAccess.saveSettings).toHaveBeenCalledWith({
+        preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES, pushConsultation: false },
+        quietHours: DEFAULT_QUIET_HOURS,
       }),
     );
+  });
+
+  it("방해 금지는 기본 켜짐 22:00~08:00이고, 끄거나 시각을 바꾸면 바로 저장한다", async () => {
+    const user = userEvent.setup();
+    const { dataAccess } = renderScreen();
+
+    const quiet = await screen.findByRole("region", { name: "방해 금지 시간" });
+    expect(await within(quiet).findByRole("switch", { name: "방해 금지 시간" })).toBeChecked();
+    expect(within(quiet).getByRole("textbox", { name: "방해 금지 시작" })).toHaveValue("22:00");
+    expect(within(quiet).getByRole("textbox", { name: "방해 금지 끝" })).toHaveValue("08:00");
+
+    await user.click(within(quiet).getByRole("switch", { name: "방해 금지 시간" }));
+    await waitFor(() =>
+      expect(dataAccess.saveSettings).toHaveBeenLastCalledWith({
+        preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+        quietHours: { ...DEFAULT_QUIET_HOURS, enabled: false },
+      }),
+    );
+    expect(within(quiet).getByRole("textbox", { name: "방해 금지 시작" })).toBeDisabled();
+  });
+
+  it("아침 메일 항목에 마지막 발송 시각을 보여 주고 테스트 메일을 보낼 수 있다", async () => {
+    const user = userEvent.setup();
+    const { dataAccess } = renderScreen();
+
+    const items = await screen.findByRole("region", { name: "받을 알림" });
+    expect(await within(items).findByText("마지막 아침 메일: 11월 27일 08:00")).toBeInTheDocument();
+    await user.click(within(items).getByRole("button", { name: "테스트 메일 보내기" }));
+
+    await waitFor(() => expect(dataAccess.sendTestEmail).toHaveBeenCalled());
+    expect(toastMock.success).toHaveBeenCalledWith("테스트 메일을 보냈습니다. 메일함(스팸함 포함)을 확인해 주세요.");
   });
 
   it("이 기기에서 알림을 켜면 구독을 저장하고, 테스트 알림을 보낼 수 있다", async () => {

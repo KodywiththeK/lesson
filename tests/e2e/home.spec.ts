@@ -87,6 +87,22 @@ test("첫 화면에서 운영 대시보드와 주요 메뉴를 확인할 수 있
   );
 });
 
+test("헤더 종에서 알림함을 열고, 알림 설정에서 방해 금지 시간을 바꾼다", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /^알림함/ }).first().click();
+  await expect(page).toHaveURL(/\/me\/inbox$/);
+  const inbox = page.getByRole("list", { name: "받은 알림" });
+  await expect(inbox.getByText("내일 레슨 변경")).toBeVisible();
+
+  await page.getByRole("link", { name: "알림 설정" }).click();
+  const quiet = page.getByRole("region", { name: "방해 금지 시간" });
+  await expect(quiet.getByRole("switch", { name: "방해 금지 시간" })).toBeChecked();
+  await expect(quiet.getByRole("textbox", { name: "방해 금지 시작" })).toHaveValue("22:00");
+  await quiet.getByRole("switch", { name: "방해 금지 시간" }).click();
+  await expect(quiet.getByRole("textbox", { name: "방해 금지 시작" })).toBeDisabled();
+  expect((await page.request.get("/me/inbox")).headers()["x-robots-tag"]).toBe("noindex, nofollow");
+});
+
 test("푸터에서 약관·개인정보처리방침을 로그인 없이 열고 문의처를 확인한다", async ({ page, request }) => {
   await page.goto("/");
   const footer = page.getByRole("contentinfo");

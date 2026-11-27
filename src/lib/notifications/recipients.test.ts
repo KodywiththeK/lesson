@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fetchNotificationRecipients } from "./recipients";
 
 describe("fetchNotificationRecipients", () => {
-  it("구성원 행을 역할·선생님·이메일·알림 설정으로 바꾼다", async () => {
+  it("구성원 행을 역할·선생님·이메일·알림 설정·방해 금지로 바꾼다", async () => {
     const rpc = vi.fn(async () => ({
       data: [
         {
@@ -17,6 +17,9 @@ describe("fetchNotificationRecipients", () => {
           push_consultation: true,
           push_join_request: true,
           push_morning_brief: true,
+          quiet_hours_enabled: false,
+          quiet_start: "22:00",
+          quiet_end: "08:00",
         },
       ],
       error: null,
@@ -35,6 +38,7 @@ describe("fetchNotificationRecipients", () => {
           pushJoinRequest: true,
           pushMorningBrief: true,
         },
+        quietHours: { enabled: false, start: "22:00", end: "08:00" },
       },
     ]);
     expect(rpc).toHaveBeenCalledWith("list_notification_recipients", { p_academy_id: "academy-1" });

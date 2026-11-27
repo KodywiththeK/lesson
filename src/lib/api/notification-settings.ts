@@ -1,3 +1,4 @@
+import type { QuietHours } from "@/domain/notification-quiet-hours";
 import type { NotificationPreferences } from "@/domain/notification-settings";
 
 type SupabaseQueryResult<TData> = {
@@ -12,9 +13,16 @@ export type NotificationPreferenceColumns = {
   push_consultation: boolean;
   push_join_request: boolean;
   push_morning_brief: boolean;
+  quiet_hours_enabled: boolean;
+  /** `HH:mm` */
+  quiet_start: string;
+  quiet_end: string;
 };
 
-type NotificationPreferenceRow = NotificationPreferenceColumns & { email: string | null };
+type NotificationPreferenceRow = NotificationPreferenceColumns & {
+  email: string | null;
+  last_morning_email_at: string | null;
+};
 
 export function toNotificationPreferences(row: NotificationPreferenceColumns): NotificationPreferences {
   return {
@@ -24,6 +32,10 @@ export function toNotificationPreferences(row: NotificationPreferenceColumns): N
     pushJoinRequest: row.push_join_request,
     pushMorningBrief: row.push_morning_brief,
   };
+}
+
+export function toQuietHours(row: NotificationPreferenceColumns): QuietHours {
+  return { enabled: row.quiet_hours_enabled, start: row.quiet_start, end: row.quiet_end };
 }
 
 export type PushSubscriptionKeys = {
@@ -41,6 +53,9 @@ type NotificationRpcArgs = {
     p_push_consultation: boolean;
     p_push_join_request: boolean;
     p_push_morning_brief: boolean;
+    p_quiet_hours_enabled: boolean;
+    p_quiet_start: string;
+    p_quiet_end: string;
   };
   save_push_subscription: {
     p_academy_id: string;
@@ -69,6 +84,9 @@ export type NotificationSettingsSupabaseClient = {
 export type MyNotificationSettings = {
   email: string | null;
   preferences: NotificationPreferences;
+  quietHours: QuietHours;
+  /** 마지막으로 아침 메일을 보낸 시각. 없으면 null. */
+  lastMorningEmailAt: string | null;
 };
 
 export async function fetchMyNotificationSettings(
@@ -86,14 +104,19 @@ export async function fetchMyNotificationSettings(
     throw new Error("알림 설정을 불러오지 못했습니다.");
   }
 
-  return { email: row.email, preferences: toNotificationPreferences(row) };
+  return {
+    email: row.email,
+    preferences: toNotificationPreferences(row),
+    quietHours: toQuietHours(row),
+    lastMorningEmailAt: row.last_morning_email_at,
+  };
 }
 
 export async function saveMyNotificationPreferences(
   supabase: NotificationSettingsSupabaseClient,
-  input: { academyId: string; preferences: NotificationPreferences },
+  input: { academyId: string; preferences: NotificationPreferences; quietHours: QuietHours },
 ): Promise<void> {
-  const { preferences } = input;
+  const { preferences, quietHours } = input;
   const { error } = await supabase.rpc("set_my_notification_preferences", {
     p_academy_id: input.academyId,
     p_morning_email: preferences.morningEmail,
@@ -101,6 +124,9 @@ export async function saveMyNotificationPreferences(
     p_push_consultation: preferences.pushConsultation,
     p_push_join_request: preferences.pushJoinRequest,
     p_push_morning_brief: preferences.pushMorningBrief,
+    p_quiet_hours_enabled: quietHours.enabled,
+    p_quiet_start: quietHours.start,
+    p_quiet_end: quietHours.end,
   });
 
   if (error) {

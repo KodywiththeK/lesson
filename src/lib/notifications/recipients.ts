@@ -1,9 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { NotificationRecipientCandidate } from "@/domain/notification-dispatch";
-import { toNotificationPreferences, type NotificationPreferenceColumns } from "@/lib/api/notification-settings";
+import type { QuietHours } from "@/domain/notification-quiet-hours";
+import {
+  toNotificationPreferences,
+  toQuietHours,
+  type NotificationPreferenceColumns,
+} from "@/lib/api/notification-settings";
 
-export type NotificationRecipient = NotificationRecipientCandidate & { email: string | null };
+export type NotificationRecipient = NotificationRecipientCandidate & { email: string | null; quietHours: QuietHours };
 
 type RecipientRow = NotificationPreferenceColumns & {
   user_id: string;
@@ -26,5 +31,6 @@ export async function fetchNotificationRecipients(client: SupabaseClient, academ
     teacherId: row.teacher_id,
     email: row.email,
     preferences: toNotificationPreferences(row),
+    quietHours: toQuietHours(row),
   }));
 }

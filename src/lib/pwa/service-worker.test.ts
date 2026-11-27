@@ -21,6 +21,7 @@ function loadServiceWorker() {
     addEventListener: (type: string, handler: Handler) => handlers.set(type, handler),
     skipWaiting: vi.fn(async () => undefined),
     registration: { showNotification: vi.fn(async () => undefined) },
+    navigator: { setAppBadge: vi.fn(async () => undefined), clearAppBadge: vi.fn(async () => undefined) },
     clients: {
       claim: vi.fn(async () => undefined),
       matchAll: vi.fn(async () => [] as unknown[]),
@@ -103,6 +104,20 @@ describe("서비스 워커", () => {
       "오늘 레슨 변경",
       expect.objectContaining({ body: "유나 14:00 → 15:30", tag: "lesson-change", data: { url: "/lessons/academy" } }),
     );
+  });
+
+  it("아침 브리핑처럼 할 일 수가 담긴 푸시는 앱 아이콘 배지를 바꾸고, 0이면 지운다", async () => {
+    const sw = loadServiceWorker();
+
+    await sw.dispatch("push", { data: { json: () => ({ title: "오늘 브리핑", body: "할 일 3건", badgeCount: 3 }) } });
+    expect(sw.self.navigator.setAppBadge).toHaveBeenCalledWith(3);
+
+    await sw.dispatch("push", { data: { json: () => ({ title: "오늘 브리핑", body: "할 일 0건", badgeCount: 0 }) } });
+    expect(sw.self.navigator.clearAppBadge).toHaveBeenCalled();
+
+    sw.self.navigator.setAppBadge.mockClear();
+    await sw.dispatch("push", { data: { json: () => ({ title: "신규 상담 접수", body: "새봄" }) } });
+    expect(sw.self.navigator.setAppBadge).not.toHaveBeenCalled();
   });
 
   it("내용이 깨진 푸시도 앱 이름으로 알림을 띄운다", async () => {

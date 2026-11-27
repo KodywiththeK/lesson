@@ -8,7 +8,7 @@ import {
 } from "@/domain/morning-brief";
 import { canReceiveNotification } from "@/domain/notification-settings";
 
-import type { DeliverPush } from "./deliver-push";
+import type { Notify } from "./notify";
 import type { NotificationRecipient } from "./recipients";
 
 type Channel = "email" | "push";
@@ -37,7 +37,8 @@ export type MorningBriefJobDependencies = {
   renderEmail: (brief: MorningBrief) => Promise<{ html: string; text: string }>;
   /** 메일 발송 설정이 없으면 null(메일은 건너뛴다). */
   sendEmail: ((message: { to: string; subject: string; html: string; text: string }) => Promise<{ id: string | null }>) | null;
-  deliverPush: DeliverPush;
+  /** 알림함 기록과 푸시(방해 금지면 미룸). */
+  notify: Notify;
 };
 
 export type MorningBriefJobResult = {
@@ -96,7 +97,7 @@ async function runAcademy(
     return cache.get(key) as Promise<T>;
   };
   const briefs = new Map<string, Promise<MorningBrief & { html: string; text: string }>>();
-  const pushGroups = new Map<string, { input: Promise<MorningBriefInput>; userIds: string[] }>();
+  const pushGroups = new Map<string, { input: Promise<MorningBriefInput>; recipients: NotificationRecipient[] }>();
   const groupKey = (recipient: NotificationRecipient) => `${recipient.role}:${recipient.teacherId ?? ""}`;
 
   const sendEmail = deps.sendEmail;
@@ -122,8 +123,8 @@ async function runAcademy(
 
       if (canReceiveNotification(recipient.role, "pushMorningBrief") && recipient.preferences.pushMorningBrief) {
         if (await deps.claim(academyId, today, recipient.userId, "push")) {
-          const group = pushGroups.get(groupKey(recipient)) ?? { input: inputFor(recipient), userIds: [] };
-          group.userIds.push(recipient.userId);
+          const group = pushGroups.get(groupKey(recipient)) ?? { input: inputFor(recipient), recipients: [] };
+          group.recipients.push(recipient);
           pushGroups.set(groupKey(recipient), group);
         } else {
           result.skipped += 1;
@@ -137,19 +138,23 @@ async function runAcademy(
     [...pushGroups.values()].map(async (group) => {
       let error: string | null = null;
       try {
-        const summary = await deps.deliverPush({
+        const summary = await deps.notify({
           academyId,
-          userIds: group.userIds,
-          payload: buildMorningBriefPush(await group.input),
+          kind: "morning_brief",
+          sourceKey: `morning-brief:${today}`,
+          recipients: group.recipients,
+          message: buildMorningBriefPush(await group.input),
         });
         result.pushes += summary.sent;
       } catch (caught) {
         error = caught instanceof Error ? caught.message : String(caught);
-        for (const userId of group.userIds) {
+        for (const { userId } of group.recipients) {
           result.failures.push({ academyId, userId, channel: "push", error });
         }
       }
-      await Promise.all(group.userIds.map((userId) => deps.finish(academyId, today, userId, "push", null, error)));
+      await Promise.all(
+        group.recipients.map(({ userId }) => deps.finish(academyId, today, userId, "push", null, error)),
+      );
     }),
   );
 }

@@ -161,6 +161,17 @@ describe("TodayTasks 요약 칸", () => {
     expect(screen.queryByText("단율 피아노 11월 수강료 입금 확인")).not.toBeInTheDocument();
   });
 
+  it("설치한 앱 아이콘 배지를 오늘 할 일 수(답변 대기 제외)로 맞춘다", async () => {
+    const setAppBadge = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "setAppBadge", { configurable: true, value: setAppBadge });
+    renderTasks({
+      states: [{ taskKey: "lesson-change:audit-1", state: "waiting_reply", updatedByName: "데스크", updatedAt: "2026-11-19T01:00:00Z" }],
+    });
+
+    await waitFor(() => expect(setAppBadge).toHaveBeenLastCalledWith(3));
+    Reflect.deleteProperty(navigator, "setAppBadge");
+  });
+
   it("선생님은 보강 잡기·학부모 연락·답변 대기 칸만 본다", async () => {
     renderTasks({ role: "teacher" });
 

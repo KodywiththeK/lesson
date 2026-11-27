@@ -1,3 +1,4 @@
+import { DEFAULT_QUIET_HOURS } from "@/domain/notification-quiet-hours";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "@/domain/notification-settings";
 import {
   deletePushSubscription,
@@ -21,37 +22,44 @@ export function createSupabaseNotificationSettingsAccess(academyId: string): Not
 
   return {
     loadSettings: () => fetchMyNotificationSettings(client(), { academyId }),
-    savePreferences: (preferences) => saveMyNotificationPreferences(client(), { academyId, preferences }),
+    saveSettings: (settings) => saveMyNotificationPreferences(client(), { academyId, ...settings }),
     saveSubscription: (subscription) =>
       savePushSubscription(client(), { academyId, subscription, userAgent: navigator.userAgent }),
     deleteSubscription: (endpoint) => deletePushSubscription(client(), { endpoint }),
-    sendTest: async () => {
-      const response = await fetch("/api/notifications/test-push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ academyId }),
-      });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? "테스트 알림을 보내지 못했습니다.");
-      }
-    },
+    sendTest: () => postAction("/api/notifications/test-push", academyId, "테스트 알림을 보내지 못했습니다."),
+    sendTestEmail: () => postAction("/api/notifications/test-email", academyId, "테스트 메일을 보내지 못했습니다."),
   };
+}
+
+/** 본인 확인 후 서버가 보내는 테스트 발송(푸시·메일). 실패하면 서버 문구를 그대로 보여 준다. */
+async function postAction(url: string, academyId: string, fallbackMessage: string) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ academyId }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? fallbackMessage);
+  }
 }
 
 /** 데모·E2E용. 서버 없이 화면 안에서만 설정을 기억한다. */
 export function createDemoNotificationSettingsAccess(): NotificationSettingsDataAccess {
-  let preferences = { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  let settings = { preferences: { ...DEFAULT_NOTIFICATION_PREFERENCES }, quietHours: { ...DEFAULT_QUIET_HOURS } };
 
   return {
-    loadSettings: async () => ({ email: "owner@example.com", preferences }),
-    savePreferences: async (next) => {
-      preferences = next;
+    loadSettings: async () => ({ email: "owner@example.com", lastMorningEmailAt: null, ...settings }),
+    saveSettings: async (next) => {
+      settings = next;
     },
     saveSubscription: async () => undefined,
     deleteSubscription: async () => undefined,
     sendTest: async () => {
       throw new Error("데모 화면에서는 테스트 알림을 보낼 수 없습니다.");
+    },
+    sendTestEmail: async () => {
+      throw new Error("데모 화면에서는 테스트 메일을 보낼 수 없습니다.");
     },
   };
 }

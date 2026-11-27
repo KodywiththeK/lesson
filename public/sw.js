@@ -40,15 +40,29 @@ self.addEventListener("push", (event) => {
   const payload = readPushPayload(event.data);
 
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: NOTIFICATION_ICON,
-      badge: NOTIFICATION_ICON,
-      tag: payload.tag,
-      data: { url: payload.url },
-    }),
+    Promise.all([
+      self.registration.showNotification(payload.title, {
+        body: payload.body,
+        icon: NOTIFICATION_ICON,
+        badge: NOTIFICATION_ICON,
+        tag: payload.tag,
+        data: { url: payload.url },
+      }),
+      updateAppBadge(payload.badgeCount),
+    ]),
   );
 });
+
+/** 할 일 수가 담긴 푸시(아침 브리핑)면 앱 아이콘 배지를 맞춘다. 지원하지 않거나 실패해도 알림은 띄운다. */
+function updateAppBadge(count) {
+  if (typeof count !== "number") {
+    return Promise.resolve();
+  }
+
+  const update = count > 0 ? self.navigator.setAppBadge?.(count) : self.navigator.clearAppBadge?.();
+
+  return Promise.resolve(update).catch(() => undefined);
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
@@ -81,6 +95,7 @@ function readPushPayload(data) {
     body: typeof payload.body === "string" ? payload.body : "",
     tag: typeof payload.tag === "string" ? payload.tag : undefined,
     url: typeof payload.url === "string" ? payload.url : "/",
+    badgeCount: typeof payload.badgeCount === "number" ? payload.badgeCount : undefined,
   };
 }
 

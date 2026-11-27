@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -27,6 +27,7 @@ import {
 import { queryKeys } from "@/lib/api/query-keys";
 import { toUserMessage } from "@/lib/errors/user-message";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { updateAppBadge } from "@/features/pwa/app-badge";
 
 import { TodayTaskGroupDialog } from "./today-task-group-dialog";
 import { createSupabaseTaskProcessing, type TodayTaskProcessing } from "./today-task-processing";
@@ -91,6 +92,18 @@ export function TodayTasks({ academyId, permissionContext, today, dataAccess, pr
     const tasks = sourceQuery.data ? buildDailyTasks(sourceQuery.data, { role, today: date, teacherId }) : [];
     return groupDailyTasks(splitDailyTasksByState(tasks, statesQuery.data ?? []), role);
   }, [sourceQuery.data, statesQuery.data, role, date, teacherId]);
+
+  const isReady = Boolean(sourceQuery.data && statesQuery.data);
+  // 설치한 앱 아이콘 배지를 지금 챙길 일 수(답변 대기 제외)로 맞춘다.
+  const openTaskCount = groups
+    .filter((group) => group.key !== "waiting-reply")
+    .reduce((total, group) => total + group.tasks.length, 0);
+
+  useEffect(() => {
+    if (isReady) {
+      void updateAppBadge(openTaskCount);
+    }
+  }, [isReady, openTaskCount]);
 
   if (role === "anonymous") {
     return null;
