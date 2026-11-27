@@ -171,7 +171,7 @@ export function buildMakeupLessonTimes(
 }
 
 export type AbsenceResolutionInputCheck =
-  | { ok: true; resolution: AbsenceResolution["type"] }
+  | { ok: true; resolution: AbsenceResolution["type"]; times: Extract<MakeupLessonTimes, { ok: true }> }
   | { ok: false; reason: string };
 
 /** 사유서의 필수 입력을 검사한다. 사유(보강/패스)와 보강일만 필수이고 보강 시간·사유 메모는 선택이다. */
@@ -183,17 +183,62 @@ export function checkAbsenceResolutionInput(
     return { ok: false, reason: "사유(보강 또는 패스)를 선택해 주세요." };
   }
 
-  if (input.resolution === "pass") {
-    return { ok: true, resolution: "pass" };
-  }
-
-  if (!input.targetDate) {
+  if (input.resolution === "makeup" && !input.targetDate) {
     return { ok: false, reason: "보강 날짜를 선택해 주세요." };
   }
 
-  const times = buildMakeupLessonTimes(source, input.startTime);
+  // 패스는 시간을 받지 않으므로 원본 시간으로 항상 통과한다.
+  const times = buildMakeupLessonTimes(source, input.resolution === "makeup" ? input.startTime : undefined);
 
-  return times.ok ? { ok: true, resolution: "makeup" } : { ok: false, reason: times.reason };
+  return times.ok ? { ok: true, resolution: input.resolution, times } : { ok: false, reason: times.reason };
+}
+
+export type AbsenceResolutionRequest =
+  | {
+      ok: true;
+      times: Extract<MakeupLessonTimes, { ok: true }>;
+      /** `resolve_academy_lesson_absence` RPC에 보낼 값(학원 id 제외). */
+      request: {
+        sourceLessonEventId: string;
+        studentId: string;
+        resolution: AbsenceResolution["type"];
+        targetDate?: string;
+        startTime?: string;
+        endTime?: string;
+        reason: string;
+      };
+    }
+  | { ok: false; reason: string };
+
+/**
+ * 결석 사유서 입력을 검사하고 저장 요청을 만든다. 레슨표와 대시보드 오늘 할 일이 같이 쓴다.
+ * 보강 시간을 비우면 시간 없이 보내 DB가 원본 시간을 임시로 쓴다. 패스는 보강일을 보내지 않는다.
+ */
+export function buildAbsenceResolutionRequest(
+  draft: { resolution: AbsenceResolution["type"] | ""; targetDate: string; startTime: string; reason: string },
+  row: { lessonEventId: string; studentId: string; startTime: string; endTime: string },
+): AbsenceResolutionRequest {
+  const check = checkAbsenceResolutionInput(draft, row);
+
+  if (!check.ok) {
+    return check;
+  }
+
+  const { resolution, times } = check;
+
+  return {
+    ok: true,
+    times,
+    request: {
+      sourceLessonEventId: row.lessonEventId,
+      studentId: row.studentId,
+      resolution,
+      targetDate: resolution === "makeup" ? draft.targetDate : undefined,
+      startTime: times.timeUnspecified ? undefined : times.startTime,
+      endTime: times.timeUnspecified ? undefined : times.endTime,
+      reason: draft.reason,
+    },
+  };
 }
 
 const MINUTES_PER_DAY = 24 * 60;

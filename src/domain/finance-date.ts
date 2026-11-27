@@ -53,6 +53,27 @@ const seoulTimeFormatter = new Intl.DateTimeFormat("en-GB", {
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
+const seoulDateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: FINANCE_TIME_ZONE,
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** 시각 문자열 → 학원 기준(Asia/Seoul) `M월 D일 HH:mm`. 처리 기록·변경 이력에 쓴다. */
+export function formatSeoulDateTime(value: string) {
+  const parts = Object.fromEntries(
+    seoulDateTimeFormatter
+      .formatToParts(new Date(value))
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value: part }) => [type, part]),
+  );
+
+  return `${Number(parts.month)}월 ${Number(parts.day)}일 ${parts.hour}:${parts.minute}`;
+}
+
 /** 시각 문자열 → 학원 기준(Asia/Seoul) `HH:mm`. */
 export function formatSeoulTime(value: string) {
   return seoulTimeFormatter.format(new Date(value));

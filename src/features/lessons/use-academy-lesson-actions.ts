@@ -4,8 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  buildMakeupLessonTimes,
-  checkAbsenceResolutionInput,
+  buildAbsenceResolutionRequest,
 } from "@/domain/academy-lesson-absence";
 import {
   checkAcademyLessonEditable,
@@ -294,37 +293,21 @@ export function useAcademyLessonActions({
   /** 결석 사유서를 확정한다. 보강이면 보강일에 [보강 수업] 일정이 생기고 원본은 결석 기록으로 남는다. */
   const resolveAbsence = async (draft: AbsenceResolutionDraft) => {
     const { row } = draft;
-    const inputCheck = checkAbsenceResolutionInput(draft, row);
+    const built = buildAbsenceResolutionRequest(draft, row);
 
-    if (!inputCheck.ok) {
-      toast.error(inputCheck.reason);
+    if (!built.ok) {
+      toast.error(built.reason);
       return false;
     }
 
-    const { resolution } = inputCheck;
-    const times = buildMakeupLessonTimes(row, resolution === "makeup" ? draft.startTime : undefined);
-
-    if (!times.ok) {
-      toast.error(times.reason);
-      return false;
-    }
-
-    const targetDate = resolution === "makeup" ? draft.targetDate : undefined;
+    const { times, request } = built;
+    const { resolution, targetDate } = request;
     let makeupLessonEventId = `makeup-${row.lessonEventId}-${draft.targetDate}`;
     let notice: AbsenceResolvedNotice;
 
     try {
       if (client) {
-        const result = await resolveMutation.mutateAsync({
-          academyId,
-          sourceLessonEventId: row.lessonEventId,
-          studentId: row.studentId,
-          resolution,
-          targetDate,
-          startTime: times.timeUnspecified ? undefined : times.startTime,
-          endTime: times.timeUnspecified ? undefined : times.endTime,
-          reason: draft.reason,
-        });
+        const result = await resolveMutation.mutateAsync({ academyId, ...request });
         makeupLessonEventId = result.makeupLessonEventId ?? makeupLessonEventId;
         notice = { month: result.month, memoLine: result.memoLine };
       } else {

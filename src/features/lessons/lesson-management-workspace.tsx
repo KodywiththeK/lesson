@@ -73,7 +73,7 @@ import {
 import {
   createAcademyLessonEvent,
   createLessonWorkspaceQueryOptions,
-  fetchAcademyAttendeeCounts,
+  fetchPreparedAttendeeCounts,
   type CreateAcademyLessonEventInput,
   type LessonWorkspaceSupabaseClient,
 } from "@/lib/api/lesson-workspace";
@@ -797,8 +797,7 @@ export function LessonManagementWorkspace({
         throw new Error("Supabase client 상태를 만들지 못했습니다.");
       }
       // 공식 조회가 실패하더라도 서버에 이미 검증된 자료가 있거나 공휴일 제외가 꺼져 있으면 이용할 수 있다.
-      try { await fetch(`/api/holidays?month=${nextMonthToCount}`, { method: "POST" }); } catch { /* 준비 여부는 서버에서 확인한다. */ }
-      return fetchAcademyAttendeeCounts(attendeeCountsClient, {
+      return fetchPreparedAttendeeCounts(attendeeCountsClient, {
         academyId,
         month: nextMonthToCount,
       });

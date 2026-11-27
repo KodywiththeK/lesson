@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAbsenceResolutionRequest,
   buildMakeupLessonTimes,
   checkAbsenceResolutionInput,
   resolveAcademyLessonAbsence,
@@ -150,7 +151,7 @@ describe("checkAbsenceResolutionInput", () => {
         { resolution: "makeup", targetDate: "2026-08-24", startTime: "" },
         source,
       ),
-    ).toEqual({ ok: true, resolution: "makeup" });
+    ).toMatchObject({ ok: true, resolution: "makeup" });
   });
 
   it("보강 시간이 수업을 자정 너머로 밀어내면 확정할 수 없다", () => {
@@ -165,6 +166,51 @@ describe("checkAbsenceResolutionInput", () => {
   it("패스는 날짜와 시간 없이 확정할 수 있다", () => {
     expect(
       checkAbsenceResolutionInput({ resolution: "pass", targetDate: "", startTime: "" }, source),
-    ).toEqual({ ok: true, resolution: "pass" });
+    ).toMatchObject({ ok: true, resolution: "pass" });
+  });
+});
+
+describe("buildAbsenceResolutionRequest", () => {
+  const row = { lessonEventId: "event-1", studentId: "student-1", startTime: "15:00", endTime: "15:50" };
+
+  it("보강은 원본 수업 길이로 끝 시간을 잡아 저장 요청을 만든다", () => {
+    expect(
+      buildAbsenceResolutionRequest(
+        { resolution: "makeup", targetDate: "2026-11-20", startTime: "16:00", reason: " 감기 " },
+        row,
+      ),
+    ).toEqual({
+      ok: true,
+      times: { ok: true, startTime: "16:00", endTime: "16:50", timeUnspecified: false },
+      request: {
+        sourceLessonEventId: "event-1",
+        studentId: "student-1",
+        resolution: "makeup",
+        targetDate: "2026-11-20",
+        startTime: "16:00",
+        endTime: "16:50",
+        reason: " 감기 ",
+      },
+    });
+  });
+
+  it("보강 시간을 비우면 시간 없이 저장하고, 패스는 보강일을 보내지 않는다", () => {
+    const unspecified = buildAbsenceResolutionRequest(
+      { resolution: "makeup", targetDate: "2026-11-20", startTime: "", reason: "" },
+      row,
+    );
+    const pass = buildAbsenceResolutionRequest(
+      { resolution: "pass", targetDate: "2026-11-20", startTime: "16:00", reason: "" },
+      row,
+    );
+
+    expect(unspecified.ok && unspecified.request).toMatchObject({ startTime: undefined, endTime: undefined });
+    expect(pass.ok && pass.request).toMatchObject({ resolution: "pass", targetDate: undefined });
+  });
+
+  it("입력이 모자라면 이유를 돌려준다", () => {
+    expect(
+      buildAbsenceResolutionRequest({ resolution: "", targetDate: "", startTime: "", reason: "" }, row),
+    ).toEqual({ ok: false, reason: "사유(보강 또는 패스)를 선택해 주세요." });
   });
 });

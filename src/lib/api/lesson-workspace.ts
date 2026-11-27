@@ -500,6 +500,23 @@ export async function deleteAcademyLessonEvent(
  * 보강일 추천에 쓸 날짜별 등원 인원을 센다. 화면이 보고 있지 않은 달(다음 달)용이다.
  * 정기 일정이 아직 만들어지지 않았을 수 있어 그 달 일정을 먼저 준비한다.
  */
+/**
+ * 그 달의 공휴일 자료를 먼저 준비한 뒤 날짜별 등원 인원을 읽는다. 보강 추천(레슨표·오늘 할 일)이 같이 쓴다.
+ * 준비 요청이 실패해도 준비 여부는 `fetchAcademyAttendeeCounts`가 서버에서 다시 확인한다.
+ */
+export async function fetchPreparedAttendeeCounts(
+  supabase: LessonWorkspaceSupabaseClient,
+  input: FetchAcademyAttendeeCountsInput,
+): Promise<Record<string, number>> {
+  try {
+    await fetch(`/api/holidays?month=${input.month}`, { method: "POST" });
+  } catch {
+    // 준비 여부는 아래 조회가 확인한다.
+  }
+
+  return fetchAcademyAttendeeCounts(supabase, input);
+}
+
 export async function fetchAcademyAttendeeCounts(
   supabase: LessonWorkspaceSupabaseClient,
   input: FetchAcademyAttendeeCountsInput,

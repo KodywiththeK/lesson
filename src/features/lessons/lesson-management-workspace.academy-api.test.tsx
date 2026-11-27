@@ -39,6 +39,7 @@ vi.mock("@/lib/api/lesson-workspace", async (importOriginal) => ({
   moveAcademyLessonEvent: api.moveEvent,
   resetAcademyLessonAttendance: api.resetAttendance,
   fetchAcademyAttendeeCounts: api.attendeeCounts,
+  fetchPreparedAttendeeCounts: api.attendeeCounts,
 }));
 
 type User = ReturnType<typeof userEvent.setup>;

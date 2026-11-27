@@ -1,5 +1,6 @@
 "use client";
 
+import { formatSeoulDateTime } from "@/domain/finance-date";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -18,24 +19,6 @@ type LessonAuditHistoryProps = {
   lessonKind: LessonAuditKind;
   client: LessonAuditSupabaseClient;
 };
-
-const SEOUL_TIME = new Intl.DateTimeFormat("ko-KR", {
-  timeZone: "Asia/Seoul",
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
-function formatAuditTime(occurredAt: string): string {
-  const parts = Object.fromEntries(
-    SEOUL_TIME.formatToParts(new Date(occurredAt))
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-  return `${Number(parts.month)}월 ${Number(parts.day)}일 ${parts.hour}:${parts.minute}`;
-}
 
 export function LessonAuditHistory({
   academyId,
@@ -71,7 +54,7 @@ export function LessonAuditHistory({
               <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                 <strong className="font-medium">{entry.label}</strong>
                 <time className="text-xs tabular-nums text-muted-foreground" dateTime={entry.occurredAt}>
-                  {formatAuditTime(entry.occurredAt)}
+                  {formatSeoulDateTime(entry.occurredAt)}
                 </time>
               </div>
               {entry.studentName ? <p>{entry.studentName}</p> : null}
